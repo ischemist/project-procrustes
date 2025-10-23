@@ -11,7 +11,7 @@ on:
       - master
 
 jobs:
-  lint:
+  type-check:
     runs-on: ubuntu-latest
 
     steps:
@@ -28,5 +28,19 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
+      # this is the same caching logic from your tests workflow. big speed up.
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            .venv
+          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Install dependencies
+        run: uv sync
+
       - name: Run ty
-        run: uvx --with types-pyyaml --with pydantic --with types-requests --with pandas ty check .
+        run: uv run ty check .
