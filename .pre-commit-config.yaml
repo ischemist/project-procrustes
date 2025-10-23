@@ -1,0 +1,25 @@
+default_language_version:
+  python: python3.13
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff (linter)
+        entry: uvx ruff check --fix
+        language: python
+        types: [python]
+
+      - id: ruff-format
+        name: ruff (formatter)
+        entry: uvx ruff format
+        language: python
+        types: [python]
+
+      - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        types: [python]
+        exclude: ^(tests/|src/burlak/dev/)
+        args: ["--config-file=pyproject.toml"]

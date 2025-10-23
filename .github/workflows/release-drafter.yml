@@ -1,0 +1,55 @@
+name: Label PR & Draft Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    types: [opened, reopened, synchronize]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  process_pr:
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assign labels from commits
+        if: github.event_name == 'pull_request'
+        id: assign-labels
+        uses: mauroalderete/action-assign-labels@v1
+        with:
+          pull-request-number: ${{ github.event.pull_request.number }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          conventional-commits: |
+            conventional-commits:
+              - type: 'feat'
+                nouns: ['FEATURE', 'Feature', 'feature', 'FEAT', 'Feat', 'feat']
+                labels: ['type/feature']
+              - type: 'fix'
+                nouns: ['FIX', 'Fix', 'fix', 'FIXED', 'Fixed', 'fixed']
+                labels: ['type/bug']
+              - type: 'refactor'
+                nouns: ['REFACTOR', 'Refactor', 'refactor', 'ref', 'REF']
+                labels: ['type/refactor']
+              - type: 'perf'
+                nouns: ['PERF', 'Perf', 'perf', 'PERFORMANCE', 'Performance', 'performance']
+                labels: ['scope/performance']
+              - type: 'docs'
+                nouns: ['DOCS', 'Docs', 'docs', 'DOC', 'Doc', 'doc']
+                labels: ['type/docs']
+              - type: 'tests'
+                nouns: ['TESTS', 'Tests', 'tests']
+                labels: ['scope/testing']
+          maintain-labels-not-matched: false
+          apply-changes: true
+
+      - uses: release-drafter/release-drafter@v6.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

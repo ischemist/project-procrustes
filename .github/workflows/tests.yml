@@ -1,0 +1,90 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            ~/.uv
+            .venv
+          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: Create and activate virtual environment
+        run: |
+          uv venv
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: run tests and generate coverage report
+        id: coverage
+        run: |
+          report=$(pytest --cov=directmultistep --cov-report=term-missing)
+
+          # this is some bash magic to make the multiline report available to next steps
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          echo "$report" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: find changed files in src
+        id: changed-src-files
+        if: github.event_name == 'pull_request'
+        uses: tj-actions/changed-files@v44 # check for the latest version, they update a lot
+        with:
+          files: src/** # or whatever your source directory is
+
+      - name: print coverage report to logs
+        run: |
+          echo "${{ steps.coverage.outputs.report }}"
+
+      - name: add coverage report as a pr comment
+        if: github.event_name == 'pull_request' && steps.changed-src-files.outputs.any_changed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `### Pytest Coverage Report 🧪
+            \`\`\`
+            ${{ steps.coverage.outputs.report }}
+            \`\`\`
+            `;
+
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: output
+            });

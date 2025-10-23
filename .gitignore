@@ -1,0 +1,59 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Other junk
+.DS_Store
+
+# Virtual environments
+.venv
+
+# Jupyter Trash
+*.ipynb
+
+# Data
+data/evaluations/
+data/processed/
+data/transfers/
+data/**/*.json.gz
+data/**/*.csv
+data/models/**/*.pickle
+data/models/**/*.pkl
+data/models/**/*.onnx
+data/models/**/*.csv*
+data/models/**/*.ckpt*
+data/models/**/*.pt*
+data/models/**/*.smi*
+data/models/**/*.sdf*
+data/models/**/*.zip*
+data/models/**/*.hdf5*
+data/models/**/*.txt*
+data/models/**/*.dat*
+data/models/**/.*
+data/models/**/*.md
+data/analysis/**/*.html
+data/analysis/**/*.json
+data/analysis/**/*.txt
+_backups/
+# AI
+_prompts/
+
+clone.sh
+
+# internal code
+scripts/dms/private/
+
+# Testing
+.coverage*
+coverage*
+archive
+collectors/
+
+tests/testing_data/**/results.json
