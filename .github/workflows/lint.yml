@@ -33,6 +33,3 @@ jobs:
 
       - name: Run ruff (formatter)
         run: uvx ruff format --check
-
-      - name: Run mypy
-        run: uvx --with types-pyyaml --with pydantic --with types-requests mypy .

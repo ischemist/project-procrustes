@@ -53,7 +53,7 @@ jobs:
       - name: run tests and generate coverage report
         id: coverage
         run: |
-          report=$(pytest --cov=directmultistep --cov-report=term-missing)
+          report=$(pytest --cov=ursa --cov-report=term-missing)
 
           # this is some bash magic to make the multiline report available to next steps
           echo "report<<EOF" >> $GITHUB_OUTPUT
