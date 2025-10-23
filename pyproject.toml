@@ -1,0 +1,162 @@
+[project]
+name = "ursa"
+version = "0.1.0"
+description = "a framework for ingesting, validating, canonicalizing, and adapting retrosynthesis model outputs to a unified benchmark standard."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic",
+    "pyyaml>=6.0.3",
+    "rdkit",
+    "tqdm>=4.67.1",
+]
+authors = [{ name = "Anton Morgunov", email = "anton@ischemist.com" }]
+license = { text = "MIT" }
+
+[project.urls]
+Homepage = "https://github.com/batistagroup/ursa"
+Issues = "https://github.com/batistagroup/ursa/issues"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+    "rich>=13.9.4",
+    "ruff",
+    "pytest",
+    "mypy",
+    "types-tqdm>=4.67.0.20241221",
+    "pytest-cov",
+    "pytest-mock>=3.14.1",
+    "types-pyyaml>=6.0.12.20250822",
+    "pandas>=2.1.4",
+]
+
+[project.optional-dependencies]
+dms = ["directmultistep"]
+aizyn = [
+    "aizynthfinder",
+    "numpy<=2.2",    # Numba needs NumPy 2.2 or less. Got NumPy 2.3.
+]
+synp = ["synplanner==1.2.0"]
+torch-gpu = ["torch"]
+torch-cpu = ["torch"]
+synth-knn = [
+    "syntheseus[retro-knn]>=0.5.0",
+    "numpy<2",
+    "dgl",
+    "torch<=2.1",
+    "torchdata<=0.7.0",
+    "faiss-cpu",
+    "torch-scatter"
+]
+viz = [
+    "ischemist>=0.1.0",
+    "kaleido>=1.1.0",
+    "openpyxl>=3.1.5",
+    "plotly>=6.3.0",
+]
+retro-star = [
+    "retro-star>=0.1.0",
+    "numpy==2.3.3",
+    "pandas==2.3.2"
+]
+analysis = []
+
+
+[tool.uv]
+conflicts = [
+    [
+        { extra = "torch-gpu" },
+        { extra = "torch-cpu" },
+    ],
+    [
+        { extra = "synth-knn" },
+        { extra = "synp" },
+        { extra = "dms" },
+        { extra = "retro-star" },
+        { extra = "aizyn" },
+        { extra = "synp" },
+    ]
+]
+
+
+[tool.uv.sources]
+dgl = { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl" }
+torch = [
+    { index = "pytorch-cpu", extra = "torch-cpu" },
+    { index = "pytorch-cu126", extra = "torch-gpu" },
+]
+retro_star = { git = "https://github.com/anmorgunov/retro_star", branch = "master" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+exclude = ["tests"]
+disable_error_code = ["unused-ignore"]
+
+[tool.ty.src]
+exclude = [
+"tests"
+]
+
+[[tool.mypy.overrides]]
+# RDKit is not typed, so we ignore all errors in it
+module = ["rdkit-stubs.*", "rdkit.*"]
+ignore_errors = true
+
+[tool.ruff]
+line-length = 120
+lint.select = [
+    "E",   # pycodestyle
+    "F",   # Pyflakes
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "I",   # isort
+]
+lint.ignore = ["E501"]
+
+[tool.coverage.run]
+omit = [
+    "*/analysis/*.py",
+    "*/constants/*",
+    "*/__init__.py",
+    "*/ursa/types.py",
+    "*/ursa/utils/logging.py",
+    "*/ursa/exceptions.py",
+    "src/directmultistep/training/runner.py"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "def __str__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "pass",
+    "logger\\."
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as integration tests, slower and may require external resources",
+]
