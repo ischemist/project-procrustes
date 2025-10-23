@@ -54,6 +54,7 @@ jobs:
         id: coverage
         run: |
           report=$(pytest --cov=ursa --cov-report=term-missing)
+          coverage json -o coverage.json # create the json artifact
 
           # this is some bash magic to make the multiline report available to next steps
           echo "report<<EOF" >> $GITHUB_OUTPUT
@@ -66,6 +67,15 @@ jobs:
         uses: tj-actions/changed-files@v44 # check for the latest version, they update a lot
         with:
           files: src/** # or whatever your source directory is
+
+      - name: commit coverage.json
+        if: github.ref == 'refs/heads/master' # only update badge on master branch pushes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update coverage.json"
+          file_pattern: coverage.json
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "github-actions[bot]@users.noreply.github.com"
 
       - name: print coverage report to logs
         run: |
