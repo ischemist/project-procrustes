@@ -4,7 +4,7 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-![lint](https://github.com/ischemist/project-procrustes/actions/workflows/lint.yml/badge.svg)
+![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/ischemist/project-procrustes/master/coverage.json&query=$.totals.percent_covered_display&label=coverage)
 
 a framework for ingesting, validating, canonicalizing, and adapting retrosynthesis model outputs to the ursa benchmark standard.
 
