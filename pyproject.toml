@@ -36,6 +36,8 @@ dev = [
     "pytest-mock>=3.14.1",
     "types-pyyaml>=6.0.12.20250822",
     "pandas>=2.1.4",
+    "requests>=2.32.5",
+    "ty>=0.0.1a24",
 ]
 
 [project.optional-dependencies]
@@ -44,7 +46,7 @@ aizyn = [
     "aizynthfinder",
     "numpy<=2.2",    # Numba needs NumPy 2.2 or less. Got NumPy 2.3.
 ]
-synp = ["synplanner==1.2.0"]
+synplanner = ["synplanner==1.2.0"]
 torch-gpu = ["torch"]
 torch-cpu = ["torch"]
 synth-knn = [
@@ -82,7 +84,7 @@ conflicts = [
         { extra = "dms" },
         { extra = "retro-star" },
         { extra = "aizyn" },
-        { extra = "synp" },
+        { extra = "synplanner" },
     ]
 ]
 
@@ -113,8 +115,10 @@ disable_error_code = ["unused-ignore"]
 
 [tool.ty.src]
 exclude = [
-"tests"
+"tests",
+"scripts"
 ]
+
 
 [[tool.mypy.overrides]]
 # RDKit is not typed, so we ignore all errors in it

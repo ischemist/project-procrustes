@@ -12,9 +12,9 @@ from ursa.utils.serializers import (
     SyntheseusSerializationError,
     TtlRetroSerializationError,
     serialize_and_save,
+    serialize_multistepttl_directory,
+    serialize_multistepttl_target,
     serialize_route,
-    serialize_ttlretro_directory,
-    serialize_ttlretro_target,
 )
 
 # --- Mock Objects to simulate syntheseus classes ---
@@ -159,7 +159,7 @@ class TestSyntheseusSerializer:
 class TestTtlRetroSerializer:
     def test_serialize_ibuprofen_directory(self, multistepttl_ibuprofen_dir: Path):
         """tests end-to-end serialization from a directory for a multi-step route."""
-        serialized_routes = serialize_ttlretro_directory(multistepttl_ibuprofen_dir)
+        serialized_routes = serialize_multistepttl_directory(multistepttl_ibuprofen_dir)
 
         assert isinstance(serialized_routes, list)
         assert len(serialized_routes) == 13
@@ -171,7 +171,7 @@ class TestTtlRetroSerializer:
 
     def test_serialize_paracetamol_directory(self, multistepttl_paracetamol_dir: Path):
         """tests end-to-end serialization for a single-step route."""
-        serialized_routes = serialize_ttlretro_directory(multistepttl_paracetamol_dir)
+        serialized_routes = serialize_multistepttl_directory(multistepttl_paracetamol_dir)
 
         assert isinstance(serialized_routes, list)
         assert len(serialized_routes) == 23
@@ -184,7 +184,7 @@ class TestTtlRetroSerializer:
         """tests that a directory without pickles returns None."""
         non_existent_dir = tmp_path / "ghost"
         non_existent_dir.mkdir()
-        assert serialize_ttlretro_directory(non_existent_dir) is None
+        assert serialize_multistepttl_directory(non_existent_dir) is None
 
     def test_no_solved_routes(self):
         """tests serialization when the tree_df has no solved routes."""
@@ -192,7 +192,7 @@ class TestTtlRetroSerializer:
         predictions_df = pd.DataFrame(index=[1, 2])
         predictions_df["index"] = predictions_df.index
 
-        result = serialize_ttlretro_target(tree_df, predictions_df)
+        result = serialize_multistepttl_target(tree_df, predictions_df)
         assert result == []
 
     def test_inconsistent_data_raises_error(self):
@@ -202,9 +202,9 @@ class TestTtlRetroSerializer:
         predictions_df["index"] = predictions_df.index
 
         with pytest.raises(TtlRetroSerializationError, match="reaction id 99 from route not found"):
-            serialize_ttlretro_target(tree_df, predictions_df)
+            serialize_multistepttl_target(tree_df, predictions_df)
 
-    def test_serialize_ttlretro_directory_raises_on_processing_error(self, tmp_path: Path, mocker: MockerFixture):
+    def test_serialize_multistepttl_directory_raises_on_processing_error(self, tmp_path: Path, mocker: MockerFixture):
         """Ensures that generic exceptions during pickle processing are wrapped."""
         target_dir = tmp_path / "bad_pickles"
         target_dir.mkdir()
@@ -215,4 +215,4 @@ class TestTtlRetroSerializer:
         mocker.patch("pandas.read_pickle", side_effect=ValueError("Corrupt pickle"))
 
         with pytest.raises(TtlRetroSerializationError, match="failed to process pickles"):
-            serialize_ttlretro_directory(target_dir)
+            serialize_multistepttl_directory(target_dir)

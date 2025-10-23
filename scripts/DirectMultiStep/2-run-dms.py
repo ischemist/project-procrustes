@@ -52,7 +52,7 @@ if __name__ == "__main__":
 
     logger.info("Loading targets and stock compounds")
 
-    with open(stocks_dir / "ursa-bb-stock-v3.csv") as f:
+    with open(stocks_dir / "ursa-bb-stock-v3-canon.csv") as f:
         ursa_bb_stock_set = set(f.read().splitlines())
 
     model_name = args.model_name.replace("_", "-").replace(" ", "-")

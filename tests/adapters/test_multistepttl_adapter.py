@@ -4,7 +4,7 @@ from tests.adapters.test_base_adapter import BaseAdapterTest
 from ursa.adapters.multistepttl_adapter import TtlRetroAdapter
 from ursa.domain.chem import canonicalize_smiles
 from ursa.domain.schemas import TargetInfo
-from ursa.utils.serializers import serialize_ttlretro_directory
+from ursa.utils.serializers import serialize_multistepttl_directory
 
 IBUPROFEN_SMILES = canonicalize_smiles("CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O")
 
@@ -49,7 +49,7 @@ class TestTtlRetroAdapterIntegration:
     @pytest.fixture(scope="class")
     def serialized_ibuprofen_data(self, multistepttl_ibuprofen_dir) -> list[dict]:
         """serializes the ibuprofen pickle data once for all tests in this module."""
-        data = serialize_ttlretro_directory(multistepttl_ibuprofen_dir)
+        data = serialize_multistepttl_directory(multistepttl_ibuprofen_dir)
         assert data is not None, "serialization failed for ibuprofen"
         return data
 

@@ -8,6 +8,69 @@
 
 a framework for ingesting, validating, canonicalizing, and adapting retrosynthesis model outputs to the ursa benchmark standard.
 
+## how to run
+
+the pipeline is a two-stage process:
+
+1.  **generate raw outputs**: run model-specific scripts to perform retrosynthesis and generate the raw output files.
+2.  **process with ursa**: run the main `ursa` pipeline to convert the raw outputs into the canonical benchmark format.
+
+### stage 1: generate raw outputs
+
+all scripts for generating raw model outputs live in the `scripts/` directory, organized by model name. you need to run these first.
+
+the general pattern is:
+
+1.  navigate to the subdirectory for the model you care about (e.g., `scripts/AiZynthFinder/`).
+2.  run the numbered scripts in order. these will download assets, prepare data, and finally run the model inference.
+3.  these scripts will save their raw output (usually a `results.json.gz` or similar) to the `data/evaluations/<model-name>/<dataset-name>/` directory.
+
+**example: running `aizynthfinder-mcts` for the `ursa-bridge-100` dataset**
+
+```bash
+# 1. download model assets (only need to do this once)
+uv run scripts/AiZynthFinder/1-download-assets.py data/models/aizynthfinder
+
+# 2. prepare the building block stock file (only need to do this once)
+uv run --extra aizyn scripts/AiZynthFinder/2-prepare-stock.py \
+    --files data/models/assets/ursa-bb-stock-v3-canon.csv \
+    --source plain \
+    --output data/models/assets/ursa-bb-stock-v3.hdf5 \
+    --target hdf5
+
+# 3. run the actual predictions
+# this will generate `data/evaluations/aizynthfinder-mcts/ursa-bridge-100/results.json.gz`
+uv run --extra aizyn scripts/AiZynthFinder/3-run-aizyn-mcts.py --target-name "ursa-bridge-100"
+```
+
+**note**: each python script contains a module-level docstring that describes its purpose and shows example usage.
+
+### stage 2: process with ursa
+
+once you have the raw output file from stage 1, you can run the main processing pipeline.
+
+```bash
+# process the raw output you just generated
+uv run scripts/process-predictions.py process --model aizynthfinder-mcts --dataset ursa-bridge-100
+```
+
+this command will:
+1.  read `ursa-config.yaml` to find the configuration for `aizynthfinder-mcts`.
+2.  load the raw results from `data/evaluations/aizynthfinder-mcts/ursa-bridge-100/results.json.gz`.
+3.  use the specified `aizynth` adapter to transform the data.
+4.  perform deduplication and any other processing steps.
+5.  save the final, canonical output and a manifest file to `data/processed/ursa-bridge-100/ursa-model-..../`.
+
+### stage 3 (optional): verify integrity
+
+you can verify that the processing is reproducible by re-calculating the source hash from the original raw files.
+
+```bash
+uv run scripts/verify-hash.py --model aizynthfinder-mcts --dataset ursa-bridge-100
+```
+
+if the hashes match, the process was successful and deterministic.
+
 ## architectural principles
 
 `ursa`'s design is guided by three principles to ensure it is robust, flexible, and maintainable.

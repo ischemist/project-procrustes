@@ -117,7 +117,7 @@ def serialize_and_save(
         f.write(json_str)
 
 
-def _get_ttlretro_advanced_scores(tree: pd.DataFrame, predictions: pd.DataFrame) -> pd.DataFrame:
+def _get_multistepttl_advanced_scores(tree: pd.DataFrame, predictions: pd.DataFrame) -> pd.DataFrame:
     """calculates forward confidence score for each route."""
     scores = []
     for route in tree["Route"]:
@@ -133,9 +133,9 @@ def _get_ttlretro_advanced_scores(tree: pd.DataFrame, predictions: pd.DataFrame)
     return tree
 
 
-def serialize_ttlretro_target(tree_df: pd.DataFrame, predictions_df: pd.DataFrame) -> list[dict[str, Any]]:
+def serialize_multistepttl_target(tree_df: pd.DataFrame, predictions_df: pd.DataFrame) -> list[dict[str, Any]]:
     """
-    serializes ttlretro dataframes for a single target into a json-compatible list of routes.
+    serializes multistepttl dataframes for a single target into a json-compatible list of routes.
 
     args:
         tree_df: the dataframe from `*__tree.pkl`.
@@ -154,7 +154,7 @@ def serialize_ttlretro_target(tree_df: pd.DataFrame, predictions_df: pd.DataFram
     if solved_routes_df.empty:
         return []
 
-    solved_routes_df = _get_ttlretro_advanced_scores(solved_routes_df, predictions_df)
+    solved_routes_df = _get_multistepttl_advanced_scores(solved_routes_df, predictions_df)
 
     output_routes = []
     for _, route_row in solved_routes_df.iterrows():
@@ -184,7 +184,7 @@ def serialize_ttlretro_target(tree_df: pd.DataFrame, predictions_df: pd.DataFram
     return output_routes
 
 
-def serialize_ttlretro_directory(target_dir: Path) -> list[dict[str, Any]] | None:
+def serialize_multistepttl_directory(target_dir: Path) -> list[dict[str, Any]] | None:
     """
     finds pickles in a directory, loads them, and serializes the routes.
 
@@ -201,7 +201,7 @@ def serialize_ttlretro_directory(target_dir: Path) -> list[dict[str, Any]] | Non
         tree_df = pd.read_pickle(tree_pkl)
         predictions_df = pd.read_pickle(predictions_pkl)
 
-        return serialize_ttlretro_target(tree_df, predictions_df)
+        return serialize_multistepttl_target(tree_df, predictions_df)
 
     except (StopIteration, FileNotFoundError):
         # logger should handle this in the calling script
