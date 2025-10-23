@@ -1,0 +1,11 @@
+expansion:
+  uspto:
+    - data/models/aizynthfinder/uspto_model.onnx
+    - data/models/aizynthfinder/uspto_templates.csv.gz
+  ringbreaker:
+    - data/models/aizynthfinder/uspto_ringbreaker_model.onnx
+    - data/models/aizynthfinder/uspto_ringbreaker_templates.csv.gz
+filter:
+  uspto: data/models/aizynthfinder/uspto_filter_model.onnx
+stock:
+  ursa-bb: data/models/assets/ursa-bb-stock-v3.hdf5
