@@ -14,8 +14,8 @@ authors = [{ name = "Anton Morgunov", email = "anton@ischemist.com" }]
 license = { text = "MIT" }
 
 [project.urls]
-Homepage = "https://github.com/batistagroup/ursa"
-Issues = "https://github.com/batistagroup/ursa/issues"
+Homepage = "https://github.com/ischemist/project-procrustes"
+Issues = "https://github.com/ischemist/project-procrustes/issues"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
