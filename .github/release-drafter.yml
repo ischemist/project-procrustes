@@ -1,31 +1,51 @@
-name-template: "v$RESOLVED_VERSION ⛰️"
+# .github/release-drafter.yml
+
+name-template: "v$RESOLVED_VERSION"
 tag-template: "v$RESOLVED_VERSION"
 include-pre-releases: true
 prerelease: true
+
+# automatically add a 'dependencies' label for your robot friends
+autolabeler:
+  - label: "dependencies"
+    branch:
+      - '/^dependabot\//'
+      - '/^renovate\//'
+    title:
+      - '/^build\(deps\)/' # for dependabot group updates
+
 categories:
-  - title: "✨ New features"
+  - title: "🚨 BREAKING CHANGES"
+    labels:
+      - "breaking-change"
+  - title: "🛡️ Security Fixes"
+    labels:
+      - "type/security"
+  - title: "✨ New Features"
     labels:
       - "type/feature"
-  - title: "🐛 Bug fixes"
+  - title: "🐛 Bug Fixes"
     labels:
       - "type/bug"
-  - title: "🚀 Performance"
+  - title: "🚀 Performance Improvements"
     labels:
       - "scope/performance"
+  - title: "📚 Documentation"
+    labels:
+      - "type/docs"
   - title: "🛠️ Maintenance & Internal Improvements"
     labels:
       - "type/refactor"
       - "type/chore"
       - "scope/ci-cd"
       - "scope/testing"
-  - title: "📚 Documentation"
-    labels:
-      - "type/docs"
-  - title: "⬆️ Dependency updates"
+  - title: "⬆️ Dependency Updates"
     labels:
       - "dependencies"
+
 change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
-change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
+change-title-escapes: '\<*_&'
+
 version-resolver:
   major:
     labels:
@@ -36,8 +56,14 @@ version-resolver:
   patch:
     labels:
       - "type/bug"
-      - "default-version-update"
+      - "type/docs"
+      - "type/refactor"
+      - "type/chore"
+      - "type/security"
+      - "scope/performance"
+      - "dependencies"
   default: patch
+
 template: |
   ## Changes
 
