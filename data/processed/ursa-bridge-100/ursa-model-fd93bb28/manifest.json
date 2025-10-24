@@ -1,0 +1,26 @@
+{
+  "model_name": "retrochimera",
+  "model_hash": "ursa-model-fd93bb28",
+  "dataset_name": "ursa-bridge-100",
+  "source_hash": "ursa-source-c2baf40e9fb2b513108057ad6edc04dfd545fe95d181744ce14044841c296f8c",
+  "results_file": "results.json.gz",
+  "processing_timestamp_utc": "2025-10-24T18:33:15+00:00",
+  "source_files": {
+    "results.json.gz": "2e0ed823d87e1f40c4d0a5b1014d1a2d5a3ad19d86b90cc8694287066bb2f3f6"
+  },
+  "statistics": {
+    "total_routes_in_raw_files": 0,
+    "total_routes_failed_or_duplicate": 0,
+    "final_unique_routes_saved": 285,
+    "num_targets_with_at_least_one_route": 95,
+    "duplication_factor": 1.0,
+    "min_routes_per_target": 3,
+    "max_routes_per_target": 3,
+    "avg_routes_per_target": 3,
+    "median_routes_per_target": 3
+  },
+  "sampling_parameters": {
+    "strategy": "top-k",
+    "k": 10
+  }
+}
