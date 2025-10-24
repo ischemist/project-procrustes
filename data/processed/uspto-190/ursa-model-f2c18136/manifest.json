@@ -1,0 +1,26 @@
+{
+  "model_name": "synllama",
+  "model_hash": "ursa-model-f2c18136",
+  "dataset_name": "uspto-190",
+  "source_hash": "ursa-source-dc2d9512c1015d3a9fbb35f307f8e4c76dd2a51127fd78b56d68d15a88d334ec",
+  "results_file": "results.json.gz",
+  "processing_timestamp_utc": "2025-10-24T18:22:56+00:00",
+  "source_files": {
+    "results.json.gz": "b091deb25d46f92b99c3dd213d4bb5ac0ab3c8ff1a48bcc91dd31272b3e97662"
+  },
+  "statistics": {
+    "total_routes_in_raw_files": 0,
+    "total_routes_failed_or_duplicate": 0,
+    "final_unique_routes_saved": 1,
+    "num_targets_with_at_least_one_route": 1,
+    "duplication_factor": 1.0,
+    "min_routes_per_target": 1,
+    "max_routes_per_target": 1,
+    "avg_routes_per_target": 1,
+    "median_routes_per_target": 1
+  },
+  "sampling_parameters": {
+    "strategy": "top-k",
+    "k": 10
+  }
+}

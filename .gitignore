@@ -41,7 +41,7 @@ data/analysis/**/*.json
 data/analysis/**/*.txt
 
 data/evaluations/**/*.json.gz
-data/processed/
+data/processed/**/*.json.gz
 
 
 _backups/
