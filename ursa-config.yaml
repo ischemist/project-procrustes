@@ -82,3 +82,6 @@ models:
     sampling:
       strategy: top-k
       k: 10
+  paroutes:
+    adapter: paroutes
+    raw_results_filename: routes.json.gz

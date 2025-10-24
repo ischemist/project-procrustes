@@ -8,7 +8,8 @@ import pytest
 from ursa.domain.chem import canonicalize_smiles
 from ursa.domain.schemas import TargetInfo
 
-MODEL_PRED_DIR = Path("tests/testing_data/model-predictions")
+TEST_DATA_DIR = Path("tests/testing_data")
+MODEL_PRED_DIR = TEST_DATA_DIR / "model-predictions"
 
 
 @pytest.fixture(scope="session")
@@ -91,6 +92,14 @@ def raw_synplanner_data() -> dict[str, Any]:
 def raw_syntheseus_data() -> dict[str, Any]:
     """loads the raw syntheseus prediction data from the test file."""
     path = Path(MODEL_PRED_DIR / "syntheseus-retro0-local-retro/results.json.gz")
+    with gzip.open(path, "rt", encoding="utf-8") as f:
+        return json.load(f)
+
+
+@pytest.fixture(scope="session")
+def raw_paroutes_data() -> dict[str, Any]:
+    """loads the raw syntheseus prediction data from the test file."""
+    path = Path(TEST_DATA_DIR / "paroutes.json.gz")
     with gzip.open(path, "rt", encoding="utf-8") as f:
         return json.load(f)
 
