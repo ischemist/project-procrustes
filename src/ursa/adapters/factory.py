@@ -7,6 +7,7 @@ from ursa.adapters.multistepttl_adapter import TtlRetroAdapter
 from ursa.adapters.paroutes_adapter import PaRoutesAdapter
 from ursa.adapters.retrochimera_adapter import RetrochimeraAdapter
 from ursa.adapters.retrostar_adapter import RetroStarAdapter
+from ursa.adapters.synllama_adapter import SynLlaMaAdapter
 from ursa.adapters.synplanner_adapter import SynPlannerAdapter
 from ursa.adapters.syntheseus_adapter import SyntheseusAdapter
 from ursa.exceptions import UrsaException
@@ -22,6 +23,7 @@ ADAPTER_MAP: dict[str, BaseAdapter] = {
     "retrostar": RetroStarAdapter(),
     "synplanner": SynPlannerAdapter(),
     "syntheseus": SyntheseusAdapter(),
+    "synllama": SynLlaMaAdapter(),
 }
 
 
