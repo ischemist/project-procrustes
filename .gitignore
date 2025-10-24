@@ -19,8 +19,6 @@ wheels/
 *.ipynb
 
 # Data
-data/evaluations/
-data/processed/
 data/transfers/
 data/**/*.json.gz
 data/**/*.csv
@@ -41,6 +39,11 @@ data/models/**/*.md
 data/analysis/**/*.html
 data/analysis/**/*.json
 data/analysis/**/*.txt
+
+data/evaluations/**/*.json.gz
+data/processed/
+
+
 _backups/
 # AI
 _prompts/
