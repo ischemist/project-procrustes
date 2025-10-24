@@ -82,6 +82,9 @@ models:
     sampling:
       strategy: top-k
       k: 10
-  paroutes:
-    adapter: paroutes
-    raw_results_filename: routes.json.gz
+  synllama:
+    adapter: synllama
+    raw_results_filename: results.json.gz
+    sampling:
+      strategy: top-k
+      k: 10
