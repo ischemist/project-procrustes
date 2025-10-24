@@ -4,6 +4,7 @@ from ursa.adapters.base_adapter import BaseAdapter
 from ursa.adapters.dms_adapter import DMSAdapter
 from ursa.adapters.dreamretro_adapter import DreamRetroAdapter
 from ursa.adapters.multistepttl_adapter import TtlRetroAdapter
+from ursa.adapters.paroutes_adapter import PaRoutesAdapter
 from ursa.adapters.retrochimera_adapter import RetrochimeraAdapter
 from ursa.adapters.retrostar_adapter import RetroStarAdapter
 from ursa.adapters.synplanner_adapter import SynPlannerAdapter
@@ -16,6 +17,7 @@ ADAPTER_MAP: dict[str, BaseAdapter] = {
     "dms": DMSAdapter(),
     "dreamretro": DreamRetroAdapter(),
     "multistepttl": TtlRetroAdapter(),
+    "paroutes": PaRoutesAdapter(),
     "retrochimera": RetrochimeraAdapter(),
     "retrostar": RetroStarAdapter(),
     "synplanner": SynPlannerAdapter(),
