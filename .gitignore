@@ -41,6 +41,7 @@ data/models/**/*.md
 data/analysis/**/*.html
 data/analysis/**/*.json
 data/analysis/**/*.txt
+data/analysis/**/*.png
 _backups/
 # AI
 _prompts/

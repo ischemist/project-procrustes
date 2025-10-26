@@ -116,3 +116,46 @@ class TestPaRoutesAdapterIntegration:
             canonicalize_smiles("O=C(O)c1ccncc1Cl"),
         }
         assert reactant_smiles == expected_smiles
+
+
+class TestPaRoutesYearParsing:
+    @pytest.mark.parametrize(
+        "patent_id, expected_year, expected_category, expected_cat_count",
+        [
+            # --- Correctly Parsed Modern Application IDs ---
+            ("US20150051201A1", "2015", None, 0),
+            ("US20011234567B2", "2001", None, 0),
+            ("US20999999999A1", "2099", None, 0),
+            # --- Pre-2001 Granted Patents (No Year Info) ---
+            ("US6039312B1", None, "pre-2001_grant", 1),
+            ("US0940123A1", None, "pre-2001_grant", 1),
+            # This would be an invalid ID, but tests the digit-first logic
+            ("US19991234567A1", None, "pre-2001_grant", 1),
+            # --- Special/Administrative Patents ---
+            ("USRE037303E1", None, "special/admin", 1),
+            ("USH0002007H1", None, "special/admin", 1),
+            ("USPP012345P2", None, "special/admin", 1),
+            ("USD012345S1", None, "special/admin", 1),
+            # --- Unknown/Non-US Formats ---
+            ("WO2015123456A1", None, "unknown_format", 1),
+            ("EP1234567A1", None, "unknown_format", 1),
+            ("garbage-string", None, "unknown_format", 1),
+            ("", None, "unknown_format", 1),
+        ],
+    )
+    def test_get_year_from_patent_id(self, patent_id, expected_year, expected_category, expected_cat_count):
+        """
+        tests the _get_year_from_patent_id helper with various patent formats.
+        """
+        adapter = PaRoutesAdapter()
+        result = adapter._get_year_from_patent_id(patent_id)
+
+        assert result == expected_year
+
+        if expected_category:
+            assert adapter.unparsed_categories[expected_category] == expected_cat_count
+            assert sum(adapter.unparsed_categories.values()) == expected_cat_count
+        else:
+            assert not adapter.unparsed_categories
+
+        assert not adapter.year_counts  # this should only be touched by the main adapt loop
