@@ -5,7 +5,7 @@ This script processes targets from a CSV file using Syntheseus's LocalRetroModel
 and saves results in a structured format similar to the DMS and AiZynthFinder scripts.
 
 Example usage:
-    uv run --extra synth-knn scripts/Syntheseus/2-run-synth-retro0-local-retro.py --target-name "test-targets"
+    uv run --extra syntheseus scripts/Syntheseus/2-run-synth-retro0-local-retro.py --target-name "ursa-bridge-100"
 
 The target CSV file should be located at: data/targets/{target_name}.csv
 Results are saved to: data/evaluations/syntheseus-retro0-local-retro/{target_name}/

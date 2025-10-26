@@ -52,6 +52,12 @@ models:
     sampling:
       strategy: by-length
       k: 10
+  dms-wide-fp16:
+    adapter: dms
+    raw_results_filename: ursa_bb_results.json.gz
+    sampling:
+      strategy: by-length
+      k: 10
   dms-explorer-XL-fp16:
     adapter: dms
     raw_results_filename: ursa_bb_results.json.gz

@@ -1,0 +1,26 @@
+{
+  "model_name": "syntheseus-retro0-local-retro",
+  "model_hash": "ursa-model-4fec0621",
+  "dataset_name": "ursa-expert-100",
+  "source_hash": "ursa-source-c88535a1ef870f785bbc519a76b297569a8d74ea2a2f2dfaf92aeaf9fe278cad",
+  "results_file": "results.json.gz",
+  "processing_timestamp_utc": "2025-10-26T18:53:17+00:00",
+  "source_files": {
+    "results.json.gz": "f039655427ef271a1483512ae608cae31f3912496dcc64fef94de1ad6c71dc79"
+  },
+  "statistics": {
+    "total_routes_in_raw_files": 0,
+    "total_routes_failed_or_duplicate": 0,
+    "final_unique_routes_saved": 502,
+    "num_targets_with_at_least_one_route": 53,
+    "duplication_factor": 1.0,
+    "min_routes_per_target": 1,
+    "max_routes_per_target": 10,
+    "avg_routes_per_target": 9.47,
+    "median_routes_per_target": 10
+  },
+  "sampling_parameters": {
+    "strategy": "top-k",
+    "k": 10
+  }
+}

@@ -2,7 +2,7 @@
 Run Retro* retrosynthesis predictions on a batch of targets.
 
 Example usage:
-    uv run --extra retro-star scripts/RetroStar/2-run-og-retro-star.py --target-name "test-targets"
+    uv run --extra retro-star --extra torch-cpu scripts/RetroStar/2-run-og-retro-star.py --target-name "ursa-expert-100"
 
 The target CSV file should be located at: data/targets/{target_name}.csv
 Results are saved to: data/evaluations/retro-star/{target_name}/
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     save_dir.mkdir(parents=True, exist_ok=True)
 
     # Initialize planner
-    starting_molecules = base_dir / "data" / "models" / "assets" / "ursa-bb-stock-v2-canon.csv"
+    starting_molecules = base_dir / "data" / "models" / "assets" / "ursa-bb-stock-v3-canon.csv"
     retro_star_dir = base_dir / "data" / "models" / "retro-star"
 
     planner = RSPlanner(

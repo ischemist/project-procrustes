@@ -13,6 +13,7 @@ dependencies = [
 authors = [{ name = "Anton Morgunov", email = "anton@ischemist.com" }]
 license = { text = "MIT" }
 
+
 [project.urls]
 Homepage = "https://github.com/ischemist/project-procrustes"
 Issues = "https://github.com/ischemist/project-procrustes/issues"
@@ -49,7 +50,16 @@ aizyn = [
 synplanner = ["synplanner==1.2.0"]
 torch-gpu = ["torch"]
 torch-cpu = ["torch"]
-synth-knn = [
+syntheseus = [
+    "syntheseus[retro-knn]>=0.5.0",
+    "numpy<2",
+    "dgl",
+    "torch<=2.1",
+    "torchdata<=0.7.0",
+    "faiss-cpu",
+    "torch-scatter"
+]
+syntheseus-linux = [
     "syntheseus[retro-knn]>=0.5.0",
     "numpy<2",
     "dgl",
@@ -79,7 +89,8 @@ conflicts = [
         { extra = "torch-cpu" },
     ],
     [
-        { extra = "synth-knn" },
+        { extra = "syntheseus" },
+        { extra = "syntheseus-linux" },
         { extra = "synp" },
         { extra = "dms" },
         { extra = "retro-star" },
@@ -90,7 +101,9 @@ conflicts = [
 
 
 [tool.uv.sources]
-dgl = { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl" }
+dgl = [
+{ url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin'" },
+]
 torch = [
     { index = "pytorch-cpu", extra = "torch-cpu" },
     { index = "pytorch-cu126", extra = "torch-gpu" },
@@ -162,5 +175,8 @@ exclude_lines = [
 
 [tool.pytest.ini_options]
 markers = [
-    "integration: marks tests as integration tests, slower and may require external resources",
+    "unit: fast, isolated, deterministic logic tests.",
+    "contract: fast, cpu-based tests for module i/o contracts (shapes/dtypes).",
+    "integration: slow, cpu-based tests for inter-module interactions.",
+    "regression: slow, numerically-sensitive tests against a golden baseline.",
 ]

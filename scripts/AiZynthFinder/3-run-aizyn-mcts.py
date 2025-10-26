@@ -5,10 +5,15 @@ This script processes targets from a CSV file using AiZynthFinder's MCTS algorit
 and saves results in a structured format similar to the DMS predictions script.
 
 Example usage:
-    uv run --extra aizyn scripts/AiZynthFinder/3-run-aizyn-mcts.py --target-name "test-targets"
+    uv run --extra aizyn scripts/AiZynthFinder/3-run-aizyn-mcts.py --target-name "ursa-bridge-100"
 
 The target CSV file should be located at: data/{target_name}.csv
 Results are saved to: data/evaluations/aizynthfinder-mcts/{target_name}/
+
+You might need to install some build tools to install aizynthfinder deps on a clean EC2 instance.
+```bash
+sudo apt-get update && sudo apt-get install build-essential python3.11-dev libxrender1
+```
 """
 
 import argparse
@@ -30,7 +35,7 @@ if __name__ == "__main__":
 
     targets = load_targets_csv(base_dir / "data" / "targets" / f"{args.target_name}.csv")
 
-    config_path = base_dir / "data" / "models" / "aizynthfinder" / "config_mcts.yml"
+    config_path = base_dir / "data" / "models" / "aizynthfinder" / "config_mcts.yaml"
 
     save_dir = base_dir / "data" / "evaluations" / "aizynthfinder-mcts" / args.target_name
     save_dir.mkdir(parents=True, exist_ok=True)

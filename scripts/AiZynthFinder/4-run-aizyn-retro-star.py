@@ -5,7 +5,7 @@ This script processes targets from a CSV file using AiZynthFinder's Retro* algor
 and saves results in a structured format similar to the DMS predictions script.
 
 Example usage:
-    uv run --extra aizyn scripts/AiZynthFinder/4-run-aizyn-retro-star.py --target-name "test-targets"
+    uv run --extra aizyn scripts/AiZynthFinder/4-run-aizyn-retro-star.py --target-name "ursa-bridge-100"
 
 The target CSV file should be located at: data/{target_name}.csv
 Results are saved to: data/evaluations/aizynthfinder-retro-star/{target_name}/
@@ -30,7 +30,7 @@ if __name__ == "__main__":
 
     targets = load_targets_csv(base_dir / "data" / "targets" / f"{args.target_name}.csv")
 
-    config_path = base_dir / "data" / "models" / "aizynthfinder" / "config_retrostar.yml"
+    config_path = base_dir / "data" / "models" / "aizynthfinder" / "config_retrostar.yaml"
 
     save_dir = base_dir / "data" / "evaluations" / "aizynthfinder-retro-star" / args.target_name
     save_dir.mkdir(parents=True, exist_ok=True)

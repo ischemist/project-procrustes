@@ -1,9 +1,9 @@
 """
 Example usage:
- DIRECTMULTISTEP_LOG_LEVEL=WARNING python scripts/DirectMultiStep/2-run-dms.py --model-name "explorer XL" --use_fp16 --target-name "uspto-190" --device "cuda:0"
- DIRECTMULTISTEP_LOG_LEVEL=WARNING python scripts/DirectMultiStep/2-run-dms.py --model-name "flex-20M" --use_fp16 --target-name "rs-first-25" --device "cuda:2"
- DIRECTMULTISTEP_LOG_LEVEL=WARNING python scripts/DirectMultiStep/2-run-dms.py --model-name "flash" --use_fp16 --target-name "ursa-bridge-100" --device "cuda:1"
- DIRECTMULTISTEP_LOG_LEVEL=WARNING python scripts/DirectMultiStep/2-run-dms.py --model-name "wide" --use_fp16 --target-name "ursa-bridge-100" --device "cuda:0"
+ DIRECTMULTISTEP_LOG_LEVEL=WARNING uv run --extra dms --extra torch-gpu scripts/DirectMultiStep/2-run-dms.py --model-name "explorer XL" --use_fp16 --target-name "ursa-bridge-100"
+ DIRECTMULTISTEP_LOG_LEVEL=WARNING uv run --extra dms --extra torch-gpu scripts/DirectMultiStep/2-run-dms.py --model-name "flex-20M" --use_fp16 --target-name "ursa-bridge-100"
+ DIRECTMULTISTEP_LOG_LEVEL=WARNING uv run --extra dms --extra torch-gpu scripts/DirectMultiStep/2-run-dms.py --model-name "flash" --use_fp16 --target-name "ursa-bridge-100"
+ DIRECTMULTISTEP_LOG_LEVEL=WARNING uv run --extra dms --extra torch-gpu scripts/DirectMultiStep/2-run-dms.py --model-name "wide" --use_fp16 --target-name "ursa-bridge-100"
 
  uv run --extra dms scripts/DirectMultiStep/2-run-dms.py --model-name "flash" --use_fp16 --target-name "test-targets" --device "cpu"
 """
@@ -96,7 +96,7 @@ if __name__ == "__main__":
             )  # list[list[tuple[str, float]]]
             all_beam_results_for_target_NS2.extend(beam_result_bs2)
         else:
-            for step in range(1, 3):
+            for step in range(1, 15):
                 encoder_inp, steps_tens, path_tens = prepare_input_tensors(
                     target, step, None, rds, rds.product_max_length, rds.sm_max_length, args.use_fp16
                 )

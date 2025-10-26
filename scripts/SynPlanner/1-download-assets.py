@@ -1,6 +1,6 @@
 """
 Usage:
-    uv run --extra synplanner scripts/SynPlanner/1-download-assets.py
+    uv run --extra synplanner --extra torch-cpu scripts/SynPlanner/1-download-assets.py
 """
 
 from pathlib import Path

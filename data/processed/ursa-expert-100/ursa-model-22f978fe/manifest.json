@@ -1,0 +1,26 @@
+{
+  "model_name": "dms-wide-fp16",
+  "model_hash": "ursa-model-22f978fe",
+  "dataset_name": "ursa-expert-100",
+  "source_hash": "ursa-source-077ac9ea9cb63f55298d92aac9b4be181678a13e09daa0b10c4e3612926fe78a",
+  "results_file": "results.json.gz",
+  "processing_timestamp_utc": "2025-10-26T12:53:40+00:00",
+  "source_files": {
+    "ursa_bb_results.json.gz": "b6390d8131f56bc7faf7008c40a9777379b174ab997750ccd0038dd432f53464"
+  },
+  "statistics": {
+    "total_routes_in_raw_files": 0,
+    "total_routes_failed_or_duplicate": 0,
+    "final_unique_routes_saved": 666,
+    "num_targets_with_at_least_one_route": 85,
+    "duplication_factor": 1.0,
+    "min_routes_per_target": 1,
+    "max_routes_per_target": 10,
+    "avg_routes_per_target": 7.84,
+    "median_routes_per_target": 10
+  },
+  "sampling_parameters": {
+    "strategy": "by-length",
+    "k": 10
+  }
+}

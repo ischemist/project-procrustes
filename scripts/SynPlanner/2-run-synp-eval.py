@@ -5,8 +5,7 @@ This script processes targets from a CSV file using Synplanner's MCTS algorithm
 and saves results in a structured format similar to the DMS predictions script.
 
 Example usage:
-    uv run --extra synp scripts/synplanner/run-synp-eval.py --target-name "rs-first-25"
-    uv run --extra synp scripts/synplanner/run-synp-eval.py --target-name "rs-first-25" --effort high
+    uv run --extra synplanner --extra torch-cpu scripts/SynPlanner/2-run-synp-eval.py --target-name "ursa-expert-100"
 """
 
 import argparse
@@ -61,7 +60,7 @@ def run_synplanner_predictions() -> None:
     targets = load_targets_csv(base_dir / "data" / "targets" / f"{args.target_name}.csv")
     policy_function = PolicyNetworkFunction(policy_config=policy_config)
     reaction_rules = load_reaction_rules(reaction_rules_path)
-    with open(base_dir / "data" / "models" / "assets" / "ursa-bb-stock-v2-canon.csv") as f:
+    with open(base_dir / "data" / "models" / "assets" / "ursa-bb-stock-v3-canon.csv") as f:
         building_blocks = set(f.read().splitlines())
 
     if search_config["evaluation_type"] == "gcn" and value_network_path.exists():

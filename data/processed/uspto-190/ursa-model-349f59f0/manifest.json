@@ -1,0 +1,26 @@
+{
+  "model_name": "synplanner-eval",
+  "model_hash": "ursa-model-349f59f0",
+  "dataset_name": "uspto-190",
+  "source_hash": "ursa-source-0535ded5cec52f5370f2429668811ffb04d890f9ca415925682a7ea6c4742067",
+  "results_file": null,
+  "processing_timestamp_utc": "2025-10-26T12:55:51+00:00",
+  "source_files": {
+    "results.json.gz": "580e4ced95287eff862bde1f33226ed6c25ed2e85634af90bc4c19c3c9c77d34"
+  },
+  "statistics": {
+    "total_routes_in_raw_files": 0,
+    "total_routes_failed_or_duplicate": 0,
+    "final_unique_routes_saved": 0,
+    "num_targets_with_at_least_one_route": 0,
+    "duplication_factor": 0.0,
+    "min_routes_per_target": 0,
+    "max_routes_per_target": 0,
+    "avg_routes_per_target": 0.0,
+    "median_routes_per_target": 0.0
+  },
+  "sampling_parameters": {
+    "strategy": "top-k",
+    "k": 10
+  }
+}
