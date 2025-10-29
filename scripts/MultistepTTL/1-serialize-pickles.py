@@ -1,6 +1,6 @@
 """
 Usage:
-    uv run scripts/MultistepTTL/1-serialize-pickles.py --ds-name rs-first-25
+    uv run scripts/MultistepTTL/1-serialize-pickles.py --ds-name ursa-expert-100
     uv run scripts/MultistepTTL/1-serialize-pickles.py --ds-name uspto-190
     uv run scripts/MultistepTTL/1-serialize-pickles.py --ds-name ursa-bridge-100
 """
@@ -13,7 +13,7 @@ from typing import Any
 
 from ursa.exceptions import TtlRetroSerializationError
 from ursa.utils.logging import logger
-from ursa.utils.serializers import serialize_ttlretro_directory
+from ursa.utils.serializers import serialize_multistepttl_directory
 
 base_dir = Path(__file__).resolve().parents[2]
 
@@ -34,10 +34,12 @@ def main() -> None:
             continue
 
         target_name = subdir.name
+        if target_name.startswith("USPTO"):
+            target_name = target_name.replace("_", "/")
         logger.info(f"-> processing target: {target_name}")
 
         try:
-            serialized_routes = serialize_ttlretro_directory(subdir)
+            serialized_routes = serialize_multistepttl_directory(subdir)
 
             if serialized_routes is None:
                 logger.warning(f"  - warning: could not find pickle files in {subdir}. skipping.")

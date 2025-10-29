@@ -39,7 +39,9 @@ data/models/**/*.md
 data/analysis/**/*.html
 data/analysis/**/*.json
 data/analysis/**/*.txt
+data/analysis/**/*.png
 
+data/evaluations/**/*.pkl
 data/evaluations/**/*.json.gz
 data/evaluations/**/results.json
 data/processed/**/*.json.gz

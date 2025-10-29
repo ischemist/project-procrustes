@@ -3,7 +3,7 @@ Example usage:
  DIRECTMULTISTEP_LOG_LEVEL=WARNING uv run --extra dms --extra torch-gpu scripts/DirectMultiStep/2-run-dms.py --model-name "explorer XL" --use_fp16 --target-name "ursa-bridge-100"
  DIRECTMULTISTEP_LOG_LEVEL=WARNING uv run --extra dms --extra torch-gpu scripts/DirectMultiStep/2-run-dms.py --model-name "flex-20M" --use_fp16 --target-name "ursa-bridge-100"
  DIRECTMULTISTEP_LOG_LEVEL=WARNING uv run --extra dms --extra torch-gpu scripts/DirectMultiStep/2-run-dms.py --model-name "flash" --use_fp16 --target-name "ursa-bridge-100"
- DIRECTMULTISTEP_LOG_LEVEL=WARNING uv run --extra dms --extra torch-gpu scripts/DirectMultiStep/2-run-dms.py --model-name "wide" --use_fp16 --target-name "ursa-bridge-100"
+ DIRECTMULTISTEP_LOG_LEVEL=WARNING uv run --extra dms --extra torch-gpu scripts/DirectMultiStep/2-run-dms.py --model-name "wide" --use_fp16 --target-name "uspto-190-pt2"
 
  uv run --extra dms scripts/DirectMultiStep/2-run-dms.py --model-name "flash" --use_fp16 --target-name "test-targets" --device "cpu"
 """

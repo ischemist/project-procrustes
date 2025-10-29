@@ -1,0 +1,26 @@
+{
+  "model_name": "multistep-ttl",
+  "model_hash": "ursa-model-4ebab769",
+  "dataset_name": "ursa-expert-100",
+  "source_hash": "ursa-source-c12fc9a697f163a7fe5ee609f5626c7f82353e5d2acddaafdac9f6c6f26d2e2a",
+  "results_file": "results.json.gz",
+  "processing_timestamp_utc": "2025-10-29T11:33:27+00:00",
+  "source_files": {
+    "results.json.gz": "05a47b0991720143cffd173cdd816ecfd5bf9bbd4832f43ecc0661ab9dc594dc"
+  },
+  "statistics": {
+    "total_routes_in_raw_files": 0,
+    "total_routes_failed_or_duplicate": 23,
+    "final_unique_routes_saved": 407,
+    "num_targets_with_at_least_one_route": 43,
+    "duplication_factor": 1.06,
+    "min_routes_per_target": 6,
+    "max_routes_per_target": 10,
+    "avg_routes_per_target": 9.47,
+    "median_routes_per_target": 10
+  },
+  "sampling_parameters": {
+    "strategy": "top-k",
+    "k": 10
+  }
+}
