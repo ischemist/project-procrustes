@@ -85,7 +85,7 @@ def load_visualization_config(config_path: Path) -> VisualizationConfig:
 def discover_model_names(base_path: Path) -> dict[str, str]:
     """scans for manifest.json files to map model hashes to model names."""
     mapping: dict[str, str] = {
-        "Insilico": "Insilico",  # special case: Insilico doesn't have a manifest
+        "Insilico": "Insilico",  # special case: Insilico was run internally
     }
     if not base_path.is_dir():
         logging.warning(f"data path for model discovery not found: {base_path}")
@@ -110,14 +110,8 @@ def build_model_display_map(
     model_id_to_name: dict[str, str], model_configs: dict[str, ModelDisplayConfig]
 ) -> dict[str, ModelDisplayConfig]:
     """builds a map from model_id to its display settings."""
-    display_map: dict[str, ModelDisplayConfig] = {}
-    for model_id, model_name in model_id_to_name.items():
-        if model_name in model_configs:
-            display_map[model_id] = model_configs[model_name]
-        else:
-            display_map[model_id] = ModelDisplayConfig(
-                abbreviation=model_name, legend_name=model_name, color=DEFAULT_COLOR
-            )
+    name_to_id = {name: id for id, name in model_id_to_name.items()}
+    display_map = {name_to_id[name]: model_configs[name] for name in model_configs}
     return display_map
 
 

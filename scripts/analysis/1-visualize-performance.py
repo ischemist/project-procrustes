@@ -33,10 +33,12 @@ def main(config_path: Path):
 
     logging.info("discovering model names from manifests...")
     discovered_names = performance.discover_model_names(processed_path)
+    print(f"{discovered_names=}")
     logging.info(f"-> discovered {len(discovered_names)} models.")
 
     logging.info("building model display map...")
     model_display_map = performance.build_model_display_map(discovered_names, viz_config.models)
+    print(f"{model_display_map=}")
     logging.info(f"-> mapped {len(model_display_map)} models with display settings.")
 
     logging.info(f"\nloading data from {input_path}...")

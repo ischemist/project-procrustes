@@ -9,12 +9,12 @@ models:
   aizynthfinder-mcts:
     legend_name: "AiZynthFinder MCTS"
     abbreviation: "AZ-M"
-    color: "#FF6B6B"
+    color: "#bc843d"
     text_position: "top left"
   aizynthfinder-retro-star:
     legend_name: "AiZynthFinder RetroStar"
     abbreviation: "AZ-RS"
-    color: "#FF8E72"
+    color: "#f4ac51"
     text_position: "top right"
   askcos:
     legend_name: "ASKCOS"
@@ -24,17 +24,17 @@ models:
   dms-flash-fp16:
     legend_name: "DMS Flash"
     abbreviation: "DMS-F"
-    color: "#4ECDC4"
+    color: "#697cf9"
     text_position: "middle left"
   dms-wide-fp16:
     legend_name: "DMS Wide"
     abbreviation: "DMS-W"
-    color: "#45B7D1"
+    color: "#415ff7"
     text_position: "top center"
   dms-explorer-XL-fp16:
     legend_name: "DMS Explorer XL"
     abbreviation: "DMS-XL"
-    color: "#45B7D1" # note: same color as wide
+    color: "#1947e1" # note: same color as wide
   dream-retroer:
     legend_name: "DreamRetroEr"
     abbreviation: "Dream"
