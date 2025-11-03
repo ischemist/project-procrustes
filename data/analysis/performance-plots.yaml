@@ -4,7 +4,7 @@ models:
   Insilico:
     legend_name: "Insilico"
     abbreviation: "IS"
-    color: "#386641"
+    color: "#6a994e"
     text_position: "top center"
   aizynthfinder-mcts:
     legend_name: "AiZynthFinder MCTS"
@@ -16,16 +16,29 @@ models:
     abbreviation: "AZ-RS"
     color: "#f4ac51"
     text_position: "top right"
+  syntheseus-retro0-local-retro:
+    legend_name: "Syntheseus Retro0 Local Retro"
+    abbreviation: "Synth-R0"
+    color: "#f84c4d"
+    text_position: "bottom center"
   askcos:
     legend_name: "ASKCOS"
     abbreviation: "ASK"
     color: "#24cddc"
     text_position: "bottom center"
+  retrochimera:
+    legend_name: "RetroChimera"
+    abbreviation: "RC"
+    color: "#BC6C25"
+  retro-star:
+    legend_name: "RetroStar"
+    abbreviation: "R*"
+    color: "#81419a"
   dms-flash-fp16:
     legend_name: "DMS Flash"
     abbreviation: "DMS-F"
     color: "#697cf9"
-    text_position: "middle left"
+    text_position: "top left"
   dms-wide-fp16:
     legend_name: "DMS Wide"
     abbreviation: "DMS-W"
@@ -44,14 +57,7 @@ models:
     legend_name: "MultiStep TTL"
     abbreviation: "TTL"
     color: "#FFEAA7"
-  retro-star:
-    legend_name: "RetroStar"
-    abbreviation: "R*"
-    color: "#81419a"
-  retrochimera:
-    legend_name: "RetroChimera"
-    abbreviation: "RC"
-    color: "#BC6C25"
+    text_position: "middle left"
   synllama:
     legend_name: "SynLLaMa"
     abbreviation: "LLaMa"
@@ -71,11 +77,6 @@ models:
     legend_name: "Syntheseus BFS Local Retro"
     abbreviation: "Synth-BFS"
     color: "#f97e7f"
-  syntheseus-retro0-local-retro:
-    legend_name: "Syntheseus Retro0 Local Retro"
-    abbreviation: "Synth-R0"
-    color: "#f84c4d"
-    text_position: "bottom center"
 
 # plot settings
 plot_settings:

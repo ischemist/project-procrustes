@@ -163,9 +163,10 @@ def _create_trace(*, record: BenchmarkRecord, display_settings: ModelDisplayConf
         mode="markers+text",
         text=[display_settings.abbreviation],
         textposition=display_settings.text_position,
+        textfont={"size": 12},
         name=f"({display_settings.abbreviation}) {display_settings.legend_name}",
         hovertemplate=f"<b>{display_settings.legend_name}</b> ({record.model_id})<br>Sol+: %{{x}}<br>CC: %{{y}}<extra></extra>",
-        marker={"color": display_settings.color},
+        marker={"color": display_settings.color, "size": 10},
         **kwargs,
     )
 
