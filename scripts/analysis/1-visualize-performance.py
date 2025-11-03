@@ -1,74 +1,76 @@
 """
 visualization script for synthesis results.
 
-this script loads benchmark data and generates performance plots.
-configuration is loaded from data/visualization-config.yaml
+loads benchmark data and generates performance plots based on a yaml config.
 """
 
+import argparse
+import logging
 from pathlib import Path
 
 from ursa.analysis import performance
+from ursa.analysis.performance import VisualizationConfig
 
-# --- configuration paths ---
-VIZ_CONFIG_PATH = Path("data/analysis/performance-plots.yaml")
-DATA_PATH = Path("data/bench-results-2025-10-30.csv")
-PROCESSED_DATA_PATH = Path("data/processed")
+# --- constants ---
+DEFAULT_VIZ_CONFIG_PATH = Path("data/analysis/performance-plots.yaml")
 
 
-def main():
+def main(config_path: Path):
     """main execution function."""
-    if not DATA_PATH.exists():
-        print(f"error: data file not found at {DATA_PATH}")
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    if not config_path.exists():
+        logging.error(f"error: visualization config not found at {config_path}")
         return
 
-    if not VIZ_CONFIG_PATH.exists():
-        print(f"error: visualization config not found at {VIZ_CONFIG_PATH}")
-        return
+    logging.info(f"loading visualization configuration from {config_path}...")
+    viz_config: VisualizationConfig = performance.load_visualization_config(config_path)
+    ps = viz_config.plot_settings  # convenience alias
 
-    print("loading visualization configuration...")
-    viz_config = performance.load_visualization_config(VIZ_CONFIG_PATH)
-    print(f"-> loaded config from {VIZ_CONFIG_PATH}")
+    input_path = Path(ps.input_data_path)
+    processed_path = Path(ps.processed_data_path)
+    output_dir = Path(ps.output_dir)
 
-    print("discovering model names from manifests...")
-    discovered_names = performance.discover_model_names(PROCESSED_DATA_PATH)
-    print(f"-> discovered {len(discovered_names)} models.")
-    print("building model display map...")
-    model_display_map = performance.build_model_display_map(discovered_names, viz_config)
-    print(f"-> mapped {len(model_display_map)} models with display settings.")
+    logging.info("discovering model names from manifests...")
+    discovered_names = performance.discover_model_names(processed_path)
+    logging.info(f"-> discovered {len(discovered_names)} models.")
 
-    print(f"\nloading data from {DATA_PATH}...")
-    df = performance.load_benchmark_data(DATA_PATH)
-    print("data loaded successfully.")
-    print(f"found {len(df)} records across {df['dataset'].nunique()} datasets.")
+    logging.info("building model display map...")
+    model_display_map = performance.build_model_display_map(discovered_names, viz_config.models)
+    logging.info(f"-> mapped {len(model_display_map)} models with display settings.")
 
-    # get plot settings from config
-    plot_settings = viz_config.get("plot_settings", {})
-    output_dir = Path(plot_settings.get("output_dir"))
-    shared_xaxes = plot_settings.get("combined_figure", {}).get("shared_xaxes", True)
-    shared_yaxes = plot_settings.get("combined_figure", {}).get("shared_yaxes", False)
+    logging.info(f"\nloading data from {input_path}...")
+    df = performance.load_benchmark_data(input_path)
+    logging.info(f"found {len(df)} records across {df['dataset'].nunique()} datasets.")
 
-    print("\ngenerating plots...")
+    logging.info("\ngenerating plots...")
 
     # 1. generate the combined plot (one per dataset, stacked vertically)
     performance.plot_performance_summary(
         df=df,
         model_display_map=model_display_map,
+        plot_settings=ps,
         output_dir=output_dir,
-        shared_xaxes=shared_xaxes,
-        shared_yaxes=shared_yaxes,
-        viz_config=viz_config,
     )
 
     # 2. generate separate plots (one figure per dataset)
     performance.plot_performance_by_dataset(
         df=df,
         model_display_map=model_display_map,
+        plot_settings=ps,
         output_dir=output_dir,
-        viz_config=viz_config,
     )
 
-    print("\n...done.")
+    logging.info("\n...done.")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="generate performance plots.")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_VIZ_CONFIG_PATH,
+        help=f"path to the visualization config yaml file (default: {DEFAULT_VIZ_CONFIG_PATH})",
+    )
+    args = parser.parse_args()
+    main(args.config)
