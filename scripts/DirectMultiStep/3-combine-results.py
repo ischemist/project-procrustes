@@ -5,7 +5,7 @@ This script takes results from subparts (e.g., uspto-190-pt1, uspto-190-pt2, etc
 and combines them into a single folder (e.g., uspto-190).
 
 Example Usage:
-    uv run scripts/dms/combine-results.py dms-wide-fp16 uspto-190
+    uv run scripts/DirectMultiStep/3-combine-results.py dms-wide-fp16 uspto-190
 """
 
 import argparse
@@ -31,13 +31,9 @@ def combine_results(parent_dir: Path, base_name: str, parts: list[str]) -> None:
 
     # Initialize combined data structures
     combined_valid_results = {}
-    combined_buyable_results = {}
-    combined_emol_results = {}
     combined_ursa_bb_results = {}
     # Initialize counters
     total_raw_solved = 0
-    total_buyable_solved = 0
-    total_emol_solved = 0
     total_ursa_bb_solved = 0
     total_time_elapsed = 0.0
 
@@ -54,13 +50,11 @@ def combine_results(parent_dir: Path, base_name: str, parts: list[str]) -> None:
         print(f"Processing {part_dir}...")
 
         # Load results.json
-        results_file = part_dir / "results.json"
+        results_file = part_dir / "summary.json"
         if results_file.exists():
             with open(results_file) as f:
                 part_results = json.load(f)
                 total_raw_solved += part_results.get("raw_solved_count", 0)
-                total_buyable_solved += part_results.get("buyable_solved_count", 0)
-                total_emol_solved += part_results.get("emol_solved_count", 0)
                 total_time_elapsed += part_results.get("time_elapsed", 0.0)
                 total_ursa_bb_solved += part_results.get("ursa_bb_solved_count", 0)
         # Load valid_results
@@ -68,18 +62,6 @@ def combine_results(parent_dir: Path, base_name: str, parts: list[str]) -> None:
         if valid_file.exists():
             part_valid = load_json_gz(valid_file)
             combined_valid_results.update(part_valid)
-
-        # Load buyable_results
-        buyable_file = part_dir / "buyable_results.json.gz"
-        if buyable_file.exists():
-            part_buyable = load_json_gz(buyable_file)
-            combined_buyable_results.update(part_buyable)
-
-        # Load emol_results
-        emol_file = part_dir / "emol_results.json.gz"
-        if emol_file.exists():
-            part_emol = load_json_gz(emol_file)
-            combined_emol_results.update(part_emol)
 
         # Load ursa_bb_results
         ursa_bb_file = part_dir / "ursa_bb_results.json.gz"
@@ -90,28 +72,22 @@ def combine_results(parent_dir: Path, base_name: str, parts: list[str]) -> None:
     # Save combined results
     combined_results = {
         "raw_solved_count": total_raw_solved,
-        "buyable_solved_count": total_buyable_solved,
-        "emol_solved_count": total_emol_solved,
         "ursa_bb_solved_count": total_ursa_bb_solved,
         "time_elapsed": total_time_elapsed,
         "parts_combined": len(parts),
     }
 
     # Save results.json
-    with open(combined_dir / "results.json", "w") as f:
+    with open(combined_dir / "summary.json", "w") as f:
         json.dump(combined_results, f, indent=2)
 
     # Save combined data files
     save_json_gz(combined_valid_results, combined_dir / "valid_results.json.gz")
-    save_json_gz(combined_buyable_results, combined_dir / "buyable_results.json.gz")
-    save_json_gz(combined_emol_results, combined_dir / "emol_results.json.gz")
     save_json_gz(combined_ursa_bb_results, combined_dir / "ursa_bb_results.json.gz")
 
     print(f"\nCombined results saved to: {combined_dir}")
     print(f"Total targets processed: {len(combined_valid_results)}")
     print(f"Raw solved count: {total_raw_solved}")
-    print(f"Buyable solved count: {total_buyable_solved}")
-    print(f"eMolecules solved count: {total_emol_solved}")
     print(f"Ursa BB solved count: {total_ursa_bb_solved}")
     print(f"Total time elapsed: {total_time_elapsed:.2f} seconds")
 

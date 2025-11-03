@@ -5,8 +5,8 @@ This script processes targets from a CSV file using Synplanner's MCTS algorithm
 and saves results in a structured format similar to the DMS predictions script.
 
 Example usage:
-    uv run --extra synp --extra torch-cpu scripts/synplanner/run-synp-rollout.py --target-name "test-targets"
-    uv run --extra synp --extra torch-cpu scripts/synplanner/run-synp-rollout.py --target-name "rs-first-25" --effort high
+    uv run --extra synplanner --extra torch-cpu scripts/SynPlanner/3-run-synp-rollout.py --target-name "ursa-expert-100"
+    uv run --extra synplanner --extra torch-cpu scripts/synplanner/run-synp-rollout.py --target-name "rs-first-25" --effort high
 """
 
 import argparse

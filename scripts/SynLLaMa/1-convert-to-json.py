@@ -12,8 +12,8 @@ the resulting json file is the expected input for the `synllamaadapter`.
 example usage:
 ---
 uv run scripts/SynLLaMa/1-convert-to-json.py \
-    --input data/raw/synllama/ursa-bridge-100/predictions.csv \
-    --output data/evaluations/synllama/ursa-bridge-100
+    --input data/evaluations/synllama/uspto-190/results.csv \
+    --output data/evaluations/synllama/uspto-190
 
 uv run scripts/SynLLaMa/1-convert-to-json.py \
     -i tests/testing_data/model-predictions/synllama/targets.csv \

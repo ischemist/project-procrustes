@@ -1,0 +1,26 @@
+{
+  "model_name": "askcos",
+  "model_hash": "ursa-model-98693154",
+  "dataset_name": "ursa-expert-100",
+  "source_hash": "ursa-source-309a681b074f29274c24b70c99f0ac1c766ffca41e94ffdb2e693342cb3f16c0",
+  "results_file": "results.json.gz",
+  "processing_timestamp_utc": "2025-10-24T18:39:28+00:00",
+  "source_files": {
+    "results.json.gz": "cdaa291a92c8e5ae3e634a5cd0157e8fe09e12397c71b3e9141481d871fa280f"
+  },
+  "statistics": {
+    "total_routes_in_raw_files": 0,
+    "total_routes_failed_or_duplicate": 0,
+    "final_unique_routes_saved": 205,
+    "num_targets_with_at_least_one_route": 23,
+    "duplication_factor": 1.0,
+    "min_routes_per_target": 2,
+    "max_routes_per_target": 10,
+    "avg_routes_per_target": 8.91,
+    "median_routes_per_target": 10
+  },
+  "sampling_parameters": {
+    "strategy": "top-k",
+    "k": 10
+  }
+}

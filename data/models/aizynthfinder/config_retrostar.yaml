@@ -1,20 +1,20 @@
 expansion:
   uspto:
-    - /Users/morgunov/Developer/batista/ursa-evaluations/data/models/aizynthfinder/uspto_model.onnx
-    - /Users/morgunov/Developer/batista/ursa-evaluations/data/models/aizynthfinder/uspto_templates.csv.gz
+    - data/models/aizynthfinder/uspto_model.onnx
+    - data/models/aizynthfinder/uspto_templates.csv.gz
   ringbreaker:
-    - /Users/morgunov/Developer/batista/ursa-evaluations/data/models/aizynthfinder/uspto_ringbreaker_model.onnx
-    - /Users/morgunov/Developer/batista/ursa-evaluations/data/models/aizynthfinder/uspto_ringbreaker_templates.csv.gz
+    - data/models/aizynthfinder/uspto_ringbreaker_model.onnx
+    - data/models/aizynthfinder/uspto_ringbreaker_templates.csv.gz
 filter:
-  uspto: /Users/morgunov/Developer/batista/ursa-evaluations/data/models/aizynthfinder/uspto_filter_model.onnx
+  uspto: data/models/aizynthfinder/uspto_filter_model.onnx
 stock:
-  ursa-bb: /Users/morgunov/Developer/batista/ursa-evaluations/data/models/assets/ursa-bb-stock-v3.hdf5
+  ursa-bb: data/models/assets/ursa-bb-stock-v3.hdf5
 search:
   algorithm: aizynthfinder.search.retrostar.search_tree.SearchTree
   algorithm_config:
     molecule_cost:
       cost: aizynthfinder.search.retrostar.cost.RetroStarCost
-      model_path: /Users/morgunov/Developer/batista/ursa-evaluations/data/models/aizynthfinder/retrostar_value_model.pickle
+      model_path: data/models/aizynthfinder/retrostar_value_model.pickle
       fingerprint_length: 2048
       fingerprint_radius: 2
       dropout_rate: 0.1

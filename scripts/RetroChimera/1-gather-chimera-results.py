@@ -7,9 +7,9 @@ and combines them into a single results.json.gz file, mapping target IDs to thei
 Usage:
 
 uv run python scripts/RetroChimera/1-gather-chimera-results.py \
-  --targets-csv data/targets/rs-first-25.csv \
-  --eval-dir data/evaluations/retrochimera/rs-first-25 \
-  --output data/evaluations/retrochimera/rs-first-25/results.json.gz
+  --targets-csv data/targets/ursa-expert-100.csv \
+  --eval-dir data/evaluations/retrochimera/ursa-expert-100 \
+  --output data/evaluations/retrochimera/ursa-expert-100/results.json.gz
 
 
 uv run python scripts/RetroChimera/1-gather-chimera-results.py \

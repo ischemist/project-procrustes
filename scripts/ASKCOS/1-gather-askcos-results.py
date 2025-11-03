@@ -7,9 +7,9 @@ and combines them into a single results.json.gz file, mapping target IDs to thei
 Usage:
 
 uv run scripts/ASKCOS/1-gather-askcos-results.py \
-  --targets-csv data/targets/rs-first-25.csv \
-  --eval-dir data/evaluations/askcos/rs-first-25 \
-  --output data/evaluations/askcos/rs-first-25/results.json.gz
+  --targets-csv data/targets/ursa-expert-100.csv \
+  --eval-dir data/evaluations/askcos/ursa-expert-100 \
+  --output data/evaluations/askcos/ursa-expert-100/results.json.gz
 
 
 uv run scripts/ASKCOS/1-gather-askcos-results.py \

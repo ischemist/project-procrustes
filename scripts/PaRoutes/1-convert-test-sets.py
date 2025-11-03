@@ -78,7 +78,7 @@ def main() -> None:
 
             pbar = tqdm(enumerate(sampled_routes, 1), total=len(sampled_routes), desc="adapting routes")
             for i, raw_route in pbar:
-                target_id = f"paroutes-n1-{i}"
+                target_id = f"paroutes-{test_set}-{i}"
                 try:
                     # the adapter needs a targetinfo object to check for smiles mismatches.
                     target_smiles = canonicalize_smiles(raw_route["smiles"])
