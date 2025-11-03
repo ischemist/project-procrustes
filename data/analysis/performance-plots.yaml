@@ -1,0 +1,90 @@
+# Visualization configuration for model performance plots
+# Maps model names (from discover_model_names) to display settings
+
+models:
+  aizynthfinder-mcts:
+    legend_name: "AiZynthFinder MCTS"
+    abbreviation: "AZ-M"
+    color: "#FF6B6B"
+
+  aizynthfinder-retro-star:
+    legend_name: "AiZynthFinder RetroStar"
+    abbreviation: "AZ-RS"
+    color: "#FF8E72"
+
+  askcos:
+    legend_name: "ASKCOS"
+    abbreviation: "ASK"
+    color: "#FFA500"
+
+  dms-flash-fp16:
+    legend_name: "DMS Flash"
+    abbreviation: "DMS-F"
+    color: "#4ECDC4"
+
+  dms-wide-fp16:
+    legend_name: "DMS Wide"
+    abbreviation: "DMS-W"
+    color: "#45B7D1"
+
+  dms-explorer-XL-fp16:
+    legend_name: "DMS Explorer XL"
+    abbreviation: "DMS-XL"
+    color: "#45B7D1"
+
+  dream-retroer:
+    legend_name: "DreamRetroEr"
+    abbreviation: "Dream"
+    color: "#96CEB4"
+
+  multistep-ttl:
+    legend_name: "MultiStep TTL"
+    abbreviation: "MSTTL"
+    color: "#FFEAA7"
+
+  retro-star:
+    legend_name: "RetroStar"
+    abbreviation: "R*"
+    color: "#DDA15E"
+
+  retrochimera:
+    legend_name: "RetroChimera"
+    abbreviation: "RC"
+    color: "#BC6C25"
+
+  synllama:
+    legend_name: "SynLLaMa"
+    abbreviation: "SynLLM"
+    color: "#C9ADA7"
+
+  synplanner-eval:
+    legend_name: "SynPlanner Eval"
+    abbreviation: "SynP-E"
+    color: "#6A4C93"
+
+  synplanner-mcts:
+    legend_name: "SynPlanner MCTS"
+    abbreviation: "SynP-M"
+    color: "#8B7AB8"
+
+  syntheseus-bfs-local-retro:
+    legend_name: "Syntheseus BFS Local Retro"
+    abbreviation: "Syn-BFS"
+    color: "#1D3557"
+
+  syntheseus-retro0-local-retro:
+    legend_name: "Syntheseus Retro0 Local Retro"
+    abbreviation: "Syn-R0"
+    color: "#457B9D"
+
+# Plot settings
+plot_settings:
+  combined_figure:
+    shared_xaxes: true
+    shared_yaxes: true
+  dataset_order:
+    - "uspto-190"
+    - "ursa-bridge-100"
+    - "ursa-expert-100"
+  output_dir: "data/analysis/plots"
+  processed_data_path: "data/processed"

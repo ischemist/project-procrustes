@@ -3,11 +3,11 @@ from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
+import yaml
 from ischemist.plotly import Styler
 from plotly.subplots import make_subplots
 
 # a sane mapping for the absolutely bonkers csv headers.
-# we can move this to a config later if it becomes a whole thing.
 COLUMN_MAP = {
     "Model Id": "model_id",
     "dataset": "dataset",
@@ -23,9 +23,9 @@ COLUMN_MAP = {
 
 # map csv dataset shorthand to a more descriptive name
 DATASET_MAP = {
+    "uspto": "uspto-190",
     "bridge": "ursa-bridge-100",
     "expert": "ursa-expert-100",
-    "uspto": "uspto-190",
 }
 
 
@@ -58,6 +58,90 @@ def discover_model_names(base_path: Path) -> dict[str, str]:
     return mapping
 
 
+def load_visualization_config(config_path: Path) -> dict:
+    """
+    loads visualization configuration from a yaml file.
+
+    returns a dictionary with model display settings (legend_name, abbreviation, color)
+    and plot settings (shared_xaxes, shared_yaxes, etc.).
+    """
+    if not config_path.exists():
+        print(f"warning: visualization config not found at {config_path}")
+        return {"models": {}, "plot_settings": {}}
+
+    try:
+        with open(config_path) as f:
+            config = yaml.safe_load(f)
+        return config if config else {"models": {}, "plot_settings": {}}
+    except (OSError, yaml.YAMLError) as e:
+        print(f"warning: failed to load visualization config at {config_path}: {e}")
+        return {"models": {}, "plot_settings": {}}
+
+
+def build_model_display_map(model_id_to_name: dict[str, str], viz_config: dict) -> dict:
+    """
+    builds a map from model_id to display settings (abbreviation, legend_name, color).
+
+    uses model names as the key in the visualization config, then maps back to model_ids.
+
+    args:
+        model_id_to_name: mapping from model_id (csv) to model_name (from manifests)
+        viz_config: visualization config dict with 'models' key containing model_name -> settings
+
+    returns a dict mapping model_id to display settings dict with keys:
+        - abbreviation: short name for plots
+        - legend_name: full name for legend
+        - color: hex color code
+    """
+    model_config = viz_config.get("models", {})
+    display_map = {}
+
+    for model_id, model_name in model_id_to_name.items():
+        if model_name in model_config:
+            display_map[model_id] = model_config[model_name]
+        else:
+            # fallback: use model name as abbreviation if not in config
+            display_map[model_id] = {
+                "abbreviation": model_name,
+                "legend_name": model_name,
+                "color": "#808080",  # default gray
+            }
+
+    return display_map
+
+
+def get_ordered_datasets(datasets: list[str], viz_config: dict) -> list[str]:
+    """
+    orders datasets according to the configured order in visualization config.
+
+    any datasets not in the config's dataset_order list will be appended at the end
+    in alphabetical order.
+
+    args:
+        datasets: list of dataset names from the dataframe
+        viz_config: visualization config dict with 'plot_settings' containing 'dataset_order'
+
+    returns: list of datasets in the configured order
+    """
+    plot_settings = viz_config.get("plot_settings", {})
+    config_order = plot_settings.get("dataset_order", [])
+
+    # ensure we have all datasets
+    dataset_set = set(datasets)
+    ordered = []
+
+    # add datasets in configured order
+    for dataset in config_order:
+        if dataset in dataset_set:
+            ordered.append(dataset)
+            dataset_set.remove(dataset)
+
+    # append any remaining datasets in alphabetical order
+    ordered.extend(sorted(dataset_set))
+
+    return ordered
+
+
 def load_benchmark_data(csv_path: Path) -> pd.DataFrame:
     """
     loads and cleans benchmark data from a csv file.
@@ -80,42 +164,83 @@ def load_benchmark_data(csv_path: Path) -> pd.DataFrame:
     return df
 
 
-def _create_trace(model_data, abbreviation, model_id, x_ax, y_ax, **kwargs):
-    """helper to create a single plotly scatter trace."""
+def _create_trace(model_data, display_settings, model_id, x_ax, y_ax, **kwargs):
+    """helper to create a single plotly scatter trace.
+
+    args:
+        model_data: pandas DataFrame with x/y data for this model
+        display_settings: dict with 'abbreviation', 'legend_name', 'color' keys
+        model_id: the model's id (for hover text)
+        x_ax, y_ax: column names for axes
+        **kwargs: additional plotly Scatter kwargs
+    """
+    abbreviation = display_settings.get("abbreviation", model_id)
+    legend_name = display_settings.get("legend_name", abbreviation)
+    color = display_settings.get("color", "#808080")
+
     return go.Scatter(
         x=model_data[x_ax],
         y=model_data[y_ax],
         mode="markers+text",
         text=[abbreviation],
         textposition="top center",
-        name=abbreviation,
-        hovertemplate=f"<b>{abbreviation}</b> ({model_id})<br>{x_ax}: %{{x}}<br>{y_ax}: %{{y}}<extra></extra>",
+        name=legend_name,
+        hovertemplate=f"<b>{legend_name}</b> ({model_id})<br>{x_ax}: %{{x}}<br>{y_ax}: %{{y}}<extra></extra>",
+        marker={"color": color},
         **kwargs,
     )
 
 
-def plot_performance_summary(df: pd.DataFrame, model_abbreviations: dict[str, str], output_dir: Path):
+def plot_performance_summary(
+    df: pd.DataFrame,
+    model_display_map: dict[str, dict],
+    output_dir: Path,
+    shared_xaxes: bool = True,
+    shared_yaxes: bool = False,
+    viz_config: dict | None = None,
+):
     """
     generates a single figure with one subplot per dataset.
+
+    args:
+        df: benchmark dataframe
+        model_display_map: mapping from model_id to display settings dict
+        output_dir: output directory
+        shared_xaxes: whether to share x-axes across subplots
+        shared_yaxes: whether to share y-axes across subplots
+        viz_config: visualization config dict for dataset ordering (optional)
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    datasets = sorted(df["dataset"].unique())
+    all_datasets = list(df["dataset"].unique())
+    if viz_config:
+        datasets = get_ordered_datasets(all_datasets, viz_config)
+    else:
+        datasets = sorted(all_datasets)
     x_ax, y_ax = "sol_plus_n", "cc"
 
-    fig = make_subplots(rows=len(datasets), cols=1, subplot_titles=datasets, shared_xaxes=True, vertical_spacing=0.08)
+    fig = make_subplots(
+        rows=len(datasets),
+        cols=1,
+        subplot_titles=datasets,
+        shared_xaxes=shared_xaxes,
+        shared_yaxes=shared_yaxes,
+        vertical_spacing=0.08,
+    )
 
     for i, dataset in enumerate(datasets, start=1):
         df_dataset = df[df["dataset"] == dataset]
         for model_id in df_dataset["model_id"].unique():
             model_data = df_dataset[df_dataset["model_id"] == model_id]
-            abbreviation = model_abbreviations.get(model_id, model_id)
+            display_settings = model_display_map.get(
+                model_id, {"abbreviation": model_id, "legend_name": model_id, "color": "#808080"}
+            )
             trace = _create_trace(
                 model_data,
-                abbreviation,
+                display_settings,
                 model_id,
                 x_ax,
                 y_ax,
-                legendgroup=abbreviation,
+                legendgroup=display_settings.get("legend_name", model_id),
                 showlegend=(i == 1),  # show legend only for the first subplot
             )
             fig.add_trace(trace, row=i, col=1)
@@ -131,12 +256,24 @@ def plot_performance_summary(df: pd.DataFrame, model_abbreviations: dict[str, st
     print(f"-> saved combined plot to {output_path}")
 
 
-def plot_performance_by_dataset(df: pd.DataFrame, model_abbreviations: dict[str, str], output_dir: Path):
+def plot_performance_by_dataset(
+    df: pd.DataFrame, model_display_map: dict[str, dict], output_dir: Path, viz_config: dict | None = None
+):
     """
     generates a separate figure for each dataset.
+
+    args:
+        df: benchmark dataframe
+        model_display_map: mapping from model_id to display settings dict
+        output_dir: output directory
+        viz_config: visualization config dict for dataset ordering (optional)
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    datasets = sorted(df["dataset"].unique())
+    all_datasets = list(df["dataset"].unique())
+    if viz_config:
+        datasets = get_ordered_datasets(all_datasets, viz_config)
+    else:
+        datasets = sorted(all_datasets)
     x_ax, y_ax = "sol_plus_n", "cc"
 
     for dataset in datasets:
@@ -145,8 +282,10 @@ def plot_performance_by_dataset(df: pd.DataFrame, model_abbreviations: dict[str,
 
         for model_id in df_dataset["model_id"].unique():
             model_data = df_dataset[df_dataset["model_id"] == model_id]
-            abbreviation = model_abbreviations.get(model_id, model_id)
-            trace = _create_trace(model_data, abbreviation, model_id, x_ax, y_ax)
+            display_settings = model_display_map.get(
+                model_id, {"abbreviation": model_id, "legend_name": model_id, "color": "#808080"}
+            )
+            trace = _create_trace(model_data, display_settings, model_id, x_ax, y_ax)
             fig.add_trace(trace)
 
         fig.update_layout(
