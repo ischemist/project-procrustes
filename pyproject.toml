@@ -69,7 +69,7 @@ syntheseus-linux = [
     "torch-scatter"
 ]
 viz = [
-    "ischemist>=0.1.0",
+    "ischemist>=0.2.0",
     "kaleido>=1.1.0",
     "openpyxl>=3.1.5",
     "plotly>=6.3.0",
