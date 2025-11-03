@@ -1,26 +1,36 @@
 # visualization configuration for model performance plots
 
 models:
+  Insilico:
+    legend_name: "Insilico"
+    abbreviation: "IS"
+    color: "#FF6B6B"
+    text_position: "top center"
   aizynthfinder-mcts:
     legend_name: "AiZynthFinder MCTS"
     abbreviation: "AZ-M"
     color: "#FF6B6B"
+    text_position: "top left"
   aizynthfinder-retro-star:
     legend_name: "AiZynthFinder RetroStar"
     abbreviation: "AZ-RS"
     color: "#FF8E72"
+    text_position: "top right"
   askcos:
     legend_name: "ASKCOS"
     abbreviation: "ASK"
     color: "#FFA500"
+    text_position: "bottom center"
   dms-flash-fp16:
     legend_name: "DMS Flash"
     abbreviation: "DMS-F"
     color: "#4ECDC4"
+    text_position: "middle left"
   dms-wide-fp16:
     legend_name: "DMS Wide"
     abbreviation: "DMS-W"
     color: "#45B7D1"
+    text_position: "top center"
   dms-explorer-XL-fp16:
     legend_name: "DMS Explorer XL"
     abbreviation: "DMS-XL"
@@ -29,9 +39,10 @@ models:
     legend_name: "DreamRetroEr"
     abbreviation: "Dream"
     color: "#96CEB4"
+    text_position: "bottom right"
   multistep-ttl:
     legend_name: "MultiStep TTL"
-    abbreviation: "MSTTL"
+    abbreviation: "TTL"
     color: "#FFEAA7"
   retro-star:
     legend_name: "RetroStar"
@@ -43,16 +54,19 @@ models:
     color: "#BC6C25"
   synllama:
     legend_name: "SynLLaMa"
-    abbreviation: "SynLLM"
+    abbreviation: "LLaMa"
     color: "#C9ADA7"
+    text_position: "bottom center"
   synplanner-eval:
     legend_name: "SynPlanner Eval"
     abbreviation: "SynP-E"
     color: "#6A4C93"
+    text_position: "middle left"
   synplanner-mcts:
     legend_name: "SynPlanner MCTS"
     abbreviation: "SynP-M"
     color: "#8B7AB8"
+    text_position: "top center"
   syntheseus-bfs-local-retro:
     legend_name: "Syntheseus BFS Local Retro"
     abbreviation: "Synth-BFS"
@@ -61,6 +75,7 @@ models:
     legend_name: "Syntheseus Retro0 Local Retro"
     abbreviation: "Synth-R0"
     color: "#457B9D"
+    text_position: "bottom center"
 
 # plot settings
 plot_settings:
@@ -72,7 +87,6 @@ plot_settings:
   # figure layout
   combined_figure:
     shared_xaxes: true
-    shared_yaxes: true
   dataset_order:
     - "uspto-190"
     - "ursa-bridge-100"
@@ -80,8 +94,9 @@ plot_settings:
   range_padding:
     # add delta to max value for axis range
     x: 0.1
-    y: 5
+    y: 0.15
   x_axis:
     title: "Sol+"
+    range: [-0.05, 0.65]
   y_axis:
-    range: [-0.1, 3.7]
+    range: [-0.35, 3.7]

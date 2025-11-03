@@ -35,6 +35,7 @@ class ModelDisplayConfig(BaseModel):
     legend_name: str
     abbreviation: str
     color: str
+    text_position: str = "top center"
 
 
 class CombinedFigureConfig(BaseModel):
@@ -83,7 +84,9 @@ def load_visualization_config(config_path: Path) -> VisualizationConfig:
 
 def discover_model_names(base_path: Path) -> dict[str, str]:
     """scans for manifest.json files to map model hashes to model names."""
-    mapping: dict[str, str] = {}
+    mapping: dict[str, str] = {
+        "Insilico": "Insilico",  # special case: Insilico doesn't have a manifest
+    }
     if not base_path.is_dir():
         logging.warning(f"data path for model discovery not found: {base_path}")
         return mapping
@@ -139,10 +142,10 @@ def _create_trace(
         y=[model_data[Y_AXIS]],  # wrap in a list
         mode="markers+text",
         text=[display_settings.abbreviation],
-        textposition="top center",
-        name=display_settings.legend_name,
-        hovertemplate=f"<b>{display_settings.legend_name}</b> ({model_id})<br>{X_AXIS}: %{{x}}<br>{Y_AXIS}: %{{y}}<extra></extra>",
-        marker={"color": display_settings.color},
+        textposition=display_settings.text_position,
+        name=f"({display_settings.abbreviation}) {display_settings.legend_name}",
+        hovertemplate=f"<b>{display_settings.legend_name} ({display_settings.abbreviation})</b> ({model_id})<br>{X_AXIS}: %{{x}}<br>{Y_AXIS}: %{{y}}<extra></extra>",
+        marker={"color": display_settings.color, "size": 8},
         **kwargs,
     )
 
@@ -205,11 +208,11 @@ def plot_performance_summary(
 
     fig.update_layout(height=400 * len(datasets))
 
-    fig.update_xaxes(title_text=plot_settings.x_axis.title, row=len(datasets), col=1)
+    Styler(legend_size=14).apply_style(fig)
+    fig.update_xaxes(title_text=plot_settings.x_axis.title, range=plot_settings.x_axis.range, row=len(datasets), col=1)
     for i in range(1, len(datasets) + 1):
         fig.update_yaxes(title_text=plot_settings.y_axis.title, range=plot_settings.y_axis.range, row=i, col=1)
 
-    Styler(legend_size=14).apply_style(fig)
     output_path = output_dir / "performance_summary.html"
     fig.write_html(output_path, include_plotlyjs="cdn")
     logging.info(f"-> saved combined plot to {output_path}")
@@ -242,6 +245,7 @@ def plot_performance_by_dataset(
             legend_title="Model",
             xaxis_range=x_range,
             yaxis_range=y_range,
+            height=600,
         )
         Styler().apply_style(fig)
         output_path = output_dir / f"performance_{dataset}.html"
