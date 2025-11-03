@@ -33,11 +33,14 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 PAROUTES_DIR = BASE_DIR / "data" / "paroutes"
 test_sets = ["n1", "n5"]
 # use `none` to signify processing the full dataset.
-SAMPLE_SIZES = [None, 1000, 500]
+SAMPLE_SIZES = [None]  # , 1000, 500]
 
 
 def main() -> None:
     """main script execution."""
+    import plotly.graph_objects as go
+
+    fig = go.Figure()
 
     for test_set in test_sets:
         input_file = PAROUTES_DIR / f"{test_set}-routes.json.gz"
@@ -53,9 +56,8 @@ def main() -> None:
             logger.error(f"failed to load or parse {input_file}: {e}")
             return
 
-        adapter = PaRoutesAdapter()
-
         for size in SAMPLE_SIZES:
+            adapter = PaRoutesAdapter()
             if size is None:
                 sampled_routes = all_routes
                 output_suffix = "full"
@@ -106,8 +108,28 @@ def main() -> None:
                 f"successfully adapted {successful_routes}/{len(sampled_routes)} routes. "
                 f"saving to {output_path.relative_to(BASE_DIR)}..."
             )
+            adapter.report_statistics()
+
+            # adapter.year_counts is dict[str, int], let's plot it as a bar chart. because years are strs, we need to sort them before plotting
+            sorted_years = sorted(adapter.year_counts.keys())
+            fig.add_trace(
+                go.Bar(
+                    x=sorted_years,
+                    y=[adapter.year_counts[year] for year in sorted_years],
+                    name=test_set,
+                    marker_color="blue",
+                )
+            )
+
             save_json_gz(processed_data, output_path)
 
+    fig.update_layout(title="Yearly Distribution of Routes", xaxis_title="Year", yaxis_title="Count")
+    from ischemist.style.plotly import Styler
+
+    Styler().apply_style(fig)
+    save_dir = BASE_DIR / "data" / "analysis"
+    save_dir.mkdir(parents=True, exist_ok=True)
+    fig.write_image(save_dir / "yearly_distribution.png", scale=4)
     logger.info("\n--- finished preprocessing all paroutes samples. ---")
 
 
