@@ -158,13 +158,14 @@ def _generate_plot_for_dataset(
 ):
     """adds traces for all models in a given dataset to a figure."""
     for model_id, model_data in df_dataset.groupby("model_id"):
+        model_id_str = str(model_id)
         display_settings = model_display_map.get(
-            model_id, ModelDisplayConfig(abbreviation=model_id, legend_name=model_id, color=DEFAULT_COLOR)
+            model_id_str, ModelDisplayConfig(abbreviation=model_id_str, legend_name=model_id_str, color=DEFAULT_COLOR)
         )
         trace = _create_trace(
             model_data=model_data.iloc[0],
             display_settings=display_settings,
-            model_id=model_id,
+            model_id=model_id_str,
             legendgroup=display_settings.legend_name,
             **trace_kwargs,
         )
