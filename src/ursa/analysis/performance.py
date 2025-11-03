@@ -1,9 +1,10 @@
+import csv
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 import plotly.graph_objects as go
 import yaml
 from ischemist.plotly import Styler
@@ -25,7 +26,6 @@ COLUMN_MAP = {
 }
 DATASET_MAP = {"uspto": "uspto-190", "bridge": "ursa-bridge-100", "expert": "ursa-expert-100"}
 DEFAULT_COLOR = "#808080"
-X_AXIS, Y_AXIS = "sol_plus", "cc"
 TEXT_OFFSET_DELTA_X = 0.01
 TEXT_OFFSET_DELTA_Y = 0.5
 
@@ -115,31 +115,57 @@ def build_model_display_map(
     return display_map
 
 
-def load_benchmark_data(csv_path: Path) -> pd.DataFrame:
-    """loads and cleans benchmark data from a csv file."""
-    df = pd.read_csv(csv_path)
-    df.columns = df.columns.str.strip()
-    df = df.rename(columns=COLUMN_MAP)
-    df["dataset"] = df["dataset"].str.strip().map(DATASET_MAP)
-    df = df.dropna(subset=["dataset", X_AXIS, Y_AXIS])
-    df[X_AXIS] = pd.to_numeric(df[X_AXIS])
-    df[Y_AXIS] = pd.to_numeric(df[Y_AXIS])
-    return df
+@dataclass
+class BenchmarkRecord:
+    """represents a single data point for a model on a dataset."""
+
+    model_id: str
+    dataset: str
+    sol_plus_n: float
+    cc: float
 
 
-def _create_trace(
-    *, model_data: pd.Series, display_settings: ModelDisplayConfig, model_id: str, **kwargs: Any
-) -> go.Scatter:
-    """helper to create a single plotly scatter trace."""
+def load_benchmark_data(csv_path: Path, x_metric: str, y_metric: str) -> list[BenchmarkRecord]:
+    """loads and cleans benchmark data from a csv file into a list of dataclasses."""
+    records: list[BenchmarkRecord] = []
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        # clean headers before passing to dictreader
+        header = [h.strip() for h in f.readline().strip().split(",")]
+        renamed_header = [COLUMN_MAP.get(h, h) for h in header]
+
+        reader = csv.DictReader(f, fieldnames=renamed_header)
+        for row in reader:
+            dataset_raw = row.get("dataset", "").strip()
+            dataset = DATASET_MAP.get(dataset_raw)
+            if not dataset:
+                continue
+
+            try:
+                records.append(
+                    BenchmarkRecord(
+                        model_id=row["model_id"].strip(),
+                        dataset=dataset,
+                        sol_plus_n=float(row[x_metric]),
+                        cc=float(row[y_metric]),
+                    )
+                )
+            except (ValueError, TypeError, KeyError):
+                # skip rows with missing or non-numeric data
+                continue
+    return records
+
+
+def _create_trace(*, record: BenchmarkRecord, display_settings: ModelDisplayConfig, **kwargs: Any) -> go.Scatter:
+    """helper to create a single plotly scatter trace from a BenchmarkRecord."""
     return go.Scatter(
-        x=[model_data[X_AXIS]],  # wrap in a list
-        y=[model_data[Y_AXIS]],  # wrap in a list
+        x=[record.sol_plus_n],
+        y=[record.cc],
         mode="markers+text",
         text=[display_settings.abbreviation],
         textposition=display_settings.text_position,
         name=f"({display_settings.abbreviation}) {display_settings.legend_name}",
-        hovertemplate=f"<b>{display_settings.legend_name} ({display_settings.abbreviation})</b> ({model_id})<br>{X_AXIS}: %{{x}}<br>{Y_AXIS}: %{{y}}<extra></extra>",
-        marker={"color": display_settings.color, "size": 8},
+        hovertemplate=f"<b>{display_settings.legend_name}</b> ({record.model_id})<br>Sol+: %{{x}}<br>CC: %{{y}}<extra></extra>",
+        marker={"color": display_settings.color},
         **kwargs,
     )
 
@@ -147,31 +173,29 @@ def _create_trace(
 def _generate_plot_for_dataset(
     *,
     fig: go.Figure,
-    df_dataset: pd.DataFrame,
+    records: list[BenchmarkRecord],
     model_display_map: dict[str, ModelDisplayConfig],
     row: int | None = None,
     col: int | None = None,
     **trace_kwargs: Any,
 ):
     """adds traces for all models in a given dataset to a figure."""
-    for model_id, model_data in df_dataset.groupby("model_id"):
-        model_id_str = str(model_id)
-        display_settings = model_display_map.get(
-            model_id_str, ModelDisplayConfig(abbreviation=model_id_str, legend_name=model_id_str, color=DEFAULT_COLOR)
-        )
-        trace = _create_trace(
-            model_data=model_data.iloc[0],
-            display_settings=display_settings,
-            model_id=model_id_str,
-            legendgroup=display_settings.legend_name,
-            **trace_kwargs,
-        )
-        fig.add_trace(trace, row=row, col=col)
+    record_map = {r.model_id: r for r in records}
+    for model_id, display_settings in model_display_map.items():
+        if model_id in record_map:
+            record = record_map[model_id]
+            trace = _create_trace(
+                record=record,
+                display_settings=display_settings,
+                legendgroup=display_settings.legend_name,
+                **trace_kwargs,
+            )
+            fig.add_trace(trace, row=row, col=col)
 
 
 def plot_performance_summary(
     *,
-    df: pd.DataFrame,
+    records: list[BenchmarkRecord],
     model_display_map: dict[str, ModelDisplayConfig],
     plot_settings: PlotSettingsConfig,
     output_dir: Path,
@@ -190,10 +214,10 @@ def plot_performance_summary(
     )
 
     for i, dataset in enumerate(datasets, start=1):
-        df_dataset = df[df["dataset"] == dataset]
+        records_for_dataset = [r for r in records if r.dataset == dataset]
         _generate_plot_for_dataset(
             fig=fig,
-            df_dataset=df_dataset,
+            records=records_for_dataset,
             model_display_map=model_display_map,
             row=i,
             col=1,
@@ -214,7 +238,7 @@ def plot_performance_summary(
 
 def plot_performance_by_dataset(
     *,
-    df: pd.DataFrame,
+    records: list[BenchmarkRecord],
     model_display_map: dict[str, ModelDisplayConfig],
     plot_settings: PlotSettingsConfig,
     output_dir: Path,
@@ -226,16 +250,20 @@ def plot_performance_by_dataset(
 
     for dataset in datasets:
         fig = go.Figure()
-        df_dataset = df[df["dataset"] == dataset]
-        _generate_plot_for_dataset(fig=fig, df_dataset=df_dataset, model_display_map=model_display_map)
+        records_for_dataset = [r for r in records if r.dataset == dataset]
+        _generate_plot_for_dataset(fig=fig, records=records_for_dataset, model_display_map=model_display_map)
 
-        x_range = [df_dataset[X_AXIS].min(), df_dataset[X_AXIS].max() + pad.x]
-        y_range = [df_dataset[Y_AXIS].min(), df_dataset[Y_AXIS].max() + pad.y]
+        if not records_for_dataset:
+            logging.warning(f"no records found for dataset '{dataset}', skipping plot generation.")
+            continue
+
+        x_coords = [r.sol_plus_n for r in records_for_dataset]
+        y_coords = [r.cc for r in records_for_dataset]
+        x_range = [min(x_coords), max(x_coords) + pad.x]
+        y_range = [min(y_coords), max(y_coords) + pad.y]
 
         fig.update_layout(
             title=f"Performance on {dataset}",
-            xaxis_title=X_AXIS,
-            yaxis_title=Y_AXIS.upper(),
             legend_title="Model",
             xaxis_range=x_range,
             yaxis_range=y_range,

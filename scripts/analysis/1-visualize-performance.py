@@ -33,23 +33,22 @@ def main(config_path: Path):
 
     logging.info("discovering model names from manifests...")
     discovered_names = performance.discover_model_names(processed_path)
-    print(f"{discovered_names=}")
     logging.info(f"-> discovered {len(discovered_names)} models.")
 
     logging.info("building model display map...")
     model_display_map = performance.build_model_display_map(discovered_names, viz_config.models)
-    print(f"{model_display_map=}")
     logging.info(f"-> mapped {len(model_display_map)} models with display settings.")
 
     logging.info(f"\nloading data from {input_path}...")
-    df = performance.load_benchmark_data(input_path)
-    logging.info(f"found {len(df)} records across {df['dataset'].nunique()} datasets.")
+    records = performance.load_benchmark_data(input_path, x_metric="sol_plus", y_metric="cc")
+    num_datasets = len(set(r.dataset for r in records))
+    logging.info(f"found {len(records)} records across {num_datasets} datasets.")
 
     logging.info("\ngenerating plots...")
 
     # 1. generate the combined plot (one per dataset, stacked vertically)
     performance.plot_performance_summary(
-        df=df,
+        records=records,
         model_display_map=model_display_map,
         plot_settings=ps,
         output_dir=output_dir,
@@ -57,7 +56,7 @@ def main(config_path: Path):
 
     # 2. generate separate plots (one figure per dataset)
     performance.plot_performance_by_dataset(
-        df=df,
+        records=records,
         model_display_map=model_display_map,
         plot_settings=ps,
         output_dir=output_dir,

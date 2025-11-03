@@ -4,7 +4,7 @@ models:
   Insilico:
     legend_name: "Insilico"
     abbreviation: "IS"
-    color: "#FF6B6B"
+    color: "#386641"
     text_position: "top center"
   aizynthfinder-mcts:
     legend_name: "AiZynthFinder MCTS"
@@ -19,7 +19,7 @@ models:
   askcos:
     legend_name: "ASKCOS"
     abbreviation: "ASK"
-    color: "#FFA500"
+    color: "#24cddc"
     text_position: "bottom center"
   dms-flash-fp16:
     legend_name: "DMS Flash"
@@ -47,7 +47,7 @@ models:
   retro-star:
     legend_name: "RetroStar"
     abbreviation: "R*"
-    color: "#DDA15E"
+    color: "#81419a"
   retrochimera:
     legend_name: "RetroChimera"
     abbreviation: "RC"
@@ -70,11 +70,11 @@ models:
   syntheseus-bfs-local-retro:
     legend_name: "Syntheseus BFS Local Retro"
     abbreviation: "Synth-BFS"
-    color: "#1D3557"
+    color: "#f97e7f"
   syntheseus-retro0-local-retro:
     legend_name: "Syntheseus Retro0 Local Retro"
     abbreviation: "Synth-R0"
-    color: "#457B9D"
+    color: "#f84c4d"
     text_position: "bottom center"
 
 # plot settings
