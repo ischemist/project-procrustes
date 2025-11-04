@@ -305,8 +305,7 @@ def _generate_funnel_bars_for_dataset(
     showlegend: bool = True,
 ):
     """helper to add stacked bar traces for one dataset to a figure/subplot."""
-    # sort records by sol_plus_n, descending
-    records_for_dataset.sort(key=lambda r: r.sol_plus_n, reverse=True)
+    record_map = {r.model_id: r for r in records_for_dataset}
 
     model_abbrevs = [
         model_display_map.get(
@@ -315,9 +314,13 @@ def _generate_funnel_bars_for_dataset(
         for mid in canonical_model_order
     ]
 
-    base_values = [r.sol_plus_n / n_targets for r in records_for_dataset]
-    middle_values = [(r.sol_plus_n_nofp - r.sol_plus_n) / n_targets for r in records_for_dataset]
-    top_values = [(r.sol_n - r.sol_plus_n_nofp) / n_targets for r in records_for_dataset]
+    base_values = [record_map[mid].sol_plus_n / n_targets for mid in canonical_model_order]
+    middle_values = [
+        (record_map[mid].sol_plus_n_nofp - record_map[mid].sol_plus_n) / n_targets for mid in canonical_model_order
+    ]
+    top_values = [
+        (record_map[mid].sol_n - record_map[mid].sol_plus_n_nofp) / n_targets for mid in canonical_model_order
+    ]
     traces_config = bar_settings.traces
 
     fig.add_trace(
