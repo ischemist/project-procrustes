@@ -73,6 +73,7 @@ class BarTraceConfig(BaseModel):
 
 class BarSettingsConfig(BaseModel):
     title_template: str = "Prediction Funnel on {dataset}"
+    sort_by_dataset: str | None = None
     x_axis_title: str = "Model"
     y_axis_title: str = "Count"
     traces: dict[str, BarTraceConfig]
@@ -298,6 +299,7 @@ def _generate_funnel_bars_for_dataset(
     model_display_map: dict[str, ModelDisplayConfig],
     bar_settings: BarSettingsConfig,
     n_targets: int,
+    canonical_model_order: list[str],
     row: int | None = None,
     col: int | None = None,
     showlegend: bool = True,
@@ -306,12 +308,11 @@ def _generate_funnel_bars_for_dataset(
     # sort records by sol_plus_n, descending
     records_for_dataset.sort(key=lambda r: r.sol_plus_n, reverse=True)
 
-    model_ids_sorted = [r.model_id for r in records_for_dataset]
     model_abbrevs = [
         model_display_map.get(
             mid, ModelDisplayConfig(legend_name=mid, abbreviation=mid[:5], color=DEFAULT_COLOR)
         ).abbreviation
-        for mid in model_ids_sorted
+        for mid in canonical_model_order
     ]
 
     base_values = [r.sol_plus_n / n_targets for r in records_for_dataset]
@@ -368,6 +369,16 @@ def plot_prediction_funnel(
     """generates a separate stacked bar chart for each dataset."""
     output_dir.mkdir(parents=True, exist_ok=True)
     datasets = dataset_totals.keys() or sorted({r.dataset for r in records})
+    canonical_model_order: list[str]
+    sort_dataset = bar_settings.sort_by_dataset
+    if sort_dataset and sort_dataset in datasets:
+        logging.info(f"determining canonical model order from dataset: {sort_dataset}")
+        sort_records = [r for r in records if r.dataset == sort_dataset]
+        sort_records.sort(key=lambda r: r.sol_plus_n, reverse=True)
+        canonical_model_order = [r.model_id for r in sort_records]
+    else:
+        logging.warning("sort_by_dataset not specified or not found. using alphabetical model order.")
+        canonical_model_order = sorted(model_display_map.keys())
 
     for dataset in datasets:
         records_for_dataset = [r for r in records if r.dataset == dataset]
@@ -381,6 +392,7 @@ def plot_prediction_funnel(
             records_for_dataset=records_for_dataset,
             model_display_map=model_display_map,
             bar_settings=bar_settings,
+            canonical_model_order=canonical_model_order,
             n_targets=dataset_totals[dataset],
         )
 
@@ -389,7 +401,6 @@ def plot_prediction_funnel(
             title=bar_settings.title_template.format(dataset=dataset),
             xaxis_title=bar_settings.x_axis_title,
             yaxis_title=bar_settings.y_axis_title,
-            legend_title="Filter Step",
             height=600,
         )
         Styler().apply_style(fig)
@@ -410,7 +421,17 @@ def plot_prediction_funnel_summary(
     """generates a single figure with one funnel chart subplot per dataset."""
     output_dir.mkdir(parents=True, exist_ok=True)
     datasets = list(dataset_totals.keys()) or sorted({r.dataset for r in records})
-
+    canonical_model_order: list[str]
+    sort_dataset = bar_settings.sort_by_dataset
+    if sort_dataset and sort_dataset in datasets:
+        logging.info(f"determining canonical model order from dataset: {sort_dataset}")
+        sort_records = [r for r in records if r.dataset == sort_dataset]
+        sort_records.sort(key=lambda r: r.sol_plus_n, reverse=True)
+        canonical_model_order = [r.model_id for r in sort_records]
+    else:
+        # fallback: just use all known model ids, sorted alphabetically
+        logging.warning("sort_by_dataset not specified or not found. using alphabetical model order.")
+        canonical_model_order = sorted(model_display_map.keys())
     fig = make_subplots(
         rows=len(datasets),
         cols=1,
@@ -426,6 +447,7 @@ def plot_prediction_funnel_summary(
             records_for_dataset=records_for_dataset,
             model_display_map=model_display_map,
             bar_settings=bar_settings,
+            canonical_model_order=canonical_model_order,
             n_targets=dataset_totals[dataset],
             row=i,
             col=1,
@@ -438,7 +460,6 @@ def plot_prediction_funnel_summary(
     fig.update_layout(
         barmode="stack",
         height=350 * len(datasets),
-        legend_title="Filter Step",
     )
     # set x-axis title only on the bottom-most plot
     fig.update_xaxes(title_text=bar_settings.x_axis_title, row=len(datasets), col=1)

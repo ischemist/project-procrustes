@@ -104,6 +104,7 @@ plot_settings:
 
 bar_settings:
   title_template: "Prediction Funnel on {dataset}"
+  sort_by_dataset: "ursa-expert-100"
   x_axis_title: "Model"
   y_axis_title: "Fraction of targets (%)"
   traces:
