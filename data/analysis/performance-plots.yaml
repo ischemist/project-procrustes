@@ -84,14 +84,14 @@ plot_settings:
   input_data_path: "data/bench-results-2025-10-30.csv"
   processed_data_path: "data/processed"
   output_dir: "data/analysis/plots"
+  dataset_totals:
+    "uspto-190": 190
+    "ursa-bridge-100": 100
+    "ursa-expert-100": 100
 
   # figure layout
   combined_figure:
     shared_xaxes: true
-  dataset_order:
-    - "uspto-190"
-    - "ursa-bridge-100"
-    - "ursa-expert-100"
   range_padding:
     # add delta to max value for axis range
     x: 0.1
@@ -101,3 +101,18 @@ plot_settings:
     range: [-0.05, 0.65]
   y_axis:
     range: [-0.35, 3.7]
+
+bar_settings:
+  title_template: "Prediction Funnel on {dataset}"
+  x_axis_title: "Model"
+  y_axis_title: "Fraction of targets (%)"
+  traces:
+    sol_plus_n:
+      name: "Sol+"
+      color: "#386641"
+    failed_fp:
+      name: "Failed FG Check"
+      color: "#f4ac51"
+    failed_sanity:
+      name: "Unknown Reaction"
+      color: "#f84c4d"

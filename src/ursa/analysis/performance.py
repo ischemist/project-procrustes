@@ -59,16 +59,29 @@ class PlotSettingsConfig(BaseModel):
     processed_data_path: str
     output_dir: str
     combined_figure: CombinedFigureConfig = Field(default_factory=CombinedFigureConfig)
-    dataset_order: list[str] = Field(default_factory=list)
+    dataset_totals: dict[str, int] = Field(default_factory=dict)
     range_padding: RangePaddingConfig = Field(default_factory=RangePaddingConfig)
 
     x_axis: AxisConfig = Field(default_factory=AxisConfig)
     y_axis: AxisConfig = Field(default_factory=AxisConfig)
 
 
+class BarTraceConfig(BaseModel):
+    name: str
+    color: str
+
+
+class BarSettingsConfig(BaseModel):
+    title_template: str = "Prediction Funnel on {dataset}"
+    x_axis_title: str = "Model"
+    y_axis_title: str = "Count"
+    traces: dict[str, BarTraceConfig]
+
+
 class VisualizationConfig(BaseModel):
     models: dict[str, ModelDisplayConfig]
     plot_settings: PlotSettingsConfig
+    bar_settings: BarSettingsConfig
 
 
 def load_visualization_config(config_path: Path) -> VisualizationConfig:
@@ -121,11 +134,14 @@ class BenchmarkRecord:
 
     model_id: str
     dataset: str
-    sol_plus_n: float
+    sol_plus: float
     cc: float
+    sol_n: int
+    sol_plus_n_nofp: int
+    sol_plus_n: int
 
 
-def load_benchmark_data(csv_path: Path, x_metric: str, y_metric: str) -> list[BenchmarkRecord]:
+def load_benchmark_data(csv_path: Path) -> list[BenchmarkRecord]:
     """loads and cleans benchmark data from a csv file into a list of dataclasses."""
     records: list[BenchmarkRecord] = []
     with open(csv_path, newline="", encoding="utf-8") as f:
@@ -140,25 +156,24 @@ def load_benchmark_data(csv_path: Path, x_metric: str, y_metric: str) -> list[Be
             if not dataset:
                 continue
 
-            try:
-                records.append(
-                    BenchmarkRecord(
-                        model_id=row["model_id"].strip(),
-                        dataset=dataset,
-                        sol_plus_n=float(row[x_metric]),
-                        cc=float(row[y_metric]),
-                    )
+            records.append(
+                BenchmarkRecord(
+                    model_id=row["model_id"].strip(),
+                    dataset=dataset,
+                    sol_plus=float(row["sol_plus"]),
+                    cc=float(row["cc"]),
+                    sol_n=int(row["sol_n"]),
+                    sol_plus_n_nofp=int(row["sol_plus_n_nofp"]),
+                    sol_plus_n=int(row["sol_plus_n"]),
                 )
-            except (ValueError, TypeError, KeyError):
-                # skip rows with missing or non-numeric data
-                continue
+            )
     return records
 
 
 def _create_trace(*, record: BenchmarkRecord, display_settings: ModelDisplayConfig, **kwargs: Any) -> go.Scatter:
     """helper to create a single plotly scatter trace from a BenchmarkRecord."""
     return go.Scatter(
-        x=[record.sol_plus_n],
+        x=[record.sol_plus],
         y=[record.cc],
         mode="markers+text",
         text=[display_settings.abbreviation],
@@ -203,7 +218,7 @@ def plot_performance_summary(
 ):
     """generates a single figure with one subplot per dataset."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    datasets = plot_settings.dataset_order
+    datasets = plot_settings.dataset_totals.keys()
 
     fig = make_subplots(
         rows=len(datasets),
@@ -246,7 +261,7 @@ def plot_performance_by_dataset(
 ):
     """generates a separate figure for each dataset."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    datasets = plot_settings.dataset_order
+    datasets = plot_settings.dataset_totals.keys()
     pad = plot_settings.range_padding
 
     for dataset in datasets:
@@ -258,7 +273,7 @@ def plot_performance_by_dataset(
             logging.warning(f"no records found for dataset '{dataset}', skipping plot generation.")
             continue
 
-        x_coords = [r.sol_plus_n for r in records_for_dataset]
+        x_coords = [r.sol_plus for r in records_for_dataset]
         y_coords = [r.cc for r in records_for_dataset]
         x_range = [min(x_coords), max(x_coords) + pad.x]
         y_range = [min(y_coords), max(y_coords) + pad.y]
@@ -274,3 +289,162 @@ def plot_performance_by_dataset(
         output_path = output_dir / f"performance_{dataset}.html"
         fig.write_html(output_path, include_plotlyjs="cdn")
         logging.info(f"-> saved separate plot to {output_path}")
+
+
+def _generate_funnel_bars_for_dataset(
+    *,
+    fig: go.Figure,
+    records_for_dataset: list[BenchmarkRecord],
+    model_display_map: dict[str, ModelDisplayConfig],
+    bar_settings: BarSettingsConfig,
+    n_targets: int,
+    row: int | None = None,
+    col: int | None = None,
+    showlegend: bool = True,
+):
+    """helper to add stacked bar traces for one dataset to a figure/subplot."""
+    # sort records by sol_plus_n, descending
+    records_for_dataset.sort(key=lambda r: r.sol_plus_n, reverse=True)
+
+    model_ids_sorted = [r.model_id for r in records_for_dataset]
+    model_abbrevs = [
+        model_display_map.get(
+            mid, ModelDisplayConfig(legend_name=mid, abbreviation=mid[:5], color=DEFAULT_COLOR)
+        ).abbreviation
+        for mid in model_ids_sorted
+    ]
+
+    base_values = [r.sol_plus_n / n_targets for r in records_for_dataset]
+    middle_values = [(r.sol_plus_n_nofp - r.sol_plus_n) / n_targets for r in records_for_dataset]
+    top_values = [(r.sol_n - r.sol_plus_n_nofp) / n_targets for r in records_for_dataset]
+    traces_config = bar_settings.traces
+
+    fig.add_trace(
+        go.Bar(
+            x=model_abbrevs,
+            y=base_values,
+            name=traces_config["sol_plus_n"].name,
+            marker_color=traces_config["sol_plus_n"].color,
+            legendgroup="funnel",
+            showlegend=showlegend,
+        ),
+        row=row,
+        col=col,
+    )
+    fig.add_trace(
+        go.Bar(
+            x=model_abbrevs,
+            y=middle_values,
+            name=traces_config["failed_fp"].name,
+            marker_color=traces_config["failed_fp"].color,
+            legendgroup="funnel",
+            showlegend=showlegend,
+        ),
+        row=row,
+        col=col,
+    )
+    fig.add_trace(
+        go.Bar(
+            x=model_abbrevs,
+            y=top_values,
+            name=traces_config["failed_sanity"].name,
+            marker_color=traces_config["failed_sanity"].color,
+            legendgroup="funnel",
+            showlegend=showlegend,
+        ),
+        row=row,
+        col=col,
+    )
+
+
+def plot_prediction_funnel(
+    *,
+    records: list[BenchmarkRecord],
+    model_display_map: dict[str, ModelDisplayConfig],
+    bar_settings: BarSettingsConfig,
+    dataset_totals: dict[str, int],
+    output_dir: Path,
+):
+    """generates a separate stacked bar chart for each dataset."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    datasets = dataset_totals.keys() or sorted({r.dataset for r in records})
+
+    for dataset in datasets:
+        records_for_dataset = [r for r in records if r.dataset == dataset]
+        if not records_for_dataset:
+            logging.warning(f"no records for dataset '{dataset}', skipping funnel plot.")
+            continue
+
+        fig = go.Figure()
+        _generate_funnel_bars_for_dataset(
+            fig=fig,
+            records_for_dataset=records_for_dataset,
+            model_display_map=model_display_map,
+            bar_settings=bar_settings,
+            n_targets=dataset_totals[dataset],
+        )
+
+        fig.update_layout(
+            barmode="stack",
+            title=bar_settings.title_template.format(dataset=dataset),
+            xaxis_title=bar_settings.x_axis_title,
+            yaxis_title=bar_settings.y_axis_title,
+            legend_title="Filter Step",
+            height=600,
+        )
+        Styler().apply_style(fig)
+
+        output_path = output_dir / f"funnel_{dataset}.html"
+        fig.write_html(output_path, include_plotlyjs="cdn")
+        logging.info(f"-> saved funnel plot to {output_path}")
+
+
+def plot_prediction_funnel_summary(
+    *,
+    records: list[BenchmarkRecord],
+    model_display_map: dict[str, ModelDisplayConfig],
+    bar_settings: BarSettingsConfig,
+    dataset_totals: dict[str, int],
+    output_dir: Path,
+):
+    """generates a single figure with one funnel chart subplot per dataset."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    datasets = list(dataset_totals.keys()) or sorted({r.dataset for r in records})
+
+    fig = make_subplots(
+        rows=len(datasets),
+        cols=1,
+        subplot_titles=datasets,
+        shared_xaxes=True,
+        vertical_spacing=0.08,
+    )
+
+    for i, dataset in enumerate(datasets, start=1):
+        records_for_dataset = [r for r in records if r.dataset == dataset]
+        _generate_funnel_bars_for_dataset(
+            fig=fig,
+            records_for_dataset=records_for_dataset,
+            model_display_map=model_display_map,
+            bar_settings=bar_settings,
+            n_targets=dataset_totals[dataset],
+            row=i,
+            col=1,
+            showlegend=(i == 1),  # only show legend for the first subplot
+        )
+        # set y-axis title for each subplot
+        fig.update_yaxes(title_text=bar_settings.y_axis_title, row=i, col=1)
+
+    # set shared layout properties
+    fig.update_layout(
+        barmode="stack",
+        height=350 * len(datasets),
+        legend_title="Filter Step",
+    )
+    # set x-axis title only on the bottom-most plot
+    fig.update_xaxes(title_text=bar_settings.x_axis_title, row=len(datasets), col=1)
+
+    Styler().apply_style(fig)
+
+    output_path = output_dir / "funnel_summary.html"
+    fig.write_html(output_path, include_plotlyjs="cdn")
+    logging.info(f"-> saved combined funnel plot to {output_path}")

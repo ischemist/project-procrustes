@@ -40,7 +40,7 @@ def main(config_path: Path):
     logging.info(f"-> mapped {len(model_display_map)} models with display settings.")
 
     logging.info(f"\nloading data from {input_path}...")
-    records = performance.load_benchmark_data(input_path, x_metric="sol_plus", y_metric="cc")
+    records = performance.load_benchmark_data(input_path)
     num_datasets = len(set(r.dataset for r in records))
     logging.info(f"found {len(records)} records across {num_datasets} datasets.")
 
