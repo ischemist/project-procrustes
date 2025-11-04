@@ -45,6 +45,7 @@ data/evaluations/**/*.pkl
 data/evaluations/**/*.json.gz
 data/evaluations/**/results.json
 data/processed/**/*.json.gz
+data/scored/
 
 
 _backups/

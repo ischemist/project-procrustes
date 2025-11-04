@@ -1,0 +1,119 @@
+# visualization configuration for model performance plots
+
+models:
+  Insilico:
+    legend_name: "Insilico"
+    abbreviation: "IS"
+    color: "#6a994e"
+    text_position: "top center"
+  aizynthfinder-mcts:
+    legend_name: "AiZynthFinder MCTS"
+    abbreviation: "AZ-M"
+    color: "#bc843d"
+    text_position: "top left"
+  aizynthfinder-retro-star:
+    legend_name: "AiZynthFinder RetroStar"
+    abbreviation: "AZ-RS"
+    color: "#f4ac51"
+    text_position: "top center"
+  syntheseus-retro0-local-retro:
+    legend_name: "Syntheseus Retro0 Local Retro"
+    abbreviation: "Synth-R0"
+    color: "#f84c4d"
+    text_position: "bottom center"
+  askcos:
+    legend_name: "ASKCOS"
+    abbreviation: "ASK"
+    color: "#24cddc"
+    text_position: "bottom center"
+  retrochimera:
+    legend_name: "RetroChimera"
+    abbreviation: "RC"
+    color: "#BC6C25"
+  retro-star:
+    legend_name: "RetroStar"
+    abbreviation: "R*"
+    color: "#81419a"
+  dms-flash-fp16:
+    legend_name: "DMS Flash"
+    abbreviation: "DMS-F"
+    color: "#697cf9"
+    text_position: "top left"
+  dms-wide-fp16:
+    legend_name: "DMS Wide"
+    abbreviation: "DMS-W"
+    color: "#415ff7"
+    text_position: "top center"
+  dms-explorer-XL-fp16:
+    legend_name: "DMS Explorer XL"
+    abbreviation: "DMS-XL"
+    color: "#1947e1" # note: same color as wide
+  dream-retroer:
+    legend_name: "DreamRetroEr"
+    abbreviation: "Dream"
+    color: "#96CEB4"
+    text_position: "bottom right"
+  multistep-ttl:
+    legend_name: "MultiStep TTL"
+    abbreviation: "TTL"
+    color: "#FFEAA7"
+    text_position: "middle left"
+  synllama:
+    legend_name: "SynLLaMa"
+    abbreviation: "LLaMa"
+    color: "#C9ADA7"
+    text_position: "bottom center"
+  synplanner-eval:
+    legend_name: "SynPlanner Eval"
+    abbreviation: "SynP-E"
+    color: "#6A4C93"
+    text_position: "middle left"
+  synplanner-mcts:
+    legend_name: "SynPlanner MCTS"
+    abbreviation: "SynP-M"
+    color: "#8B7AB8"
+    text_position: "top center"
+  syntheseus-bfs-local-retro:
+    legend_name: "Syntheseus BFS Local Retro"
+    abbreviation: "Synth-BFS"
+    color: "#f97e7f"
+
+# plot settings
+plot_settings:
+  # paths
+  input_data_path: "data/bench-results-2025-10-30.csv"
+  processed_data_path: "data/processed"
+  output_dir: "data/analysis/plots"
+  dataset_totals:
+    "uspto-190": 190
+    "ursa-bridge-100": 100
+    "ursa-expert-100": 100
+
+  # figure layout
+  combined_figure:
+    shared_xaxes: true
+  range_padding:
+    # add delta to max value for axis range
+    x: 0.1
+    y: 0.15
+  x_axis:
+    title: "Sol+"
+    range: [-0.05, 0.65]
+  y_axis:
+    range: [-0.35, 3.7]
+
+bar_settings:
+  title_template: "Prediction Funnel on {dataset}"
+  sort_by_dataset: "ursa-expert-100"
+  x_axis_title: "Model"
+  y_axis_title: "Fraction of targets (%)"
+  traces:
+    sol_plus_n:
+      name: "Sol+"
+      color: "#386641"
+    failed_fp:
+      name: "Failed FG Check"
+      color: "#f4ac51"
+    failed_sanity:
+      name: "Unknown Reaction"
+      color: "#f84c4d"
