@@ -15,7 +15,7 @@ models:
     legend_name: "AiZynthFinder RetroStar"
     abbreviation: "AZ-RS"
     color: "#f4ac51"
-    text_position: "top right"
+    text_position: "top center"
   syntheseus-retro0-local-retro:
     legend_name: "Syntheseus Retro0 Local Retro"
     abbreviation: "Synth-R0"

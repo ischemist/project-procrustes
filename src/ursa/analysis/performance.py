@@ -219,7 +219,7 @@ def plot_performance_summary(
 ):
     """generates a single figure with one subplot per dataset."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    datasets = plot_settings.dataset_totals.keys()
+    datasets = list(plot_settings.dataset_totals.keys())
 
     fig = make_subplots(
         rows=len(datasets),
@@ -247,7 +247,7 @@ def plot_performance_summary(
     fig.update_xaxes(title_text=plot_settings.x_axis.title, range=plot_settings.x_axis.range, row=len(datasets), col=1)
     for i in range(1, len(datasets) + 1):
         fig.update_yaxes(title_text=plot_settings.y_axis.title, range=plot_settings.y_axis.range, row=i, col=1)
-
+    fig.update_layout(legend=dict(orientation="h", entrywidth=200))
     output_path = output_dir / "performance_summary.html"
     fig.write_html(output_path, include_plotlyjs="cdn")
     logging.info(f"-> saved combined plot to {output_path}")
