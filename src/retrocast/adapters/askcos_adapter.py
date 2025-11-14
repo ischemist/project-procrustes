@@ -26,6 +26,23 @@ class AskcosChemicalNode(AskcosBaseNode):
     terminal: bool
 
 
+class AskcosTemplateSource(BaseModel):
+    """Nested structure for template information."""
+
+    reaction_smarts: str | None = None
+
+
+class AskcosModelMetadata(BaseModel):
+    """Model metadata containing template information."""
+
+    source: dict[str, Any] = Field(default_factory=dict)
+
+    def get_template(self) -> str | None:
+        """Extract reaction_smarts from nested template structure."""
+        template_dict = self.source.get("template", {})
+        return template_dict.get("reaction_smarts") if isinstance(template_dict, dict) else None
+
+
 class AskcosReactionProperties(BaseModel):
     mapped_smiles: str | None = None
 
@@ -33,6 +50,7 @@ class AskcosReactionProperties(BaseModel):
 class AskcosReactionNode(AskcosBaseNode):
     type: Literal["reaction"]
     reaction_properties: AskcosReactionProperties | None = None
+    model_metadata: list[AskcosModelMetadata] = Field(default_factory=list)
 
 
 AskcosNode = Annotated[AskcosChemicalNode | AskcosReactionNode, Field(discriminator="type")]
@@ -224,7 +242,13 @@ class AskcosAdapter(BaseAdapter):
         if node_data.reaction_properties and node_data.reaction_properties.mapped_smiles:
             mapped_smiles = ReactionSmilesStr(node_data.reaction_properties.mapped_smiles)
 
+        # Extract template from model_metadata if available
+        template = None
+        if node_data.model_metadata and len(node_data.model_metadata) > 0:
+            template = node_data.model_metadata[0].get_template()
+
         return ReactionStep(
             reactants=reactants,
             mapped_smiles=mapped_smiles,
+            template=template,
         )
