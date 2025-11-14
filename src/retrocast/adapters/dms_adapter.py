@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.domain.schemas import BenchmarkTree, MoleculeNode, ReactionNode, TargetInfo
-from retrocast.exceptions import AdapterLogicError, UrsaException
+from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 from retrocast.utils.hashing import generate_molecule_hash
 from retrocast.utils.logging import logger
@@ -52,7 +52,7 @@ class DMSAdapter(BaseAdapter):
                 # The private _transform method now only handles one route at a time
                 tree = self._transform(dms_tree_root, target_info)
                 yield tree
-            except UrsaException as e:
+            except RetroCastException as e:
                 # A single route failed, log it and continue with the next one.
                 logger.warning(f"  - Route for '{target_info.id}' failed transformation: {e}")
                 continue
@@ -60,7 +60,7 @@ class DMSAdapter(BaseAdapter):
     def _transform(self, raw_data: DMSTree, target_info: TargetInfo) -> BenchmarkTree:
         """
         Orchestrates the transformation of a single DMS output tree.
-        Raises UrsaException on failure.
+        Raises RetroCastException on failure.
         """
         # begin the recursion from the root node
         retrosynthetic_tree = self._build_molecule_node(dms_node=raw_data, path_prefix="ursa-mol-root")

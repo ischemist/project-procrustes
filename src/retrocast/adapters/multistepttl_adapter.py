@@ -9,7 +9,7 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_tree_from_precursor_map
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.domain.schemas import BenchmarkTree, MoleculeNode, TargetInfo
-from retrocast.exceptions import AdapterLogicError, UrsaException
+from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.utils.hashing import generate_molecule_hash
 from retrocast.utils.logging import logger
 
@@ -45,14 +45,14 @@ class TtlRetroAdapter(BaseAdapter):
             try:
                 tree = self._transform(route, target_info)
                 yield tree
-            except UrsaException as e:
+            except RetroCastException as e:
                 logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
                 continue
 
     def _transform(self, route: TtlRoute, target_info: TargetInfo) -> BenchmarkTree:
         """
         orchestrates the transformation of a single ttlretro route.
-        raises ursaexception on failure.
+        raises RetroCastException on failure.
         """
         if not route.reactions:
             retrosynthetic_tree = MoleculeNode(

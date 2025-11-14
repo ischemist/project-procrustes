@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.domain.schemas import BenchmarkTree, MoleculeNode, ReactionNode, TargetInfo
-from retrocast.exceptions import AdapterLogicError, UrsaException
+from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 from retrocast.utils.hashing import generate_molecule_hash
 from retrocast.utils.logging import logger
@@ -89,7 +89,7 @@ class AskcosAdapter(BaseAdapter):
                     target_info=target_info,
                 )
                 yield tree
-            except UrsaException as e:
+            except RetroCastException as e:
                 logger.warning(f"  - pathway {i} for target '{target_info.id}' failed transformation: {e}")
                 continue
 

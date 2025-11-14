@@ -13,7 +13,7 @@ from retrocast.cli import (
     handle_process,
     load_config,
 )
-from retrocast.exceptions import UrsaException
+from retrocast.exceptions import RetroCastException
 
 
 @pytest.fixture
@@ -179,8 +179,8 @@ class TestCliProcessExecution:
     def test_run_single_process_handles_ursa_exception(
         self, mock_project_structure: Path, mock_config: dict, mock_dependencies: dict, caplog
     ):
-        """Tests that UrsaExceptions are caught and logged."""
-        mock_dependencies["load_targets"].side_effect = UrsaException("Bad SMILES")
+        """Tests that RetroCastExceptions are caught and logged."""
+        mock_dependencies["load_targets"].side_effect = RetroCastException("Bad SMILES")
         _run_single_process(mock_project_structure, mock_config, "model-a", "dataset-1", None, None)
         mock_dependencies["process_run"].assert_not_called()
         assert "a critical error occurred" in caplog.text

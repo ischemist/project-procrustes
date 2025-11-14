@@ -7,7 +7,7 @@ from pytest_mock import MockerFixture
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.core import process_model_run
 from retrocast.domain.schemas import BenchmarkTree, MoleculeNode, TargetInfo
-from retrocast.exceptions import UrsaIOException
+from retrocast.exceptions import RetroCastIOError
 from retrocast.io import save_json_gz
 from retrocast.typing import SmilesStr
 from retrocast.utils.hashing import generate_model_hash
@@ -176,7 +176,7 @@ def test_process_model_run_handles_io_error(
 
     mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
     # mock load_json_gz to simulate a file read/parse failure
-    mocker.patch("retrocast.core.load_json_gz", side_effect=UrsaIOException("test error"))
+    mocker.patch("retrocast.core.load_json_gz", side_effect=RetroCastIOError("test error"))
 
     # act
     process_model_run(

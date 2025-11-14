@@ -12,7 +12,7 @@ from retrocast.domain.tree import (
     sample_random_k,
     sample_top_k,
 )
-from retrocast.exceptions import UrsaIOException
+from retrocast.exceptions import RetroCastIOError
 from retrocast.io import load_json_gz, save_json, save_json_gz
 from retrocast.utils.hashing import generate_file_hash, generate_model_hash, generate_source_hash
 from retrocast.utils.logging import logger
@@ -59,7 +59,7 @@ def process_model_run(
     try:
         logger.info(f"Processing file: {raw_results_file.name}")
         raw_data_per_target = load_json_gz(raw_results_file)
-    except UrsaIOException as e:
+    except RetroCastIOError as e:
         logger.error(f"FATAL: Could not read or parse input file {raw_results_file}. Aborting. Error: {e}")
         return
 

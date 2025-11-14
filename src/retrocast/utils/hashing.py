@@ -1,7 +1,7 @@
 import hashlib
 from pathlib import Path
 
-from retrocast.exceptions import UrsaException
+from retrocast.exceptions import RetroCastException
 from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
@@ -14,7 +14,7 @@ def generate_file_hash(path: Path) -> str:
             return hashlib.sha256(file_bytes).hexdigest()
     except OSError as e:
         logger.error(f"Could not read file for hashing: {path}")
-        raise UrsaException(f"File I/O error on {path}: {e}") from e
+        raise RetroCastException(f"File I/O error on {path}: {e}") from e
 
 
 def generate_molecule_hash(smiles: SmilesStr) -> str:

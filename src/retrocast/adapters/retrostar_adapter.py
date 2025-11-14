@@ -7,7 +7,7 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_tree_from_precursor_map
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.domain.schemas import BenchmarkTree, TargetInfo
-from retrocast.exceptions import AdapterLogicError, UrsaException
+from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
@@ -39,7 +39,7 @@ class RetroStarAdapter(BaseAdapter):
         try:
             tree = self._transform(route_str, target_info)
             yield tree
-        except UrsaException as e:
+        except RetroCastException as e:
             logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
             return
 
@@ -87,7 +87,7 @@ class RetroStarAdapter(BaseAdapter):
     def _transform(self, route_str: str, target_info: TargetInfo) -> BenchmarkTree:
         """
         orchestrates the transformation of a single retrostar route string.
-        raises ursaexception on failure.
+        raises RetroCastException on failure.
         """
         parsed_target_smiles, precursor_map = self._parse_route_string(route_str)
 

@@ -27,7 +27,7 @@ import json
 import sys
 from pathlib import Path
 
-from retrocast.exceptions import UrsaException
+from retrocast.exceptions import RetroCastException
 from retrocast.utils.hashing import generate_file_hash, generate_source_hash
 from retrocast.utils.logging import logger
 
@@ -84,7 +84,7 @@ def verify_single_run(manifest_path: Path, base_dir: Path) -> bool:
     except (json.JSONDecodeError, KeyError) as e:
         logger.error(f"{RED}  -> FAILURE: Manifest is corrupted or malformed. Error: {e}{RESET}")
         return False
-    except UrsaException as e:
+    except RetroCastException as e:
         logger.error(f"{RED}  -> FAILURE: I/O error reading a source file: {e}{RESET}")
         return False
 

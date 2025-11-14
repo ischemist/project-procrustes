@@ -86,7 +86,7 @@ plot_settings:
   output_dir: "data/analysis/plots"
   dataset_totals:
     "uspto-190": 190
-    "ursa-bridge-100": 100
+    "-bridge-100": 100
     "ursa-expert-100": 100
 
   # figure layout

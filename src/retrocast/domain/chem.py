@@ -1,6 +1,6 @@
 from rdkit import Chem, rdBase
 
-from retrocast.exceptions import InvalidSmilesError, UrsaException
+from retrocast.exceptions import InvalidSmilesError, RetroCastException
 from retrocast.typing import InchiKeyStr, SmilesStr
 from retrocast.utils.logging import logger
 
@@ -19,7 +19,7 @@ def canonicalize_smiles(smiles: str, remove_mapping: bool = False) -> SmilesStr:
 
     Raises:
         InvalidSmilesError: If the input SMILES is malformed or cannot be parsed by RDKit.
-        UrsaException: For any other unexpected errors during processing.
+        RetroCastException: For any other unexpected errors during processing.
     """
     if not isinstance(smiles, str) or not smiles:
         logger.error("Provided SMILES is not a valid string or is empty.")
@@ -47,7 +47,7 @@ def canonicalize_smiles(smiles: str, remove_mapping: bool = False) -> SmilesStr:
     except Exception as e:
         logger.error(f"An unexpected RDKit error occurred for SMILES '{smiles}': {e}")
         # wrap the unknown error so the rest of the app doesn't need to know about rdkit specifics
-        raise UrsaException(f"An unexpected error occurred during SMILES processing: {e}") from e
+        raise RetroCastException(f"An unexpected error occurred during SMILES processing: {e}") from e
 
 
 def get_inchi_key(smiles: str) -> str:
@@ -62,7 +62,7 @@ def get_inchi_key(smiles: str) -> str:
 
     Raises:
         InvalidSmilesError: If the input SMILES is malformed or cannot be parsed by RDKit.
-        UrsaException: For any other unexpected errors during processing.
+        RetroCastException: For any other unexpected errors during processing.
     """
     if not isinstance(smiles, str) or not smiles:
         logger.error("Provided SMILES for InChIKey generation is not a valid string or is empty.")
@@ -80,7 +80,7 @@ def get_inchi_key(smiles: str) -> str:
             # This is a very rare edge case but good to guard against.
             msg = f"RDKit produced an empty InChIKey for SMILES: '{smiles}'"
             logger.error(msg)
-            raise UrsaException(msg)
+            raise RetroCastException(msg)
         return InchiKeyStr(inchi_key)
 
     except InvalidSmilesError:
@@ -89,4 +89,4 @@ def get_inchi_key(smiles: str) -> str:
     except Exception as e:
         logger.error(f"An unexpected RDKit error occurred during InChIKey generation for SMILES '{smiles}': {e}")
         # Wrap the unknown error so the rest of the app doesn't need to know about rdkit specifics
-        raise UrsaException(f"An unexpected error occurred during InChIKey generation: {e}") from e
+        raise RetroCastException(f"An unexpected error occurred during InChIKey generation: {e}") from e

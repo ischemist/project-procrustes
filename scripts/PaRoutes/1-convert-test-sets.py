@@ -24,7 +24,7 @@ from tqdm import tqdm
 from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.domain.schemas import TargetInfo
-from retrocast.exceptions import UrsaException
+from retrocast.exceptions import RetroCastException
 from retrocast.io import save_json_gz
 from retrocast.utils.logging import logger
 
@@ -93,7 +93,7 @@ def main() -> None:
                         processed_data[target_id] = [tree.model_dump() for tree in adapted_trees]
                         successful_routes += 1
 
-                except UrsaException as e:
+                except RetroCastException as e:
                     logger.warning(f"could not process route {i} due to an error: {e}")
                 except (KeyError, TypeError):
                     logger.warning(f"route {i} has invalid structure or missing 'smiles' key.")

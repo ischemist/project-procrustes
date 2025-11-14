@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import InvalidSmilesError, UrsaException
+from retrocast.exceptions import InvalidSmilesError, RetroCastException
 
 
 def test_canonicalize_smiles_valid_non_canonical() -> None:
@@ -162,14 +162,14 @@ def test_get_inchi_key_bad_input_raises_error(bad_input) -> None:
 @patch("retrocast.domain.chem.Chem.MolToSmiles")
 def test_canonicalize_smiles_raises_ursa_exception_on_generic_error(mock_moltosmiles) -> None:
     """
-    tests that a generic, unexpected rdkit error is wrapped in our UrsaException.
+    tests that a generic, unexpected rdkit error is wrapped in our RetroCastException.
     this covers the final `except` block.
     """
     # arrange: force the rdkit function to raise a generic error
     mock_moltosmiles.side_effect = RuntimeError("some esoteric rdkit failure")
 
     # act / assert
-    with pytest.raises(UrsaException) as exc_info:
+    with pytest.raises(RetroCastException) as exc_info:
         canonicalize_smiles("CCO")  # a valid smiles that will now fail
 
     assert "An unexpected error occurred during SMILES processing" in str(exc_info.value)
@@ -185,7 +185,7 @@ def test_get_inchi_key_raises_ursa_exception_on_empty_result(mock_moltoinchikey)
     mock_moltoinchikey.return_value = ""
 
     # act / assert
-    with pytest.raises(UrsaException) as exc_info:
+    with pytest.raises(RetroCastException) as exc_info:
         get_inchi_key("CCO")
 
     assert "produced an empty InChIKey" in str(exc_info.value)
@@ -194,14 +194,14 @@ def test_get_inchi_key_raises_ursa_exception_on_empty_result(mock_moltoinchikey)
 @patch("retrocast.domain.chem.Chem.MolToInchiKey")
 def test_get_inchi_key_raises_ursa_exception_on_generic_error(mock_moltoinchikey) -> None:
     """
-    tests that a generic, unexpected rdkit error is wrapped in our UrsaException.
+    tests that a generic, unexpected rdkit error is wrapped in our RetroCastException.
     this covers the final `except` block in get_inchi_key.
     """
     # arrange
     mock_moltoinchikey.side_effect = RuntimeError("another esoteric rdkit failure")
 
     # act / assert
-    with pytest.raises(UrsaException) as exc_info:
+    with pytest.raises(RetroCastException) as exc_info:
         get_inchi_key("CCO")
 
     assert "An unexpected error occurred during InChIKey generation" in str(exc_info.value)

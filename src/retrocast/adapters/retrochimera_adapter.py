@@ -9,7 +9,7 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_tree_from_precursor_map
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.domain.schemas import BenchmarkTree, TargetInfo
-from retrocast.exceptions import UrsaException
+from retrocast.exceptions import RetroCastException
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -92,14 +92,14 @@ class RetrochimeraAdapter(BaseAdapter):
                 try:
                     tree = self._transform(route, target_info)
                     yield tree
-                except UrsaException as e:
+                except RetroCastException as e:
                     logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
                     continue
 
     def _transform(self, route: RetrochimeraRoute, target_info: TargetInfo) -> BenchmarkTree:
         """
         orchestrates the transformation of a single retrochimera route.
-        raises ursaexception on failure.
+        raises RetroCastException on failure.
         """
         precursor_map = self._build_precursor_map(route)
         # refactor: use the common recursive builder.

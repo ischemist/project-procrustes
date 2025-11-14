@@ -7,7 +7,7 @@ import yaml
 
 from retrocast.adapters.factory import get_adapter
 from retrocast.core import process_model_run
-from retrocast.exceptions import UrsaException
+from retrocast.exceptions import RetroCastException
 from retrocast.io import load_and_prepare_targets
 from retrocast.utils.logging import logger
 
@@ -114,7 +114,7 @@ def _run_single_process(
             sampling_strategy=strategy,
             sample_k=k,
         )
-    except UrsaException as e:
+    except RetroCastException as e:
         logger.error(f"a critical error occurred during processing for {model_name}/{dataset_name}: {e}")
     except Exception as e:
         logger.critical(f"an unexpected error occurred for {model_name}/{dataset_name}: {e}", exc_info=True)

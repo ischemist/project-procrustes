@@ -10,7 +10,7 @@ from retrocast.adapters.retrostar_adapter import RetroStarAdapter
 from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
-from retrocast.exceptions import UrsaException
+from retrocast.exceptions import RetroCastException
 
 ADAPTER_MAP: dict[str, BaseAdapter] = {
     "aizynth": AizynthAdapter(),
@@ -33,5 +33,5 @@ def get_adapter(adapter_name: str) -> BaseAdapter:
     """
     adapter = ADAPTER_MAP.get(adapter_name)
     if adapter is None:
-        raise UrsaException(f"unknown adapter '{adapter_name}'. check `ursa-config.yaml` and `ADAPTER_MAP`.")
+        raise RetroCastException(f"unknown adapter '{adapter_name}'. check `ursa-config.yaml` and `ADAPTER_MAP`.")
     return adapter

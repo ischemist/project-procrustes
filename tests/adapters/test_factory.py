@@ -2,7 +2,7 @@ import pytest
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.factory import ADAPTER_MAP, get_adapter
-from retrocast.exceptions import UrsaException
+from retrocast.exceptions import RetroCastException
 
 
 def test_get_adapter_known_adapter():
@@ -19,11 +19,11 @@ def test_get_adapter_known_adapter():
 
 def test_get_adapter_unknown_adapter_raises_exception():
     """
-    tests that requesting an unknown adapter name raises an ursaexception
+    tests that requesting an unknown adapter name raises an RetroCastException
     with a helpful error message.
     """
     unknown_name = "this-adapter-does-not-exist"
-    with pytest.raises(UrsaException, match=f"unknown adapter '{unknown_name}'"):
+    with pytest.raises(RetroCastException, match=f"unknown adapter '{unknown_name}'"):
         get_adapter(unknown_name)
 
 

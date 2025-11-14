@@ -1,46 +1,46 @@
-class UrsaException(Exception):
+class RetroCastException(Exception):
     """Base exception for all errors raised by the ursa package."""
 
     pass
 
 
-class InvalidSmilesError(UrsaException):
+class InvalidSmilesError(RetroCastException):
     """Raised when a SMILES string is malformed or cannot be processed."""
 
     pass
 
 
-class SchemaLogicError(UrsaException, ValueError):
+class SchemaLogicError(RetroCastException, ValueError):
     """Raised when data violates the logical rules of a schema, beyond basic type validation."""
 
     pass
 
 
-class AdapterLogicError(UrsaException):
+class AdapterLogicError(RetroCastException):
     """Raised when an adapter fails to correctly fulfill its transformation contract."""
 
     pass
 
 
-class UrsaIOException(UrsaException):
+class RetroCastIOError(RetroCastException):
     """Raised for file system or I/O related errors during processing."""
 
     pass
 
 
-class UrsaSerializationError(UrsaException):
+class RetroCastSerializationError(RetroCastException):
     """Raised when data cannot be serialized to the desired format (e.g., JSON)."""
 
     pass
 
 
-class TtlRetroSerializationError(UrsaSerializationError):
+class TtlRetroSerializationError(RetroCastSerializationError):
     """custom exception for errors during ttlretro route serialization."""
 
     pass
 
 
-class SyntheseusSerializationError(UrsaSerializationError):
+class SyntheseusSerializationError(RetroCastSerializationError):
     """Custom exception for errors during syntheseus route serialization."""
 
     pass

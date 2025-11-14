@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from retrocast.exceptions import UrsaException
+from retrocast.exceptions import RetroCastException
 from retrocast.utils.hashing import (
     generate_file_hash,
     generate_model_hash,
@@ -97,5 +97,5 @@ def test_generate_file_hash_is_correct(tmp_path: Path) -> None:
 def test_generate_file_hash_raises_exception_for_missing_file(tmp_path: Path) -> None:
     """Tests that our custom exception is raised if the file does not exist."""
     non_existent_path = tmp_path / "this_file_does_not_exist.txt"
-    with pytest.raises(UrsaException):
+    with pytest.raises(RetroCastException):
         generate_file_hash(non_existent_path)

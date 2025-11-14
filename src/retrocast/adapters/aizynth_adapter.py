@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_tree_from_bipartite_node
 from retrocast.domain.schemas import BenchmarkTree, TargetInfo
-from retrocast.exceptions import AdapterLogicError, UrsaException
+from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -63,14 +63,14 @@ class AizynthAdapter(BaseAdapter):
             try:
                 tree = self._transform(aizynth_tree_root, target_info)
                 yield tree
-            except UrsaException as e:
+            except RetroCastException as e:
                 logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
                 continue
 
     def _transform(self, aizynth_root: AizynthMoleculeInput, target_info: TargetInfo) -> BenchmarkTree:
         """
         orchestrates the transformation of a single aizynthfinder output tree.
-        raises ursaexception on failure.
+        raises RetroCastException on failure.
         """
         # refactor: use the common recursive builder.
         retrosynthetic_tree = build_tree_from_bipartite_node(raw_mol_node=aizynth_root, path_prefix="ursa-mol-root")

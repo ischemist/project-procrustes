@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.domain.schemas import TargetInfo
-from retrocast.exceptions import UrsaException, UrsaIOException, UrsaSerializationError
+from retrocast.exceptions import RetroCastException, RetroCastIOError, RetroCastSerializationError
 from retrocast.utils.logging import logger
 
 # This allows us to return the same type that was passed in.
@@ -32,10 +32,10 @@ def save_json_gz(data: dict[str, Any], path: Path) -> None:
             f.write(json_str)
     except TypeError as e:
         logger.error(f"Data for {path} is not JSON serializable: {e}")
-        raise UrsaSerializationError(f"Data serialization error for {path}: {e}") from e
+        raise RetroCastSerializationError(f"Data serialization error for {path}: {e}") from e
     except OSError as e:
         logger.error(f"Failed to write or serialize gzipped JSON to {path}: {e}")
-        raise UrsaIOException(f"Data saving/serialization error on {path}: {e}") from e
+        raise RetroCastIOError(f"Data saving/serialization error on {path}: {e}") from e
 
 
 def load_json_gz(path: Path) -> dict[str, Any]:
@@ -49,11 +49,11 @@ def load_json_gz(path: Path) -> dict[str, Any]:
         with gzip.open(path, "rt", encoding="utf-8") as f:
             loaded_data = json.load(f)
             if not isinstance(loaded_data, dict):
-                raise UrsaIOException(f"Expected a JSON object (dict), but found {type(loaded_data)} in {path}")
+                raise RetroCastIOError(f"Expected a JSON object (dict), but found {type(loaded_data)} in {path}")
             return loaded_data
     except (OSError, gzip.BadGzipFile, json.JSONDecodeError) as e:
         logger.error(f"Failed to load or parse gzipped JSON file: {path}")
-        raise UrsaIOException(f"Data loading error on {path}: {e}") from e
+        raise RetroCastIOError(f"Data loading error on {path}: {e}") from e
 
 
 def save_json(data: dict[str, Any], path: Path) -> None:
@@ -64,7 +64,7 @@ def save_json(data: dict[str, Any], path: Path) -> None:
             json.dump(data, f, indent=2)
     except OSError as e:
         logger.error(f"Failed to write to JSON file: {path}")
-        raise UrsaIOException(f"Data saving error on {path}: {e}") from e
+        raise RetroCastIOError(f"Data saving error on {path}: {e}") from e
 
 
 def load_targets_csv(path: Path) -> dict[str, str]:
@@ -86,13 +86,13 @@ def load_targets_csv(path: Path) -> dict[str, str]:
             return data
     except KeyError as e:
         logger.error(f"Missing required column in CSV file {path}: {e}")
-        raise UrsaIOException(f"CSV column {e} not found in {path}") from e
+        raise RetroCastIOError(f"CSV column {e} not found in {path}") from e
     except OSError as e:
         logger.error(f"Failed to read CSV file: {path}")
-        raise UrsaIOException(f"Data loading error on {path}: {e}") from e
+        raise RetroCastIOError(f"Data loading error on {path}: {e}") from e
     except csv.Error as e:
         logger.error(f"Failed to parse CSV file: {path}")
-        raise UrsaIOException(f"CSV parsing error on {path}: {e}") from e
+        raise RetroCastIOError(f"CSV parsing error on {path}: {e}") from e
 
 
 def load_targets_json(path: Path) -> dict[str, str]:
@@ -111,13 +111,13 @@ def load_targets_json(path: Path) -> dict[str, str]:
                 data = json.load(f)
 
         if not isinstance(data, dict):
-            raise UrsaIOException(f"Expected JSON object (dict), found {type(data)}")
+            raise RetroCastIOError(f"Expected JSON object (dict), found {type(data)}")
         if not data:
             logger.warning(f"JSON file {path} is empty")
         return data
     except (OSError, json.JSONDecodeError) as e:
         logger.error(f"Failed to read or parse JSON file: {path}")
-        raise UrsaIOException(f"Data loading error on {path}: {e}") from e
+        raise RetroCastIOError(f"Data loading error on {path}: {e}") from e
 
 
 def load_target_ids(csv_path: str) -> list[tuple[int, str]]:
@@ -130,10 +130,10 @@ def load_target_ids(csv_path: str) -> list[tuple[int, str]]:
                 target_ids.append((idx, row["Structure ID"]))
     except OSError as e:
         logger.error(f"Failed to read CSV file: {csv_path}")
-        raise UrsaIOException(f"Data loading error on {csv_path}: {e}") from e
+        raise RetroCastIOError(f"Data loading error on {csv_path}: {e}") from e
     except csv.Error as e:
         logger.error(f"Failed to parse CSV file: {csv_path}")
-        raise UrsaIOException(f"CSV parsing error on {csv_path}: {e}") from e
+        raise RetroCastIOError(f"CSV parsing error on {csv_path}: {e}") from e
     return target_ids
 
 
@@ -186,7 +186,7 @@ def combine_evaluation_results(targets_csv: str, eval_dir: str, output_path: str
     eval_path = Path(eval_dir)
 
     if not eval_path.exists():
-        raise UrsaIOException(f"Evaluation directory does not exist: {eval_dir}")
+        raise RetroCastIOError(f"Evaluation directory does not exist: {eval_dir}")
 
     results = {}
     missing_files = []
@@ -206,7 +206,7 @@ def combine_evaluation_results(targets_csv: str, eval_dir: str, output_path: str
                 # Chimera files are named directly as target_id.json
                 json_file = find_json_file_by_name(target_id, eval_path, prefix="")
             else:
-                raise UrsaException(f"Unknown naming convention: {naming_convention}")
+                raise RetroCastException(f"Unknown naming convention: {naming_convention}")
 
             if json_file is None:
                 missing_files.append(target_id)
@@ -243,8 +243,8 @@ def load_and_prepare_targets(file_path: Path) -> dict[str, TargetInfo]:
         elif file_path.suffix == ".json" or (file_path.suffix == ".gz" and file_path.stem.endswith(".json")):
             targets_raw = load_targets_json(file_path)
         else:
-            raise UrsaException(f"Unsupported file format: {file_path}")
-    except UrsaIOException:
+            raise RetroCastException(f"Unsupported file format: {file_path}")
+    except RetroCastIOError:
         # Let IO exceptions propagate with their specific type.
         raise
 
@@ -253,11 +253,11 @@ def load_and_prepare_targets(file_path: Path) -> dict[str, TargetInfo]:
         try:
             canon_smiles = canonicalize_smiles(raw_smiles)
             prepared_targets[target_id] = TargetInfo(id=target_id, smiles=canon_smiles)
-        except UrsaException as e:
+        except RetroCastException as e:
             msg = f"Invalid SMILES for target '{target_id}': {raw_smiles}. Cannot proceed."
             logger.error(msg)
             # **THE FIX IS HERE**: Raise a new exception with the better message.
-            raise UrsaException(msg) from e
+            raise RetroCastException(msg) from e
 
     logger.info(f"Successfully prepared {len(prepared_targets)} targets.")
     return prepared_targets

@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_tree_from_bipartite_node
 from retrocast.domain.schemas import BenchmarkTree, TargetInfo
-from retrocast.exceptions import AdapterLogicError, UrsaException
+from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -122,7 +122,7 @@ class PaRoutesAdapter(BaseAdapter):
         try:
             tree = self._transform(validated_route_root, target_info)
             yield tree
-        except UrsaException as e:
+        except RetroCastException as e:
             logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
             return
 
