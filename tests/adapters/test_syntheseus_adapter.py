@@ -2,8 +2,7 @@ import pytest
 
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.DEPRECATE_schemas import TargetInfo
-from retrocast.schemas import Route
+from retrocast.schemas import Route, TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 # derive SMILES from the raw data to ensure canonicalization matches
@@ -45,11 +44,11 @@ class TestSyntheseusAdapterUnit(BaseAdapterTest):
 
     @pytest.fixture
     def target_input(self):
-        return TargetInfo(id="ethanol", smiles="CCO")
+        return TargetInput(id="ethanol", smiles="CCO")
 
     @pytest.fixture
     def mismatched_target_input(self):
-        return TargetInfo(id="ethanol", smiles="CCC")
+        return TargetInput(id="ethanol", smiles="CCC")
 
 
 @pytest.mark.contract
@@ -63,7 +62,7 @@ class TestSyntheseusAdapterContract:
     @pytest.fixture(scope="class")
     def uspto_routes(self, adapter: SyntheseusAdapter, raw_syntheseus_data):
         """Shared fixture for USPTO-2/190 routes."""
-        target_info = TargetInfo(id="USPTO-2/190", smiles=USPTO_2_SMILES)
+        target_info = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
         raw_routes = raw_syntheseus_data["USPTO-2/190"]
         return list(adapter.adapt(raw_routes, target_info))
 
@@ -111,7 +110,7 @@ class TestSyntheseusAdapterRegression:
     def test_adapt_multi_route_complex_target(self, adapter, raw_syntheseus_data):
         """Tests a successful run with multiple, complex routes for a single target."""
         raw_data = raw_syntheseus_data["USPTO-2/190"]
-        target_info = TargetInfo(id="USPTO-2/190", smiles=USPTO_2_SMILES)
+        target_info = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
 
         routes = list(adapter.adapt(raw_data, target_info))
 
@@ -136,7 +135,7 @@ class TestSyntheseusAdapterRegression:
     def test_adapt_purchasable_target(self, adapter, raw_syntheseus_data):
         """Tests a target that is purchasable, resulting in a 0-step route."""
         raw_data = raw_syntheseus_data["paracetamol"]
-        target_info = TargetInfo(id="paracetamol", smiles=PARACETAMOL_SMILES)
+        target_info = TargetInput(id="paracetamol", smiles=PARACETAMOL_SMILES)
 
         routes = list(adapter.adapt(raw_data, target_info))
 
@@ -152,7 +151,7 @@ class TestSyntheseusAdapterRegression:
     def test_adapt_no_routes_found(self, adapter, raw_syntheseus_data):
         """Tests a target for which the model found no routes (empty list)."""
         raw_data = raw_syntheseus_data["ibuprofen"]
-        target_info = TargetInfo(id="ibuprofen", smiles="CC(C)Cc1ccc(C(C)C(=O)O)cc1")
+        target_info = TargetInput(id="ibuprofen", smiles="CC(C)Cc1ccc(C(C)C(=O)O)cc1")
 
         routes = list(adapter.adapt(raw_data, target_info))
         assert len(routes) == 0
