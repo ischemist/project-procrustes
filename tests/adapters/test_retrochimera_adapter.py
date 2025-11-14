@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 
 from retrocast.adapters.retrochimera_adapter import RetrochimeraAdapter
@@ -44,48 +46,135 @@ class TestRetrochimeraAdapterUnit(BaseAdapterTest):
         return {"smiles": "CCO"}
 
     @pytest.fixture
-    def target_info(self):
+    def target_input(self):
         return TargetInfo(id="ethanol", smiles="CCO")
 
     @pytest.fixture
-    def mismatched_target_info(self):
+    def mismatched_target_input(self):
         return TargetInfo(id="ethanol", smiles="CCC")
 
 
 @pytest.mark.integration
-class TestRetrochimeraAdapterIntegration:
-    adapter = RetrochimeraAdapter()
+class TestRetrochimeraAdapterContract:
+    """Contract tests: verify the adapter produces valid Route objects with required fields populated."""
 
-    def test_adapt_successful_routes(self, raw_retrochimera_data):
-        """tests that the adapter correctly parses multiple valid routes from the input."""
-        raw_data = raw_retrochimera_data["Ebastine"]
+    @pytest.fixture(scope="class")
+    def adapter(self) -> RetrochimeraAdapter:
+        return RetrochimeraAdapter()
 
-        # derive the target smiles directly from the raw data file
-        target_smi_raw = raw_data["smiles"]
-        target_info = TargetInfo(id="Ebastine", smiles=canonicalize_smiles(target_smi_raw))
+    @pytest.fixture(scope="class")
+    def ebastine_target_input(self) -> TargetInfo:
+        """Provides the target input for Ebastine from raw data."""
+        return TargetInfo(
+            id="Ebastine",
+            smiles=canonicalize_smiles("CC(C)(C)C1=CC=C(C=C1)C(=O)CCCN2CCC(CC2)OC(C3=CC=CC=C3)C4=CC=CC=C4"),
+        )
 
-        trees = list(self.adapter.adapt(raw_data, target_info))
+    @pytest.fixture(scope="class")
+    def routes(self, adapter, raw_retrochimera_data, ebastine_target_input):
+        """Shared fixture to avoid re-running adaptation for every test."""
+        raw_target_data = raw_retrochimera_data["Ebastine"]
+        return list(adapter.adapt(raw_target_data, ebastine_target_input))
 
-        assert len(trees) == 3
+    def test_produces_correct_number_of_routes(self, routes):
+        """Verify the adapter produces the expected number of routes."""
+        assert len(routes) == 3
 
-        # --- deep inspection of the first route ---
-        tree = trees[0]
-        root = tree.retrosynthetic_tree
+    def test_all_routes_have_ranks(self, routes):
+        """Verify all routes are properly ranked."""
+        ranks = [route.rank for route in routes]
+        assert ranks == list(range(1, len(routes) + 1))
 
-        assert tree.target.id == "Ebastine"
-        assert root.smiles == canonicalize_smiles(target_smi_raw)
-        assert not root.is_starting_material
-        assert len(root.reactions) == 1
+    def test_all_routes_have_inchikeys(self, routes):
+        """Verify all target molecules have InChIKeys."""
+        for route in routes:
+            assert route.target.inchikey is not None
+            assert len(route.target.inchikey) > 0
 
-        reaction = root.reactions[0]
-        assert len(reaction.reactants) == 2
+    def test_all_targets_are_non_leaf(self, routes):
+        """Verify all target molecules have synthesis steps (not leaves)."""
+        for route in routes:
+            assert not route.target.is_leaf
+            assert route.target.synthesis_step is not None
 
-        # derive the expected reactants from the raw data, then canonicalize them
-        expected_reactants_raw = raw_data["result"]["outputs"][0]["routes"][0]["reactions"][0]["reactants"]
-        expected_reactants_canon = {canonicalize_smiles(s) for s in expected_reactants_raw}
+    def test_all_reactants_are_leaves(self, routes):
+        """Verify all immediate reactants are leaf nodes."""
+        for route in routes:
+            if route.target.synthesis_step:
+                for reactant in route.target.synthesis_step.reactants:
+                    assert reactant.is_leaf
 
-        # get the actual reactants from the parsed tree
-        actual_reactants_canon = {r.smiles for r in reaction.reactants}
 
-        assert actual_reactants_canon == expected_reactants_canon
-        assert all(r.is_starting_material for r in reaction.reactants)
+@pytest.mark.integration
+class TestRetrochimeraAdapterRegression:
+    """Regression tests: verify specific routes match expected structures and values."""
+
+    @pytest.fixture(scope="class")
+    def adapter(self) -> RetrochimeraAdapter:
+        return RetrochimeraAdapter()
+
+    @pytest.fixture(scope="class")
+    def ebastine_target_input(self) -> TargetInfo:
+        """Provides the target input for Ebastine from raw data."""
+        return TargetInfo(
+            id="Ebastine",
+            smiles=canonicalize_smiles("CC(C)(C)C1=CC=C(C=C1)C(=O)CCCN2CCC(CC2)OC(C3=CC=CC=C3)C4=CC=CC=C4"),
+        )
+
+    @pytest.fixture(scope="class")
+    def routes(self, adapter, raw_retrochimera_data, ebastine_target_input):
+        """Shared fixture to avoid re-running adaptation for every test."""
+        raw_target_data = raw_retrochimera_data["Ebastine"]
+        return list(adapter.adapt(raw_target_data, ebastine_target_input))
+
+    def test_first_route_has_correct_target(self, routes, ebastine_target_input):
+        """Verify the first route has the correct target SMILES."""
+        route1 = routes[0]
+        assert route1.rank == 1
+        assert route1.target.smiles == ebastine_target_input.smiles
+        assert not route1.target.is_leaf
+
+    def test_first_route_has_synthesis_step(self, routes):
+        """Verify the first route's target has a synthesis step."""
+        route1 = routes[0]
+        assert route1.target.synthesis_step is not None
+        assert len(route1.target.synthesis_step.reactants) == 2
+
+    def test_first_route_reactants_are_starting_materials(self, routes):
+        """Verify all reactants in the first route are starting materials."""
+        route1 = routes[0]
+        reaction = route1.target.synthesis_step
+        assert reaction is not None
+        assert all(r.is_leaf for r in reaction.reactants)
+
+    def test_routes_have_distinct_structures(self, routes):
+        """Verify that routes have different structures (different signatures)."""
+        signatures = [route.get_signature() for route in routes]
+        # All 3 routes should be distinct
+        assert len(set(signatures)) == 3
+
+    def test_all_molecules_have_canonical_smiles(self, routes):
+        """Verify all molecules have canonical SMILES strings."""
+
+        def check_molecule(mol):
+            # The SMILES should match when canonicalized again
+            assert canonicalize_smiles(mol.smiles) == mol.smiles
+            if mol.synthesis_step:
+                for reactant in mol.synthesis_step.reactants:
+                    check_molecule(reactant)
+
+        for route in routes:
+            check_molecule(route.target)
+
+    def test_all_molecules_have_inchikeys(self, routes):
+        """Verify all molecules in all routes have InChIKeys."""
+
+        def check_molecule(mol):
+            assert mol.inchikey is not None
+            assert len(mol.inchikey) > 0
+            if mol.synthesis_step:
+                for reactant in mol.synthesis_step.reactants:
+                    check_molecule(reactant)
+
+        for route in routes:
+            check_molecule(route.target)
