@@ -2,8 +2,8 @@ import pytest
 
 from retrocast.adapters.dreamretro_adapter import DreamRetroAdapter
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.DEPRECATE_schemas import TargetInfo
 from retrocast.exceptions import AdapterLogicError
+from retrocast.schemas import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 
@@ -26,12 +26,12 @@ class TestDreamRetroAdapterUnit(BaseAdapterTest):
         return "this is not a dict"
 
     @pytest.fixture
-    def target_info(self):
-        return TargetInfo(id="ethanol", smiles="CCO")
+    def target_input(self):
+        return TargetInput(id="ethanol", smiles="CCO")
 
     @pytest.fixture
-    def mismatched_target_info(self):
-        return TargetInfo(id="ethanol", smiles="CCC")
+    def mismatched_target_input(self):
+        return TargetInput(id="ethanol", smiles="CCC")
 
     def test_parser_raises_on_invalid_step_format(self, adapter_instance):
         """the private parser method should raise an error for malformed steps."""
@@ -51,45 +51,60 @@ class TestDreamRetroAdapterIntegration:
 
         product_smi_raw, reactants_smi_raw = raw_route_str.split(">>")
 
-        target_info = TargetInfo(id="Mirabegron", smiles=canonicalize_smiles(product_smi_raw))
-        trees = list(self.adapter.adapt(raw_data, target_info))
+        target_input = TargetInput(id="Mirabegron", smiles=canonicalize_smiles(product_smi_raw))
+        routes = list(self.adapter.adapt(raw_data, target_input))
 
-        assert len(trees) == 1
-        tree = trees[0]
-        root = tree.retrosynthetic_tree
+        assert len(routes) == 1
+        route = routes[0]
+        root = route.target
 
         assert root.smiles == canonicalize_smiles(product_smi_raw)
-        reaction = root.reactions[0]
+        assert root.synthesis_step is not None
+        reaction = root.synthesis_step
 
         reactant_smiles = {r.smiles for r in reaction.reactants}
         expected_reactants = {canonicalize_smiles(s) for s in reactants_smi_raw.split(".")}
 
         assert reactant_smiles == expected_reactants
 
+        # verify metadata
+        assert route.metadata["expand_model_call"] == raw_data["expand_model_call"]
+        assert route.metadata["value_model_call"] == raw_data["value_model_call"]
+        assert route.metadata["reaction_nodes_lens"] == raw_data["reaction_nodes_lens"]
+        assert route.metadata["mol_nodes_lens"] == raw_data["mol_nodes_lens"]
+
     def test_adapt_multi_step_route(self, raw_dreamretro_data):
         """tests a multi-step route from a |-delimited string (anagliptin)."""
         raw_data = raw_dreamretro_data["Anagliptin"]
         raw_route_str = raw_data["routes"]
         root_smi_raw, _, _ = raw_route_str.split(">>")[0].split("|")[0].partition(">")
-        target_info = TargetInfo(id="Anagliptin", smiles=canonicalize_smiles(root_smi_raw))
+        target_input = TargetInput(id="Anagliptin", smiles=canonicalize_smiles(root_smi_raw))
 
-        trees = list(self.adapter.adapt(raw_data, target_info))
-        assert len(trees) == 1
-        root = trees[0].retrosynthetic_tree
+        routes = list(self.adapter.adapt(raw_data, target_input))
+        assert len(routes) == 1
+        root = routes[0].target
 
         assert root.smiles == canonicalize_smiles(root_smi_raw)
-        reaction1 = root.reactions[0]
+        assert root.synthesis_step is not None
+        reaction1 = root.synthesis_step
         assert len(reaction1.reactants) == 2
 
-        intermediate_node = next(r for r in reaction1.reactants if not r.is_starting_material)
-        leaf_node = next(r for r in reaction1.reactants if r.is_starting_material)
+        intermediate_node = next(r for r in reaction1.reactants if not r.is_leaf)
+        leaf_node = next(r for r in reaction1.reactants if r.is_leaf)
         assert leaf_node.smiles == "N#C[C@@H]1CCCN1C(=O)CCl"
 
-        reaction2 = intermediate_node.reactions[0]
+        assert intermediate_node.synthesis_step is not None
+        reaction2 = intermediate_node.synthesis_step
         assert len(reaction2.reactants) == 2
-        assert all(r.is_starting_material for r in reaction2.reactants)
+        assert all(r.is_leaf for r in reaction2.reactants)
 
         reactant_smiles_l2 = {r.smiles for r in reaction2.reactants}
         _, l2_reactants_raw = raw_route_str.split("|")[1].split(">>")
         expected_reactants_l2 = {canonicalize_smiles(s) for s in l2_reactants_raw.split(".")}
         assert reactant_smiles_l2 == expected_reactants_l2
+
+        # verify metadata
+        assert routes[0].metadata["expand_model_call"] == raw_data["expand_model_call"]
+        assert routes[0].metadata["value_model_call"] == raw_data["value_model_call"]
+        assert routes[0].metadata["reaction_nodes_lens"] == raw_data["reaction_nodes_lens"]
+        assert routes[0].metadata["mol_nodes_lens"] == raw_data["mol_nodes_lens"]
