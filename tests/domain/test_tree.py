@@ -2,7 +2,7 @@
 
 import random
 
-from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, MoleculeNode, ReactionNode, TargetInfo
+from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, MoleculeNode, ReactionNode, TargetInput
 from retrocast.domain.tree import (
     calculate_route_length,
     deduplicate_routes,
@@ -15,7 +15,7 @@ from retrocast.utils.hashing import generate_molecule_hash
 
 def _build_simple_tree(target_smiles: str, reactant_smiles_list: list[str]) -> BenchmarkTree:
     """A helper function to quickly build a 1-step BenchmarkTree for testing."""
-    target_info = TargetInfo(id=target_smiles, smiles=target_smiles)
+    target_info = TargetInput(id=target_smiles, smiles=target_smiles)
     reactants = []
     for i, smiles in enumerate(reactant_smiles_list):
         reactants.append(
@@ -48,7 +48,7 @@ def _build_simple_tree(target_smiles: str, reactant_smiles_list: list[str]) -> B
 def _build_route_of_length(target_id: str, length: int) -> BenchmarkTree:
     """Builds a linear route of a specific length for testing filtering."""
     if length == 0:
-        target_info = TargetInfo(id=target_id, smiles=target_id)
+        target_info = TargetInput(id=target_id, smiles=target_id)
         node = MoleculeNode(
             id="root",
             molecule_hash=generate_molecule_hash(target_id),
@@ -108,7 +108,7 @@ def _build_route_of_length(target_id: str, length: int) -> BenchmarkTree:
             reactions=[reaction],
         )
 
-    target_info = TargetInfo(id=target_id, smiles=target_id)
+    target_info = TargetInput(id=target_id, smiles=target_id)
     return BenchmarkTree(target=target_info, retrosynthetic_tree=product_node)
 
 
@@ -135,7 +135,7 @@ def test_deduplicate_removes_reactant_order_duplicates() -> None:
 
 def test_deduplicate_distinguishes_different_assembly_order() -> None:
     """Tests (A+B>>I1)+C>>T is different from A+(B+C>>I2)>>T"""
-    target_info = TargetInfo(id="T", smiles="T")
+    target_info = TargetInput(id="T", smiles="T")
     # Route 1
     i1_tree = _build_simple_tree("I1", ["A", "B"]).retrosynthetic_tree
     c_node = MoleculeNode(id="c", molecule_hash=generate_molecule_hash("C"), smiles="C", is_starting_material=True)

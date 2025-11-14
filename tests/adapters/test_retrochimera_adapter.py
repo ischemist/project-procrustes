@@ -4,7 +4,7 @@ import pytest
 
 from retrocast.adapters.retrochimera_adapter import RetrochimeraAdapter
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.DEPRECATE_schemas import TargetInfo
+from retrocast.domain.DEPRECATE_schemas import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 
@@ -47,11 +47,11 @@ class TestRetrochimeraAdapterUnit(BaseAdapterTest):
 
     @pytest.fixture
     def target_input(self):
-        return TargetInfo(id="ethanol", smiles="CCO")
+        return TargetInput(id="ethanol", smiles="CCO")
 
     @pytest.fixture
     def mismatched_target_input(self):
-        return TargetInfo(id="ethanol", smiles="CCC")
+        return TargetInput(id="ethanol", smiles="CCC")
 
 
 @pytest.mark.integration
@@ -63,9 +63,9 @@ class TestRetrochimeraAdapterContract:
         return RetrochimeraAdapter()
 
     @pytest.fixture(scope="class")
-    def ebastine_target_input(self) -> TargetInfo:
+    def ebastine_target_input(self) -> TargetInput:
         """Provides the target input for Ebastine from raw data."""
-        return TargetInfo(
+        return TargetInput(
             id="Ebastine",
             smiles=canonicalize_smiles("CC(C)(C)C1=CC=C(C=C1)C(=O)CCCN2CCC(CC2)OC(C3=CC=CC=C3)C4=CC=CC=C4"),
         )
@@ -114,9 +114,9 @@ class TestRetrochimeraAdapterRegression:
         return RetrochimeraAdapter()
 
     @pytest.fixture(scope="class")
-    def ebastine_target_input(self) -> TargetInfo:
+    def ebastine_target_input(self) -> TargetInput:
         """Provides the target input for Ebastine from raw data."""
-        return TargetInfo(
+        return TargetInput(
             id="Ebastine",
             smiles=canonicalize_smiles("CC(C)(C)C1=CC=C(C=C1)C(=O)CCCN2CCC(CC2)OC(C3=CC=CC=C3)C4=CC=CC=C4"),
         )

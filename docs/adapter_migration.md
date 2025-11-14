@@ -5,13 +5,13 @@ This document provides a step-by-step guide for migrating adapters from the old 
 ## Overview of Changes
 
 ### Old Schema (`DEPRECATE_schemas.py`)
-- **Root**: `BenchmarkTree` containing `TargetInfo` and `MoleculeNode` (retrosynthetic tree root)
+- **Root**: `BenchmarkTree` containing `TargetInput` and `MoleculeNode` (retrosynthetic tree root)
 - **Node Structure**: `MoleculeNode` → `ReactionNode` → `MoleculeNode` (recursive bipartite graph)
 - **Identification**: Path-dependent IDs + content-based hashes
 - **Key Fields**: 
   - `MoleculeNode`: `id`, `molecule_hash`, `smiles`, `is_starting_material`, `reactions`
   - `ReactionNode`: `id`, `reaction_smiles`, `reactants`
-  - `TargetInfo`: `smiles`, `id`
+  - `TargetInput`: `smiles`, `id`
 
 ### New Schema (`schemas.py`)
 - **Root**: `Route` containing a `Molecule` (target)
@@ -27,7 +27,7 @@ This document provides a step-by-step guide for migrating adapters from the old 
 | Aspect | Old Schema | New Schema |
 |--------|-----------|------------|
 | Root object | `BenchmarkTree` | `Route` |
-| Target info | Separate `TargetInfo` object | Part of root `Molecule` |
+| Target info | Separate `TargetInput` object | Part of root `Molecule` |
 | Molecule ID | Path-dependent string `id` + `molecule_hash` | `inchikey` (canonical identifier) |
 | Reaction ID | Path-dependent string `id` | No explicit ID |
 | Leaf detection | `is_starting_material` boolean field | `is_leaf` computed property |
@@ -41,7 +41,7 @@ This document provides a step-by-step guide for migrating adapters from the old 
 
 **Old:**
 ```python
-from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, TargetInfo, MoleculeNode, ReactionNode
+from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, TargetInput, MoleculeNode, ReactionNode
 ```
 
 **New:**
@@ -51,21 +51,21 @@ from retrocast.typing import SmilesStr, InchiKeyStr, ReactionSmilesStr
 from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
 ```
 
-**Note**: `TargetInfo` is still imported from `domain.schemas` for the `adapt()` method signature (but not used in the output).
+**Note**: `TargetInput` is still imported from `domain.schemas` for the `adapt()` method signature (but not used in the output).
 
 ### Step 2: Update the `adapt()` Method Signature
 
 **Old:**
 ```python
-def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[BenchmarkTree, None, None]:
+def adapt(self, raw_target_data: Any, target_info: TargetInput) -> Generator[BenchmarkTree, None, None]:
 ```
 
 **New:**
 ```python
-def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[Route, None, None]:
+def adapt(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
 ```
 
-The input signature stays the same (uses `TargetInfo` for backward compatibility), but the output changes from `BenchmarkTree` to `Route`.
+The input signature stays the same (uses `TargetInput` for backward compatibility), but the output changes from `BenchmarkTree` to `Route`.
 
 ### Step 3: Update Tree Building Logic
 
@@ -321,22 +321,22 @@ The `BaseAdapterTest` expects specific fixture names. Update your fixtures:
 ```python
 @pytest.fixture
 def target_info(self):
-    return TargetInfo(id="ethanol", smiles="CCO")
+    return TargetInput(id="ethanol", smiles="CCO")
 
 @pytest.fixture
 def mismatched_target_info(self):
-    return TargetInfo(id="ethanol", smiles="CCC")
+    return TargetInput(id="ethanol", smiles="CCC")
 ```
 
 **New:**
 ```python
 @pytest.fixture
 def target_input(self):
-    return TargetInfo(id="ethanol", smiles="CCO")
+    return TargetInput(id="ethanol", smiles="CCO")
 
 @pytest.fixture
 def mismatched_target_input(self):
-    return TargetInfo(id="ethanol", smiles="CCC")
+    return TargetInput(id="ethanol", smiles="CCC")
 ```
 
 #### Contract Test Example
@@ -528,5 +528,5 @@ See the `retrostar_adapter.py` for a complete reference implementation after mig
 
 - **InChIKey Generation**: The `get_inchi_key()` function may be slower than hashing, but provides canonical identification across different SMILES representations.
 - **Metadata Flexibility**: Use metadata dictionaries generously to preserve model-specific information that doesn't fit standard fields.
-- **Backward Compatibility**: The `TargetInfo` input to `adapt()` is kept for now but may be deprecated once all consumers are updated.
+- **Backward Compatibility**: The `TargetInput` input to `adapt()` is kept for now but may be deprecated once all consumers are updated.
 - **Error Handling**: Exception handling logic should remain the same; just update the object types being constructed.

@@ -7,7 +7,7 @@ from pydantic import BaseModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
-from retrocast.domain.DEPRECATE_schemas import TargetInfo
+from retrocast.domain.DEPRECATE_schemas import TargetInput
 from retrocast.exceptions import RetroCastException
 from retrocast.schemas import Molecule, ReactionStep, Route
 from retrocast.typing import SmilesStr
@@ -58,7 +58,7 @@ class RetrochimeraData(BaseModel):
 class RetrochimeraAdapter(BaseAdapter):
     """adapter for converting retrochimera-style outputs to the Route schema."""
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[Route, None, None]:
+    def adapt(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
         """
         validates raw retrochimera data, transforms it, and yields Route objects.
         """
@@ -99,7 +99,7 @@ class RetrochimeraAdapter(BaseAdapter):
                     logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
                     continue
 
-    def _transform(self, route: RetrochimeraRoute, target_info: TargetInfo, rank: int) -> Route:
+    def _transform(self, route: RetrochimeraRoute, target_info: TargetInput, rank: int) -> Route:
         """
         orchestrates the transformation of a single retrochimera route.
         raises RetroCastException on failure.

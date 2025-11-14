@@ -1,6 +1,6 @@
 import pytest
 
-from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, MoleculeNode, ReactionNode, RunStatistics, TargetInfo
+from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, MoleculeNode, ReactionNode, RunStatistics, TargetInput
 
 
 @pytest.fixture
@@ -82,7 +82,7 @@ def multi_level_tree() -> BenchmarkTree:
     rxn_root = ReactionNode(id="rxn_root", reaction_smiles="I1.S1>>T", reactants=reactants_sorted)
     root = MoleculeNode(id="root", molecule_hash="h_t", smiles="T", is_starting_material=False, reactions=[rxn_root])
 
-    target_info = TargetInfo(id="target_t", smiles="T")
+    target_info = TargetInput(id="target_t", smiles="T")
     return BenchmarkTree(target=target_info, retrosynthetic_tree=root)
 
 

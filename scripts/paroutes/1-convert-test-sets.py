@@ -23,7 +23,7 @@ from tqdm import tqdm
 
 from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.DEPRECATE_schemas import TargetInfo
+from retrocast.domain.DEPRECATE_schemas import TargetInput
 from retrocast.exceptions import RetroCastException
 from retrocast.io import save_json_gz
 from retrocast.utils.logging import logger
@@ -80,9 +80,9 @@ def main() -> None:
             for i, raw_route in pbar:
                 target_id = f"paroutes-{test_set}-{i}"
                 try:
-                    # the adapter needs a targetinfo object to check for smiles mismatches.
+                    # the adapter needs a TargetInput object to check for smiles mismatches.
                     target_smiles = canonicalize_smiles(raw_route["smiles"])
-                    target_info = TargetInfo(id=target_id, smiles=target_smiles)
+                    target_info = TargetInput(id=target_id, smiles=target_smiles)
 
                     # the adapter yields valid benchmarktree objects.
                     # for paroutes, each input is a single route, so we expect 0 or 1 trees.

@@ -7,7 +7,7 @@ from pydantic import BaseModel, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
-from retrocast.domain.DEPRECATE_schemas import TargetInfo
+from retrocast.domain.DEPRECATE_schemas import TargetInput
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.schemas import Molecule, ReactionStep, Route
 from retrocast.typing import SmilesStr
@@ -27,7 +27,7 @@ class SynLlamaRouteList(RootModel[list[SynLlamaRouteInput]]):
 class SynLlaMaAdapter(BaseAdapter):
     """adapter for converting pre-processed synllama outputs to the Route schema."""
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[Route, None, None]:
+    def adapt(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
         """validates the pre-processed json data for synllama and yields Route objects."""
         try:
             validated_routes = SynLlamaRouteList.model_validate(raw_target_data)
@@ -43,7 +43,7 @@ class SynLlaMaAdapter(BaseAdapter):
                 logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, route: SynLlamaRouteInput, target_info: TargetInfo, rank: int) -> Route:
+    def _transform(self, route: SynLlamaRouteInput, target_info: TargetInput, rank: int) -> Route:
         """orchestrates the transformation of a single synllama route string."""
         # the final product is always the last element in the semicolon-delimited string.
         # this is the most reliable way to identify it.

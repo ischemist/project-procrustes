@@ -171,7 +171,7 @@ class MoleculeNode(BaseModel):
         return 1 + max_child_depth
 
 
-class TargetInfo(BaseModel):
+class TargetInput(BaseModel):
     """A simple container for the target molecule's identity."""
 
     smiles: SmilesStr
@@ -183,7 +183,7 @@ class BenchmarkTree(BaseModel):
     The root schema for a single, complete retrosynthesis benchmark entry.
     """
 
-    target: TargetInfo
+    target: TargetInput
     retrosynthetic_tree: MoleculeNode
 
     def to_simple_tree(self) -> dict[str, Any]:

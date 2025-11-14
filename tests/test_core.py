@@ -6,7 +6,7 @@ from pytest_mock import MockerFixture
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.core import process_model_run
-from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, MoleculeNode, TargetInfo
+from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, MoleculeNode, TargetInput
 from retrocast.exceptions import RetroCastIOError
 from retrocast.io import save_json_gz
 from retrocast.typing import SmilesStr
@@ -14,16 +14,16 @@ from retrocast.utils.hashing import generate_model_hash
 
 
 @pytest.fixture
-def aspirin_target_info() -> TargetInfo:
-    """Provides a standard TargetInfo object for aspirin."""
-    return TargetInfo(
+def aspirin_target_info() -> TargetInput:
+    """Provides a standard TargetInput object for aspirin."""
+    return TargetInput(
         id="aspirin",
         smiles=SmilesStr("CC(=O)OC1=CC=CC=C1C(=O)O"),
     )
 
 
 @pytest.fixture
-def minimal_fake_tree(aspirin_target_info: TargetInfo) -> BenchmarkTree:
+def minimal_fake_tree(aspirin_target_info: TargetInput) -> BenchmarkTree:
     """Provides a minimal, valid BenchmarkTree for mocking adapter outputs."""
     root_node = MoleculeNode(
         id="retrocast-mol-root",
@@ -53,7 +53,7 @@ def multiple_unique_trees(minimal_fake_tree: BenchmarkTree) -> list[BenchmarkTre
 
 
 def test_process_model_run_no_sampling(
-    tmp_path: Path, mocker: MockerFixture, aspirin_target_info: TargetInfo, multiple_unique_trees: list[BenchmarkTree]
+    tmp_path: Path, mocker: MockerFixture, aspirin_target_info: TargetInput, multiple_unique_trees: list[BenchmarkTree]
 ) -> None:
     """
     Tests the full orchestration without any sampling. Verifies correct output
@@ -109,7 +109,7 @@ def test_process_model_run_with_sampling_strategies(
     saved_routes: int,
     tmp_path: Path,
     mocker: MockerFixture,
-    aspirin_target_info: TargetInfo,
+    aspirin_target_info: TargetInput,
     multiple_unique_trees: list[BenchmarkTree],
 ) -> None:
     """
@@ -161,7 +161,7 @@ def test_process_model_run_with_sampling_strategies(
 
 
 def test_process_model_run_handles_io_error(
-    tmp_path: Path, mocker: MockerFixture, caplog, aspirin_target_info: TargetInfo
+    tmp_path: Path, mocker: MockerFixture, caplog, aspirin_target_info: TargetInput
 ) -> None:
     """
     tests that a fatal error is logged and execution is aborted if the
@@ -201,7 +201,7 @@ def test_process_model_run_warns_on_missing_k(
     tmp_path: Path,
     mocker: MockerFixture,
     caplog,
-    aspirin_target_info: TargetInfo,
+    aspirin_target_info: TargetInput,
     multiple_unique_trees: list[BenchmarkTree],
 ) -> None:
     """
@@ -242,7 +242,7 @@ def test_process_model_run_warns_on_unknown_strategy(
     tmp_path: Path,
     mocker: MockerFixture,
     caplog,
-    aspirin_target_info: TargetInfo,
+    aspirin_target_info: TargetInput,
     multiple_unique_trees: list[BenchmarkTree],
 ) -> None:
     """

@@ -122,7 +122,7 @@ class BipartiteRouteList(RootModel[list[BipartiteMoleculeInput]]):
     pass
 
 class BipartiteModelAdapter(BaseAdapter):
-    def adapt(self, raw_data: Any, target_info: TargetInfo) -> Generator[BenchmarkTree, None, None]:
+    def adapt(self, raw_data: Any, target_info: TargetInput) -> Generator[BenchmarkTree, None, None]:
         validated_routes = BipartiteRouteList.model_validate(raw_data)
         for root_node in validated_routes.root:
             try:
@@ -152,7 +152,7 @@ class PrecursorModelAdapter(BaseAdapter):
         # ... your parsing logic here ...
         return precursor_map
 
-    def adapt(self, raw_data: Any, target_info: TargetInfo) -> Generator[BenchmarkTree, None, None]:
+    def adapt(self, raw_data: Any, target_info: TargetInput) -> Generator[BenchmarkTree, None, None]:
         try:
             precursor_map = self._parse_route_string(raw_data["routes"])
             tree = build_tree_from_precursor_map(target_info.smiles, precursor_map)
@@ -193,7 +193,7 @@ class CustomModelAdapter(BaseAdapter):
             reactions.append(ReactionNode(...))
         return MoleculeNode(smiles=canon_smiles, reactions=reactions, ...)
 
-    def adapt(self, raw_data: Any, target_info: TargetInfo) -> Generator[BenchmarkTree, None, None]:
+    def adapt(self, raw_data: Any, target_info: TargetInput) -> Generator[BenchmarkTree, None, None]:
         validated_routes = CustomRouteList.model_validate(raw_data)
         for root_node in validated_routes.root:
             tree = self._build_molecule_node(root_node)
@@ -212,7 +212,7 @@ once your adapter class is implemented:
     import pytest
     from tests.adapters.test_base_adapter import BaseAdapterTest
     from retrocast.adapters.new_model_adapter import NewModelAdapter
-    from retrocast.domain.DEPRECATE_schemas import TargetInfo
+    from retrocast.domain.DEPRECATE_schemas import TargetInput
 
     class TestNewModelAdapterUnit(BaseAdapterTest):
         @pytest.fixture
@@ -231,10 +231,10 @@ once your adapter class is implemented:
         def raw_invalid_schema_data(self) -> Any: ...
 
         @pytest.fixture
-        def target_info(self) -> TargetInfo: ...
+        def target_info(self) -> TargetInput: ...
 
         @pytest.fixture
-        def mismatched_target_info(self) -> TargetInfo: ...
+        def mismatched_target_info(self) -> TargetInput: ...
     ```
 
 2.  **register adapter**: add your new adapter to the map in `retrocast/adapters/factory.py`.
