@@ -3,9 +3,9 @@ from typing import Any
 
 import pytest
 
+from retrocast.adapters.askcos_adapter import AskcosAdapter
+from retrocast.domain.schemas import TargetInfo
 from tests.adapters.test_base_adapter import BaseAdapterTest
-from ursa.adapters.askcos_adapter import AskcosAdapter
-from ursa.domain.schemas import TargetInfo
 
 
 class TestAskcosAdapterUnit(BaseAdapterTest):

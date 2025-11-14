@@ -1,9 +1,9 @@
 import pytest
 
+from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.domain.schemas import TargetInfo
 from tests.adapters.test_base_adapter import BaseAdapterTest
-from ursa.adapters.syntheseus_adapter import SyntheseusAdapter
-from ursa.domain.chem import canonicalize_smiles
-from ursa.domain.schemas import TargetInfo
 
 # derive SMILES from the raw data to ensure canonicalization matches
 PARACETAMOL_SMILES = canonicalize_smiles("CC(=O)Nc1ccc(O)cc1")

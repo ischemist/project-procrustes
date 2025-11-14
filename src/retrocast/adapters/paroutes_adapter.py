@@ -7,11 +7,11 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
-from ursa.adapters.base_adapter import BaseAdapter
-from ursa.adapters.common import build_tree_from_bipartite_node
-from ursa.domain.schemas import BenchmarkTree, TargetInfo
-from ursa.exceptions import AdapterLogicError, UrsaException
-from ursa.utils.logging import logger
+from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.common import build_tree_from_bipartite_node
+from retrocast.domain.schemas import BenchmarkTree, TargetInfo
+from retrocast.exceptions import AdapterLogicError, UrsaException
+from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
 # this format is effectively identical to aizynthfinder's output,

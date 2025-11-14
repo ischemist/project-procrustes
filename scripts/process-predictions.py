@@ -30,7 +30,7 @@ uv run scripts/process-predictions.py process --model aizynthfinder-mcts --all-d
 import argparse
 from pathlib import Path
 
-from ursa import cli
+from retrocast import cli
 
 
 def main() -> None:

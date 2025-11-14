@@ -8,8 +8,8 @@ import argparse
 import logging
 from pathlib import Path
 
-from ursa.analysis import performance
-from ursa.analysis.performance import VisualizationConfig
+from retrocast.analysis import performance
+from retrocast.analysis.performance import VisualizationConfig
 
 # --- constants ---
 DEFAULT_VIZ_CONFIG_PATH = Path("data/analysis/performance-plots.yaml")

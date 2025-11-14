@@ -27,9 +27,9 @@ import json
 import sys
 from pathlib import Path
 
-from ursa.exceptions import UrsaException
-from ursa.utils.hashing import generate_file_hash, generate_source_hash
-from ursa.utils.logging import logger
+from retrocast.exceptions import UrsaException
+from retrocast.utils.hashing import generate_file_hash, generate_source_hash
+from retrocast.utils.logging import logger
 
 # ANSI color codes for pretty printing
 GREEN = "\033[92m"

@@ -5,13 +5,13 @@ from typing import Any
 
 from pydantic import BaseModel, RootModel, ValidationError
 
-from ursa.adapters.base_adapter import BaseAdapter
-from ursa.adapters.common import PrecursorMap, build_tree_from_precursor_map
-from ursa.domain.chem import canonicalize_smiles
-from ursa.domain.schemas import BenchmarkTree, MoleculeNode, TargetInfo
-from ursa.exceptions import AdapterLogicError, UrsaException
-from ursa.utils.hashing import generate_molecule_hash
-from ursa.utils.logging import logger
+from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.common import PrecursorMap, build_tree_from_precursor_map
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.domain.schemas import BenchmarkTree, MoleculeNode, TargetInfo
+from retrocast.exceptions import AdapterLogicError, UrsaException
+from retrocast.utils.hashing import generate_molecule_hash
+from retrocast.utils.logging import logger
 
 
 class TtlReaction(BaseModel):

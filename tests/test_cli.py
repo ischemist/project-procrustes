@@ -5,7 +5,7 @@ import pytest
 import yaml
 from pytest_mock import MockerFixture
 
-from ursa.cli import (
+from retrocast.cli import (
     _run_single_process,
     get_model_config,
     handle_info,
@@ -13,7 +13,7 @@ from ursa.cli import (
     handle_process,
     load_config,
 )
-from ursa.exceptions import UrsaException
+from retrocast.exceptions import UrsaException
 
 
 @pytest.fixture
@@ -126,9 +126,9 @@ class TestCliProcessExecution:
     def mock_dependencies(self, mocker: MockerFixture) -> dict:
         """Mocks all functions called by _run_single_process."""
         return {
-            "load_targets": mocker.patch("ursa.cli.load_and_prepare_targets", return_value={"target": "info"}),
-            "get_adapter": mocker.patch("ursa.cli.get_adapter"),
-            "process_run": mocker.patch("ursa.cli.process_model_run"),
+            "load_targets": mocker.patch("retrocast.cli.load_and_prepare_targets", return_value={"target": "info"}),
+            "get_adapter": mocker.patch("retrocast.cli.get_adapter"),
+            "process_run": mocker.patch("retrocast.cli.process_model_run"),
         }
 
     def test_run_single_process_happy_path(
@@ -201,7 +201,7 @@ class TestHandleProcessDispatch:
     @pytest.fixture
     def mock_run_single(self, mocker: MockerFixture):
         """Mocks the core _run_single_process function."""
-        return mocker.patch("ursa.cli._run_single_process")
+        return mocker.patch("retrocast.cli._run_single_process")
 
     def test_handle_process_single_run(self, mock_project_structure, mock_config, mock_run_single):
         """Tests dispatching a single model/dataset run."""

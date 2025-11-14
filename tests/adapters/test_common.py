@@ -3,9 +3,9 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from ursa.adapters.common import build_tree_from_bipartite_node, build_tree_from_precursor_map
-from ursa.domain.chem import canonicalize_smiles
-from ursa.exceptions import AdapterLogicError
+from retrocast.adapters.common import build_tree_from_bipartite_node, build_tree_from_precursor_map
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.exceptions import AdapterLogicError
 
 
 class TestBipartiteBuilder:

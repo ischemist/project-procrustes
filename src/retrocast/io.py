@@ -7,10 +7,10 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 from tqdm import tqdm
 
-from ursa.domain.chem import canonicalize_smiles
-from ursa.domain.schemas import TargetInfo
-from ursa.exceptions import UrsaException, UrsaIOException, UrsaSerializationError
-from ursa.utils.logging import logger
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.domain.schemas import TargetInfo
+from retrocast.exceptions import UrsaException, UrsaIOException, UrsaSerializationError
+from retrocast.utils.logging import logger
 
 # This allows us to return the same type that was passed in.
 # e.g., load_model(MyModel) -> MyModel

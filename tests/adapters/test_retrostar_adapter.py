@@ -1,9 +1,9 @@
 import pytest
 
+from retrocast.adapters.retrostar_adapter import RetroStarAdapter
+from retrocast.domain.schemas import TargetInfo
+from retrocast.exceptions import AdapterLogicError
 from tests.adapters.test_base_adapter import BaseAdapterTest
-from ursa.adapters.retrostar_adapter import RetroStarAdapter
-from ursa.domain.schemas import TargetInfo
-from ursa.exceptions import AdapterLogicError
 
 ASPIRIN_SMILES = "CC(=O)Oc1ccccc1C(=O)O"
 PARACETAMOL_SMILES = "CC(=O)Nc1ccc(O)cc1"

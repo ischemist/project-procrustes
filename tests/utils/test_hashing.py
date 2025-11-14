@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from ursa.exceptions import UrsaException
-from ursa.utils.hashing import (
+from retrocast.exceptions import UrsaException
+from retrocast.utils.hashing import (
     generate_file_hash,
     generate_model_hash,
     generate_molecule_hash,

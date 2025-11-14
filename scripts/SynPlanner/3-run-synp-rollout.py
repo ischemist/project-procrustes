@@ -26,8 +26,8 @@ from synplan.utils.config import PolicyNetworkConfig
 from synplan.utils.loading import load_reaction_rules
 from tqdm import tqdm
 
-from ursa.io import load_targets_csv, save_json_gz
-from ursa.utils.logging import logger
+from retrocast.io import load_targets_csv, save_json_gz
+from retrocast.utils.logging import logger
 
 # establish a reliable base directory for pathing
 base_dir = Path(__file__).resolve().parents[2]

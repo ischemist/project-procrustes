@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from ursa.domain.schemas import BenchmarkTree
+from retrocast.domain.schemas import BenchmarkTree
 
 
 class BaseAdapterTest(ABC):

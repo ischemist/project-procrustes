@@ -18,7 +18,7 @@ import numpy as np
 from retro_star.api import RSPlanner
 from tqdm import tqdm
 
-from ursa.io import load_targets_csv, save_json_gz
+from retrocast.io import load_targets_csv, save_json_gz
 
 base_dir = Path(__file__).resolve().parents[2]
 

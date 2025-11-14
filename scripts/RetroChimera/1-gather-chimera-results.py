@@ -25,7 +25,7 @@ uv run python scripts/RetroChimera/1-gather-chimera-results.py \
 
 import argparse
 
-from ursa.io import combine_evaluation_results
+from retrocast.io import combine_evaluation_results
 
 
 def main() -> None:

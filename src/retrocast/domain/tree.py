@@ -2,8 +2,8 @@ import hashlib
 import random
 from collections import defaultdict
 
-from ursa.domain.schemas import BenchmarkTree, MoleculeNode
-from ursa.utils.logging import logger
+from retrocast.domain.schemas import BenchmarkTree, MoleculeNode
+from retrocast.utils.logging import logger
 
 
 def _generate_tree_signature(node: MoleculeNode) -> str:

@@ -26,7 +26,7 @@ from directmultistep.utils.post_process import (
 from directmultistep.utils.pre_process import canonicalize_smiles
 from tqdm import tqdm
 
-from ursa.io import load_targets_csv, save_json_gz
+from retrocast.io import load_targets_csv, save_json_gz
 
 base_dir = Path(__file__).resolve().parents[2]
 

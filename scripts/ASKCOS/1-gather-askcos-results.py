@@ -25,7 +25,7 @@ uv run scripts/ASKCOS/1-gather-askcos-results.py \
 
 import argparse
 
-from ursa.io import combine_evaluation_results
+from retrocast.io import combine_evaluation_results
 
 
 def main() -> None:

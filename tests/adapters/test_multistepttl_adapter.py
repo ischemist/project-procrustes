@@ -1,10 +1,10 @@
 import pytest
 
+from retrocast.adapters.multistepttl_adapter import TtlRetroAdapter
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.domain.schemas import TargetInfo
+from retrocast.utils.serializers import serialize_multistepttl_directory
 from tests.adapters.test_base_adapter import BaseAdapterTest
-from ursa.adapters.multistepttl_adapter import TtlRetroAdapter
-from ursa.domain.chem import canonicalize_smiles
-from ursa.domain.schemas import TargetInfo
-from ursa.utils.serializers import serialize_multistepttl_directory
 
 IBUPROFEN_SMILES = canonicalize_smiles("CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O")
 

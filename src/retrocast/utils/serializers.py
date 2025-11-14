@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from ursa.exceptions import SyntheseusSerializationError, TtlRetroSerializationError
+from retrocast.exceptions import SyntheseusSerializationError, TtlRetroSerializationError
 
 
 def _build_tree_recursive(

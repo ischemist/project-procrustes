@@ -5,12 +5,12 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from ursa.adapters.base_adapter import BaseAdapter
-from ursa.adapters.common import PrecursorMap, build_tree_from_precursor_map
-from ursa.domain.chem import canonicalize_smiles
-from ursa.domain.schemas import BenchmarkTree, TargetInfo
-from ursa.exceptions import UrsaException
-from ursa.utils.logging import logger
+from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.common import PrecursorMap, build_tree_from_precursor_map
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.domain.schemas import BenchmarkTree, TargetInfo
+from retrocast.exceptions import UrsaException
+from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
 

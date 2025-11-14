@@ -3,8 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
-from ursa.exceptions import SchemaLogicError
-from ursa.typing import ReactionSmilesStr, SmilesStr
+from retrocast.exceptions import SchemaLogicError
+from retrocast.typing import ReactionSmilesStr, SmilesStr
 
 
 class RunStatistics(BaseModel):

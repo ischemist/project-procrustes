@@ -12,8 +12,8 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from ursa.domain.chem import canonicalize_smiles
-from ursa.exceptions import InvalidSmilesError
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.exceptions import InvalidSmilesError
 
 data_path = Path(__name__).resolve().parent / "data" / "models" / "assets"
 argparser = argparse.ArgumentParser()

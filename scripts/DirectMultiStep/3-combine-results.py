@@ -12,7 +12,7 @@ import argparse
 import json
 from pathlib import Path
 
-from ursa.io import load_json_gz, save_json_gz
+from retrocast.io import load_json_gz, save_json_gz
 
 
 def combine_results(parent_dir: Path, base_name: str, parts: list[str]) -> None:

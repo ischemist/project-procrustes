@@ -24,7 +24,7 @@ from pathlib import Path
 from aizynthfinder.aizynthfinder import AiZynthFinder
 from tqdm import tqdm
 
-from ursa.io import load_targets_csv, save_json_gz
+from retrocast.io import load_targets_csv, save_json_gz
 
 base_dir = Path(__file__).resolve().parents[2]
 

@@ -1,10 +1,10 @@
 import pytest
 
+from retrocast.adapters.dreamretro_adapter import DreamRetroAdapter
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.domain.schemas import TargetInfo
+from retrocast.exceptions import AdapterLogicError
 from tests.adapters.test_base_adapter import BaseAdapterTest
-from ursa.adapters.dreamretro_adapter import DreamRetroAdapter
-from ursa.domain.chem import canonicalize_smiles
-from ursa.domain.schemas import TargetInfo
-from ursa.exceptions import AdapterLogicError
 
 
 class TestDreamRetroAdapterUnit(BaseAdapterTest):

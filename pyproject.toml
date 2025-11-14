@@ -1,5 +1,5 @@
 [project]
-name = "ursa"
+name = "retrocast"
 version = "0.1.0"
 description = "a framework for ingesting, validating, canonicalizing, and adapting retrosynthesis model outputs to a unified benchmark standard."
 readme = "README.md"

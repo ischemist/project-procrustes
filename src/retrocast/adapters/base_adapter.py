@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from typing import Any
 
-from ursa.domain.schemas import BenchmarkTree, TargetInfo
+from retrocast.domain.schemas import BenchmarkTree, TargetInfo
 
 
 class BaseAdapter(ABC):

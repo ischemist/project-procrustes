@@ -27,7 +27,7 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-from ursa.utils.logging import logger
+from retrocast.utils.logging import logger
 
 
 def main() -> None:

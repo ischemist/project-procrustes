@@ -4,13 +4,13 @@ from pathlib import Path
 import pytest
 from pytest_mock import MockerFixture
 
-from ursa.adapters.base_adapter import BaseAdapter
-from ursa.core import process_model_run
-from ursa.domain.schemas import BenchmarkTree, MoleculeNode, TargetInfo
-from ursa.exceptions import UrsaIOException
-from ursa.io import save_json_gz
-from ursa.typing import SmilesStr
-from ursa.utils.hashing import generate_model_hash
+from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.core import process_model_run
+from retrocast.domain.schemas import BenchmarkTree, MoleculeNode, TargetInfo
+from retrocast.exceptions import UrsaIOException
+from retrocast.io import save_json_gz
+from retrocast.typing import SmilesStr
+from retrocast.utils.hashing import generate_model_hash
 
 
 @pytest.fixture
@@ -129,7 +129,7 @@ def test_process_model_run_with_sampling_strategies(
 
     mock_sampling_func = mocker.MagicMock()
     mock_sampling_func.return_value = multiple_unique_trees[:saved_routes]
-    mocker.patch.dict("ursa.core.SAMPLING_STRATEGY_MAP", {strategy: mock_sampling_func})
+    mocker.patch.dict("retrocast.core.SAMPLING_STRATEGY_MAP", {strategy: mock_sampling_func})
 
     # ACT
     process_model_run(
@@ -176,7 +176,7 @@ def test_process_model_run_handles_io_error(
 
     mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
     # mock load_json_gz to simulate a file read/parse failure
-    mocker.patch("ursa.core.load_json_gz", side_effect=UrsaIOException("test error"))
+    mocker.patch("retrocast.core.load_json_gz", side_effect=UrsaIOException("test error"))
 
     # act
     process_model_run(

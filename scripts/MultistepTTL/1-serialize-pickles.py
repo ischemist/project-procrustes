@@ -11,9 +11,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ursa.exceptions import TtlRetroSerializationError
-from ursa.utils.logging import logger
-from ursa.utils.serializers import serialize_multistepttl_directory
+from retrocast.exceptions import TtlRetroSerializationError
+from retrocast.utils.logging import logger
+from retrocast.utils.serializers import serialize_multistepttl_directory
 
 base_dir = Path(__file__).resolve().parents[2]
 

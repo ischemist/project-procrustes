@@ -2,10 +2,10 @@ from copy import deepcopy
 
 import pytest
 
+from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.domain.schemas import TargetInfo
 from tests.adapters.test_base_adapter import BaseAdapterTest
-from ursa.adapters.paroutes_adapter import PaRoutesAdapter
-from ursa.domain.chem import canonicalize_smiles
-from ursa.domain.schemas import TargetInfo
 
 
 class TestPaRoutesAdapterUnit(BaseAdapterTest):

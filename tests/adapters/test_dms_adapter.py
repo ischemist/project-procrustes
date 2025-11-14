@@ -1,9 +1,9 @@
 import pytest
 
+from retrocast.adapters.dms_adapter import DMSAdapter, DMSTree
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.domain.schemas import TargetInfo
 from tests.adapters.test_base_adapter import BaseAdapterTest
-from ursa.adapters.dms_adapter import DMSAdapter, DMSTree
-from ursa.domain.chem import canonicalize_smiles
-from ursa.domain.schemas import TargetInfo
 
 
 class TestDMSAdapterUnit(BaseAdapterTest):

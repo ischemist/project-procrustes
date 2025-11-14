@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from pytest import MonkeyPatch
 
-from ursa.exceptions import UrsaException, UrsaIOException, UrsaSerializationError
-from ursa.io import (
+from retrocast.exceptions import UrsaException, UrsaIOException, UrsaSerializationError
+from retrocast.io import (
     combine_evaluation_results,
     find_json_file_by_name,
     find_json_file_by_position,

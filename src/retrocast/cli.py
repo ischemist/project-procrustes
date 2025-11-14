@@ -5,11 +5,11 @@ from typing import Any, cast
 
 import yaml
 
-from ursa.adapters.factory import get_adapter
-from ursa.core import process_model_run
-from ursa.exceptions import UrsaException
-from ursa.io import load_and_prepare_targets
-from ursa.utils.logging import logger
+from retrocast.adapters.factory import get_adapter
+from retrocast.core import process_model_run
+from retrocast.exceptions import UrsaException
+from retrocast.io import load_and_prepare_targets
+from retrocast.utils.logging import logger
 
 
 def load_config(config_path: Path) -> dict[str, Any]:

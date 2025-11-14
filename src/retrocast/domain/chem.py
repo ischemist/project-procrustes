@@ -1,8 +1,8 @@
 from rdkit import Chem, rdBase
 
-from ursa.exceptions import InvalidSmilesError, UrsaException
-from ursa.typing import InchiKeyStr, SmilesStr
-from ursa.utils.logging import logger
+from retrocast.exceptions import InvalidSmilesError, UrsaException
+from retrocast.typing import InchiKeyStr, SmilesStr
+from retrocast.utils.logging import logger
 
 rdBase.DisableLog("rdApp.error")
 

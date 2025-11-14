@@ -1,8 +1,8 @@
 import pytest
 
-from ursa.adapters.base_adapter import BaseAdapter
-from ursa.adapters.factory import ADAPTER_MAP, get_adapter
-from ursa.exceptions import UrsaException
+from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.factory import ADAPTER_MAP, get_adapter
+from retrocast.exceptions import UrsaException
 
 
 def test_get_adapter_known_adapter():

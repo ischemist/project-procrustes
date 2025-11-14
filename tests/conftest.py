@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from ursa.domain.chem import canonicalize_smiles
-from ursa.domain.schemas import TargetInfo
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.domain.schemas import TargetInfo
 
 TEST_DATA_DIR = Path("tests/testing_data")
 MODEL_PRED_DIR = TEST_DATA_DIR / "model-predictions"

@@ -21,12 +21,12 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from ursa.adapters.paroutes_adapter import PaRoutesAdapter
-from ursa.domain.chem import canonicalize_smiles
-from ursa.domain.schemas import TargetInfo
-from ursa.exceptions import UrsaException
-from ursa.io import save_json_gz
-from ursa.utils.logging import logger
+from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.domain.schemas import TargetInfo
+from retrocast.exceptions import UrsaException
+from retrocast.io import save_json_gz
+from retrocast.utils.logging import logger
 
 # --- configuration ---
 BASE_DIR = Path(__file__).resolve().parents[2]

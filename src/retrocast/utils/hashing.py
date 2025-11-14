@@ -1,9 +1,9 @@
 import hashlib
 from pathlib import Path
 
-from ursa.exceptions import UrsaException
-from ursa.typing import SmilesStr
-from ursa.utils.logging import logger
+from retrocast.exceptions import UrsaException
+from retrocast.typing import SmilesStr
+from retrocast.utils.logging import logger
 
 
 def generate_file_hash(path: Path) -> str:

@@ -3,21 +3,21 @@ from __future__ import annotations
 from collections.abc import Generator
 from typing import Any
 
-from ursa.adapters.base_adapter import BaseAdapter
-from ursa.adapters.common import PrecursorMap, build_tree_from_precursor_map
-from ursa.domain.chem import canonicalize_smiles
-from ursa.domain.schemas import BenchmarkTree, TargetInfo
-from ursa.exceptions import AdapterLogicError, UrsaException
-from ursa.typing import SmilesStr
-from ursa.utils.logging import logger
+from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.common import PrecursorMap, build_tree_from_precursor_map
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.domain.schemas import BenchmarkTree, TargetInfo
+from retrocast.exceptions import AdapterLogicError, UrsaException
+from retrocast.typing import SmilesStr
+from retrocast.utils.logging import logger
 
 
-class RetroStarAdapter(BaseAdapter):
-    """adapter for converting retrostar-style outputs to the benchmarktree schema."""
+class DreamRetroAdapter(BaseAdapter):
+    """adapter for converting dreamretro-style outputs to the benchmarktree schema."""
 
     def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[BenchmarkTree, None, None]:
         """
-        validates raw retrostar data, transforms its single route string, and yields a benchmarktree.
+        validates raw dreamretro data, transforms its single route string, and yields a benchmarktree.
         """
         if not isinstance(raw_target_data, dict):
             logger.warning(
@@ -45,7 +45,7 @@ class RetroStarAdapter(BaseAdapter):
 
     def _parse_route_string(self, route_str: str) -> tuple[SmilesStr, PrecursorMap]:
         """
-        parses the retrostar route string into a target smiles and a precursor map.
+        parses the dreamretro route string into a target smiles and a precursor map.
 
         raises:
             adapterlogicerror: if the string format is invalid.
@@ -86,8 +86,7 @@ class RetroStarAdapter(BaseAdapter):
 
     def _transform(self, route_str: str, target_info: TargetInfo) -> BenchmarkTree:
         """
-        orchestrates the transformation of a single retrostar route string.
-        raises ursaexception on failure.
+        orchestrates the transformation of a single dreamretro route string.
         """
         parsed_target_smiles, precursor_map = self._parse_route_string(route_str)
 
