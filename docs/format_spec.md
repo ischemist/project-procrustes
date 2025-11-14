@@ -42,8 +42,8 @@ Represents a single retrosynthetic reaction.
 
 -   **`reactants: list[Molecule]`**: A list of `Molecule` objects that are the precursors in this reaction.
 -   **`mapped_smiles: Optional[ReactionSmilesStr]`**: (Optional) The atom-mapped reaction SMILES string, if provided by the model.
--   **`reagents: Optional[str]`**: (Optional) A SMILES string representing reagents used in the forward reaction (e.g., `"O.ClS(=O)(=O)Cl"`).
--   **`solvents: Optional[str]`**: (Optional) A SMILES string or name representing solvents.
+-   **`reagents: Optional[list[SmilesStr]]`**: (Optional) A list of SMILES strings representing reagents used in the forward reaction (e.g., `["O", "ClS(=O)(=O)Cl"]`).
+-   **`solvents: Optional[list[SmilesStr]]`**: (Optional) A list of SMILES strings representing solvents.
 -   **`metadata: dict[str, Any]`**: An open dictionary for reaction-specific metadata, such as a reaction probability, template ID, or patent reference.
 
 ## Example Usage (Conceptual)

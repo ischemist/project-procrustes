@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, NewType
+from typing import Any
 
 from pydantic import BaseModel, Field, computed_field
 
-# Using NewTypes for semantic clarity, as you did. Good call.
-SmilesStr = NewType("SmilesStr", str)
-ReactionSmilesStr = NewType("ReactionSmilesStr", str)
-InchiKeyStr = NewType("InchiKeyStr", str)
+from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
 
 
 class TargetInput(BaseModel):
@@ -62,8 +59,8 @@ class ReactionStep(BaseModel):
     reactants: list[Molecule]
 
     mapped_smiles: ReactionSmilesStr | None = None
-    reagents: str | None = None  # SMILES or names, e.g. "O.ClS(=O)(=O)Cl"
-    solvents: str | None = None
+    reagents: list[SmilesStr] | None = None  # List of reagent SMILES, e.g. ["O", "ClS(=O)(=O)Cl"]
+    solvents: list[SmilesStr] | None = None  # List of solvent SMILES
 
     # Generic bucket for reaction-specific data (e.g., template scores, patent IDs).
     metadata: dict[str, Any] = Field(default_factory=dict)
