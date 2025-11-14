@@ -50,7 +50,7 @@ class TestAizynthAdapterUnit(BaseAdapterTest):
         return TargetInfo(id="ethanol", smiles="CCC")
 
 
-@pytest.mark.integration
+@pytest.mark.contract
 class TestAizynthAdapterContract:
     """Contract tests: verify the adapter produces valid Route objects with required fields populated."""
 
@@ -124,7 +124,7 @@ class TestAizynthAdapterContract:
             check_molecule(route.target)
 
 
-@pytest.mark.integration
+@pytest.mark.regression
 class TestAizynthAdapterRegression:
     """Regression tests: verify specific routes match expected structures and values."""
 
