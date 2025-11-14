@@ -61,7 +61,6 @@ class ReactionStep(BaseModel):
 
     reactants: list[Molecule]
 
-    # Explicitly add your desired optional fields
     mapped_smiles: ReactionSmilesStr | None = None
     reagents: str | None = None  # SMILES or names, e.g. "O.ClS(=O)(=O)Cl"
     solvents: str | None = None

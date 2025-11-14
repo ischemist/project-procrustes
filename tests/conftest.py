@@ -113,6 +113,6 @@ def raw_paroutes_data() -> dict[str, Any]:
 
 
 @pytest.fixture(scope="session")
-def methylacetate_target_info() -> TargetInput:
+def methylacetate_target_input() -> TargetInput:
     """provides the target input object for methyl acetate."""
     return TargetInput(id="methylacetate", smiles=canonicalize_smiles("COC(C)=O"))
