@@ -1,9 +1,9 @@
 import pytest
 
+from retrocast.adapters.retrochimera_adapter import RetrochimeraAdapter
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.domain.schemas import TargetInfo
 from tests.adapters.test_base_adapter import BaseAdapterTest
-from ursa.adapters.retrochimera_adapter import RetrochimeraAdapter
-from ursa.domain.chem import canonicalize_smiles
-from ursa.domain.schemas import TargetInfo
 
 
 class TestRetrochimeraAdapterUnit(BaseAdapterTest):

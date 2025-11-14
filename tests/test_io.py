@@ -1,4 +1,4 @@
-"""Tests for the ursa.io module.
+"""Tests for the retrocast.io module.
 
 This module contains unit tests for all public I/O utilities, including
 JSON (gzipped and uncompressed), CSV, and SMILES canonicalization.
@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 from pytest import MonkeyPatch
 
-from ursa.exceptions import UrsaException, UrsaIOException, UrsaSerializationError
-from ursa.io import (
+from retrocast.exceptions import RetroCastException, RetroCastIOError, RetroCastSerializationError
+from retrocast.io import (
     combine_evaluation_results,
     find_json_file_by_name,
     find_json_file_by_position,
@@ -82,30 +82,30 @@ def test_save_json_gz_creates_directories(tmp_path: Path) -> None:
 
 
 def test_load_json_gz_raises_io_error_for_missing_file(tmp_path: Path) -> None:
-    """Missing files raise UrsaIOException when loading gzipped JSON."""
-    with pytest.raises(UrsaIOException):
+    """Missing files raise RetroCastIOError when loading gzipped JSON."""
+    with pytest.raises(RetroCastIOError):
         load_json_gz(tmp_path / "nope.json.gz")
 
 
 def test_load_json_gz_raises_io_error_for_malformed_gzip(tmp_path: Path) -> None:
-    """Malformed gzip content raises UrsaIOException."""
+    """Malformed gzip content raises RetroCastIOError."""
     file_path = tmp_path / "bad.json.gz"
     file_path.write_text("not gzipped")
-    with pytest.raises(UrsaIOException):
+    with pytest.raises(RetroCastIOError):
         load_json_gz(file_path)
 
 
 def test_save_json_gz_raises_serialization_error(tmp_path: Path) -> None:
-    """Non-serializable objects raise UrsaSerializationError."""
-    with pytest.raises(UrsaSerializationError):
+    """Non-serializable objects raise RetroCastSerializationError."""
+    with pytest.raises(RetroCastSerializationError):
         save_json_gz({"a_set": {1, 2, 3}}, tmp_path / "bad.json.gz")
 
 
 def test_load_json_gz_raises_on_non_dict_content(tmp_path: Path) -> None:
-    """Non-dict content raises UrsaIOException when loading gzipped JSON."""
+    """Non-dict content raises RetroCastIOError when loading gzipped JSON."""
     file_path = tmp_path / "list.json.gz"
     save_json_gz([1, 2, 3], file_path)  # type: ignore
-    with pytest.raises(UrsaIOException):
+    with pytest.raises(RetroCastIOError):
         load_json_gz(file_path)
 
 
@@ -118,7 +118,7 @@ def test_load_targets_csv_raises_on_missing_column(tmp_path: Path):
     """CSV loader raises when required columns are absent."""
     file_path = tmp_path / "bad_headers.csv"
     file_path.write_text("Structure ID,Wrong_Header\n-,-")
-    with pytest.raises(UrsaIOException):
+    with pytest.raises(RetroCastIOError):
         load_targets_csv(file_path)
 
 
@@ -148,10 +148,10 @@ def test_load_targets_json_gz_happy_path(valid_json_gz_file: Path):
 
 
 def test_load_targets_json_raises_on_non_dict(tmp_path: Path):
-    """Non-dict JSON content raises UrsaIOException."""
+    """Non-dict JSON content raises RetroCastIOError."""
     file_path = tmp_path / "list.json"
     file_path.write_text("[1, 2, 3]")
-    with pytest.raises(UrsaIOException):
+    with pytest.raises(RetroCastIOError):
         load_targets_json(file_path)
 
 
@@ -175,63 +175,63 @@ def test_prepare_targets_from_json_gz(valid_json_gz_file: Path):
 
 
 def test_prepare_targets_raises_on_unsupported_format(tmp_path: Path):
-    """Unsupported file extensions raise UrsaException."""
+    """Unsupported file extensions raise RetroCastException."""
     file_path = tmp_path / "data.txt"
     file_path.touch()
-    with pytest.raises(UrsaException):
+    with pytest.raises(RetroCastException):
         load_and_prepare_targets(file_path)
 
 
 def test_prepare_targets_raises_on_invalid_smiles(tmp_path: Path):
-    """Invalid SMILES strings raise UrsaException with a clear message."""
+    """Invalid SMILES strings raise RetroCastException with a clear message."""
     file_path = tmp_path / "bad_smiles.csv"
     with file_path.open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["Structure ID", "SMILES"])
         writer.writerow(["good", "CCO"])
         writer.writerow(["bad", "invalid"])
-    with pytest.raises(UrsaException):
+    with pytest.raises(RetroCastException):
         load_and_prepare_targets(file_path)
 
 
 def test_prepare_targets_propagates_io_error(tmp_path: Path):
-    """Non-existent files raise UrsaIOException."""
-    with pytest.raises(UrsaIOException):
+    """Non-existent files raise RetroCastIOError."""
+    with pytest.raises(RetroCastIOError):
         load_and_prepare_targets(tmp_path / "non_existent_file.csv")
 
 
 def test_save_json_gz_raises_io_error_on_write_failure(tmp_path: Path, monkeypatch: MonkeyPatch):
-    """Write failures during save_json_gz raise UrsaIOException."""
+    """Write failures during save_json_gz raise RetroCastIOError."""
     file_path = tmp_path / "protected" / "data.json.gz"
 
     def mock_mkdir(*_, **__):
         raise OSError("Permission denied")
 
     monkeypatch.setattr(pathlib.Path, "mkdir", mock_mkdir)
-    with pytest.raises(UrsaIOException):
+    with pytest.raises(RetroCastIOError):
         save_json_gz({"key": "value"}, file_path)
 
 
 def test_save_json_raises_io_error_on_write_failure(tmp_path: Path, monkeypatch: MonkeyPatch):
-    """Write failures during save_json raise UrsaIOException."""
+    """Write failures during save_json raise RetroCastIOError."""
     file_path = tmp_path / "protected" / "data.json"
 
     def mock_mkdir(*_, **__):
         raise OSError("Disk is full")
 
     monkeypatch.setattr(pathlib.Path, "mkdir", mock_mkdir)
-    with pytest.raises(UrsaIOException):
+    with pytest.raises(RetroCastIOError):
         save_json({"key": "value"}, file_path)
 
 
 def test_load_targets_csv_raises_io_error_on_read_failure(monkeypatch: MonkeyPatch):
-    """Read failures during CSV loading raise UrsaIOException."""
+    """Read failures during CSV loading raise RetroCastIOError."""
 
     def mock_open(*_, **__):
         raise OSError("Cannot read file")
 
     monkeypatch.setattr(Path, "open", mock_open)
-    with pytest.raises(UrsaIOException):
+    with pytest.raises(RetroCastIOError):
         load_targets_csv(Path("/fake/path.csv"))
 
 
@@ -246,7 +246,7 @@ def test_load_targets_json_with_empty_object(tmp_path: Path, caplog):
 def test_load_targets_json_raises_on_malformed_json(tmp_path: Path):
     file_path = tmp_path / "malformed.json"
     file_path.write_text("{'key': 'invalid'}")
-    with pytest.raises(UrsaIOException):
+    with pytest.raises(RetroCastIOError):
         load_targets_json(file_path)
 
 
@@ -278,8 +278,8 @@ def test_load_target_ids(valid_targets_csv: Path):
 
 
 def test_load_target_ids_raises_on_missing_file():
-    """Missing CSV raises UrsaIOException."""
-    with pytest.raises(UrsaIOException):
+    """Missing CSV raises RetroCastIOError."""
+    with pytest.raises(RetroCastIOError):
         load_target_ids("non_existent.csv")
 
 
@@ -356,19 +356,19 @@ def test_combine_evaluation_results_chimera(tmp_path: Path, valid_targets_csv: P
 
 
 def test_combine_evaluation_results_missing_dir(tmp_path: Path, valid_targets_csv: Path):
-    """Test that missing eval dir raises UrsaIOException."""
+    """Test that missing eval dir raises RetroCastIOError."""
     eval_dir = tmp_path / "missing"
     output_path = tmp_path / "results.json.gz"
-    with pytest.raises(UrsaIOException):
+    with pytest.raises(RetroCastIOError):
         combine_evaluation_results(str(valid_targets_csv), str(eval_dir), str(output_path), "askcos")
 
 
 def test_combine_evaluation_results_unknown_convention(tmp_path: Path, valid_targets_csv: Path):
-    """Test that unknown naming convention raises UrsaException."""
+    """Test that unknown naming convention raises RetroCastException."""
     eval_dir = tmp_path / "eval"
     eval_dir.mkdir()
     output_path = tmp_path / "results.json.gz"
-    with pytest.raises(UrsaException):
+    with pytest.raises(RetroCastException):
         combine_evaluation_results(str(valid_targets_csv), str(eval_dir), str(output_path), "unknown")
 
 

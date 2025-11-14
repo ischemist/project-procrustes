@@ -8,4 +8,4 @@ expansion:
 filter:
   uspto: data/models/aizynthfinder/uspto_filter_model.onnx
 stock:
-  ursa-bb: data/models/assets/ursa-bb-stock-v3.hdf5
+  retrocast-bb: data/models/assets/retrocast-bb-stock-v3.hdf5

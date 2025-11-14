@@ -1,5 +1,5 @@
 """
-Verifies the integrity of a processed Ursa benchmark run.
+Verifies the integrity of a processed retrocast benchmark run.
 
 This script can operate in two modes:
 1. Single Mode: Verify a specific manifest file.
@@ -10,7 +10,7 @@ Example Usage:
 ---
 
 # 1. Verify a single, specific run
-uv run scripts/verify-hash.py --manifest data/processed/rs-first-25/ursa-model-4b6418ea/manifest.json
+uv run scripts/verify-hash.py --manifest data/processed/rs-first-25/retrocast-model-4b6418ea/manifest.json
 
 # 2. Verify ALL runs for ALL models and ALL datasets
 uv run scripts/verify-hash.py --all-models --all-datasets
@@ -27,9 +27,9 @@ import json
 import sys
 from pathlib import Path
 
-from ursa.exceptions import UrsaException
-from ursa.utils.hashing import generate_file_hash, generate_source_hash
-from ursa.utils.logging import logger
+from retrocast.exceptions import RetroCastException
+from retrocast.utils.hashing import generate_file_hash, generate_source_hash
+from retrocast.utils.logging import logger
 
 # ANSI color codes for pretty printing
 GREEN = "\033[92m"
@@ -84,7 +84,7 @@ def verify_single_run(manifest_path: Path, base_dir: Path) -> bool:
     except (json.JSONDecodeError, KeyError) as e:
         logger.error(f"{RED}  -> FAILURE: Manifest is corrupted or malformed. Error: {e}{RESET}")
         return False
-    except UrsaException as e:
+    except RetroCastException as e:
         logger.error(f"{RED}  -> FAILURE: I/O error reading a source file: {e}{RESET}")
         return False
 
@@ -92,7 +92,7 @@ def verify_single_run(manifest_path: Path, base_dir: Path) -> bool:
 def main() -> None:
     """Main function to parse arguments and orchestrate verification."""
     parser = argparse.ArgumentParser(
-        description="Verify the integrity of processed Ursa benchmark runs.",
+        description="Verify the integrity of processed retrocast benchmark runs.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     mode_group = parser.add_mutually_exclusive_group(required=True)

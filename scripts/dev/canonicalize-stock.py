@@ -3,7 +3,7 @@ Check that the canonicalization of the buyables stock is correct.
 
 Usage:
 
-uv run scripts/dev/canonicalize-stock.py -i ursa-bb-stock-v3 -o ursa-bb-stock-v3-canon
+uv run scripts/dev/canonicalize-stock.py -i retrocast-bb-stock-v3 -o retrocast-bb-stock-v3-canon
 
 """
 
@@ -12,8 +12,8 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from ursa.domain.chem import canonicalize_smiles
-from ursa.exceptions import InvalidSmilesError
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.exceptions import InvalidSmilesError
 
 data_path = Path(__name__).resolve().parent / "data" / "models" / "assets"
 argparser = argparse.ArgumentParser()

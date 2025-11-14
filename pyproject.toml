@@ -1,5 +1,5 @@
 [project]
-name = "ursa"
+name = "retrocast"
 version = "0.1.0"
 description = "a framework for ingesting, validating, canonicalizing, and adapting retrosynthesis model outputs to a unified benchmark standard."
 readme = "README.md"
@@ -155,9 +155,9 @@ omit = [
     "*/analysis/*.py",
     "*/constants/*",
     "*/__init__.py",
-    "*/ursa/types.py",
-    "*/ursa/utils/logging.py",
-    "*/ursa/exceptions.py",
+    "*/retrocast/types.py",
+    "*/retrocast/utils/logging.py",
+    "*/retrocast/exceptions.py",
     "src/directmultistep/training/runner.py"
 ]
 

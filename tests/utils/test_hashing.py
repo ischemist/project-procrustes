@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from ursa.exceptions import UrsaException
-from ursa.utils.hashing import (
+from retrocast.exceptions import RetroCastException
+from retrocast.utils.hashing import (
     generate_file_hash,
     generate_model_hash,
     generate_molecule_hash,
@@ -48,7 +48,7 @@ def test_generate_model_hash_is_sensitive() -> None:
 def test_generate_model_hash_has_correct_format_and_length() -> None:
     """Tests the prefix and truncated length of the model hash."""
     model_hash = generate_model_hash("any-model-name")
-    prefix = "ursa-model-"
+    prefix = "retrocast-model-"
     assert model_hash.startswith(prefix)
     # The hash part should be exactly 8 characters long.
     assert len(model_hash) == len(prefix) + 8
@@ -67,7 +67,7 @@ def test_generate_source_hash_is_deterministic_and_order_invariant() -> None:
     source_hash_2 = generate_source_hash(model_name, file_hashes_2)
 
     assert source_hash_1 == source_hash_2
-    assert source_hash_1.startswith("ursa-source-")
+    assert source_hash_1.startswith("retrocast-source-")
 
 
 def test_generate_source_hash_is_sensitive_to_model_name() -> None:
@@ -86,7 +86,7 @@ def test_generate_file_hash_is_correct(tmp_path: Path) -> None:
     """
     Tests that generate_file_hash correctly computes the sha256 of a file's content.
     """
-    content = b"ursa major is the best bear"
+    content = b"retrocast major is the best bear"
     expected_hash = hashlib.sha256(content).hexdigest()
     file_path = tmp_path / "test.txt"
     file_path.write_bytes(content)
@@ -97,5 +97,5 @@ def test_generate_file_hash_is_correct(tmp_path: Path) -> None:
 def test_generate_file_hash_raises_exception_for_missing_file(tmp_path: Path) -> None:
     """Tests that our custom exception is raised if the file does not exist."""
     non_existent_path = tmp_path / "this_file_does_not_exist.txt"
-    with pytest.raises(UrsaException):
+    with pytest.raises(RetroCastException):
         generate_file_hash(non_existent_path)

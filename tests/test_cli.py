@@ -5,7 +5,7 @@ import pytest
 import yaml
 from pytest_mock import MockerFixture
 
-from ursa.cli import (
+from retrocast.cli import (
     _run_single_process,
     get_model_config,
     handle_info,
@@ -13,7 +13,7 @@ from ursa.cli import (
     handle_process,
     load_config,
 )
-from ursa.exceptions import UrsaException
+from retrocast.exceptions import RetroCastException
 
 
 @pytest.fixture
@@ -42,7 +42,7 @@ def mock_project_structure(tmp_path: Path, mock_config: dict) -> Path:
     base_dir.mkdir()
 
     # Config file
-    config_path = base_dir / "ursa-config.yaml"
+    config_path = base_dir / "retrocast-config.yaml"
     with config_path.open("w") as f:
         yaml.dump(mock_config, f)
 
@@ -65,7 +65,7 @@ def mock_project_structure(tmp_path: Path, mock_config: dict) -> Path:
 class TestCliUnit:
     def test_load_config_success(self, mock_project_structure: Path):
         """Tests that a valid config file is loaded correctly."""
-        config = load_config(mock_project_structure / "ursa-config.yaml")
+        config = load_config(mock_project_structure / "retrocast-config.yaml")
         assert "models" in config
         assert "model-a" in config["models"]
 
@@ -126,9 +126,9 @@ class TestCliProcessExecution:
     def mock_dependencies(self, mocker: MockerFixture) -> dict:
         """Mocks all functions called by _run_single_process."""
         return {
-            "load_targets": mocker.patch("ursa.cli.load_and_prepare_targets", return_value={"target": "info"}),
-            "get_adapter": mocker.patch("ursa.cli.get_adapter"),
-            "process_run": mocker.patch("ursa.cli.process_model_run"),
+            "load_targets": mocker.patch("retrocast.cli.load_and_prepare_targets", return_value={"target": "info"}),
+            "get_adapter": mocker.patch("retrocast.cli.get_adapter"),
+            "process_run": mocker.patch("retrocast.cli.process_model_run"),
         }
 
     def test_run_single_process_happy_path(
@@ -179,8 +179,8 @@ class TestCliProcessExecution:
     def test_run_single_process_handles_ursa_exception(
         self, mock_project_structure: Path, mock_config: dict, mock_dependencies: dict, caplog
     ):
-        """Tests that UrsaExceptions are caught and logged."""
-        mock_dependencies["load_targets"].side_effect = UrsaException("Bad SMILES")
+        """Tests that RetroCastExceptions are caught and logged."""
+        mock_dependencies["load_targets"].side_effect = RetroCastException("Bad SMILES")
         _run_single_process(mock_project_structure, mock_config, "model-a", "dataset-1", None, None)
         mock_dependencies["process_run"].assert_not_called()
         assert "a critical error occurred" in caplog.text
@@ -201,7 +201,7 @@ class TestHandleProcessDispatch:
     @pytest.fixture
     def mock_run_single(self, mocker: MockerFixture):
         """Mocks the core _run_single_process function."""
-        return mocker.patch("ursa.cli._run_single_process")
+        return mocker.patch("retrocast.cli._run_single_process")
 
     def test_handle_process_single_run(self, mock_project_structure, mock_config, mock_run_single):
         """Tests dispatching a single model/dataset run."""

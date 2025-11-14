@@ -2,15 +2,15 @@
 
 import random
 
-from ursa.domain.schemas import BenchmarkTree, MoleculeNode, ReactionNode, TargetInfo
-from ursa.domain.tree import (
+from retrocast.domain.schemas import BenchmarkTree, MoleculeNode, ReactionNode, TargetInfo
+from retrocast.domain.tree import (
     calculate_route_length,
     deduplicate_routes,
     sample_k_by_length,
     sample_random_k,
     sample_top_k,
 )
-from ursa.utils.hashing import generate_molecule_hash
+from retrocast.utils.hashing import generate_molecule_hash
 
 
 def _build_simple_tree(target_smiles: str, reactant_smiles_list: list[str]) -> BenchmarkTree:

@@ -15,7 +15,7 @@
 #
 # Examples:
 #   ./create-tarball.sh rs-first-25
-#   ./create-tarball.sh --dry-run ursa-bridge-100
+#   ./create-tarball.sh --dry-run uspto-190
 #   ./create-tarball.sh --output my_data.tar.gz --verbose uspto-190
 #   ./create-tarball.sh --recent-days 2 rs-first-25
 
@@ -71,7 +71,7 @@ USAGE:
 
 ARGUMENTS:
     <dataset_name>      Name of the dataset directory in data/processed/
-                       Available: rs-first-25, ursa-bridge-100, uspto-190
+                       Available: uspto-190
 
 OPTIONS:
     --dry-run          Show what would be included without creating tarball
@@ -85,11 +85,11 @@ OPTIONS:
 
 EXAMPLES:
     ./create-tarball.sh rs-first-25
-    ./create-tarball.sh --dry-run ursa-bridge-100
+    ./create-tarball.sh --dry-run uspto-190
     ./create-tarball.sh --output data/transfers/my_data.tar.gz --verbose uspto-190
     ./create-tarball.sh --include-pattern "*.json*" rs-first-25
     ./create-tarball.sh --recent-days 2 rs-first-25
-    ./create-tarball.sh --model-hash df005226 ursa-bridge-100
+    ./create-tarball.sh --model-hash df005226 uspto-190
 
 EOF
 }

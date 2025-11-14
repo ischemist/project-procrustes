@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from pytest_mock import MockerFixture
 
-from ursa.utils.serializers import (
+from retrocast.utils.serializers import (
     SyntheseusSerializationError,
     TtlRetroSerializationError,
     serialize_and_save,

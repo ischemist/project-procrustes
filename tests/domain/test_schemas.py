@@ -1,6 +1,6 @@
 import pytest
 
-from ursa.domain.schemas import BenchmarkTree, MoleculeNode, ReactionNode, RunStatistics, TargetInfo
+from retrocast.domain.schemas import BenchmarkTree, MoleculeNode, ReactionNode, RunStatistics, TargetInfo
 
 
 @pytest.fixture

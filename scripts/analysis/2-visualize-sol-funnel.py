@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from ursa.analysis.performance import (
+from retrocast.analysis.performance import (
     build_model_display_map,
     discover_model_names,
     load_benchmark_data,

@@ -1,9 +1,9 @@
 import pytest
 
+from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
+from retrocast.domain.chem import canonicalize_smiles
+from retrocast.domain.schemas import TargetInfo
 from tests.adapters.test_base_adapter import BaseAdapterTest
-from ursa.adapters.synplanner_adapter import SynPlannerAdapter
-from ursa.domain.chem import canonicalize_smiles
-from ursa.domain.schemas import TargetInfo
 
 
 class TestSynPlannerAdapterUnit(BaseAdapterTest):
