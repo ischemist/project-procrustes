@@ -35,7 +35,7 @@ def setup_logging() -> None:
     """Setup logging configuration from hardcoded dict with environment variable override"""
 
     # Get log level from environment variable, default to INFO if not set
-    log_level = os.getenv("URSA_LOG_LEVEL", "INFO").upper()
+    log_level = os.getenv("RETROCAST_LOG", "INFO").upper()
 
     # Validate the log level
     valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}

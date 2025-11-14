@@ -2,7 +2,7 @@ import pytest
 
 from retrocast.adapters.multistepttl_adapter import TtlRetroAdapter
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.schemas import TargetInfo
+from retrocast.domain.DEPRECATE_schemas import TargetInfo
 from retrocast.utils.serializers import serialize_multistepttl_directory
 from tests.adapters.test_base_adapter import BaseAdapterTest
 

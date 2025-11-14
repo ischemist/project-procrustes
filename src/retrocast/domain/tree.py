@@ -2,7 +2,7 @@ import hashlib
 import random
 from collections import defaultdict
 
-from retrocast.domain.schemas import BenchmarkTree, MoleculeNode
+from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, MoleculeNode
 from retrocast.utils.logging import logger
 
 

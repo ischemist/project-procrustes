@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.schemas import TargetInfo
+from retrocast.schemas import TargetInput
 
 TEST_DATA_DIR = Path("tests/testing_data")
 MODEL_PRED_DIR = TEST_DATA_DIR / "model-predictions"
@@ -113,6 +113,6 @@ def raw_paroutes_data() -> dict[str, Any]:
 
 
 @pytest.fixture(scope="session")
-def methylacetate_target_info() -> TargetInfo:
-    """provides the target info object for methyl acetate."""
-    return TargetInfo(id="methylacetate", smiles=canonicalize_smiles("COC(C)=O"))
+def methylacetate_target_info() -> TargetInput:
+    """provides the target input object for methyl acetate."""
+    return TargetInput(id="methylacetate", smiles=canonicalize_smiles("COC(C)=O"))

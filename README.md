@@ -172,7 +172,7 @@ if the raw output is already a recursive tree but with a different schema, you'l
 # in retrocast/adapters/custom_model_adapter.py
 from pydantic import BaseModel, RootModel
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.domain.schemas import MoleculeNode, ReactionNode
+from retrocast.domain.DEPRECATE_schemas import MoleculeNode, ReactionNode
 # ... other imports
 
 # --- pydantic schemas for raw input validation ---
@@ -212,7 +212,7 @@ once your adapter class is implemented:
     import pytest
     from tests.adapters.test_base_adapter import BaseAdapterTest
     from retrocast.adapters.new_model_adapter import NewModelAdapter
-    from retrocast.domain.schemas import TargetInfo
+    from retrocast.domain.DEPRECATE_schemas import TargetInfo
 
     class TestNewModelAdapterUnit(BaseAdapterTest):
         @pytest.fixture

@@ -8,7 +8,7 @@ from pydantic import BaseModel, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_tree_from_precursor_map
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.schemas import BenchmarkTree, TargetInfo
+from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, TargetInfo
 from retrocast.exceptions import RetroCastException
 from retrocast.utils.logging import logger
 

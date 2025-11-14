@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from typing import Any
 
-from retrocast.domain.schemas import BenchmarkTree, TargetInfo
+from retrocast.schemas import Route, TargetInput
 
 
 class BaseAdapter(ABC):
@@ -10,16 +10,16 @@ class BaseAdapter(ABC):
     Abstract base class for all model output adapters.
 
     An adapter's role is to transform a model's raw output format into the
-    canonical `BenchmarkTree` schema.
+    canonical `Route` schema.
     """
 
     @abstractmethod
-    def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[BenchmarkTree, None, None]:
+    def adapt(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         """
-        Validates, transforms, and yields BenchmarkTrees from raw model data.
+        Validates, transforms, and yields Routes from raw model data.
 
         This is the primary method for an adapter. It encapsulates all model-specific
-        logic. It should be a generator that yields successful trees and handles its
+        logic. It should be a generator that yields successful routes and handles its
         own exceptions internally by logging and continuing.
 
         Args:
@@ -35,9 +35,9 @@ class BaseAdapter(ABC):
                     routes (e.g., RetroChimera). `raw_target_data` is typically a `dict`.
 
                 The adapter is responsible for handling the specific structure of its model.
-            target_info: The identity of the target molecule.
+            target_input: The identity of the target molecule (id and canonical SMILES).
 
         Yields:
-            Successfully transformed BenchmarkTree objects.
+            Successfully transformed Route objects.
         """
         raise NotImplementedError

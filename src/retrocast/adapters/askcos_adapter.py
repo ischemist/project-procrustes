@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.schemas import BenchmarkTree, MoleculeNode, ReactionNode, TargetInfo
+from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, MoleculeNode, ReactionNode, TargetInfo
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 from retrocast.utils.hashing import generate_molecule_hash

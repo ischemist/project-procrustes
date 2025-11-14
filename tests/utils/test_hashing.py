@@ -48,7 +48,7 @@ def test_generate_model_hash_is_sensitive() -> None:
 def test_generate_model_hash_has_correct_format_and_length() -> None:
     """Tests the prefix and truncated length of the model hash."""
     model_hash = generate_model_hash("any-model-name")
-    prefix = "retrocast-model-"
+    prefix = "retrocasted-model-"
     assert model_hash.startswith(prefix)
     # The hash part should be exactly 8 characters long.
     assert len(model_hash) == len(prefix) + 8
@@ -67,7 +67,7 @@ def test_generate_source_hash_is_deterministic_and_order_invariant() -> None:
     source_hash_2 = generate_source_hash(model_name, file_hashes_2)
 
     assert source_hash_1 == source_hash_2
-    assert source_hash_1.startswith("retrocast-source-")
+    assert source_hash_1.startswith("retrocasted-source-")
 
 
 def test_generate_source_hash_is_sensitive_to_model_name() -> None:

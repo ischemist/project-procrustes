@@ -5,7 +5,7 @@ from typing import Any
 from tqdm import tqdm
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.domain.schemas import RunStatistics, TargetInfo
+from retrocast.domain.DEPRECATE_schemas import RunStatistics, TargetInfo
 from retrocast.domain.tree import (
     deduplicate_routes,
     sample_k_by_length,

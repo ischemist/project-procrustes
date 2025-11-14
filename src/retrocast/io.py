@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from tqdm import tqdm
 
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.schemas import TargetInfo
+from retrocast.domain.DEPRECATE_schemas import TargetInfo
 from retrocast.exceptions import RetroCastException, RetroCastIOError, RetroCastSerializationError
 from retrocast.utils.logging import logger
 

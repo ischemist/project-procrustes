@@ -2,7 +2,7 @@ import pytest
 
 from retrocast.adapters.aizynth_adapter import AizynthAdapter
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.schemas import TargetInfo
+from retrocast.domain.DEPRECATE_schemas import TargetInfo
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 
