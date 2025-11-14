@@ -26,7 +26,7 @@ def aspirin_target_info() -> TargetInfo:
 def minimal_fake_tree(aspirin_target_info: TargetInfo) -> BenchmarkTree:
     """Provides a minimal, valid BenchmarkTree for mocking adapter outputs."""
     root_node = MoleculeNode(
-        id="ursa-mol-root",
+        id="retrocast-mol-root",
         molecule_hash="hash_aspirin",
         smiles=aspirin_target_info.smiles,
         is_starting_material=True,

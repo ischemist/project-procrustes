@@ -73,7 +73,9 @@ class AizynthAdapter(BaseAdapter):
         raises RetroCastException on failure.
         """
         # refactor: use the common recursive builder.
-        retrosynthetic_tree = build_tree_from_bipartite_node(raw_mol_node=aizynth_root, path_prefix="ursa-mol-root")
+        retrosynthetic_tree = build_tree_from_bipartite_node(
+            raw_mol_node=aizynth_root, path_prefix="retrocast-mol-root"
+        )
 
         if retrosynthetic_tree.smiles != target_info.smiles:
             msg = (

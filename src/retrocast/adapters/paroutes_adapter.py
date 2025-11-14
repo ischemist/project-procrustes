@@ -131,7 +131,9 @@ class PaRoutesAdapter(BaseAdapter):
         orchestrates the transformation of a single validated paroutes tree.
         """
         # this format is a standard bipartite graph, so we reuse the common builder.
-        retrosynthetic_tree = build_tree_from_bipartite_node(raw_mol_node=paroutes_root, path_prefix="ursa-mol-root")
+        retrosynthetic_tree = build_tree_from_bipartite_node(
+            raw_mol_node=paroutes_root, path_prefix="retrocast-mol-root"
+        )
 
         if retrosynthetic_tree.smiles != target_info.smiles:
             msg = (

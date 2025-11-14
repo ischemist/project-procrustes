@@ -42,7 +42,7 @@ def mock_project_structure(tmp_path: Path, mock_config: dict) -> Path:
     base_dir.mkdir()
 
     # Config file
-    config_path = base_dir / "ursa-config.yaml"
+    config_path = base_dir / "retrocast-config.yaml"
     with config_path.open("w") as f:
         yaml.dump(mock_config, f)
 
@@ -65,7 +65,7 @@ def mock_project_structure(tmp_path: Path, mock_config: dict) -> Path:
 class TestCliUnit:
     def test_load_config_success(self, mock_project_structure: Path):
         """Tests that a valid config file is loaded correctly."""
-        config = load_config(mock_project_structure / "ursa-config.yaml")
+        config = load_config(mock_project_structure / "retrocast-config.yaml")
         assert "models" in config
         assert "model-a" in config["models"]
 

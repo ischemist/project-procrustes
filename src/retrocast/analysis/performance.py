@@ -24,7 +24,7 @@ COLUMN_MAP = {
     "CC": "cc",
     "comment": "comment",
 }
-DATASET_MAP = {"uspto": "uspto-190", "bridge": "ursa-bridge-100", "expert": "ursa-expert-100"}
+DATASET_MAP = {"uspto": "uspto-190"}
 DEFAULT_COLOR = "#808080"
 TEXT_OFFSET_DELTA_X = 0.01
 TEXT_OFFSET_DELTA_Y = 0.5
@@ -105,13 +105,13 @@ def discover_model_names(base_path: Path) -> dict[str, str]:
         logging.warning(f"data path for model discovery not found: {base_path}")
         return mapping
 
-    for manifest_path in base_path.glob("**/ursa-model-*/manifest.json"):
+    for manifest_path in base_path.glob("**/retrocast-model-*/manifest.json"):
         try:
             manifest = json.loads(manifest_path.read_text())
             model_hash = manifest.get("model_hash")
             model_name = manifest.get("model_name")
             if model_hash and model_name:
-                model_id = model_hash.replace("ursa-model-", "")
+                model_id = model_hash.replace("retrocast-model-", "")
                 if model_id in mapping and mapping[model_id] != model_name:
                     logging.warning(f"conflicting name for {model_id}: '{mapping[model_id]}' vs '{model_name}'")
                 mapping[model_id] = model_name

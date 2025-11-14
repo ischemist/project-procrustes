@@ -48,7 +48,7 @@ def test_generate_model_hash_is_sensitive() -> None:
 def test_generate_model_hash_has_correct_format_and_length() -> None:
     """Tests the prefix and truncated length of the model hash."""
     model_hash = generate_model_hash("any-model-name")
-    prefix = "ursa-model-"
+    prefix = "retrocast-model-"
     assert model_hash.startswith(prefix)
     # The hash part should be exactly 8 characters long.
     assert len(model_hash) == len(prefix) + 8
@@ -67,7 +67,7 @@ def test_generate_source_hash_is_deterministic_and_order_invariant() -> None:
     source_hash_2 = generate_source_hash(model_name, file_hashes_2)
 
     assert source_hash_1 == source_hash_2
-    assert source_hash_1.startswith("ursa-source-")
+    assert source_hash_1.startswith("retrocast-source-")
 
 
 def test_generate_source_hash_is_sensitive_to_model_name() -> None:
@@ -86,7 +86,7 @@ def test_generate_file_hash_is_correct(tmp_path: Path) -> None:
     """
     Tests that generate_file_hash correctly computes the sha256 of a file's content.
     """
-    content = b"ursa major is the best bear"
+    content = b"retrocast major is the best bear"
     expected_hash = hashlib.sha256(content).hexdigest()
     file_path = tmp_path / "test.txt"
     file_path.write_bytes(content)

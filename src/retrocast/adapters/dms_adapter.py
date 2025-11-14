@@ -63,7 +63,7 @@ class DMSAdapter(BaseAdapter):
         Raises RetroCastException on failure.
         """
         # begin the recursion from the root node
-        retrosynthetic_tree = self._build_molecule_node(dms_node=raw_data, path_prefix="ursa-mol-root")
+        retrosynthetic_tree = self._build_molecule_node(dms_node=raw_data, path_prefix="retrocast-mol-root")
 
         # Final validation: does the transformed tree root match the canonical target smiles?
         if retrosynthetic_tree.smiles != target_info.smiles:
@@ -110,7 +110,9 @@ class DMSAdapter(BaseAdapter):
 
             reactions.append(
                 ReactionNode(
-                    id=path_prefix.replace("ursa-mol", "ursa-rxn"), reaction_smiles=reaction_smiles, reactants=reactants
+                    id=path_prefix.replace("retrocast-mol", "retrocast-rxn"),
+                    reaction_smiles=reaction_smiles,
+                    reactants=reactants,
                 )
             )
 

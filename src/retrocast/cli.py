@@ -18,7 +18,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
         with config_path.open("r") as f:
             return cast(dict[str, Any], yaml.safe_load(f))
     except FileNotFoundError:
-        logger.error(f"configuration file not found at {config_path}. please create `ursa-config.yaml`.")
+        logger.error(f"configuration file not found at {config_path}. please create `retrocast-config.yaml`.")
         sys.exit(1)
     except yaml.YAMLError as e:
         logger.error(f"error parsing configuration file {config_path}: {e}")
@@ -28,14 +28,14 @@ def load_config(config_path: Path) -> dict[str, Any]:
 def get_model_config(config: dict[str, Any], model_name: str) -> dict[str, Any]:
     """retrieves the configuration for a specific model."""
     if "models" not in config or model_name not in config["models"]:
-        logger.error(f"model '{model_name}' not found in `ursa-config.yaml`.")
+        logger.error(f"model '{model_name}' not found in `retrocast-config.yaml`.")
         sys.exit(1)
     return cast(dict[str, Any], config["models"][model_name])
 
 
 def handle_list(config: dict[str, Any]) -> None:
     """handles the 'list' command."""
-    logger.info("available models in `ursa-config.yaml`:")
+    logger.info("available models in `retrocast-config.yaml`:")
     for model_name in sorted(config.get("models", {}).keys()):
         print(f"  - {model_name}")
 

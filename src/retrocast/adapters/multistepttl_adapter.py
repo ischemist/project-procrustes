@@ -56,7 +56,7 @@ class TtlRetroAdapter(BaseAdapter):
         """
         if not route.reactions:
             retrosynthetic_tree = MoleculeNode(
-                id="ursa-mol-root",
+                id="retrocast-mol-root",
                 molecule_hash=generate_molecule_hash(target_info.smiles),
                 smiles=target_info.smiles,
                 is_starting_material=True,

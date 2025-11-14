@@ -1,4 +1,4 @@
-"""Tests for the ursa.io module.
+"""Tests for the retrocast.io module.
 
 This module contains unit tests for all public I/O utilities, including
 JSON (gzipped and uncompressed), CSV, and SMILES canonicalization.

@@ -1,5 +1,5 @@
 """
-Verifies the integrity of a processed Ursa benchmark run.
+Verifies the integrity of a processed retrocast benchmark run.
 
 This script can operate in two modes:
 1. Single Mode: Verify a specific manifest file.
@@ -10,7 +10,7 @@ Example Usage:
 ---
 
 # 1. Verify a single, specific run
-uv run scripts/verify-hash.py --manifest data/processed/rs-first-25/ursa-model-4b6418ea/manifest.json
+uv run scripts/verify-hash.py --manifest data/processed/rs-first-25/retrocast-model-4b6418ea/manifest.json
 
 # 2. Verify ALL runs for ALL models and ALL datasets
 uv run scripts/verify-hash.py --all-models --all-datasets
@@ -92,7 +92,7 @@ def verify_single_run(manifest_path: Path, base_dir: Path) -> bool:
 def main() -> None:
     """Main function to parse arguments and orchestrate verification."""
     parser = argparse.ArgumentParser(
-        description="Verify the integrity of processed Ursa benchmark runs.",
+        description="Verify the integrity of processed retrocast benchmark runs.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     mode_group = parser.add_mutually_exclusive_group(required=True)

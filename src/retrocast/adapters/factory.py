@@ -33,5 +33,5 @@ def get_adapter(adapter_name: str) -> BaseAdapter:
     """
     adapter = ADAPTER_MAP.get(adapter_name)
     if adapter is None:
-        raise RetroCastException(f"unknown adapter '{adapter_name}'. check `ursa-config.yaml` and `ADAPTER_MAP`.")
+        raise RetroCastException(f"unknown adapter '{adapter_name}'. check `retrocast-config.yaml` and `ADAPTER_MAP`.")
     return adapter

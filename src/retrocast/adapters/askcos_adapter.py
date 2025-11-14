@@ -111,7 +111,7 @@ class AskcosAdapter(BaseAdapter):
 
         retrosynthetic_tree = self._build_molecule_node(
             chem_uuid=root_uuid,
-            path_prefix="ursa-mol-root",
+            path_prefix="retrocast-mol-root",
             adj_list=adj_list,
             uuid2smiles=uuid2smiles,
             node_dict=node_dict,
@@ -208,7 +208,7 @@ class AskcosAdapter(BaseAdapter):
         reaction_smiles = ReactionSmilesStr(f"{'.'.join(sorted(reactant_smiles_list))}>>{product_smiles}")
 
         return ReactionNode(
-            id=path_prefix.replace("ursa-mol", "ursa-rxn"),
+            id=path_prefix.replace("retrocast-mol", "retrocast-rxn"),
             reaction_smiles=reaction_smiles,
             reactants=reactants,
         )

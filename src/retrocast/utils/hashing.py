@@ -42,11 +42,11 @@ def generate_model_hash(model_name: str) -> str:
     for any practical number of models.
 
     Returns:
-        A 'ursa-model-' prefixed, 12-character hex digest.
+        A 'retrocast-model-' prefixed, 12-character hex digest.
     """
     name_bytes = model_name.encode("utf-8")
     full_hash = hashlib.sha256(name_bytes).hexdigest()
-    return f"ursa-model-{full_hash[:8]}"
+    return f"retrocast-model-{full_hash[:8]}"
 
 
 def generate_source_hash(model_name: str, file_hashes: list[str]) -> str:
@@ -62,10 +62,10 @@ def generate_source_hash(model_name: str, file_hashes: list[str]) -> str:
         file_hashes: A sorted list of the sha256 hashes of all input files.
 
     Returns:
-        A 'ursa-source-' prefixed full sha256 hex digest.
+        A 'retrocast-source-' prefixed full sha256 hex digest.
     """
     sorted_hashes = sorted(file_hashes)
     run_signature = model_name + "".join(sorted_hashes)
     run_bytes = run_signature.encode("utf-8")
     hasher = hashlib.sha256(run_bytes)
-    return f"ursa-source-{hasher.hexdigest()}"
+    return f"retrocast-source-{hasher.hexdigest()}"

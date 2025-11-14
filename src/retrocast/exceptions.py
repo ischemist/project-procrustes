@@ -1,5 +1,5 @@
 class RetroCastException(Exception):
-    """Base exception for all errors raised by the ursa package."""
+    """Base exception for all errors raised by the retrocast package."""
 
     pass
 

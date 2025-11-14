@@ -108,7 +108,7 @@ def serialize_and_save(
             except SyntheseusSerializationError as e:
                 print(f"Warning: Could not serialize route {i} for target {target_smiles}. Reason: {e}")
 
-        # We use the raw target smiles/id as the key, Ursa will map it to an ID later.
+        # We use the raw target smiles/id as the key, retrocast will map it to an ID later.
         serialized_data[target_id] = serialized_routes
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

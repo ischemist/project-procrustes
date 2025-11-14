@@ -21,7 +21,7 @@ LOGGING_CONFIG: dict[str, Any] = {
         }
     },
     "loggers": {
-        "ursa": {
+        "retrocast": {
             "handlers": ["console"],
             "propagate": True,
             "level": "INFO",  # Default level
@@ -44,9 +44,9 @@ def setup_logging() -> None:
         log_level = "INFO"
 
     # Override the log level in the copied config
-    LOGGING_CONFIG["loggers"]["ursa"]["level"] = log_level
+    LOGGING_CONFIG["loggers"]["retrocast"]["level"] = log_level
 
     logging.config.dictConfig(LOGGING_CONFIG)
 
 
-logger = logging.getLogger("ursa")
+logger = logging.getLogger("retrocast")

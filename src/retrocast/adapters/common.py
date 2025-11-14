@@ -85,7 +85,7 @@ def build_tree_from_bipartite_node(raw_mol_node: BipartiteMolNode, path_prefix: 
 
         reactions.append(
             ReactionNode(
-                id=path_prefix.replace("ursa-mol", "ursa-rxn"),
+                id=path_prefix.replace("retrocast-mol", "retrocast-rxn"),
                 reaction_smiles=reaction_smiles,
                 reactants=reactants,
             )
@@ -107,7 +107,7 @@ def build_tree_from_bipartite_node(raw_mol_node: BipartiteMolNode, path_prefix: 
 def build_tree_from_precursor_map(
     smiles: SmilesStr,
     precursor_map: PrecursorMap,
-    path_prefix: str = "ursa-mol-root",
+    path_prefix: str = "retrocast-mol-root",
     visited_path: set[SmilesStr] | None = None,
 ) -> MoleculeNode:
     """
@@ -149,7 +149,7 @@ def build_tree_from_precursor_map(
 
         reactions.append(
             ReactionNode(
-                id=path_prefix.replace("ursa-mol", "ursa-rxn"),
+                id=path_prefix.replace("retrocast-mol", "retrocast-rxn"),
                 reaction_smiles=reaction_smiles,
                 reactants=reactants,
             )

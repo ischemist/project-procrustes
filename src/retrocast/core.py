@@ -40,7 +40,7 @@ def process_model_run(
     Includes optional top-k filtering and organizes results by a stable
     model hash and the dataset name.
     """
-    logger.info(f"--- Starting Ursa Processing for Model: '{model_name}' on Dataset: '{dataset_name}' ---")
+    logger.info(f"--- Starting retrocast Processing for Model: '{model_name}' on Dataset: '{dataset_name}' ---")
 
     # 1. HASHING & PATH SETUP
     model_hash = generate_model_hash(model_name)

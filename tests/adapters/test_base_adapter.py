@@ -28,7 +28,7 @@ class BaseAdapterTest(ABC):
         Provide a minimal, valid piece of raw data representing one or more successful routes.
 
         Note: This data should match the expected structure for the adapter's `adapt` method.
-        See the docstring for `ursa.adapters.base_adapter.BaseAdapter.adapt` for a discussion
+        See the docstring for `retrocast.adapters.base_adapter.BaseAdapter.adapt` for a discussion
         of "Route-Centric" vs. "Target-Centric" data formats.
         """
         raise NotImplementedError

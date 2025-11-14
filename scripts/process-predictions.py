@@ -1,7 +1,7 @@
 """
-unified pipeline runner for ursa.
+unified pipeline runner for retrocast.
 
-this script uses `ursa-config.yaml` to orchestrate pre-processing and processing
+this script uses `retrocast-config.yaml` to orchestrate pre-processing and processing
 of model outputs for the benchmark.
 
 ---
@@ -15,7 +15,7 @@ uv run scripts/process-predictions.py list
 uv run scripts/process-predictions.py info --model multistep-ttl
 
 # process the output of a model for a given dataset
-uv run scripts/process-predictions.py process --model dms-flash-fp16 --dataset ursa-bridge-100
+uv run scripts/process-predictions.py process --model dms-flash-fp16 --dataset uspto-190
 
 # process output, but override the sampling strategy from the config
 uv run scripts/process-predictions.py process --model dms-flash-fp16 --dataset uspto-190 --sampling-strategy top-k --k 5
@@ -34,12 +34,14 @@ from retrocast import cli
 
 
 def main() -> None:
-    """main function to parse arguments and delegate to handlers in `ursa.cli`."""
-    parser = argparse.ArgumentParser(description="ursa pipeline runner.", formatter_class=argparse.RawTextHelpFormatter)
+    """main function to parse arguments and delegate to handlers in `retrocast.cli`."""
+    parser = argparse.ArgumentParser(
+        description="retrocast pipeline runner.", formatter_class=argparse.RawTextHelpFormatter
+    )
     subparsers = parser.add_subparsers(dest="command", required=True, help="available commands")
 
     # --- list command ---
-    subparsers.add_parser("list", help="list all models defined in `ursa-config.yaml`.")
+    subparsers.add_parser("list", help="list all models defined in `retrocast-config.yaml`.")
 
     # --- info command ---
     parser_info = subparsers.add_parser("info", help="show configuration details for a specific model.")
@@ -64,7 +66,7 @@ def main() -> None:
 
     # the base directory is the parent of the 'scripts' directory.
     base_dir = Path(__file__).resolve().parents[1]
-    config = cli.load_config(base_dir / "ursa-config.yaml")
+    config = cli.load_config(base_dir / "retrocast-config.yaml")
 
     if args.command == "list":
         cli.handle_list(config)

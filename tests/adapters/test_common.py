@@ -26,7 +26,7 @@ class TestBipartiteBuilder:
             ],
         )
 
-        tree = build_tree_from_bipartite_node(raw_data, "ursa-mol-root")
+        tree = build_tree_from_bipartite_node(raw_data, "retrocast-mol-root")
 
         assert tree.smiles == "CCO"
         assert not tree.is_starting_material
@@ -48,7 +48,7 @@ class TestBipartiteBuilder:
             children=[SimpleNamespace(smiles="CC=O", type="mol", in_stock=True, children=[])],
         )
         with pytest.raises(AdapterLogicError, match="child of molecule node was not a reaction node"):
-            build_tree_from_bipartite_node(raw_data, "ursa-mol-root")
+            build_tree_from_bipartite_node(raw_data, "retrocast-mol-root")
 
     def test_raises_on_invalid_tree_logic(self):
         """pydantic models should fail if a starting material has children."""
@@ -57,7 +57,7 @@ class TestBipartiteBuilder:
         )
         # the builder will create it, but the pydantic validation on MoleculeNode will fail
         with pytest.raises(ValidationError, match="is a starting material but has 1 parent reactions"):
-            build_tree_from_bipartite_node(raw_data, "ursa-mol-root")
+            build_tree_from_bipartite_node(raw_data, "retrocast-mol-root")
 
 
 class TestPrecursorMapBuilder:
