@@ -48,6 +48,9 @@ class BipartiteRxnNode(Protocol):
     @property
     def children(self) -> list[BipartiteMolNode]: ...
 
+    @property
+    def metadata(self) -> dict[str, Any]: ...
+
 
 def build_tree_from_bipartite_node(raw_mol_node: BipartiteMolNode, path_prefix: str) -> MoleculeNode:
     """
@@ -281,13 +284,19 @@ def build_molecule_from_bipartite_node(raw_mol_node: BipartiteMolNode) -> Molecu
         reactant_mol = build_molecule_from_bipartite_node(raw_mol_node=reactant_mol_input)
         reactant_molecules.append(reactant_mol)
 
+    # Extract template and mapped_smiles from metadata if available
+    rxn_metadata = raw_reaction_node.metadata
+    template = rxn_metadata.get("template") if rxn_metadata else None
+    mapped_smiles = rxn_metadata.get("mapped_reaction_smiles") if rxn_metadata else None
+
     # Create the reaction step
     synthesis_step = ReactionStep(
         reactants=reactant_molecules,
-        mapped_smiles=None,
+        mapped_smiles=mapped_smiles,
+        template=template,
         reagents=None,
         solvents=None,
-        metadata={},
+        metadata=rxn_metadata if rxn_metadata else {},
     )
 
     return Molecule(

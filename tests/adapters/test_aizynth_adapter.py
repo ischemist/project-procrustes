@@ -3,6 +3,7 @@ import pytest
 from retrocast.adapters.aizynth_adapter import AizynthAdapter
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.domain.DEPRECATE_schemas import TargetInfo
+from retrocast.schemas import Route
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 
@@ -41,11 +42,11 @@ class TestAizynthAdapterUnit(BaseAdapterTest):
         return [{"smiles": "CCO", "children": []}]
 
     @pytest.fixture
-    def target_info(self):
+    def target_input(self):
         return TargetInfo(id="ethanol", smiles="CCO")
 
     @pytest.fixture
-    def mismatched_target_info(self):
+    def mismatched_target_input(self):
         return TargetInfo(id="ethanol", smiles="CCC")
 
 
@@ -63,27 +64,34 @@ class TestAizynthAdapterIntegration:
         # sanity check the input data
         assert len(raw_routes) == 11
 
-        trees = list(adapter.adapt(raw_routes, target_info))
+        routes = list(adapter.adapt(raw_routes, target_info))
 
-        assert len(trees) == 11
-        first_tree = trees[0]
+        assert len(routes) == 11
+        first_route = routes[0]
 
-        # check root node
-        assert first_tree.target.id == "aspirin"
-        assert first_tree.retrosynthetic_tree.smiles == target_info.smiles
-        assert not first_tree.retrosynthetic_tree.is_starting_material
+        # check route and target molecule
+        assert isinstance(first_route, Route)
+        assert first_route.rank == 1
+        assert first_route.target.smiles == target_info.smiles
+        assert first_route.target.inchikey
+        assert not first_route.target.is_leaf
 
         # check the first, simplest route: salicylic acid + acetic anhydride -> aspirin
-        reaction = first_tree.retrosynthetic_tree.reactions[0]
-        assert len(reaction.reactants) == 2
+        synthesis_step = first_route.target.synthesis_step
+        assert synthesis_step is not None
+        assert len(synthesis_step.reactants) == 2
 
-        reactant_smiles = {r.smiles for r in reaction.reactants}
+        # check that template and mapped_smiles are extracted
+        assert synthesis_step.template is not None
+        assert synthesis_step.mapped_smiles is not None
+
+        reactant_smiles = {r.smiles for r in synthesis_step.reactants}
         expected_smiles = {
             canonicalize_smiles("CC(=O)OC(C)=O"),  # acetic anhydride
             canonicalize_smiles("O=C(O)c1ccccc1O"),  # salicylic acid
         }
         assert reactant_smiles == expected_smiles
-        assert all(r.is_starting_material for r in reaction.reactants)
+        assert all(r.is_leaf for r in synthesis_step.reactants)
 
     def test_aizynth_adapter_ibuprofen(self, adapter, raw_aizynth_mcts_data):
         """tests that the adapter correctly processes a multi-step ibuprofen route."""
@@ -91,31 +99,41 @@ class TestAizynthAdapterIntegration:
         # let's test against the first route provided in the file
         raw_route = raw_aizynth_mcts_data["ibuprofen"][0]
 
-        trees = list(adapter.adapt([raw_route], target_info))
-        assert len(trees) == 1
-        tree = trees[0].retrosynthetic_tree
+        routes = list(adapter.adapt([raw_route], target_info))
+        assert len(routes) == 1
+        route = routes[0]
+        target = route.target
 
         # follow the path down:
         # ibuprofen -> intermediate 1 -> intermediate 2 -> starting materials
-        assert tree.smiles == target_info.smiles
-        assert not tree.is_starting_material
+        assert target.smiles == target_info.smiles
+        assert not target.is_leaf
         # step 1
-        rxn1 = tree.reactions[0]
-        intermediate1 = rxn1.reactants[0]
+        step1 = target.synthesis_step
+        assert step1 is not None
+        assert step1.template is not None  # check template is extracted
+        assert step1.mapped_smiles is not None  # check mapped_smiles is extracted
+        intermediate1 = step1.reactants[0]
         assert intermediate1.smiles == canonicalize_smiles("CC(C)C(=O)c1ccc([C@@H](C)C(=O)O)cc1")
-        assert not intermediate1.is_starting_material
+        assert not intermediate1.is_leaf
         # step 2
-        rxn2 = intermediate1.reactions[0]
-        intermediate2 = rxn2.reactants[0]
+        step2 = intermediate1.synthesis_step
+        assert step2 is not None
+        assert step2.template is not None
+        assert step2.mapped_smiles is not None
+        intermediate2 = step2.reactants[0]
         assert intermediate2.smiles == canonicalize_smiles("COC(=O)[C@H](C)c1ccc(C(=O)C(C)C)cc1")
-        assert not intermediate2.is_starting_material
+        assert not intermediate2.is_leaf
         # step 3 (final)
-        rxn3 = intermediate2.reactions[0]
-        assert len(rxn3.reactants) == 2
-        reactant_smiles = {r.smiles for r in rxn3.reactants}
+        step3 = intermediate2.synthesis_step
+        assert step3 is not None
+        assert step3.template is not None
+        assert step3.mapped_smiles is not None
+        assert len(step3.reactants) == 2
+        reactant_smiles = {r.smiles for r in step3.reactants}
         expected_smiles = {
             canonicalize_smiles("CC(C)C(=O)O"),
             canonicalize_smiles("COC(=O)[C@H](C)c1ccccc1"),
         }
         assert reactant_smiles == expected_smiles
-        assert all(r.is_starting_material for r in rxn3.reactants)
+        assert all(r.is_leaf for r in step3.reactants)

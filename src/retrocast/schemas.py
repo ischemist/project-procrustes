@@ -59,6 +59,7 @@ class ReactionStep(BaseModel):
     reactants: list[Molecule]
 
     mapped_smiles: ReactionSmilesStr | None = None
+    template: str | None = None  # Reaction template string (e.g., SMARTS pattern)
     reagents: list[SmilesStr] | None = None  # List of reagent SMILES, e.g. ["O", "ClS(=O)(=O)Cl"]
     solvents: list[SmilesStr] | None = None  # List of solvent SMILES
 
