@@ -3,7 +3,7 @@ Check that the canonicalization of the buyables stock is correct.
 
 Usage:
 
-uv run scripts/dev/canonicalize-stock.py -i ursa-bb-stock-v3 -o ursa-bb-stock-v3-canon
+uv run scripts/dev/canonicalize-stock.py -i retrocast-bb-stock-v3 -o retrocast-bb-stock-v3-canon
 
 """
 

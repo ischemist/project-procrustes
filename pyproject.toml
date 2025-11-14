@@ -155,9 +155,9 @@ omit = [
     "*/analysis/*.py",
     "*/constants/*",
     "*/__init__.py",
-    "*/ursa/types.py",
-    "*/ursa/utils/logging.py",
-    "*/ursa/exceptions.py",
+    "*/retrocast/types.py",
+    "*/retrocast/utils/logging.py",
+    "*/retrocast/exceptions.py",
     "src/directmultistep/training/runner.py"
 ]
 
