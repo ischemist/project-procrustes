@@ -3,22 +3,22 @@ from typing import Any
 
 import pytest
 
-from retrocast.domain.schemas import BenchmarkTree
+from retrocast.schemas import Route
 
 
 class BaseAdapterTest(ABC):
     """
-    an abstract base class for adapter unit tests.
+    An abstract base class for adapter unit tests.
 
-    subclasses MUST provide the required fixtures. in return, they inherit a
+    Subclasses MUST provide the required fixtures. In return, they inherit a
     standard set of tests for common adapter failure modes and success cases.
-    this ensures consistency and provides a clear template for adding new adapters.
+    This ensures consistency and provides a clear template for adding new adapters.
     """
 
     @pytest.fixture
     @abstractmethod
     def adapter_instance(self) -> Any:
-        """yield the adapter instance to be tested."""
+        """Yield the adapter instance to be tested."""
         raise NotImplementedError
 
     @pytest.fixture
@@ -36,53 +36,54 @@ class BaseAdapterTest(ABC):
     @pytest.fixture
     @abstractmethod
     def raw_unsuccessful_run_data(self) -> Any:
-        """provide raw data representing a failed run (e.g., succ: false, or an empty list)."""
+        """Provide raw data representing a failed run (e.g., succ: false, or an empty list)."""
         raise NotImplementedError
 
     @pytest.fixture
     @abstractmethod
     def raw_invalid_schema_data(self) -> Any:
-        """provide raw data that should fail the adapter's pydantic validation."""
+        """Provide raw data that should fail the adapter's pydantic validation."""
         raise NotImplementedError
 
     @pytest.fixture
     @abstractmethod
-    def target_info(self) -> Any:
-        """provide the correct targetinfo for the `raw_valid_route_data` fixture."""
+    def target_input(self) -> Any:
+        """Provide the correct TargetInput for the `raw_valid_route_data` fixture."""
         raise NotImplementedError
 
     @pytest.fixture
     @abstractmethod
-    def mismatched_target_info(self) -> Any:
-        """provide a targetinfo whose smiles does NOT match the root of `raw_valid_route_data`."""
+    def mismatched_target_input(self) -> Any:
+        """Provide a TargetInput whose smiles does NOT match the root of `raw_valid_route_data`."""
         raise NotImplementedError
 
-    # --- common tests, inherited by all adapter tests ---
+    # --- Common tests, inherited by all adapter tests ---
 
-    def test_adapt_success(self, adapter_instance, raw_valid_route_data, target_info):
-        """tests that a valid raw route produces at least one benchmarktree."""
-        trees = list(adapter_instance.adapt(raw_valid_route_data, target_info))
-        assert len(trees) >= 1
-        tree = trees[0]
-        assert isinstance(tree, BenchmarkTree)
-        assert tree.target.id == target_info.id
-        assert tree.retrosynthetic_tree.smiles == target_info.smiles
+    def test_adapt_success(self, adapter_instance, raw_valid_route_data, target_input):
+        """Tests that a valid raw route produces at least one Route."""
+        routes = list(adapter_instance.adapt(raw_valid_route_data, target_input))
+        assert len(routes) >= 1
+        route = routes[0]
+        assert isinstance(route, Route)
+        assert route.target.smiles == target_input.smiles
+        assert route.target.inchikey  # Ensure InChIKey is populated
+        assert route.rank >= 1
 
-    def test_adapt_handles_unsuccessful_run(self, adapter_instance, raw_unsuccessful_run_data, target_info):
-        """tests that data for an unsuccessful run yields no trees."""
-        trees = list(adapter_instance.adapt(raw_unsuccessful_run_data, target_info))
-        assert len(trees) == 0
+    def test_adapt_handles_unsuccessful_run(self, adapter_instance, raw_unsuccessful_run_data, target_input):
+        """Tests that data for an unsuccessful run yields no routes."""
+        routes = list(adapter_instance.adapt(raw_unsuccessful_run_data, target_input))
+        assert len(routes) == 0
 
-    def test_adapt_handles_invalid_schema(self, adapter_instance, raw_invalid_schema_data, target_info, caplog):
-        """tests that data failing schema validation yields no trees and logs a warning."""
-        trees = list(adapter_instance.adapt(raw_invalid_schema_data, target_info))
-        assert len(trees) == 0
+    def test_adapt_handles_invalid_schema(self, adapter_instance, raw_invalid_schema_data, target_input, caplog):
+        """Tests that data failing schema validation yields no routes and logs a warning."""
+        routes = list(adapter_instance.adapt(raw_invalid_schema_data, target_input))
+        assert len(routes) == 0
         assert "failed" in caplog.text and "validation" in caplog.text
 
     def test_adapt_handles_mismatched_smiles(
-        self, adapter_instance, raw_valid_route_data, mismatched_target_info, caplog
+        self, adapter_instance, raw_valid_route_data, mismatched_target_input, caplog
     ):
-        """tests that a smiles mismatch between target and data yields no trees and logs a warning."""
-        trees = list(adapter_instance.adapt(raw_valid_route_data, mismatched_target_info))
-        assert len(trees) == 0
+        """Tests that a SMILES mismatch between target and data yields no routes and logs a warning."""
+        routes = list(adapter_instance.adapt(raw_valid_route_data, mismatched_target_input))
+        assert len(routes) == 0
         assert "mismatched smiles" in caplog.text.lower() or "does not match expected target" in caplog.text.lower()

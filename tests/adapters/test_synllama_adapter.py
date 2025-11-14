@@ -2,7 +2,7 @@ import pytest
 
 from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.schemas import TargetInfo
+from retrocast.domain.DEPRECATE_schemas import TargetInfo
 from retrocast.exceptions import AdapterLogicError
 from tests.adapters.test_base_adapter import BaseAdapterTest
 

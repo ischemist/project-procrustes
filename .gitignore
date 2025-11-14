@@ -63,3 +63,5 @@ archive
 collectors/
 
 tests/testing_data/**/results.json
+
+docs/adapter_migration.md

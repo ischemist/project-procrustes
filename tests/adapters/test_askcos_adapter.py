@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from retrocast.adapters.askcos_adapter import AskcosAdapter
-from retrocast.domain.schemas import TargetInfo
+from retrocast.schemas import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 
@@ -59,72 +59,169 @@ class TestAskcosAdapterUnit(BaseAdapterTest):
         return {"results": {}}
 
     @pytest.fixture
-    def target_info(self):
-        return TargetInfo(id="ethyl_acetate", smiles="CCOC(C)=O")
+    def target_input(self):
+        return TargetInput(id="ethyl_acetate", smiles="CCOC(C)=O")
 
     @pytest.fixture
-    def mismatched_target_info(self):
-        return TargetInfo(id="ethyl_acetate", smiles="CCO")
+    def mismatched_target_input(self):
+        return TargetInput(id="ethyl_acetate", smiles="CCO")
 
 
 @pytest.mark.integration
-class TestAskcosAdapterIntegration:
-    def test_adapt_methylacetate(self, raw_askcos_data: dict[str, Any], methylacetate_target_info: TargetInfo):
-        """
-        tests the full processing of a valid askcos output for a single target.
-        it verifies the total number of routes and the structure of specific simple
-        and multi-step routes.
-        """
-        adapter = AskcosAdapter()
+class TestAskcosAdapterContract:
+    """Contract tests: verify the adapter produces valid Route objects with required fields populated."""
+
+    @pytest.fixture(scope="class")
+    def adapter(self) -> AskcosAdapter:
+        return AskcosAdapter()
+
+    @pytest.fixture(scope="class")
+    def routes(self, adapter: AskcosAdapter, raw_askcos_data: dict[str, Any], methylacetate_target_input: TargetInput):
+        """Shared fixture to avoid re-running adaptation for every test."""
         raw_target_data = raw_askcos_data["methylacetate"]
-        trees = list(adapter.adapt(raw_target_data, methylacetate_target_info))
+        return list(adapter.adapt(raw_target_data, methylacetate_target_input))
 
-        # the input file has 15 distinct pathways defined
-        assert len(trees) == 15
+    def test_produces_correct_number_of_routes(self, routes):
+        """Verify the adapter produces the expected number of routes."""
+        assert len(routes) == 15
 
-        # --- check 1: a simple, one-step route ---
-        # this corresponds to the first pathway in the raw data
-        tree1 = trees[0].retrosynthetic_tree
-        assert tree1.smiles == "COC(C)=O"
-        assert not tree1.is_starting_material
-        assert len(tree1.reactions) == 1
+    def test_all_routes_have_metadata(self, routes):
+        """Verify all routes have metadata with required fields."""
+        for route in routes:
+            assert route.metadata is not None
+            assert "total_iterations" in route.metadata
+            assert "total_chemicals" in route.metadata
+            assert "total_reactions" in route.metadata
+            assert "total_templates" in route.metadata
+            assert "total_paths" in route.metadata
 
-        reaction1 = tree1.reactions[0]
-        assert reaction1.reaction_smiles == "CC(=O)Cl.CO>>COC(C)=O"
-        assert len(reaction1.reactants) == 2
+    def test_all_routes_have_ranks(self, routes):
+        """Verify all routes are properly ranked."""
+        ranks = [route.rank for route in routes]
+        assert ranks == list(range(1, len(routes) + 1))
 
-        reactant_smiles = {r.smiles for r in reaction1.reactants}
+    def test_all_routes_have_inchikeys(self, routes):
+        """Verify all target molecules have InChIKeys."""
+        for route in routes:
+            assert route.target.inchikey is not None
+            assert len(route.target.inchikey) > 0
+
+    def test_all_non_leaf_molecules_have_synthesis_steps(self, routes):
+        """Verify all non-leaf molecules have synthesis steps."""
+
+        def check_molecule(mol):
+            if not mol.is_leaf:
+                assert mol.synthesis_step is not None
+                for reactant in mol.synthesis_step.reactants:
+                    check_molecule(reactant)
+
+        for route in routes:
+            check_molecule(route.target)
+
+    def test_all_reaction_steps_have_mapped_smiles(self, routes):
+        """Verify all reaction steps have mapped SMILES populated."""
+
+        def check_molecule(mol):
+            if mol.synthesis_step is not None:
+                assert mol.synthesis_step.mapped_smiles is not None
+                for reactant in mol.synthesis_step.reactants:
+                    check_molecule(reactant)
+
+        for route in routes:
+            check_molecule(route.target)
+
+    def test_all_reaction_steps_have_templates(self, routes):
+        """Verify all reaction steps have templates populated."""
+
+        def check_molecule(mol):
+            if mol.synthesis_step is not None:
+                assert mol.synthesis_step.template is not None
+                assert len(mol.synthesis_step.template) > 0
+                for reactant in mol.synthesis_step.reactants:
+                    check_molecule(reactant)
+
+        for route in routes:
+            check_molecule(route.target)
+
+
+@pytest.mark.integration
+class TestAskcosAdapterRegression:
+    """Regression tests: verify specific routes match expected structures and values."""
+
+    @pytest.fixture(scope="class")
+    def adapter(self) -> AskcosAdapter:
+        return AskcosAdapter()
+
+    @pytest.fixture(scope="class")
+    def routes(self, adapter: AskcosAdapter, raw_askcos_data: dict[str, Any], methylacetate_target_input: TargetInput):
+        """Shared fixture to avoid re-running adaptation for every test."""
+        raw_target_data = raw_askcos_data["methylacetate"]
+        return list(adapter.adapt(raw_target_data, methylacetate_target_input))
+
+    def test_first_route_is_simple_one_step(self, routes):
+        """Verify the first route is a simple one-step synthesis."""
+        route1 = routes[0]
+        assert route1.rank == 1
+
+        target = route1.target
+        assert target.smiles == "COC(C)=O"
+        assert not target.is_leaf
+        assert target.synthesis_step is not None
+
+        reaction = target.synthesis_step
+        assert len(reaction.reactants) == 2
+
+        reactant_smiles = {r.smiles for r in reaction.reactants}
         assert reactant_smiles == {"CC(=O)Cl", "CO"}
-        assert all(r.is_starting_material for r in reaction1.reactants)
+        assert all(r.is_leaf for r in reaction.reactants)
 
-        # --- check 2: a more complex, two-step route ---
-        # this corresponds to the second pathway in the raw data
-        tree2 = trees[1].retrosynthetic_tree
-        assert tree2.smiles == "COC(C)=O"
-        assert not tree2.is_starting_material
-        assert len(tree2.reactions) == 1
+    def test_first_route_mapped_smiles(self, routes):
+        """Verify the mapped SMILES for the first route matches expected value."""
+        route1 = routes[0]
+        reaction = route1.target.synthesis_step
+        assert reaction.mapped_smiles == "Cl[C:3]([CH3:4])=[O:5].[CH3:1][OH:2]>>[CH3:1][O:2][C:3]([CH3:4])=[O:5]"
 
-        # first retrosynthetic step
-        reaction_step1 = tree2.reactions[0]
-        assert reaction_step1.reaction_smiles == "C=[N+]=[N-].CC(=O)O>>COC(C)=O"
-        assert len(reaction_step1.reactants) == 2
-        reactant_smiles_step1 = {r.smiles for r in reaction_step1.reactants}
+    def test_first_route_template(self, routes):
+        """Verify the template for the first route contains expected pattern."""
+        route1 = routes[0]
+        reaction = route1.target.synthesis_step
+        assert reaction.template is not None
+        # Template should be a SMARTS pattern with reaction arrow
+        assert ">>" in reaction.template
+
+    def test_second_route_is_two_step(self, routes):
+        """Verify the second route is a two-step synthesis."""
+        route2 = routes[1]
+        assert route2.rank == 2
+
+        target = route2.target
+        assert target.smiles == "COC(C)=O"
+        assert not target.is_leaf
+
+        # First step reactants
+        step1 = target.synthesis_step
+        assert len(step1.reactants) == 2
+        reactant_smiles_step1 = {r.smiles for r in step1.reactants}
         assert reactant_smiles_step1 == {"C=[N+]=[N-]", "CC(=O)O"}
 
-        # find the intermediate and the starting material from step 1
-        diazomethane_node = next(r for r in reaction_step1.reactants if r.smiles == "C=[N+]=[N-]")
-        acetic_acid_node = next(r for r in reaction_step1.reactants if r.smiles == "CC(=O)O")
-        assert not diazomethane_node.is_starting_material
-        assert acetic_acid_node.is_starting_material
+        # Find intermediate and starting material
+        diazomethane = next(r for r in step1.reactants if r.smiles == "C=[N+]=[N-]")
+        acetic_acid = next(r for r in step1.reactants if r.smiles == "CC(=O)O")
 
-        # second retrosynthetic step (from diazomethane)
-        assert len(diazomethane_node.reactions) == 1
-        reaction_step2 = diazomethane_node.reactions[0]
-        assert reaction_step2.reaction_smiles == "CN(N=O)C(N)=O>>C=[N+]=[N-]"
-        assert len(reaction_step2.reactants) == 1
-        final_reactant = reaction_step2.reactants[0]
-        assert final_reactant.smiles == "CN(N=O)C(N)=O"
-        assert final_reactant.is_starting_material
+        assert not diazomethane.is_leaf
+        assert acetic_acid.is_leaf
+
+        # Second step
+        step2 = diazomethane.synthesis_step
+        assert step2 is not None
+        assert len(step2.reactants) == 1
+        assert step2.reactants[0].smiles == "CN(N=O)C(N)=O"
+        assert step2.reactants[0].is_leaf
+
+
+@pytest.mark.integration
+class TestAskcosAdapterErrorHandling:
+    """Tests for error handling and edge cases."""
 
     @pytest.mark.parametrize(
         "key_to_remove, error_match",
@@ -138,7 +235,7 @@ class TestAskcosAdapterIntegration:
         ],
     )
     def test_logs_warning_on_inconsistent_nodedict(
-        self, raw_askcos_data, methylacetate_target_info, key_to_remove, error_match, caplog
+        self, raw_askcos_data, methylacetate_target_input, key_to_remove, error_match, caplog
     ):
         """Tests resilience to inconsistencies in the node_dict mapping."""
         adapter = AskcosAdapter()
@@ -147,9 +244,9 @@ class TestAskcosAdapterIntegration:
         corrupted_data["results"]["uds"]["node_dict"].pop(key_to_remove, None)
 
         # The adapter should still run and produce routes for the non-corrupted pathways
-        trees = list(adapter.adapt(corrupted_data, methylacetate_target_info))
+        routes = list(adapter.adapt(corrupted_data, methylacetate_target_input))
 
-        # The key assertion: we produced FEWER trees than total pathways.
+        # The key assertion: we produced FEWER routes than total pathways.
         total_pathways = len(raw_target_data["results"]["uds"]["pathways"])
-        assert len(trees) < total_pathways
+        assert len(routes) < total_pathways
         assert error_match in caplog.text

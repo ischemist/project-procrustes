@@ -8,8 +8,8 @@ from pydantic import BaseModel
 from tqdm import tqdm
 
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.schemas import TargetInfo
 from retrocast.exceptions import RetroCastException, RetroCastIOError, RetroCastSerializationError
+from retrocast.schemas import TargetInput
 from retrocast.utils.logging import logger
 
 # This allows us to return the same type that was passed in.
@@ -230,7 +230,7 @@ def combine_evaluation_results(targets_csv: str, eval_dir: str, output_path: str
         logger.warning(f"Missing files for {len(missing_files)} targets: {missing_files}")
 
 
-def load_and_prepare_targets(file_path: Path) -> dict[str, TargetInfo]:
+def load_and_prepare_targets(file_path: Path) -> dict[str, TargetInput]:
     """
     Loads a file containing target IDs and SMILES, canonicalizes the SMILES,
     and prepares a dictionary of TargetInfo objects.
@@ -248,15 +248,14 @@ def load_and_prepare_targets(file_path: Path) -> dict[str, TargetInfo]:
         # Let IO exceptions propagate with their specific type.
         raise
 
-    prepared_targets: dict[str, TargetInfo] = {}
+    prepared_targets: dict[str, TargetInput] = {}
     for target_id, raw_smiles in targets_raw.items():
         try:
             canon_smiles = canonicalize_smiles(raw_smiles)
-            prepared_targets[target_id] = TargetInfo(id=target_id, smiles=canon_smiles)
+            prepared_targets[target_id] = TargetInput(id=target_id, smiles=canon_smiles)
         except RetroCastException as e:
             msg = f"Invalid SMILES for target '{target_id}': {raw_smiles}. Cannot proceed."
             logger.error(msg)
-            # **THE FIX IS HERE**: Raise a new exception with the better message.
             raise RetroCastException(msg) from e
 
     logger.info(f"Successfully prepared {len(prepared_targets)} targets.")

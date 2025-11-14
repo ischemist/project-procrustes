@@ -6,9 +6,10 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.common import build_tree_from_bipartite_node
-from retrocast.domain.schemas import BenchmarkTree, TargetInfo
+from retrocast.adapters.common import build_molecule_from_bipartite_node
+from retrocast.domain.DEPRECATE_schemas import TargetInfo
 from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.schemas import Route
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -49,9 +50,9 @@ class AizynthRouteList(RootModel[list[AizynthMoleculeInput]]):
 class AizynthAdapter(BaseAdapter):
     """adapter for converting aizynthfinder-style outputs to the benchmarktree schema."""
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[BenchmarkTree, None, None]:
+    def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[Route, None, None]:
         """
-        validates raw aizynthfinder data, transforms it, and yields benchmarktree objects.
+        validates raw aizynthfinder data, transforms it, and yields route objects.
         """
         try:
             validated_routes = AizynthRouteList.model_validate(raw_target_data)
@@ -59,30 +60,28 @@ class AizynthAdapter(BaseAdapter):
             logger.warning(f"  - raw data for target '{target_info.id}' failed aizynth schema validation. error: {e}")
             return
 
-        for aizynth_tree_root in validated_routes.root:
+        for rank, aizynth_tree_root in enumerate(validated_routes.root, start=1):
             try:
-                tree = self._transform(aizynth_tree_root, target_info)
-                yield tree
+                route = self._transform(aizynth_tree_root, target_info, rank)
+                yield route
             except RetroCastException as e:
                 logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, aizynth_root: AizynthMoleculeInput, target_info: TargetInfo) -> BenchmarkTree:
+    def _transform(self, aizynth_root: AizynthMoleculeInput, target_info: TargetInfo, rank: int) -> Route:
         """
         orchestrates the transformation of a single aizynthfinder output tree.
         raises RetroCastException on failure.
         """
-        # refactor: use the common recursive builder.
-        retrosynthetic_tree = build_tree_from_bipartite_node(
-            raw_mol_node=aizynth_root, path_prefix="retrocast-mol-root"
-        )
+        # use the common recursive builder with new schema
+        target_molecule = build_molecule_from_bipartite_node(raw_mol_node=aizynth_root)
 
-        if retrosynthetic_tree.smiles != target_info.smiles:
+        if target_molecule.smiles != target_info.smiles:
             msg = (
                 f"mismatched smiles for target {target_info.id}. "
-                f"expected canonical: {target_info.smiles}, but adapter produced: {retrosynthetic_tree.smiles}"
+                f"expected canonical: {target_info.smiles}, but adapter produced: {target_molecule.smiles}"
             )
             logger.error(msg)
             raise AdapterLogicError(msg)
 
-        return BenchmarkTree(target=target_info, retrosynthetic_tree=retrosynthetic_tree)
+        return Route(target=target_molecule, rank=rank, metadata={})

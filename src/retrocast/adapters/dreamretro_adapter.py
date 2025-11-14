@@ -4,43 +4,43 @@ from collections.abc import Generator
 from typing import Any
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.common import PrecursorMap, build_tree_from_precursor_map
+from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.schemas import BenchmarkTree, TargetInfo
 from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.schemas import Route, TargetInput
 from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
 
 class DreamRetroAdapter(BaseAdapter):
-    """adapter for converting dreamretro-style outputs to the benchmarktree schema."""
+    """adapter for converting dreamretro-style outputs to the route schema."""
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[BenchmarkTree, None, None]:
+    def adapt(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         """
-        validates raw dreamretro data, transforms its single route string, and yields a benchmarktree.
+        validates raw dreamretro data, transforms its single route string, and yields a route.
         """
         if not isinstance(raw_target_data, dict):
             logger.warning(
-                f"  - raw data for target '{target_info.id}' failed validation: expected a dict, got {type(raw_target_data).__name__}."
+                f"  - raw data for target '{target_input.id}' failed validation: expected a dict, got {type(raw_target_data).__name__}."
             )
             return
 
         if not raw_target_data.get("succ"):
-            logger.debug(f"skipping raw data for '{target_info.id}': 'succ' is not true.")
+            logger.debug(f"skipping raw data for '{target_input.id}': 'succ' is not true.")
             return
 
         route_str = raw_target_data.get("routes")
         if not isinstance(route_str, str) or not route_str:
             logger.warning(
-                f"  - raw data for target '{target_info.id}' failed validation: no valid 'routes' string found."
+                f"  - raw data for target '{target_input.id}' failed validation: no valid 'routes' string found."
             )
             return
 
         try:
-            tree = self._transform(route_str, target_info)
-            yield tree
+            route = self._transform(route_str, target_input, raw_target_data)
+            yield route
         except RetroCastException as e:
-            logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
+            logger.warning(f"  - route for '{target_input.id}' failed transformation: {e}")
             return
 
     def _parse_route_string(self, route_str: str) -> tuple[SmilesStr, PrecursorMap]:
@@ -84,20 +84,27 @@ class DreamRetroAdapter(BaseAdapter):
                 f"failed to parse route string step. invalid format near '{current_step_for_error_reporting[:70]}...'."
             ) from e
 
-    def _transform(self, route_str: str, target_info: TargetInfo) -> BenchmarkTree:
+    def _transform(self, route_str: str, target_input: TargetInput, raw_data: dict[str, Any]) -> Route:
         """
         orchestrates the transformation of a single dreamretro route string.
         """
         parsed_target_smiles, precursor_map = self._parse_route_string(route_str)
 
-        if parsed_target_smiles != target_info.smiles:
+        if parsed_target_smiles != target_input.smiles:
             msg = (
-                f"mismatched smiles for target {target_info.id}. "
-                f"expected canonical: {target_info.smiles}, but adapter produced: {parsed_target_smiles}"
+                f"mismatched smiles for target {target_input.id}. "
+                f"expected canonical: {target_input.smiles}, but adapter produced: {parsed_target_smiles}"
             )
             raise AdapterLogicError(msg)
 
-        # refactor: use the common recursive builder.
-        retrosynthetic_tree = build_tree_from_precursor_map(smiles=target_info.smiles, precursor_map=precursor_map)
+        # build molecule tree from precursor map
+        molecule = build_molecule_from_precursor_map(smiles=target_input.smiles, precursor_map=precursor_map)
 
-        return BenchmarkTree(target=target_info, retrosynthetic_tree=retrosynthetic_tree)
+        # extract metadata
+        metadata = {
+            key: raw_data[key]
+            for key in ["expand_model_call", "value_model_call", "reaction_nodes_lens", "mol_nodes_lens"]
+            if key in raw_data
+        }
+
+        return Route(target=molecule, rank=1, metadata=metadata)

@@ -5,7 +5,7 @@ from typing import Any
 from tqdm import tqdm
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.domain.schemas import RunStatistics, TargetInfo
+from retrocast.domain.DEPRECATE_schemas import RunStatistics
 from retrocast.domain.tree import (
     deduplicate_routes,
     sample_k_by_length,
@@ -14,6 +14,7 @@ from retrocast.domain.tree import (
 )
 from retrocast.exceptions import RetroCastIOError
 from retrocast.io import load_json_gz, save_json, save_json_gz
+from retrocast.schemas import TargetInput
 from retrocast.utils.hashing import generate_file_hash, generate_model_hash, generate_source_hash
 from retrocast.utils.logging import logger
 
@@ -30,7 +31,7 @@ def process_model_run(
     adapter: BaseAdapter,
     raw_results_file: Path,
     processed_dir: Path,
-    targets_map: dict[str, TargetInfo],
+    targets_map: dict[str, TargetInput],
     sampling_strategy: str | None = None,
     sample_k: int | None = None,
 ) -> None:

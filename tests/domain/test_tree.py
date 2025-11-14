@@ -2,7 +2,7 @@
 
 import random
 
-from retrocast.domain.schemas import BenchmarkTree, MoleculeNode, ReactionNode, TargetInfo
+from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, MoleculeNode, ReactionNode, TargetInfo
 from retrocast.domain.tree import (
     calculate_route_length,
     deduplicate_routes,

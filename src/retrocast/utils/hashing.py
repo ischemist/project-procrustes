@@ -1,9 +1,27 @@
+import gzip
 import hashlib
 from pathlib import Path
 
 from retrocast.exceptions import RetroCastException
 from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
+
+
+def get_content_hash(path: Path, block_size: int = 65536) -> str:
+    """
+    Computes the SHA256 hash of a file's uncompressed content,
+    supporting both plain and gzipped files.
+    """
+    hasher = hashlib.sha256()
+
+    open_func = gzip.open if path.suffix == ".gz" else open
+    mode = "rb"
+
+    with open_func(path, mode) as f:
+        while block := f.read(block_size):
+            hasher.update(block)
+
+    return hasher.hexdigest()
 
 
 def generate_file_hash(path: Path) -> str:
@@ -46,7 +64,7 @@ def generate_model_hash(model_name: str) -> str:
     """
     name_bytes = model_name.encode("utf-8")
     full_hash = hashlib.sha256(name_bytes).hexdigest()
-    return f"retrocast-model-{full_hash[:8]}"
+    return f"retrocasted-model-{full_hash[:8]}"
 
 
 def generate_source_hash(model_name: str, file_hashes: list[str]) -> str:
@@ -68,4 +86,4 @@ def generate_source_hash(model_name: str, file_hashes: list[str]) -> str:
     run_signature = model_name + "".join(sorted_hashes)
     run_bytes = run_signature.encode("utf-8")
     hasher = hashlib.sha256(run_bytes)
-    return f"retrocast-source-{hasher.hexdigest()}"
+    return f"retrocasted-source-{hasher.hexdigest()}"

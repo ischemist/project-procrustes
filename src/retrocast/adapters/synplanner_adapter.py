@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_tree_from_bipartite_node
-from retrocast.domain.schemas import BenchmarkTree, TargetInfo
+from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, TargetInfo
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.utils.logging import logger
 

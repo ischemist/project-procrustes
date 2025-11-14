@@ -8,7 +8,7 @@ from pydantic import BaseModel, RootModel, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_tree_from_precursor_map
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.schemas import BenchmarkTree, MoleculeNode, TargetInfo
+from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, MoleculeNode, TargetInfo
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.utils.hashing import generate_molecule_hash
 from retrocast.utils.logging import logger
