@@ -113,6 +113,14 @@ def raw_paroutes_data() -> dict[str, Any]:
 
 
 @pytest.fixture(scope="session")
+def pharma_routes_data() -> dict[str, Any]:
+    """loads the pharma routes data from the test file for contract/regression tests."""
+    path = Path(TEST_DATA_DIR / "pharma_routes.json.gz")
+    with gzip.open(path, "rt", encoding="utf-8") as f:
+        return json.load(f)
+
+
+@pytest.fixture(scope="session")
 def methylacetate_target_input() -> TargetInput:
     """provides the target input object for methyl acetate."""
     return TargetInput(id="methylacetate", smiles=canonicalize_smiles("COC(C)=O"))
