@@ -82,7 +82,7 @@ if the hashes match, the process was successful and deterministic.
 
 the main `retrocast.core.process_model_run` function orchestrates the workflow:
 
-`load raw data` -> `invoke adapter` -> `transform to BenchmarkTree` -> `deduplicate routes` -> `serialize results & manifest`
+`load raw data` -> `invoke adapter` -> `transform to Route` -> `deduplicate routes` -> `serialize results & manifest`
 
 ## adding a new model adapter
 
@@ -95,14 +95,15 @@ most model outputs fall into one of a few common patterns. identify the pattern,
 if the raw output is a json tree where molecule nodes point to reaction nodes and vice-versa, your job is easy.
 
 1.  **define input schemas**: create pydantic models to validate the raw json.
-2.  **call the common builder**: use `build_tree_from_bipartite_node`.
+2.  **implement a recursive builder**: create a `_build_molecule_from_bipartite_node` method that converts the bipartite structure into the `Route` schema.
 
 ```python
 # in retrocast/adapters/bipartite_model_adapter.py
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Generator
 from pydantic import BaseModel, Field, RootModel, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.common import build_tree_from_bipartite_node
+from retrocast.schemas import Route, Molecule, ReactionStep
+from retrocast.domain.chem import get_inchi_key, canonicalize_smiles
 # ... other imports
 
 # --- pydantic schemas for raw input validation ---
@@ -122,13 +123,55 @@ class BipartiteRouteList(RootModel[list[BipartiteMoleculeInput]]):
     pass
 
 class BipartiteModelAdapter(BaseAdapter):
-    def adapt(self, raw_data: Any, target_info: TargetInput) -> Generator[BenchmarkTree, None, None]:
+    def _build_molecule_from_bipartite_node(self, raw_mol_node: BipartiteMoleculeInput) -> Molecule:
+        """Recursively build a Molecule tree from a bipartite graph node."""
+        canon_smiles = canonicalize_smiles(raw_mol_node.smiles)
+        
+        # Check if this is a leaf
+        is_leaf = raw_mol_node.in_stock or not bool(raw_mol_node.children)
+        
+        if is_leaf:
+            return Molecule(
+                smiles=canon_smiles,
+                inchikey=get_inchi_key(canon_smiles),
+                synthesis_step=None,
+                metadata={}
+            )
+        
+        # In a tree, molecule has at most one reaction
+        if len(raw_mol_node.children) > 1:
+            logger.warning(f"Molecule {canon_smiles} has multiple reactions, using first only")
+        
+        raw_reaction_node = raw_mol_node.children[0]
+        
+        # Build reactants recursively
+        reactant_molecules = []
+        for reactant_raw in raw_reaction_node.children:
+            reactant_mol = self._build_molecule_from_bipartite_node(reactant_raw)
+            reactant_molecules.append(reactant_mol)
+        
+        # Create the reaction step
+        synthesis_step = ReactionStep(
+            reactants=reactant_molecules,
+            metadata={}
+        )
+        
+        return Molecule(
+            smiles=canon_smiles,
+            inchikey=get_inchi_key(canon_smiles),
+            synthesis_step=synthesis_step,
+            metadata={}
+        )
+
+    def adapt(self, raw_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
         validated_routes = BipartiteRouteList.model_validate(raw_data)
-        for root_node in validated_routes.root:
+        for rank, root_node in enumerate(validated_routes.root, start=1):
             try:
-                tree = build_tree_from_bipartite_node(root_node, "retrocast-mol-root")
-                yield BenchmarkTree(target=target_info, retrosynthetic_tree=tree)
-            except retrocastException as e:
+                target_molecule = self._build_molecule_from_bipartite_node(root_node)
+                if target_molecule.smiles != target_info.smiles:
+                    raise AdapterLogicError(f"Mismatched SMILES for target {target_info.id}")
+                yield Route(target=target_molecule, rank=rank)
+            except RetroCastException as e:
                 logger.warning(f"route for '{target_info.id}' failed: {e}")
 ```
 
@@ -136,28 +179,85 @@ class BipartiteModelAdapter(BaseAdapter):
 
 if the raw output is a string or list of reactions that can be parsed into a `dict[product_smiles, list[reactant_smiles]]`, use this pattern.
 
-1.  **parse raw data**: write a model-specific parser that converts the raw format into a `PrecursorMap`.
-2.  **call the common builder**: use `build_tree_from_precursor_map`.
+1.  **parse raw data**: write a model-specific parser that converts the raw format into a precursor map.
+2.  **implement a recursive builder**: create a `_build_molecule_from_precursor_map` method that converts the map into a `Route` schema.
 
 ```python
 # in retrocast/adapters/precursor_model_adapter.py
+from typing import Any, Generator
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.common import PrecursorMap, build_tree_from_precursor_map
+from retrocast.schemas import Route, Molecule, ReactionStep
+from retrocast.domain.chem import get_inchi_key
+from retrocast.typing import SmilesStr
 # ... other imports ...
 
 class PrecursorModelAdapter(BaseAdapter):
-    def _parse_route_string(self, route_str: str) -> PrecursorMap:
+    def _parse_route_string(self, route_str: str) -> dict[SmilesStr, list[SmilesStr]]:
         # model-specific logic to parse the string "p1>>r1.r2|p2>>r3..."
-        precursor_map: PrecursorMap = {}
+        precursor_map: dict[SmilesStr, list[SmilesStr]] = {}
         # ... your parsing logic here ...
         return precursor_map
 
-    def adapt(self, raw_data: Any, target_info: TargetInput) -> Generator[BenchmarkTree, None, None]:
+    def _build_molecule_from_precursor_map(
+        self,
+        smiles: SmilesStr,
+        precursor_map: dict[SmilesStr, list[SmilesStr]],
+        visited: set[SmilesStr] | None = None,
+    ) -> Molecule:
+        """Recursively build a Molecule tree from a precursor map."""
+        if visited is None:
+            visited = set()
+        
+        # Cycle detection
+        if smiles in visited:
+            logger.warning(f"Cycle detected for {smiles}, treating as leaf")
+            return Molecule(
+                smiles=smiles,
+                inchikey=get_inchi_key(smiles),
+                synthesis_step=None,
+                metadata={}
+            )
+        
+        new_visited = visited | {smiles}
+        
+        # Check if this is a leaf (not in precursor map)
+        if smiles not in precursor_map:
+            return Molecule(
+                smiles=smiles,
+                inchikey=get_inchi_key(smiles),
+                synthesis_step=None,
+                metadata={}
+            )
+        
+        # Build reactants recursively
+        reactant_molecules = []
+        for reactant_smiles in precursor_map[smiles]:
+            reactant_mol = self._build_molecule_from_precursor_map(
+                smiles=reactant_smiles,
+                precursor_map=precursor_map,
+                visited=new_visited
+            )
+            reactant_molecules.append(reactant_mol)
+        
+        # Create the reaction step
+        synthesis_step = ReactionStep(
+            reactants=reactant_molecules,
+            metadata={}
+        )
+        
+        return Molecule(
+            smiles=smiles,
+            inchikey=get_inchi_key(smiles),
+            synthesis_step=synthesis_step,
+            metadata={}
+        )
+
+    def adapt(self, raw_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
         try:
             precursor_map = self._parse_route_string(raw_data["routes"])
-            tree = build_tree_from_precursor_map(target_info.smiles, precursor_map)
-            yield BenchmarkTree(target=target_info, retrosynthetic_tree=tree)
-        except retrocastException as e:
+            target_molecule = self._build_molecule_from_precursor_map(target_info.smiles, precursor_map)
+            yield Route(target=target_molecule, rank=1)
+        except RetroCastException as e:
             logger.warning(f"route for '{target_info.id}' failed: {e}")
 ```
 
@@ -166,38 +266,59 @@ class PrecursorModelAdapter(BaseAdapter):
 if the raw output is already a recursive tree but with a different schema, you'll need a custom recursive builder.
 
 1.  **define input schemas**: create pydantic models for the raw tree structure.
-2.  **write a recursive builder**: create a private `_build_molecule_node` method that traverses the raw tree and constructs the canonical `MoleculeNode` tree.
+2.  **write a recursive builder**: create a private `_build_molecule` method that traverses the raw tree and constructs the canonical `Molecule` tree.
 
 ```python
 # in retrocast/adapters/custom_model_adapter.py
+from typing import Any, Generator
 from pydantic import BaseModel, RootModel
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.domain.DEPRECATE_schemas import MoleculeNode, ReactionNode
+from retrocast.schemas import Route, Molecule, ReactionStep
+from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
 # ... other imports
 
 # --- pydantic schemas for raw input validation ---
 class CustomTree(BaseModel):
     smiles: str
-    children: list["CustomTree"]
+    children: list["CustomTree"] = Field(default_factory=list)
 
 class CustomRouteList(RootModel[list[CustomTree]]):
     pass
 
 class CustomModelAdapter(BaseAdapter):
-    def _build_molecule_node(self, custom_node: CustomTree, ...) -> MoleculeNode:
-        # logic to convert one custom node to one retrocast node
+    def _build_molecule(self, custom_node: CustomTree) -> Molecule:
+        """Recursively convert a custom tree node to a retrocast Molecule."""
         canon_smiles = canonicalize_smiles(custom_node.smiles)
-        reactions = []
-        if custom_node.children:
-            reactants = [self._build_molecule_node(child) for child in custom_node.children] # recursive call
-            reactions.append(ReactionNode(...))
-        return MoleculeNode(smiles=canon_smiles, reactions=reactions, ...)
+        
+        if not custom_node.children:
+            # Leaf node
+            return Molecule(
+                smiles=canon_smiles,
+                inchikey=get_inchi_key(canon_smiles),
+                synthesis_step=None,
+                metadata={}
+            )
+        
+        # Build reactants recursively
+        reactants = [self._build_molecule(child) for child in custom_node.children]
+        
+        synthesis_step = ReactionStep(
+            reactants=reactants,
+            metadata={}
+        )
+        
+        return Molecule(
+            smiles=canon_smiles,
+            inchikey=get_inchi_key(canon_smiles),
+            synthesis_step=synthesis_step,
+            metadata={}
+        )
 
-    def adapt(self, raw_data: Any, target_info: TargetInput) -> Generator[BenchmarkTree, None, None]:
+    def adapt(self, raw_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
         validated_routes = CustomRouteList.model_validate(raw_data)
-        for root_node in validated_routes.root:
-            tree = self._build_molecule_node(root_node)
-            yield BenchmarkTree(target=target_info, retrosynthetic_tree=tree)
+        for rank, root_node in enumerate(validated_routes.root, start=1):
+            target_molecule = self._build_molecule(root_node)
+            yield Route(target=target_molecule, rank=rank)
 ```
 
 
@@ -205,14 +326,17 @@ class CustomModelAdapter(BaseAdapter):
 
 once your adapter class is implemented:
 
-1.  **write tests**: create `tests/adapters/test_new_adapter.py`, inherit from `BaseAdapterTest`, and provide the required fixtures. this test harness provides a standard suite of tests for free.
+1.  **write tests**: create `tests/adapters/test_new_adapter.py` with unit and integration tests. organize tests into three classes:
+    - `Test{Adapter}Unit`: inherits from `BaseAdapterTest`, provides standard unit tests
+    - `Test{Adapter}Contract`: integration tests verifying valid `Route` objects with required fields
+    - `Test{Adapter}Regression`: integration tests verifying specific route structures and values
 
     ```python
     # in tests/adapters/test_new_adapter.py
     import pytest
     from tests.adapters.test_base_adapter import BaseAdapterTest
     from retrocast.adapters.new_model_adapter import NewModelAdapter
-    from retrocast.domain.DEPRECATE_schemas import TargetInput
+    from retrocast.schemas import TargetInput
 
     class TestNewModelAdapterUnit(BaseAdapterTest):
         @pytest.fixture
@@ -231,10 +355,47 @@ once your adapter class is implemented:
         def raw_invalid_schema_data(self) -> Any: ...
 
         @pytest.fixture
-        def target_info(self) -> TargetInput: ...
+        def target_input(self) -> TargetInput: ...
 
         @pytest.fixture
-        def mismatched_target_info(self) -> TargetInput: ...
+        def mismatched_target_input(self) -> TargetInput: ...
+    
+    @pytest.mark.integration
+    class TestNewModelAdapterContract:
+        """Contract tests: verify all routes have required fields populated."""
+        
+        @pytest.fixture(scope="class")
+        def adapter(self) -> NewModelAdapter:
+            return NewModelAdapter()
+        
+        @pytest.fixture(scope="class")
+        def routes(self, adapter, raw_data, target_input):
+            return list(adapter.adapt(raw_data, target_input))
+        
+        def test_all_routes_have_ranks(self, routes):
+            ranks = [route.rank for route in routes]
+            assert ranks == list(range(1, len(routes) + 1))
+        
+        def test_all_routes_have_inchikeys(self, routes):
+            for route in routes:
+                assert route.target.inchikey is not None
+    
+    @pytest.mark.integration
+    class TestNewModelAdapterRegression:
+        """Regression tests: verify specific route structures match expectations."""
+        
+        @pytest.fixture(scope="class")
+        def adapter(self) -> NewModelAdapter:
+            return NewModelAdapter()
+        
+        @pytest.fixture(scope="class")
+        def routes(self, adapter, raw_data, target_input):
+            return list(adapter.adapt(raw_data, target_input))
+        
+        def test_first_route_structure(self, routes):
+            route = routes[0]
+            assert route.rank == 1
+            # Add specific assertions about route structure
     ```
 
 2.  **register adapter**: add your new adapter to the map in `retrocast/adapters/factory.py`.

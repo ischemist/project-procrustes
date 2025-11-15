@@ -19,13 +19,13 @@ import json
 import random
 from pathlib import Path
 
-from retrocast.domain.DEPRECATE_schemas import TargetInput
 from tqdm import tqdm
 
 from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.exceptions import RetroCastException
 from retrocast.io import save_json_gz
+from retrocast.schemas import TargetInput
 from retrocast.utils.logging import logger
 
 # --- configuration ---
