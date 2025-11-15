@@ -182,9 +182,8 @@ class TestNewModelAdapterUnit(BaseAdapterTest):
         ...
 
     @pytest.fixture
-    def target_info(self) -> TargetInput:
+    def target_input(self) -> TargetInput:
         # return target info matching your valid route
-        ...
 
     @pytest.fixture
     def mismatched_target_info(self) -> TargetInput:
