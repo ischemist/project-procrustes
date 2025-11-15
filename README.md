@@ -89,7 +89,7 @@ This will:
 
 ### Use as a Python Library
 
-You can also use RetroCast programmatically to adapt individual routes:
+You can also use RetroCast programmatically to adapt individual routes from any supported model:
 
 ```python
 from retrocast import adapt_single_route, TargetInput
@@ -106,7 +106,8 @@ raw_route = {
     ]
 }
 
-# Adapt to unified format
+# Adapt to unified format - works with both route-centric (DMS, AiZynth)
+# and target-centric (RetroChimera, ASKCOS) adapter formats
 route = adapt_single_route(raw_route, target, adapter_name="dms")
 
 if route:

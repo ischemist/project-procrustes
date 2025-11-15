@@ -5,6 +5,7 @@ Tests for the public API convenience functions for single route adaptation.
 import pytest
 
 from retrocast import ADAPTER_MAP, adapt_routes, adapt_single_route, get_adapter
+from retrocast.domain.tree import deduplicate_routes, sample_top_k
 from retrocast.exceptions import RetroCastException
 from retrocast.schemas import Route, TargetInput
 
@@ -99,6 +100,92 @@ class TestAdaptSingleRoute:
 
         # Should return None because of mismatch
         assert route is None
+
+    def test_adapt_single_route_target_centric_retrochimera(self):
+        """Test adapting target-centric data (RetroChimera format)."""
+        # Use canonical SMILES for Ebastine
+        target_smiles = "CC(C)(C)c1ccc(C(=O)CCCN2CCC(OC(c3ccccc3)c3ccccc3)CC2)cc1"
+        target = TargetInput(id="Ebastine", smiles=target_smiles)
+
+        # RetroChimera format: target-centric dict with nested routes
+        retrochimera_data = {
+            "smiles": target_smiles,
+            "result": {
+                "request": {"inputs": [target_smiles]},
+                "outputs": [
+                    {
+                        "routes": [
+                            {
+                                "reactions": [
+                                    {
+                                        "reactants": ["BrC(c1ccccc1)c1ccccc1", "CC(C)(C)c1ccc(C(=O)CCCN2CCC(O)CC2)cc1"],
+                                        "product": target_smiles,
+                                        "probability": 0.684,
+                                        "metadata": {},
+                                    }
+                                ],
+                                "num_steps": 1,
+                                "step_probability_min": 0.684,
+                                "step_probability_product": 0.684,
+                            }
+                        ],
+                        "num_routes": 1,
+                    }
+                ],
+                "time_taken_s": 10.0,
+            },
+        }
+
+        # Should handle target-centric format correctly
+        route = adapt_single_route(retrochimera_data, target, "retrochimera")
+
+        assert route is not None
+        assert isinstance(route, Route)
+        assert route.target.smiles == target_smiles
+        assert route.depth == 1
+        assert len(route.leaves) == 2  # Two reactants
+
+    def test_adapt_single_route_target_centric_askcos(self):
+        """Test adapting target-centric data (ASKCOS format)."""
+        target_smiles = "CCO"
+        target = TargetInput(id="ethanol", smiles=target_smiles)
+
+        # ASKCOS format: target-centric dict with node graph and pathways
+        # Note: ASKCOS uses a special root UUID "00000000-0000-0000-0000-000000000000"
+        askcos_data = {
+            "results": {
+                "uds": {
+                    "node_dict": {
+                        "CCO": {"id": "chem0", "type": "chemical", "smiles": target_smiles, "terminal": False},
+                        "C": {"id": "chem1", "type": "chemical", "smiles": "C", "terminal": True},
+                        "CO": {"id": "chem2", "type": "chemical", "smiles": "CO", "terminal": True},
+                        "C.CO>>CCO": {"id": "rxn1", "type": "reaction", "smiles": "C.CO>>CCO"},
+                    },
+                    "uuid2smiles": {
+                        "00000000-0000-0000-0000-000000000000": target_smiles,  # Root UUID
+                        "uuid-rxn": "C.CO>>CCO",
+                        "uuid-chem1": "C",
+                        "uuid-chem2": "CO",
+                    },
+                    "pathways": [
+                        [
+                            {"source": "00000000-0000-0000-0000-000000000000", "target": "uuid-rxn"},
+                            {"source": "uuid-rxn", "target": "uuid-chem1"},
+                            {"source": "uuid-rxn", "target": "uuid-chem2"},
+                        ]
+                    ],
+                }
+            }
+        }
+
+        # Should handle target-centric format correctly
+        route = adapt_single_route(askcos_data, target, "askcos")
+
+        assert route is not None
+        assert isinstance(route, Route)
+        assert route.target.smiles == target_smiles
+        assert route.depth == 1
+        assert len(route.leaves) == 2
 
 
 class TestAdaptRoutes:
@@ -223,11 +310,19 @@ class TestIntegrationWithDomainTree:
         # Adapt all routes
         routes = adapt_routes(raw_routes, target, "dms")
         assert len(routes) == 3
-
-        # Deduplicate (NOTE: This uses the old schema, but we can test the concept)
-        # For now, just verify we can import and the routes are adapted correctly
         assert all(isinstance(r, Route) for r in routes)
 
+        # Deduplicate - should remove the duplicate route
+        unique_routes = deduplicate_routes(routes)
+        assert len(unique_routes) == 2
+        assert all(isinstance(r, Route) for r in unique_routes)
+
+        # Verify the signatures are unique
+        signatures = [r.get_signature() for r in unique_routes]
+        assert len(set(signatures)) == 2
+
         # Sample top-k
-        # top_routes = sample_top_k(routes, k=2)
-        # assert len(top_routes) == 2
+        top_routes = sample_top_k(unique_routes, k=1)
+        assert len(top_routes) == 1
+        assert isinstance(top_routes[0], Route)
+        assert top_routes[0].target.smiles == "CCO"

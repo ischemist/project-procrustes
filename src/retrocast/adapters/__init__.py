@@ -29,14 +29,23 @@ ADAPTER_MAP: dict[str, BaseAdapter] = {
     "synllama": SynLlaMaAdapter(),
 }
 
+# Adapters that expect target-centric data format (dict with metadata + nested routes)
+# vs route-centric format (list of route objects)
+TARGET_CENTRIC_ADAPTERS = {
+    "askcos",
+    "retrochimera",
+}
+
 
 def get_adapter(adapter_name: str) -> BaseAdapter:
     """
-    retrieves an adapter instance based on its name from the config.
+    Retrieves an adapter instance from the `ADAPTER_MAP`.
     """
     adapter = ADAPTER_MAP.get(adapter_name)
     if adapter is None:
-        raise RetroCastException(f"unknown adapter '{adapter_name}'. check `retrocast-config.yaml` and `ADAPTER_MAP`.")
+        raise RetroCastException(
+            f"unknown adapter '{adapter_name}'. Check `retrocast.adapters.ADAPTER_MAP` for available adapters."
+        )
     return adapter
 
 
@@ -49,12 +58,15 @@ def adapt_single_route(
     Adapt a single raw route to the unified Route format.
 
     This is a convenience function for users who want to adapt individual routes
-    programmatically without the full batch processing pipeline.
+    programmatically without the full batch processing pipeline. It intelligently
+    handles both route-centric and target-centric adapter formats.
 
     Args:
-        raw_route: A single route in the model's native format. For most adapters
-            (route-centric like DMS, AiZynth), this is a single route object/dict.
-            For target-centric adapters, this may be a dict containing the route data.
+        raw_route: A single route or target data in the model's native format.
+            - For route-centric adapters (DMS, AiZynth, SynPlanner): Pass a single
+              route object/dict from the model's output list.
+            - For target-centric adapters (RetroChimera, ASKCOS): Pass the complete
+              target data dict (containing target metadata and nested routes).
         target: Target molecule information (id and canonical SMILES).
         adapter_name: Name of the adapter to use (e.g., "dms", "aizynth", "retrostar").
             See ADAPTER_MAP.keys() for available adapters.
@@ -62,7 +74,8 @@ def adapt_single_route(
     Returns:
         Route object if successful, None if adaptation failed.
 
-    Example:
+    Examples:
+        Route-centric adapter (DMS):
         >>> from retrocast.adapters import adapt_single_route
         >>> from retrocast.schemas import TargetInput
         >>>
@@ -73,12 +86,24 @@ def adapt_single_route(
         >>> if route:
         ...     print(f"Route depth: {route.depth}")
         ...     print(f"Starting materials: {len(route.leaves)}")
+
+        Target-centric adapter (RetroChimera):
+        >>> target = TargetInput(id="mol1", smiles="CCO")
+        >>> retrochimera_data = {
+        ...     "smiles": "CCO",
+        ...     "result": {"outputs": [{"routes": [...]}]}
+        ... }
+        >>> route = adapt_single_route(retrochimera_data, target, "retrochimera")
     """
     adapter = get_adapter(adapter_name)
 
-    # Wrap single route in a list since adapters expect list/dict format
-    # Most adapters are route-centric and expect a list of routes
-    raw_data = [raw_route] if not isinstance(raw_route, list) else raw_route
+    # Determine if this adapter expects target-centric or route-centric format
+    if adapter_name in TARGET_CENTRIC_ADAPTERS:
+        # Target-centric adapters (RetroChimera, ASKCOS) expect a dict directly
+        raw_data = raw_route
+    else:
+        # Route-centric adapters (DMS, AiZynth, etc.) expect a list of routes
+        raw_data = [raw_route] if not isinstance(raw_route, list) else raw_route
 
     # Get first successful route from the generator
     for route in adapter.adapt(raw_data, target):
@@ -131,6 +156,7 @@ __all__ = [
     "adapt_routes",
     "get_adapter",
     "ADAPTER_MAP",
+    "TARGET_CENTRIC_ADAPTERS",
     "BaseAdapter",
     "AizynthAdapter",
     "AskcosAdapter",

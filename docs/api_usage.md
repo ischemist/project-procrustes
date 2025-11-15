@@ -1,6 +1,6 @@
-# RetroCAst API Usage Guide
+# RetroCast API Usage Guide
 
-This guide shows how to use RetroCAst as a Python library to adapt retrosynthesis routes from different models into a unified format.
+This guide shows how to use RetroCast as a Python library to adapt retrosynthesis routes from different models into a unified format.
 
 ## Installation
 
@@ -14,7 +14,11 @@ pip install -e .
 
 ### Adapting a Single Route
 
-The simplest way to adapt a route is using `adapt_single_route`:
+The simplest way to adapt a route is using `adapt_single_route`. This function works with both route-centric and target-centric adapters:
+
+#### Route-Centric Adapters (DMS, AiZynth, SynPlanner)
+
+For route-centric models, pass a single route object from the model's output:
 
 ```python
 from retrocast import adapt_single_route, TargetInput
@@ -26,6 +30,7 @@ target = TargetInput(
 )
 
 # Your model's raw prediction (example: DMS format)
+# This is ONE route from the model's output list
 raw_route = {
     "smiles": "CC(=O)Oc1ccccc1C(=O)O",
     "children": [
@@ -42,12 +47,41 @@ if route:
     print(f"  Depth: {route.depth} steps")
     print(f"  Starting materials: {len(route.leaves)}")
     print(f"  Route signature: {route.get_signature()[:16]}...")
-    
+
     # Access route details
     for leaf in route.leaves:
         print(f"  - {leaf.smiles}")
 else:
     print("✗ Route adaptation failed")
+```
+
+#### Target-Centric Adapters (RetroChimera, ASKCOS)
+
+For target-centric models, pass the complete target data dict (containing metadata and routes):
+
+```python
+from retrocast import adapt_single_route, TargetInput
+
+target = TargetInput(id="mol1", smiles="CCO")
+
+# RetroChimera format: complete target data with nested routes
+retrochimera_data = {
+    "smiles": "CCO",
+    "result": {
+        "outputs": [{
+            "routes": [
+                {
+                    "reactions": [...],
+                    "num_steps": 2,
+                    "step_probability_min": 0.85
+                }
+            ]
+        }]
+    }
+}
+
+# The function automatically detects the format and handles it correctly
+route = adapt_single_route(retrochimera_data, target, adapter_name="retrochimera")
 ```
 
 ### Adapting Multiple Routes
@@ -76,7 +110,7 @@ top_10_routes = adapt_routes(raw_routes, target, "aizynth", max_routes=10)
 
 ## Working with Different Adapters
 
-RetroCAst supports multiple retrosynthesis model formats. See which adapters are available:
+RetroCast supports multiple retrosynthesis model formats. See which adapters are available:
 
 ```python
 from retrocast import ADAPTER_MAP
@@ -117,7 +151,7 @@ for route in adapter.adapt(raw_data, target):
 
 ## Post-Processing Routes
 
-RetroCAst provides utilities for filtering and deduplicating routes:
+RetroCast provides utilities for filtering and deduplicating routes:
 
 ### Deduplication
 
@@ -188,7 +222,7 @@ print(f"Target InChIKey: {route.target.inchikey}")
 # Get all starting materials
 for leaf in route.leaves:
     print(f"Starting material: {leaf.smiles}")
-    
+
 # Check if it's a leaf (no synthesis step)
 if route.target.is_leaf:
     print("This is a direct purchase - target is already available!")
@@ -197,7 +231,7 @@ if route.target.is_leaf:
 if not route.target.is_leaf and route.target.synthesis_step:
     step = route.target.synthesis_step
     print(f"First reaction has {len(step.reactants)} reactants")
-    
+
     # Access template, mapped SMILES, etc.
     if step.template:
         print(f"Template: {step.template}")
@@ -303,7 +337,7 @@ for route in adapter.adapt(raw_data, target):
 
 ## Type Hints and IDE Support
 
-RetroCAst is fully typed for excellent IDE support:
+RetroCast is fully typed for excellent IDE support:
 
 ```python
 from retrocast import Route, Molecule, ReactionStep, TargetInput
