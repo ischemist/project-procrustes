@@ -93,7 +93,14 @@ def test_process_model_run_no_sampling(
     raw_dir, processed_dir = tmp_path / "raw", tmp_path / "processed"
     raw_dir.mkdir(), processed_dir.mkdir()
     model_name, dataset_name = "test_model_v1", "test_dataset"
-    raw_file_content = {"aspirin": [{"smiles": "...", "children": []}]}
+    # Create raw data with 3 routes to match the 3 routes returned by adapter
+    raw_file_content = {
+        "aspirin": [
+            {"smiles": "route1", "children": []},
+            {"smiles": "route2", "children": []},
+            {"smiles": "route3", "children": []},
+        ]
+    }
     raw_file_path = raw_dir / "target_aspirin.json.gz"
     save_json_gz(raw_file_content, raw_file_path)
 
@@ -122,7 +129,15 @@ def test_process_model_run_no_sampling(
         manifest = json.load(f)
 
     assert "sampling_parameters" not in manifest
-    assert manifest["statistics"]["final_unique_routes_saved"] == len(multiple_unique_routes)
+
+    # Verify all statistics are correct
+    stats = manifest["statistics"]
+    assert stats["total_routes_in_raw_files"] == 3  # 3 raw routes
+    assert stats["final_unique_routes_saved"] == len(multiple_unique_routes)  # 3 routes
+    # No failures since adapter yields all routes successfully
+    assert stats["total_routes_failed_or_duplicate"] == 0
+    assert stats["num_targets_with_at_least_one_route"] == 1
+    assert stats["duplication_factor"] == 1.0  # No duplicates
 
 
 @pytest.mark.parametrize(
@@ -307,3 +322,115 @@ def test_process_model_run_warns_on_unknown_strategy(
     with manifest_path.open("r") as f:
         manifest = json.load(f)
     assert manifest["statistics"]["final_unique_routes_saved"] == len(multiple_unique_routes)
+
+
+def test_process_model_run_tracks_failures(
+    tmp_path: Path,
+    mocker: MockerFixture,
+    aspirin_target_info: TargetInput,
+    multiple_unique_routes: list[Route],
+) -> None:
+    """
+    Tests that statistics correctly track routes that fail during adapter processing.
+    """
+    # ARRANGE
+    raw_dir, processed_dir = tmp_path / "raw", tmp_path / "processed"
+    raw_dir.mkdir(), processed_dir.mkdir()
+    model_name, dataset_name = "test_model_failures", "test_dataset"
+
+    # Create raw data with 5 routes
+    raw_file_content = {
+        "aspirin": [
+            {"smiles": "route1", "children": []},
+            {"smiles": "route2", "children": []},
+            {"smiles": "route3", "children": []},
+            {"smiles": "route4", "children": []},
+            {"smiles": "route5", "children": []},
+        ]
+    }
+    raw_file_path = raw_dir / "results.json.gz"
+    save_json_gz(raw_file_content, raw_file_path)
+
+    # Mock adapter to only yield 2 successful routes (3 failures)
+    mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
+    mock_adapter_instance.adapt.return_value = iter(multiple_unique_routes[:2])
+
+    # ACT
+    process_model_run(
+        model_name=model_name,
+        dataset_name=dataset_name,
+        adapter=mock_adapter_instance,
+        raw_results_file=raw_file_path,
+        processed_dir=processed_dir,
+        targets_map={"aspirin": aspirin_target_info},
+        sampling_strategy=None,
+        sample_k=None,
+    )
+
+    # ASSERT
+    manifest_path = processed_dir / generate_model_hash(model_name) / "manifest.json"
+    with manifest_path.open("r") as f:
+        manifest = json.load(f)
+
+    stats = manifest["statistics"]
+    assert stats["total_routes_in_raw_files"] == 5  # 5 raw routes
+    assert stats["final_unique_routes_saved"] == 2  # 2 successful routes
+    # 3 routes failed during adapter processing (validation or transformation)
+    assert stats["total_routes_failed_or_duplicate"] == 3
+    assert stats["num_targets_with_at_least_one_route"] == 1
+
+
+def test_process_model_run_tracks_duplicates(
+    tmp_path: Path,
+    mocker: MockerFixture,
+    aspirin_target_info: TargetInput,
+    multiple_unique_routes: list[Route],
+) -> None:
+    """
+    Tests that statistics correctly track duplicate routes after deduplication.
+    """
+    # ARRANGE
+    raw_dir, processed_dir = tmp_path / "raw", tmp_path / "processed"
+    raw_dir.mkdir(), processed_dir.mkdir()
+    model_name, dataset_name = "test_model_duplicates", "test_dataset"
+
+    # Create raw data with 3 routes
+    raw_file_content = {
+        "aspirin": [
+            {"smiles": "route1", "children": []},
+            {"smiles": "route2", "children": []},
+            {"smiles": "route3", "children": []},
+        ]
+    }
+    raw_file_path = raw_dir / "results.json.gz"
+    save_json_gz(raw_file_content, raw_file_path)
+
+    # Mock adapter to yield route1, route1 (duplicate), route2
+    # So 3 raw -> 3 transformed -> 2 unique
+    duplicate_routes = [multiple_unique_routes[0], multiple_unique_routes[0], multiple_unique_routes[1]]
+    mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
+    mock_adapter_instance.adapt.return_value = iter(duplicate_routes)
+
+    # ACT
+    process_model_run(
+        model_name=model_name,
+        dataset_name=dataset_name,
+        adapter=mock_adapter_instance,
+        raw_results_file=raw_file_path,
+        processed_dir=processed_dir,
+        targets_map={"aspirin": aspirin_target_info},
+        sampling_strategy=None,
+        sample_k=None,
+    )
+
+    # ASSERT
+    manifest_path = processed_dir / generate_model_hash(model_name) / "manifest.json"
+    with manifest_path.open("r") as f:
+        manifest = json.load(f)
+
+    stats = manifest["statistics"]
+    assert stats["total_routes_in_raw_files"] == 3  # 3 raw routes
+    assert stats["final_unique_routes_saved"] == 2  # 2 unique routes after dedup
+    # 0 routes failed processing, but 1 duplicate was removed
+    assert stats["total_routes_failed_or_duplicate"] == 1
+    assert stats["duplication_factor"] == 1.5  # 3 successful / 2 unique = 1.5
