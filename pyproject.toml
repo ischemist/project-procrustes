@@ -1,6 +1,6 @@
 [project]
 name = "retrocast"
-version = "0.1.0"
+dynamic = ["version"]
 description = "a framework for ingesting, validating, canonicalizing, and adapting retrosynthesis model outputs to a unified benchmark standard."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -19,8 +19,12 @@ Homepage = "https://github.com/ischemist/project-procrustes"
 Issues = "https://github.com/ischemist/project-procrustes/issues"
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
 
 [tool.setuptools]
 package-dir = { "" = "src" }

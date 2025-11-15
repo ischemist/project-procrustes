@@ -8,6 +8,16 @@ from pydantic import BaseModel, Field, computed_field
 from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
 
 
+def _get_retrocast_version() -> str:
+    """Get the current retrocast version for provenance tracking."""
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("retrocast")
+    except PackageNotFoundError:
+        return "0.0.0.dev0+unknown"
+
+
 class TargetInput(BaseModel):
     """Input data for adapter processing. Provides target molecule identity."""
 
@@ -80,6 +90,12 @@ class Route(BaseModel):
 
     # Metadata for the entire route
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    # Version of retrocast that created this route (for provenance tracking)
+    retrocast_version: str = Field(
+        default_factory=_get_retrocast_version,
+        description="Version of retrocast that created this route",
+    )
 
     @computed_field
     @property
