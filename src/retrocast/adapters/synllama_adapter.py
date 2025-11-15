@@ -26,7 +26,7 @@ class SynLlamaRouteList(RootModel[list[SynLlamaRouteInput]]):
 class SynLlaMaAdapter(BaseAdapter):
     """adapter for converting pre-processed synllama outputs to the Route schema."""
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
         """validates the pre-processed json data for synllama and yields Route objects."""
         try:
             validated_routes = SynLlamaRouteList.model_validate(raw_target_data)

@@ -50,7 +50,7 @@ class SyntheseusRouteList(RootModel[list[SyntheseusMoleculeInput]]):
 class SyntheseusAdapter(BaseAdapter):
     """adapter for converting serialized syntheseus outputs to the route schema."""
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
         """
         validates raw syntheseus data, transforms it, and yields route objects.
         """

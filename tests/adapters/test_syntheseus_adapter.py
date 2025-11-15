@@ -64,7 +64,7 @@ class TestSyntheseusAdapterContract:
         """Shared fixture for USPTO-2/190 routes."""
         target_info = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
         raw_routes = raw_syntheseus_data["USPTO-2/190"]
-        return list(adapter.adapt(raw_routes, target_info))
+        return list(adapter.cast(raw_routes, target_info))
 
     def test_produces_correct_number_of_routes(self, uspto_routes):
         """Verify the adapter produces the expected number of routes."""
@@ -112,7 +112,7 @@ class TestSyntheseusAdapterRegression:
         raw_data = raw_syntheseus_data["USPTO-2/190"]
         target_info = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
 
-        routes = list(adapter.adapt(raw_data, target_info))
+        routes = list(adapter.cast(raw_data, target_info))
 
         # The file contains 10 distinct routes for this target
         assert len(routes) == 10
@@ -137,7 +137,7 @@ class TestSyntheseusAdapterRegression:
         raw_data = raw_syntheseus_data["paracetamol"]
         target_info = TargetInput(id="paracetamol", smiles=PARACETAMOL_SMILES)
 
-        routes = list(adapter.adapt(raw_data, target_info))
+        routes = list(adapter.cast(raw_data, target_info))
 
         assert len(routes) == 1
         route = routes[0]
@@ -153,5 +153,5 @@ class TestSyntheseusAdapterRegression:
         raw_data = raw_syntheseus_data["ibuprofen"]
         target_info = TargetInput(id="ibuprofen", smiles="CC(C)Cc1ccc(C(C)C(=O)O)cc1")
 
-        routes = list(adapter.adapt(raw_data, target_info))
+        routes = list(adapter.cast(raw_data, target_info))
         assert len(routes) == 0

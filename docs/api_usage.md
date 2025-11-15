@@ -145,7 +145,7 @@ adapter = get_adapter("dms")
 target = TargetInput(id="mol1", smiles="CCO")
 raw_data = [...]  # Your model's output
 
-for route in adapter.adapt(raw_data, target):
+for route in adapter.cast(raw_data, target):
     print(f"Route {route.rank}: depth={route.depth}")
 ```
 
@@ -327,7 +327,7 @@ adapter = get_adapter("dms")
 target = TargetInput(id="test", smiles="CCO")
 
 # The adapt method is a generator - yields routes one at a time
-for route in adapter.adapt(raw_data, target):
+for route in adapter.cast(raw_data, target):
     # Process route immediately without loading all into memory
     if route.depth <= 3:
         print(f"Found short route with depth {route.depth}")

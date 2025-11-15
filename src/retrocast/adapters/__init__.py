@@ -106,7 +106,7 @@ def adapt_single_route(
         raw_data = [raw_route] if not isinstance(raw_route, list) else raw_route
 
     # Get first successful route from the generator
-    for route in adapter.adapt(raw_data, target):
+    for route in adapter.cast(raw_data, target):
         return route
 
     return None
@@ -143,7 +143,7 @@ def adapt_routes(
     adapter = get_adapter(adapter_name)
     routes = []
 
-    for i, route in enumerate(adapter.adapt(raw_routes, target)):
+    for i, route in enumerate(adapter.cast(raw_routes, target)):
         routes.append(route)
         if max_routes and i + 1 >= max_routes:
             break

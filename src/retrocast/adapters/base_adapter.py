@@ -14,7 +14,7 @@ class BaseAdapter(ABC):
     """
 
     @abstractmethod
-    def adapt(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         """
         Validates, transforms, and yields Routes from raw model data.
 

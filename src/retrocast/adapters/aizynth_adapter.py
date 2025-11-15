@@ -49,7 +49,7 @@ class AizynthRouteList(RootModel[list[AizynthMoleculeInput]]):
 class AizynthAdapter(BaseAdapter):
     """adapter for converting aizynthfinder-style outputs to the benchmarktree schema."""
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
         """
         validates raw aizynthfinder data, transforms it, and yields route objects.
         """

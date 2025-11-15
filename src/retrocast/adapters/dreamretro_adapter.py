@@ -15,7 +15,7 @@ from retrocast.utils.logging import logger
 class DreamRetroAdapter(BaseAdapter):
     """adapter for converting dreamretro-style outputs to the route schema."""
 
-    def adapt(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         """
         validates raw dreamretro data, transforms its single route string, and yields a route.
         """

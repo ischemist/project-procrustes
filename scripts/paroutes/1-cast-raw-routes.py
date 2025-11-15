@@ -45,7 +45,7 @@ def adapt_routes(raw_routes: list[dict], dataset_prefix: str) -> dict[str, list[
             target_info = TargetInput(id=target_id, smiles=target_smiles)
 
             # PaRoutes: each input is a single route, so we expect 0 or 1 trees
-            routes = list(adapter.adapt(raw_route, target_info))
+            routes = list(adapter.cast(raw_route, target_info))
 
             if routes:
                 adapted_routes[target_id] = routes

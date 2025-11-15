@@ -105,7 +105,7 @@ def test_process_model_run_no_sampling(
     save_json_gz(raw_file_content, raw_file_path)
 
     mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
-    mock_adapter_instance.adapt.return_value = iter(multiple_unique_routes)
+    mock_adapter_instance.cast.return_value = iter(multiple_unique_routes)
 
     # ACT
     process_model_run(
@@ -170,7 +170,7 @@ def test_process_model_run_with_sampling_strategies(
     save_json_gz(raw_file_content, raw_file_path)
 
     mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
-    mock_adapter_instance.adapt.return_value = iter(multiple_unique_routes)
+    mock_adapter_instance.cast.return_value = iter(multiple_unique_routes)
 
     mock_sampling_func = mocker.MagicMock()
     mock_sampling_func.return_value = multiple_unique_routes[:saved_routes]
@@ -260,7 +260,7 @@ def test_process_model_run_warns_on_missing_k(
     save_json_gz({"aspirin": [{}]}, raw_file_path)
 
     mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
-    mock_adapter_instance.adapt.return_value = iter(multiple_unique_routes)
+    mock_adapter_instance.cast.return_value = iter(multiple_unique_routes)
 
     # act
     process_model_run(
@@ -301,7 +301,7 @@ def test_process_model_run_warns_on_unknown_strategy(
     save_json_gz({"aspirin": [{}]}, raw_file_path)
 
     mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
-    mock_adapter_instance.adapt.return_value = iter(multiple_unique_routes)
+    mock_adapter_instance.cast.return_value = iter(multiple_unique_routes)
 
     # act
     process_model_run(
@@ -353,7 +353,7 @@ def test_process_model_run_tracks_failures(
 
     # Mock adapter to only yield 2 successful routes (3 failures)
     mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
-    mock_adapter_instance.adapt.return_value = iter(multiple_unique_routes[:2])
+    mock_adapter_instance.cast.return_value = iter(multiple_unique_routes[:2])
 
     # ACT
     process_model_run(
@@ -409,7 +409,7 @@ def test_process_model_run_tracks_duplicates(
     # So 3 raw -> 3 transformed -> 2 unique
     duplicate_routes = [multiple_unique_routes[0], multiple_unique_routes[0], multiple_unique_routes[1]]
     mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
-    mock_adapter_instance.adapt.return_value = iter(duplicate_routes)
+    mock_adapter_instance.cast.return_value = iter(duplicate_routes)
 
     # ACT
     process_model_run(

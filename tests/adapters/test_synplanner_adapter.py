@@ -71,7 +71,7 @@ class TestSynPlannerAdapterContract:
         """Shared fixture for paracetamol routes."""
         target_info = TargetInput(id="paracetamol", smiles=canonicalize_smiles("c1cc(ccc1O)NC(C)=O"))
         raw_routes = raw_synplanner_data["paracetamol"]
-        return list(adapter.adapt(raw_routes, target_info))
+        return list(adapter.cast(raw_routes, target_info))
 
     def test_produces_correct_number_of_routes(self, paracetamol_routes):
         """Verify the adapter produces the expected number of routes."""
@@ -138,7 +138,7 @@ class TestSynPlannerAdapterRegression:
         """Verify the first aspirin route is a multi-step synthesis."""
         target_info = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
         raw_routes = raw_synplanner_data["aspirin"]
-        routes = list(adapter.adapt(raw_routes, target_info))
+        routes = list(adapter.cast(raw_routes, target_info))
 
         first_route = routes[0]
         assert first_route.rank == 1
@@ -168,7 +168,7 @@ class TestSynPlannerAdapterRegression:
         """Verify the first paracetamol route has the expected multi-step structure."""
         target_info = TargetInput(id="paracetamol", smiles=canonicalize_smiles("c1cc(ccc1O)NC(C)=O"))
         raw_routes = raw_synplanner_data["paracetamol"]
-        routes = list(adapter.adapt(raw_routes, target_info))
+        routes = list(adapter.cast(raw_routes, target_info))
 
         first_route = routes[0]
         assert first_route.rank == 1
@@ -212,7 +212,7 @@ class TestSynPlannerAdapterRegression:
         """Verify the mapped SMILES for reactions in the first paracetamol route."""
         target_info = TargetInput(id="paracetamol", smiles=canonicalize_smiles("c1cc(ccc1O)NC(C)=O"))
         raw_routes = raw_synplanner_data["paracetamol"]
-        routes = list(adapter.adapt(raw_routes, target_info))
+        routes = list(adapter.cast(raw_routes, target_info))
 
         first_route = routes[0]
 
@@ -248,7 +248,7 @@ class TestSynPlannerAdapterRegression:
         """Verify the mapped SMILES for reactions in the first aspirin route."""
         target_info = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
         raw_routes = raw_synplanner_data["aspirin"]
-        routes = list(adapter.adapt(raw_routes, target_info))
+        routes = list(adapter.cast(raw_routes, target_info))
 
         first_route = routes[0]
 

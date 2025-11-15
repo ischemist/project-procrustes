@@ -29,7 +29,7 @@ class TtlRouteList(RootModel[list[TtlRoute]]):
 class TtlRetroAdapter(BaseAdapter):
     """adapter for converting pre-processed ttlretro outputs to the route schema."""
 
-    def adapt(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         """
         validates the pre-processed json data for ttlretro, transforms it, and yields route objects.
         """

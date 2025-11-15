@@ -50,7 +50,7 @@ class SynPlannerRouteList(RootModel[list[SynPlannerMoleculeInput]]):
 class SynPlannerAdapter(BaseAdapter):
     """adapter for converting synplanner-style outputs to the route schema."""
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
         """
         validates raw synplanner data, transforms it, and yields route objects.
         """

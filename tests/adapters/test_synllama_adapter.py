@@ -46,7 +46,7 @@ class TestSynLlamaAdapterUnit(BaseAdapterTest):
         raw_data = [{"synthesis_string": multi_step_string}]
         target_input = TargetInput(id="multi-step-test", smiles=canonicalize_smiles("CCC"))
 
-        routes = list(adapter_instance.adapt(raw_data, target_input))
+        routes = list(adapter_instance.cast(raw_data, target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -106,7 +106,7 @@ class TestSynLlamaAdapterContract:
         target_smi_canon = canonicalize_smiles(product_smi_raw)
 
         target_input = TargetInput(id=target_id, smiles=target_smi_canon)
-        return list(adapter.adapt(raw_routes, target_input))
+        return list(adapter.cast(raw_routes, target_input))
 
     def test_produces_at_least_one_route(self, routes):
         """Verify the adapter produces at least one route."""
@@ -163,7 +163,7 @@ class TestSynLlamaAdapterRegression:
         target_smi_canon = canonicalize_smiles(product_smi_raw)
 
         target_input = TargetInput(id=target_id, smiles=target_smi_canon)
-        return list(adapter.adapt(raw_routes, target_input))
+        return list(adapter.cast(raw_routes, target_input))
 
     @pytest.fixture(scope="class")
     def agn_routes(self, adapter, raw_synllama_data):
@@ -177,7 +177,7 @@ class TestSynLlamaAdapterRegression:
         target_smi_canon = canonicalize_smiles(product_smi_raw)
 
         target_input = TargetInput(id=target_id, smiles=target_smi_canon)
-        return list(adapter.adapt(raw_routes, target_input))
+        return list(adapter.cast(raw_routes, target_input))
 
     @pytest.fixture(scope="class")
     def uspto_routes(self, adapter, raw_synllama_data):
@@ -191,7 +191,7 @@ class TestSynLlamaAdapterRegression:
         target_smi_canon = canonicalize_smiles(product_smi_raw)
 
         target_input = TargetInput(id=target_id, smiles=target_smi_canon)
-        return list(adapter.adapt(raw_routes, target_input))
+        return list(adapter.cast(raw_routes, target_input))
 
     def test_conivaptan_first_route_has_rank_one(self, conivaptan_routes):
         """Verify Conivaptan first route has rank 1."""

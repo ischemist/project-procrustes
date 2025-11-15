@@ -89,7 +89,7 @@ class AskcosAdapter(BaseAdapter):
         """
         self.use_full_graph = use_full_graph
 
-    def adapt(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         """validates raw askcos data, transforms its pathways, and yields route objects."""
         if self.use_full_graph:
             raise NotImplementedError("extracting routes from the full askcos search graph is not yet implemented.")

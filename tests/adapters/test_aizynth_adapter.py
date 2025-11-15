@@ -62,7 +62,7 @@ class TestAizynthAdapterContract:
         """Shared fixture for aspirin routes."""
         target_info = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
         raw_routes = raw_aizynth_mcts_data["aspirin"]
-        return list(adapter.adapt(raw_routes, target_info))
+        return list(adapter.cast(raw_routes, target_info))
 
     def test_produces_correct_number_of_routes(self, aspirin_routes):
         """Verify the adapter produces the expected number of routes."""
@@ -135,7 +135,7 @@ class TestAizynthAdapterRegression:
         """Verify the first aspirin route is a simple one-step synthesis."""
         target_info = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
         raw_routes = raw_aizynth_mcts_data["aspirin"]
-        routes = list(adapter.adapt(raw_routes, target_info))
+        routes = list(adapter.cast(raw_routes, target_info))
 
         first_route = routes[0]
         assert first_route.rank == 1
@@ -159,7 +159,7 @@ class TestAizynthAdapterRegression:
         """Verify the first ibuprofen route is a three-step synthesis."""
         target_info = TargetInput(id="ibuprofen", smiles=canonicalize_smiles("CC(C)Cc1ccc([C@@H](C)C(=O)O)cc1"))
         raw_route = raw_aizynth_mcts_data["ibuprofen"][0]
-        routes = list(adapter.adapt([raw_route], target_info))
+        routes = list(adapter.cast([raw_route], target_info))
 
         assert len(routes) == 1
         route = routes[0]

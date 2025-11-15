@@ -66,21 +66,21 @@ class TestRetroStarAdapterContract:
         """Run adapter once for aspirin and reuse results."""
         raw_data = raw_retrostar_data["aspirin"]
         target_input = TargetInput(id="aspirin", smiles=ASPIRIN_SMILES)
-        return list(self.adapter.adapt(raw_data, target_input))
+        return list(self.adapter.cast(raw_data, target_input))
 
     @pytest.fixture(scope="class")
     def paracetamol_routes(self, raw_retrostar_data):
         """Run adapter once for paracetamol and reuse results."""
         raw_data = raw_retrostar_data["paracetamol"]
         target_input = TargetInput(id="paracetamol", smiles=PARACETAMOL_SMILES)
-        return list(self.adapter.adapt(raw_data, target_input))
+        return list(self.adapter.cast(raw_data, target_input))
 
     @pytest.fixture(scope="class")
     def daridorexant_routes(self, raw_retrostar_data):
         """Run adapter once for daridorexant and reuse results."""
         raw_data = raw_retrostar_data["daridorexant"]
         target_input = TargetInput(id="daridorexant", smiles=DARIDOREXANT_SMILES)
-        return list(self.adapter.adapt(raw_data, target_input))
+        return list(self.adapter.cast(raw_data, target_input))
 
     def test_route_has_required_fields(self, aspirin_routes):
         """All routes must have required Route fields populated."""
@@ -170,7 +170,7 @@ class TestRetroStarAdapterRegression:
         raw_data = raw_retrostar_data["aspirin"]
         target_input = TargetInput(id="aspirin", smiles=ASPIRIN_SMILES)
 
-        routes = list(self.adapter.adapt(raw_data, target_input))
+        routes = list(self.adapter.cast(raw_data, target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -197,7 +197,7 @@ class TestRetroStarAdapterRegression:
         raw_data = raw_retrostar_data["paracetamol"]
         target_input = TargetInput(id="paracetamol", smiles=PARACETAMOL_SMILES)
 
-        routes = list(self.adapter.adapt(raw_data, target_input))
+        routes = list(self.adapter.cast(raw_data, target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -217,7 +217,7 @@ class TestRetroStarAdapterRegression:
         raw_data = raw_retrostar_data["daridorexant"]
         target_input = TargetInput(id="daridorexant", smiles=DARIDOREXANT_SMILES)
 
-        routes = list(self.adapter.adapt(raw_data, target_input))
+        routes = list(self.adapter.cast(raw_data, target_input))
         assert len(routes) == 1
         route = routes[0]
         target = route.target

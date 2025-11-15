@@ -74,7 +74,7 @@ def process_model_run(
         stats.total_routes_in_raw_files += num_raw_routes
 
         # Transform routes through adapter (handles validation and transformation)
-        transformed_trees = list(adapter.adapt(raw_routes_list, targets_map[target_id]))
+        transformed_trees = list(adapter.cast(raw_routes_list, targets_map[target_id]))
 
         # Track failures (both validation and transformation failures)
         num_failed = num_raw_routes - len(transformed_trees)

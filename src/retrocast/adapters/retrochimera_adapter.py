@@ -57,7 +57,7 @@ class RetrochimeraData(BaseModel):
 class RetrochimeraAdapter(BaseAdapter):
     """adapter for converting retrochimera-style outputs to the Route schema."""
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
         """
         validates raw retrochimera data, transforms it, and yields Route objects.
         """

@@ -53,7 +53,7 @@ class TestPaRoutesAdapterContract:
         target_id = "paroutes-ex-1"
         raw_route = raw_paroutes_data[target_id]
         target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
-        return list(adapter.adapt(raw_route, target_input))
+        return list(adapter.cast(raw_route, target_input))
 
     @pytest.fixture(scope="class")
     def routes_ex2(self, adapter, raw_paroutes_data):
@@ -61,7 +61,7 @@ class TestPaRoutesAdapterContract:
         target_id = "paroutes-ex-2"
         raw_route = raw_paroutes_data[target_id]
         target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
-        return list(adapter.adapt(raw_route, target_input))
+        return list(adapter.cast(raw_route, target_input))
 
     def test_produces_single_route(self, routes_ex1):
         """verify the adapter produces exactly one route per target."""
@@ -129,7 +129,7 @@ class TestPaRoutesAdapterRegression:
         target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
 
         # both reaction steps in this example are from patent 'us20150051201a1'.
-        routes = list(adapter.adapt(raw_route, target_input))
+        routes = list(adapter.cast(raw_route, target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -161,7 +161,7 @@ class TestPaRoutesAdapterRegression:
         inner_reaction["metadata"]["ID"] = "SOME-OTHER-PATENT;1234;56789"
 
         # the adapter should now see two different patent ids and yield nothing.
-        routes = list(adapter.adapt(raw_route, target_input))
+        routes = list(adapter.cast(raw_route, target_input))
 
         assert len(routes) == 0
 
@@ -174,7 +174,7 @@ class TestPaRoutesAdapterRegression:
         target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
 
         # all reaction steps in this example are from patent 'us08242133b2'.
-        routes = list(adapter.adapt(raw_route, target_input))
+        routes = list(adapter.cast(raw_route, target_input))
 
         assert len(routes) == 1
         route = routes[0]

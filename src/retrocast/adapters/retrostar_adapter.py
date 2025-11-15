@@ -15,7 +15,7 @@ from retrocast.utils.logging import logger
 class RetroStarAdapter(BaseAdapter):
     """Adapter for converting RetroStar-style outputs to the Route schema."""
 
-    def adapt(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         """
         Validates raw RetroStar data, transforms its single route string, and yields a Route.
         """
