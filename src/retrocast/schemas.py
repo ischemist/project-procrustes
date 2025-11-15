@@ -144,7 +144,7 @@ class RunStatistics(BaseModel):
 
     @property
     def total_failures(self) -> int:
-        """Total number of routes that were discarded for any reason."""
+        """Total number of routes that failed validation or transformation."""
         return self.routes_failed_transformation
 
     @property
