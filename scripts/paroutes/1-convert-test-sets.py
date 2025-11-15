@@ -12,19 +12,16 @@ Usage:
 """
 
 import argparse
-import gzip
-import json
-from datetime import UTC, datetime
 from pathlib import Path
 
 from tqdm import tqdm
 
 from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
+from retrocast.curation import create_manifest
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.exceptions import RetroCastException
-from retrocast.io import save_json, save_routes
-from retrocast.schemas import Route, TargetInput, _get_retrocast_version
-from retrocast.utils.hashing import compute_routes_content_hash, generate_file_hash
+from retrocast.io import load_raw_routes, save_json, save_routes
+from retrocast.schemas import Route, TargetInput
 from retrocast.utils.logging import logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -47,20 +44,6 @@ def parse_args() -> argparse.Namespace:
         help="Name of the PaRoutes dataset to convert (without .json.gz extension)",
     )
     return parser.parse_args()
-
-
-def load_raw_routes(input_file: Path) -> list[dict]:
-    """Load raw routes from a gzipped JSON file."""
-    logger.info(f"Loading raw routes from {input_file}...")
-    try:
-        with gzip.open(input_file, "rt", encoding="utf-8") as f:
-            all_routes = json.load(f)
-        if not isinstance(all_routes, list):
-            raise RetroCastException(f"Expected a list of routes in {input_file}, but got {type(all_routes)}")
-        logger.info(f"Loaded {len(all_routes):,} total routes.")
-        return all_routes
-    except (OSError, json.JSONDecodeError) as e:
-        raise RetroCastException(f"Failed to load or parse {input_file}: {e}") from e
 
 
 def adapt_routes(raw_routes: list[dict], dataset_prefix: str) -> dict[str, list[Route]]:
@@ -93,33 +76,6 @@ def adapt_routes(raw_routes: list[dict], dataset_prefix: str) -> dict[str, list[
     return adapted_routes
 
 
-def create_manifest(
-    dataset_name: str,
-    input_file: Path,
-    output_file: Path,
-    routes: dict[str, list[Route]],
-    raw_route_count: int,
-) -> dict:
-    """Create a manifest with file hashes and statistics."""
-    manifest = {
-        "dataset": dataset_name,
-        "source_file": input_file.name,
-        "source_file_hash": generate_file_hash(input_file),
-        "output_file": output_file.name,
-        "output_file_hash": generate_file_hash(output_file),
-        "output_content_hash": compute_routes_content_hash(routes),
-        "statistics": {
-            "total_raw_routes": raw_route_count,
-            "successful_adaptations": len(routes),
-            "failed_adaptations": raw_route_count - len(routes),
-            "total_routes_saved": sum(len(r) for r in routes.values()),
-        },
-        "timestamp": datetime.now(UTC).isoformat(),
-        "retrocast_version": _get_retrocast_version(),
-    }
-    return manifest
-
-
 def main() -> None:
     """Main script execution."""
     args = parse_args()
@@ -150,7 +106,11 @@ def main() -> None:
     save_routes(adapted_routes, output_file)
 
     # Create and save manifest
-    manifest = create_manifest(dataset_name, input_file, output_file, adapted_routes, len(raw_routes))
+    statistics = {
+        "n_routes_source": len(raw_routes),
+        "n_routes_saved": sum(len(r) for r in adapted_routes.values()),
+    }
+    manifest = create_manifest(dataset_name, input_file, output_file, adapted_routes, statistics)
     logger.info(f"Saving manifest to {manifest_file.relative_to(BASE_DIR)}...")
     save_json(manifest, manifest_file)
 

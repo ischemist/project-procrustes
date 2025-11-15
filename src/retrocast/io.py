@@ -265,6 +265,35 @@ def combine_evaluation_results(targets_csv: str, eval_dir: str, output_path: str
         logger.warning(f"Missing files for {len(missing_files)} targets: {missing_files}")
 
 
+def load_raw_routes(input_file: Path) -> list[dict]:
+    """
+    Load raw routes from a gzipped JSON file.
+
+    This function loads a JSON file containing a list of route dictionaries,
+    typically used as input for route conversion/curation scripts.
+
+    Args:
+        input_file: Path to the gzipped JSON file containing raw routes.
+
+    Returns:
+        List of dictionaries, where each dict represents a raw route.
+
+    Raises:
+        RetroCastIOError: If the file cannot be read or parsed.
+    """
+    logger.info(f"Loading raw routes from {input_file}...")
+    try:
+        with gzip.open(input_file, "rt", encoding="utf-8") as f:
+            all_routes = json.load(f)
+        if not isinstance(all_routes, list):
+            raise RetroCastIOError(f"Expected a list of routes in {input_file}, but got {type(all_routes)}")
+        logger.info(f"Loaded {len(all_routes):,} total routes.")
+        return all_routes
+    except (OSError, gzip.BadGzipFile, json.JSONDecodeError) as e:
+        logger.error(f"Failed to load or parse {input_file}: {e}")
+        raise RetroCastIOError(f"Failed to load or parse {input_file}: {e}") from e
+
+
 def load_and_prepare_targets(file_path: Path) -> dict[str, TargetInput]:
     """
     Loads a file containing target IDs and SMILES, canonicalizes the SMILES,

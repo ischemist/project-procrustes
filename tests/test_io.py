@@ -20,6 +20,7 @@ from retrocast.io import (
     find_json_file_by_position,
     load_and_prepare_targets,
     load_json_gz,
+    load_raw_routes,
     load_routes,
     load_target_ids,
     load_targets_csv,
@@ -542,3 +543,70 @@ def test_save_routes_empty_dict(tmp_path: Path) -> None:
     save_routes({}, file_path)
     loaded = load_routes(file_path)
     assert loaded == {}
+
+
+# ==============================================================================
+# load_raw_routes Tests
+# ==============================================================================
+
+
+def test_load_raw_routes_happy_path(tmp_path: Path) -> None:
+    """Test loading raw routes from gzipped JSON file."""
+    import gzip
+
+    routes_data = [{"smiles": "CCO", "children": []}, {"smiles": "c1ccccc1", "children": []}]
+    file_path = tmp_path / "routes.json.gz"
+    with gzip.open(file_path, "wt", encoding="utf-8") as f:
+        json.dump(routes_data, f)
+
+    result = load_raw_routes(file_path)
+    assert result == routes_data
+    assert len(result) == 2
+
+
+def test_load_raw_routes_empty_list(tmp_path: Path) -> None:
+    """Test loading an empty list of routes."""
+    import gzip
+
+    file_path = tmp_path / "empty.json.gz"
+    with gzip.open(file_path, "wt", encoding="utf-8") as f:
+        json.dump([], f)
+
+    result = load_raw_routes(file_path)
+    assert result == []
+
+
+def test_load_raw_routes_raises_on_non_list(tmp_path: Path) -> None:
+    """Test that non-list content raises RetroCastIOError."""
+    file_path = tmp_path / "dict.json.gz"
+    save_json_gz({"not": "a list"}, file_path)
+
+    with pytest.raises(RetroCastIOError):
+        load_raw_routes(file_path)
+
+
+def test_load_raw_routes_raises_on_missing_file(tmp_path: Path) -> None:
+    """Test that missing file raises RetroCastIOError."""
+    with pytest.raises(RetroCastIOError):
+        load_raw_routes(tmp_path / "nonexistent.json.gz")
+
+
+def test_load_raw_routes_raises_on_malformed_gzip(tmp_path: Path) -> None:
+    """Test that malformed gzip raises RetroCastIOError."""
+    file_path = tmp_path / "bad.json.gz"
+    file_path.write_text("not a gzip file")
+
+    with pytest.raises(RetroCastIOError):
+        load_raw_routes(file_path)
+
+
+def test_load_raw_routes_raises_on_malformed_json(tmp_path: Path) -> None:
+    """Test that malformed JSON raises RetroCastIOError."""
+    import gzip
+
+    file_path = tmp_path / "bad_json.json.gz"
+    with gzip.open(file_path, "wt", encoding="utf-8") as f:
+        f.write("not valid json {")
+
+    with pytest.raises(RetroCastIOError):
+        load_raw_routes(file_path)
