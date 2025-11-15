@@ -10,6 +10,7 @@ import pathlib
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from pytest import MonkeyPatch
 
 from retrocast.exceptions import RetroCastException, RetroCastIOError, RetroCastSerializationError
@@ -19,13 +20,17 @@ from retrocast.io import (
     find_json_file_by_position,
     load_and_prepare_targets,
     load_json_gz,
+    load_routes,
     load_target_ids,
     load_targets_csv,
     load_targets_json,
     normalize_target_id_for_filename,
     save_json,
     save_json_gz,
+    save_routes,
 )
+from retrocast.schemas import Molecule, Route
+from retrocast.typing import InchiKeyStr, SmilesStr
 
 VALID_TARGET_DATA = {"target_abc": "CCO", "target_xyz": "c1ccccc1"}
 
@@ -449,3 +454,91 @@ def test_combine_evaluation_results_with_missing_and_malformed_files(tmp_path: P
     assert "missing files for 2 targets" in caplog.text.lower()
     assert "malformed_target" in caplog.text
     assert "missing_target" in caplog.text
+
+
+# ==============================================================================
+# save_routes and load_routes Tests
+# ==============================================================================
+
+
+@pytest.fixture
+def sample_routes() -> dict[str, list[Route]]:
+    """Create sample routes for testing."""
+    mol1 = Molecule(smiles=SmilesStr("CCO"), inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"))
+    mol2 = Molecule(smiles=SmilesStr("c1ccccc1"), inchikey=InchiKeyStr("UHOVQNZJYSORNB-UHFFFAOYSA-N"))
+
+    route1 = Route(target=mol1, rank=1)
+    route2 = Route(target=mol2, rank=1)
+    route3 = Route(target=mol2, rank=2)
+
+    return {"target_1": [route1], "target_2": [route2, route3]}
+
+
+def test_save_and_load_routes_roundtrip(tmp_path: Path, sample_routes: dict[str, list[Route]]) -> None:
+    """Test that routes can be saved and loaded back correctly."""
+    file_path = tmp_path / "routes.json.gz"
+    save_routes(sample_routes, file_path)
+
+    loaded_routes = load_routes(file_path)
+
+    assert set(loaded_routes.keys()) == set(sample_routes.keys())
+    assert len(loaded_routes["target_1"]) == 1
+    assert len(loaded_routes["target_2"]) == 2
+    assert loaded_routes["target_1"][0].target.smiles == "CCO"
+    assert loaded_routes["target_2"][0].rank == 1
+    assert loaded_routes["target_2"][1].rank == 2
+
+
+def test_save_routes_creates_directories(tmp_path: Path, sample_routes: dict[str, list[Route]]) -> None:
+    """Verify that save_routes creates missing parent directories."""
+    file_path = tmp_path / "nested" / "dir" / "routes.json.gz"
+    save_routes(sample_routes, file_path)
+    assert file_path.exists()
+
+
+def test_load_routes_preserves_metadata(tmp_path: Path) -> None:
+    """Test that metadata is preserved through save/load cycle."""
+    mol = Molecule(
+        smiles=SmilesStr("CCO"),
+        inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+        metadata={"score": 0.95, "custom": "value"},
+    )
+    route = Route(target=mol, rank=1, metadata={"cost": 10.5}, solvability={"zinc": True})
+    routes = {"target": [route]}
+
+    file_path = tmp_path / "routes.json.gz"
+    save_routes(routes, file_path)
+    loaded = load_routes(file_path)
+
+    loaded_route = loaded["target"][0]
+    assert loaded_route.metadata == {"cost": 10.5}
+    assert loaded_route.solvability == {"zinc": True}
+    assert loaded_route.target.metadata == {"score": 0.95, "custom": "value"}
+
+
+def test_load_routes_raises_on_invalid_structure(tmp_path: Path) -> None:
+    """Test that invalid route structures raise appropriate errors."""
+    file_path = tmp_path / "bad_routes.json.gz"
+    # Routes should be a list, not a dict
+    save_json_gz({"target": {"not": "a list"}}, file_path)
+
+    with pytest.raises(RetroCastIOError):
+        load_routes(file_path)
+
+
+def test_load_routes_validates_route_schema(tmp_path: Path) -> None:
+    """Test that invalid route data raises validation errors."""
+    file_path = tmp_path / "invalid_routes.json.gz"
+    # Missing required 'rank' field
+    save_json_gz({"target": [{"target": {"smiles": "CCO", "inchikey": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"}}]}, file_path)
+
+    with pytest.raises(ValidationError):  # Will be a Pydantic ValidationError
+        load_routes(file_path)
+
+
+def test_save_routes_empty_dict(tmp_path: Path) -> None:
+    """Test saving an empty routes dictionary."""
+    file_path = tmp_path / "empty.json.gz"
+    save_routes({}, file_path)
+    loaded = load_routes(file_path)
+    assert loaded == {}

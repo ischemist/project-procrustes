@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.exceptions import RetroCastException, RetroCastIOError, RetroCastSerializationError
-from retrocast.schemas import TargetInput
+from retrocast.schemas import Route, TargetInput
 from retrocast.utils.logging import logger
 
 # This allows us to return the same type that was passed in.
@@ -54,6 +54,41 @@ def load_json_gz(path: Path) -> dict[str, Any]:
     except (OSError, gzip.BadGzipFile, json.JSONDecodeError) as e:
         logger.error(f"Failed to load or parse gzipped JSON file: {path}")
         raise RetroCastIOError(f"Data loading error on {path}: {e}") from e
+
+
+def save_routes(routes: dict[str, list[Route]], path: Path) -> None:
+    """
+    Saves a dictionary of routes to a gzipped JSON file.
+
+    Args:
+        routes: Dictionary mapping target IDs to lists of Route objects.
+        path: Path to the output gzipped JSON file.
+    """
+    data = {
+        target_id: [route.model_dump(mode="json") for route in route_list] for target_id, route_list in routes.items()
+    }
+    save_json_gz(data, path)
+    logger.info(f"Saved {sum(len(r) for r in routes.values())} routes for {len(routes)} targets to {path}")
+
+
+def load_routes(path: Path) -> dict[str, list[Route]]:
+    """
+    Loads routes from a gzipped JSON file.
+
+    Args:
+        path: Path to the gzipped JSON file containing routes.
+
+    Returns:
+        Dictionary mapping target IDs to lists of Route objects.
+    """
+    data = load_json_gz(path)
+    routes = {}
+    for target_id, route_list in data.items():
+        if not isinstance(route_list, list):
+            raise RetroCastIOError(f"Expected list of routes for target '{target_id}', got {type(route_list)}")
+        routes[target_id] = [Route.model_validate(r) for r in route_list]
+    logger.info(f"Loaded {sum(len(r) for r in routes.values())} routes for {len(routes)} targets from {path}")
+    return routes
 
 
 def save_json(data: dict[str, Any], path: Path) -> None:

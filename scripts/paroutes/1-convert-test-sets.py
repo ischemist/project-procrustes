@@ -1,22 +1,20 @@
 """
-pre-processes the raw paroutes data into a benchmark-compatible format.
+Converts raw PaRoutes data into the standard retrocast format.
 
-the raw data is a single json list of routes. this script converts it into
-the standard retrocast input format, which is a dictionary mapping a unique target id
-to its raw route data.
+This script takes a PaRoutes JSON file (all-routes, n1-routes, or n5-routes),
+adapts each route to the standard Route schema, and saves the results along
+with a manifest containing file hashes for verification.
 
-it generates multiple versions: one with all routes, and several smaller
-random samples for testing or lighter-weight analysis.
-
----
-usage:
----
-uv run scripts/paroutes/1-convert-test-sets.py
+Usage:
+    uv run scripts/paroutes/1-convert-test-sets.py all-routes
+    uv run scripts/paroutes/1-convert-test-sets.py n1-routes
+    uv run scripts/paroutes/1-convert-test-sets.py n5-routes
 """
 
+import argparse
 import gzip
 import json
-import random
+from datetime import UTC, datetime
 from pathlib import Path
 
 from tqdm import tqdm
@@ -24,113 +22,145 @@ from tqdm import tqdm
 from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.exceptions import RetroCastException
-from retrocast.io import save_json_gz
-from retrocast.schemas import TargetInput
+from retrocast.io import save_json, save_routes
+from retrocast.schemas import Route, TargetInput, _get_retrocast_version
+from retrocast.utils.hashing import compute_routes_content_hash, generate_file_hash
 from retrocast.utils.logging import logger
 
-# --- configuration ---
 BASE_DIR = Path(__file__).resolve().parents[2]
 PAROUTES_DIR = BASE_DIR / "data" / "paroutes"
-test_sets = ["n1", "n5"]
-# use `none` to signify processing the full dataset.
-SAMPLE_SIZES = [None]  # , 1000, 500]
+OUTPUT_DIR = PAROUTES_DIR / "processed"
+
+VALID_DATASETS = ["all-routes", "n1-routes", "n5-routes"]
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Convert PaRoutes data to standard retrocast format.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    parser.add_argument(
+        "dataset",
+        choices=VALID_DATASETS,
+        help="Name of the PaRoutes dataset to convert (without .json.gz extension)",
+    )
+    return parser.parse_args()
+
+
+def load_raw_routes(input_file: Path) -> list[dict]:
+    """Load raw routes from a gzipped JSON file."""
+    logger.info(f"Loading raw routes from {input_file}...")
+    try:
+        with gzip.open(input_file, "rt", encoding="utf-8") as f:
+            all_routes = json.load(f)
+        if not isinstance(all_routes, list):
+            raise RetroCastException(f"Expected a list of routes in {input_file}, but got {type(all_routes)}")
+        logger.info(f"Loaded {len(all_routes):,} total routes.")
+        return all_routes
+    except (OSError, json.JSONDecodeError) as e:
+        raise RetroCastException(f"Failed to load or parse {input_file}: {e}") from e
+
+
+def adapt_routes(raw_routes: list[dict], dataset_prefix: str) -> dict[str, list[Route]]:
+    """Adapt raw routes to the standard Route schema."""
+    adapter = PaRoutesAdapter()
+    adapted_routes: dict[str, list[Route]] = {}
+    failed_count = 0
+
+    pbar = tqdm(enumerate(raw_routes, 1), total=len(raw_routes), desc="Adapting routes")
+    for i, raw_route in pbar:
+        target_id = f"{dataset_prefix}-{i}"
+        try:
+            target_smiles = canonicalize_smiles(raw_route["smiles"])
+            target_info = TargetInput(id=target_id, smiles=target_smiles)
+
+            # PaRoutes: each input is a single route, so we expect 0 or 1 trees
+            routes = list(adapter.adapt(raw_route, target_info))
+
+            if routes:
+                adapted_routes[target_id] = routes
+        except RetroCastException as e:
+            logger.debug(f"Could not process route {i}: {e}")
+            failed_count += 1
+        except (KeyError, TypeError) as e:
+            logger.debug(f"Route {i} has invalid structure: {e}")
+            failed_count += 1
+
+    logger.info(f"Successfully adapted {len(adapted_routes)}/{len(raw_routes)} routes ({failed_count} failed)")
+    adapter.report_statistics()
+    return adapted_routes
+
+
+def create_manifest(
+    dataset_name: str,
+    input_file: Path,
+    output_file: Path,
+    routes: dict[str, list[Route]],
+    raw_route_count: int,
+) -> dict:
+    """Create a manifest with file hashes and statistics."""
+    manifest = {
+        "dataset": dataset_name,
+        "source_file": input_file.name,
+        "source_file_hash": generate_file_hash(input_file),
+        "output_file": output_file.name,
+        "output_file_hash": generate_file_hash(output_file),
+        "output_content_hash": compute_routes_content_hash(routes),
+        "statistics": {
+            "total_raw_routes": raw_route_count,
+            "successful_adaptations": len(routes),
+            "failed_adaptations": raw_route_count - len(routes),
+            "total_routes_saved": sum(len(r) for r in routes.values()),
+        },
+        "timestamp": datetime.now(UTC).isoformat(),
+        "retrocast_version": _get_retrocast_version(),
+    }
+    return manifest
 
 
 def main() -> None:
-    """main script execution."""
-    import plotly.graph_objects as go
+    """Main script execution."""
+    args = parse_args()
+    dataset_name = args.dataset
 
-    fig = go.Figure()
+    input_file = PAROUTES_DIR / f"{dataset_name}.json.gz"
+    if not input_file.exists():
+        logger.error(f"Input file not found: {input_file}")
+        raise SystemExit(1)
 
-    for test_set in test_sets:
-        input_file = PAROUTES_DIR / f"{test_set}-routes.json.gz"
-        logger.info(f"loading raw routes from {input_file}...")
-        try:
-            with gzip.open(input_file, "rt", encoding="utf-8") as f:
-                all_routes = json.load(f)
-            if not isinstance(all_routes, list):
-                logger.error(f"expected a list of routes in {input_file}, but got {type(all_routes)}")
-                return
-            logger.info(f"loaded {len(all_routes):,} total routes.")
-        except (OSError, json.JSONDecodeError) as e:
-            logger.error(f"failed to load or parse {input_file}: {e}")
-            return
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_file = OUTPUT_DIR / f"{dataset_name}.json.gz"
+    manifest_file = OUTPUT_DIR / f"{dataset_name}-manifest.json"
 
-        for size in SAMPLE_SIZES:
-            adapter = PaRoutesAdapter()
-            if size is None:
-                sampled_routes = all_routes
-                output_suffix = "full"
-                logger.info("\n--- processing full dataset ---")
-            else:
-                if len(all_routes) < size:
-                    logger.warning(
-                        f"requested sample of {size} is larger than total routes ({len(all_routes)}). skipping."
-                    )
-                    continue
-                sampled_routes = random.sample(all_routes, size)
-                output_suffix = f"sample-{size}"
-                logger.info(f"\n--- processing random sample of {size} ---")
+    # Load and adapt routes
+    raw_routes = load_raw_routes(input_file)
 
-            # this is the format retrocast's main pipeline expects: a dict mapping id -> data
-            processed_data = {}
-            successful_routes = 0
+    # Extract dataset prefix for target IDs (e.g., "n1" from "n1-routes")
+    dataset_prefix = dataset_name.replace("-routes", "")
+    adapted_routes = adapt_routes(raw_routes, dataset_prefix)
 
-            pbar = tqdm(enumerate(sampled_routes, 1), total=len(sampled_routes), desc="adapting routes")
-            for i, raw_route in pbar:
-                target_id = f"paroutes-{test_set}-{i}"
-                try:
-                    # the adapter needs a TargetInput object to check for smiles mismatches.
-                    target_smiles = canonicalize_smiles(raw_route["smiles"])
-                    target_info = TargetInput(id=target_id, smiles=target_smiles)
+    if not adapted_routes:
+        logger.error("No routes were successfully adapted. No output files will be written.")
+        raise SystemExit(1)
 
-                    # the adapter yields valid benchmarktree objects.
-                    # for paroutes, each input is a single route, so we expect 0 or 1 trees.
-                    adapted_trees = list(adapter.adapt(raw_route, target_info))
+    # Save routes
+    logger.info(f"Saving adapted routes to {output_file.relative_to(BASE_DIR)}...")
+    save_routes(adapted_routes, output_file)
 
-                    if adapted_trees:
-                        # we only save the first (and only) valid tree.
-                        processed_data[target_id] = [tree.model_dump() for tree in adapted_trees]
-                        successful_routes += 1
+    # Create and save manifest
+    manifest = create_manifest(dataset_name, input_file, output_file, adapted_routes, len(raw_routes))
+    logger.info(f"Saving manifest to {manifest_file.relative_to(BASE_DIR)}...")
+    save_json(manifest, manifest_file)
 
-                except RetroCastException as e:
-                    logger.warning(f"could not process route {i} due to an error: {e}")
-                except (KeyError, TypeError):
-                    logger.warning(f"route {i} has invalid structure or missing 'smiles' key.")
-
-            if not processed_data:
-                logger.warning("no routes were successfully processed. no output file will be written.")
-                continue
-
-            output_filename = f"paroutes-{test_set}-{output_suffix}.json.gz"
-            output_path = PAROUTES_DIR / output_filename
-            logger.info(
-                f"successfully adapted {successful_routes}/{len(sampled_routes)} routes. "
-                f"saving to {output_path.relative_to(BASE_DIR)}..."
-            )
-            adapter.report_statistics()
-
-            # adapter.year_counts is dict[str, int], let's plot it as a bar chart. because years are strs, we need to sort them before plotting
-            sorted_years = sorted(adapter.year_counts.keys())
-            fig.add_trace(
-                go.Bar(
-                    x=sorted_years,
-                    y=[adapter.year_counts[year] for year in sorted_years],
-                    name=test_set,
-                    marker_color="blue",
-                )
-            )
-
-            save_json_gz(processed_data, output_path)
-
-    fig.update_layout(title="Yearly Distribution of Routes", xaxis_title="Year", yaxis_title="Count")
-    from ischemist.style.plotly import Styler
-
-    Styler().apply_style(fig)
-    save_dir = BASE_DIR / "data" / "analysis"
-    save_dir.mkdir(parents=True, exist_ok=True)
-    fig.write_image(save_dir / "yearly_distribution.png", scale=4)
-    logger.info("\n--- finished preprocessing all paroutes samples. ---")
+    # Report summary
+    logger.info("\n--- Conversion Summary ---")
+    logger.info(f"Input file hash:    {manifest['source_file_hash'][:16]}...")
+    logger.info(f"Output file hash:   {manifest['output_file_hash'][:16]}...")
+    logger.info(f"Content hash:       {manifest['output_content_hash'][:16]}...")
+    logger.info(f"Total routes saved: {manifest['statistics']['total_routes_saved']}")
+    logger.info("--- Done ---")
 
 
 if __name__ == "__main__":

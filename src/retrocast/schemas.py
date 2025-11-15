@@ -143,6 +143,26 @@ class Route(BaseModel):
 
         return _get_node_sig(self.target)
 
+    def get_content_hash(self) -> str:
+        """
+        Generates a deterministic hash of the complete route content.
+
+        Unlike get_signature() which only considers tree topology (InchiKeys),
+        this method includes ALL data: rank, metadata, solvability, retrocast_version,
+        and all reaction details (mapped_smiles, templates, reagents, solvents, etc.).
+
+        This is useful for verifying that two routes are semantically identical,
+        including all metadata and provenance information.
+        """
+        import hashlib
+        import json
+
+        # Exclude computed fields to ensure deterministic serialization
+        # (sets like 'leaves' have non-deterministic iteration order across processes)
+        route_dict = self.model_dump(mode="json", exclude={"leaves", "depth"})
+        route_json = json.dumps(route_dict, sort_keys=True)
+        return hashlib.sha256(route_json.encode()).hexdigest()
+
 
 # We need to tell Pydantic to rebuild the forward references
 Molecule.model_rebuild()

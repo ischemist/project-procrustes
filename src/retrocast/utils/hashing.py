@@ -1,26 +1,14 @@
-import gzip
+from __future__ import annotations
+
 import hashlib
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from retrocast.exceptions import RetroCastException
 from retrocast.utils.logging import logger
 
-
-def get_content_hash(path: Path, block_size: int = 65536) -> str:
-    """
-    Computes the SHA256 hash of a file's uncompressed content,
-    supporting both plain and gzipped files.
-    """
-    hasher = hashlib.sha256()
-
-    open_func = gzip.open if path.suffix == ".gz" else open
-    mode = "rb"
-
-    with open_func(path, mode) as f:
-        while block := f.read(block_size):
-            hasher.update(block)
-
-    return hasher.hexdigest()
+if TYPE_CHECKING:
+    from retrocast.schemas import Route
 
 
 def generate_file_hash(path: Path) -> str:
@@ -70,3 +58,31 @@ def generate_source_hash(model_name: str, file_hashes: list[str]) -> str:
     run_bytes = run_signature.encode("utf-8")
     hasher = hashlib.sha256(run_bytes)
     return f"retrocasted-source-{hasher.hexdigest()}"
+
+
+def compute_routes_content_hash(routes: dict[str, list[Route]]) -> str:
+    """
+    Computes an order-agnostic hash of routes content.
+
+    This hash is deterministic and will be identical for routes that contain
+    the same data, regardless of insertion order. It uses Route.get_content_hash()
+    which includes all route data (rank, metadata, tree structure, etc.).
+
+    Args:
+        routes: Dictionary mapping target IDs to lists of Route objects.
+
+    Returns:
+        A SHA256 hex digest representing the content hash.
+    """
+    # Sort by target_id for determinism
+    sorted_target_ids = sorted(routes.keys())
+    route_hashes = []
+
+    for target_id in sorted_target_ids:
+        # Sort routes by rank for determinism within each target
+        for route in sorted(routes[target_id], key=lambda r: r.rank):
+            route_hash = route.get_content_hash()
+            route_hashes.append(f"{target_id}:{route_hash}")
+
+    combined = "".join(route_hashes)
+    return hashlib.sha256(combined.encode()).hexdigest()
