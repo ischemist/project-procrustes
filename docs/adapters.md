@@ -89,14 +89,14 @@ class PrecursorModelAdapter(BaseAdapter):
         # ... your parsing logic here ...
         return precursor_map
 
-    def adapt(self, raw_data: Any, target_info: TargetInfo) -> Generator[Route, None, None]:
+    def adapt(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         try:
             precursor_map = self._parse_route_string(raw_data["routes"])
-            tree = build_tree_from_precursor_map(target_info.smiles, precursor_map)
-            yield Route(target=target_info, retrosynthetic_tree=tree)
-        except RetrocastException as e:
-            logger.warning(f"route for '{target_info.id}' failed: {e}")
-```
+            # Use the new helper to build the tree from the target SMILES
+            tree = build_molecule_from_precursor_map(target_input.smiles, precursor_map)
+            yield Route(target=tree, rank=1)  # Assuming one route per target
+        except (RetrocastException, KeyError) as e:
+            logger.warning(f"route for '{target_input.id}' failed: {e}")
 
 **Key points**:
 1. Write a model-specific parser to extract the precursor map
