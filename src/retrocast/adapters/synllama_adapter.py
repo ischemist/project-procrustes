@@ -6,10 +6,10 @@ from typing import Any
 from pydantic import BaseModel, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.common import PrecursorMap, build_tree_from_precursor_map
-from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, TargetInfo
+from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
+from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -24,25 +24,25 @@ class SynLlamaRouteList(RootModel[list[SynLlamaRouteInput]]):
 
 
 class SynLlaMaAdapter(BaseAdapter):
-    """adapter for converting pre-processed synllama outputs to the benchmarktree schema."""
+    """adapter for converting pre-processed synllama outputs to the Route schema."""
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[BenchmarkTree, None, None]:
-        """validates the pre-processed json data for synllama and yields benchmarktree objects."""
+    def adapt(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
+        """validates the pre-processed json data for synllama and yields Route objects."""
         try:
             validated_routes = SynLlamaRouteList.model_validate(raw_target_data)
         except ValidationError as e:
             logger.warning(f"  - data for target '{target_info.id}' failed synllama schema validation. error: {e}")
             return
 
-        for route in validated_routes.root:
+        for rank, route in enumerate(validated_routes.root, start=1):
             try:
-                tree = self._transform(route, target_info)
-                yield tree
+                route_obj = self._transform(route, target_info, rank=rank)
+                yield route_obj
             except RetroCastException as e:
                 logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, route: SynLlamaRouteInput, target_info: TargetInfo) -> BenchmarkTree:
+    def _transform(self, route: SynLlamaRouteInput, target_info: TargetInput, rank: int) -> Route:
         """orchestrates the transformation of a single synllama route string."""
         # the final product is always the last element in the semicolon-delimited string.
         # this is the most reliable way to identify it.
@@ -60,16 +60,71 @@ class SynLlaMaAdapter(BaseAdapter):
             raise AdapterLogicError(msg)
 
         precursor_map = self._parse_synthesis_string(route.synthesis_string)
-        retrosynthetic_tree = build_tree_from_precursor_map(smiles=target_info.smiles, precursor_map=precursor_map)
-        return BenchmarkTree(target=target_info, retrosynthetic_tree=retrosynthetic_tree)
+        target_molecule = self._build_molecule_from_precursor_map(
+            smiles=target_info.smiles, precursor_map=precursor_map
+        )
+        return Route(target=target_molecule, rank=rank, metadata={})
 
-    def _parse_synthesis_string(self, synthesis_str: str) -> PrecursorMap:
+    def _build_molecule_from_precursor_map(
+        self,
+        smiles: SmilesStr,
+        precursor_map: dict[SmilesStr, list[SmilesStr]],
+        visited: set[SmilesStr] | None = None,
+    ) -> Molecule:
+        """Recursively build a Molecule tree from a precursor map."""
+        if visited is None:
+            visited = set()
+
+        # Cycle detection
+        if smiles in visited:
+            logger.warning(f"Cycle detected for {smiles}, treating as leaf")
+            return Molecule(
+                smiles=smiles,
+                inchikey=get_inchi_key(smiles),
+                synthesis_step=None,
+                metadata={},
+            )
+
+        new_visited = visited | {smiles}
+
+        # Check if this is a leaf (not in precursor map)
+        if smiles not in precursor_map:
+            return Molecule(
+                smiles=smiles,
+                inchikey=get_inchi_key(smiles),
+                synthesis_step=None,
+                metadata={},
+            )
+
+        # Build reactants recursively
+        reactant_molecules = []
+        for reactant_smiles in precursor_map[smiles]:
+            reactant_mol = self._build_molecule_from_precursor_map(
+                smiles=reactant_smiles, precursor_map=precursor_map, visited=new_visited
+            )
+            reactant_molecules.append(reactant_mol)
+
+        # Create the reaction step
+        synthesis_step = ReactionStep(
+            reactants=reactant_molecules,
+            metadata={},
+        )
+
+        # Create the molecule with its synthesis step
+        return Molecule(
+            smiles=smiles,
+            inchikey=get_inchi_key(smiles),
+            synthesis_step=synthesis_step,
+            metadata={},
+        )
+
+    def _parse_synthesis_string(self, synthesis_str: str) -> dict[SmilesStr, list[SmilesStr]]:
         """
         parses a multi-step synllama route string into a precursor map.
         the format is a sequence of `reactants;template;product` chunks, chained together.
         e.g., r1;r2;t1;p1;r3;t2;p2 means p1=f(r1,r2) and p2=f(p1,r3).
         """
-        precursor_map: PrecursorMap = {}
+        precursor_map: dict[SmilesStr, list[SmilesStr]] = {}
         # clean up parts: remove whitespace and empty strings from sequences like ';;'
         parts = [p.strip() for p in synthesis_str.split(";") if p.strip()]
 

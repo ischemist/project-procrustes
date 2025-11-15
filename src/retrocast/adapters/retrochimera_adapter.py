@@ -6,10 +6,10 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.common import PrecursorMap, build_tree_from_precursor_map
-from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, TargetInfo
+from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import RetroCastException
+from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
+from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -55,11 +55,11 @@ class RetrochimeraData(BaseModel):
 
 
 class RetrochimeraAdapter(BaseAdapter):
-    """adapter for converting retrochimera-style outputs to the benchmarktree schema."""
+    """adapter for converting retrochimera-style outputs to the Route schema."""
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[BenchmarkTree, None, None]:
+    def adapt(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
         """
-        validates raw retrochimera data, transforms it, and yields benchmarktree objects.
+        validates raw retrochimera data, transforms it, and yields Route objects.
         """
         try:
             validated_data = RetrochimeraData.model_validate(raw_target_data)
@@ -87,34 +87,102 @@ class RetrochimeraAdapter(BaseAdapter):
             logger.warning(f"  - no outputs found for target '{target_info.id}'")
             return
 
+        rank = 1
         for output in validated_data.result.outputs:
             for route in output.routes:
                 try:
-                    tree = self._transform(route, target_info)
-                    yield tree
+                    route_obj = self._transform(route, target_info, rank=rank)
+                    yield route_obj
+                    rank += 1
                 except RetroCastException as e:
                     logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
                     continue
 
-    def _transform(self, route: RetrochimeraRoute, target_info: TargetInfo) -> BenchmarkTree:
+    def _transform(self, route: RetrochimeraRoute, target_info: TargetInput, rank: int) -> Route:
         """
         orchestrates the transformation of a single retrochimera route.
         raises RetroCastException on failure.
         """
         precursor_map = self._build_precursor_map(route)
-        # refactor: use the common recursive builder.
-        retrosynthetic_tree = build_tree_from_precursor_map(smiles=target_info.smiles, precursor_map=precursor_map)
+        target_molecule = self._build_molecule_from_precursor_map(
+            smiles=target_info.smiles,
+            precursor_map=precursor_map,
+        )
 
-        return BenchmarkTree(target=target_info, retrosynthetic_tree=retrosynthetic_tree)
+        return Route(target=target_molecule, rank=rank, metadata={})
 
-    def _build_precursor_map(self, route: RetrochimeraRoute) -> PrecursorMap:
+    def _build_precursor_map(self, route: RetrochimeraRoute) -> dict[SmilesStr, list[SmilesStr]]:
         """
         builds a precursor map from the route's reactions.
         each product maps to its list of reactant smiles.
         """
-        precursor_map: PrecursorMap = {}
+        precursor_map: dict[SmilesStr, list[SmilesStr]] = {}
         for reaction in route.reactions:
             canon_product = canonicalize_smiles(reaction.product)
             canon_reactants = [canonicalize_smiles(r) for r in reaction.reactants]
             precursor_map[canon_product] = canon_reactants
         return precursor_map
+
+    def _build_molecule_from_precursor_map(
+        self,
+        smiles: SmilesStr,
+        precursor_map: dict[SmilesStr, list[SmilesStr]],
+        visited: set[SmilesStr] | None = None,
+    ) -> Molecule:
+        """
+        recursively builds a Molecule from a precursor map, with cycle detection.
+        """
+        if visited is None:
+            visited = set()
+
+        # Cycle detection
+        if smiles in visited:
+            logger.warning(f"Cycle detected in route graph involving smiles: {smiles}. Treating as a leaf node.")
+            return Molecule(
+                smiles=smiles,
+                inchikey=get_inchi_key(smiles),
+                synthesis_step=None,
+                metadata={},
+            )
+
+        new_visited = visited | {smiles}
+        is_leaf = smiles not in precursor_map
+
+        if is_leaf:
+            # This is a starting material (leaf node)
+            return Molecule(
+                smiles=smiles,
+                inchikey=get_inchi_key(smiles),
+                synthesis_step=None,
+                metadata={},
+            )
+
+        # Build reactants recursively
+        reactant_smiles_list = precursor_map[smiles]
+        reactant_molecules: list[Molecule] = []
+
+        for reactant_smi in reactant_smiles_list:
+            reactant_mol = self._build_molecule_from_precursor_map(
+                smiles=reactant_smi,
+                precursor_map=precursor_map,
+                visited=new_visited,
+            )
+            reactant_molecules.append(reactant_mol)
+
+        # Create the reaction step
+        synthesis_step = ReactionStep(
+            reactants=reactant_molecules,
+            mapped_smiles=None,
+            template=None,
+            reagents=None,
+            solvents=None,
+            metadata={},
+        )
+
+        # Create the molecule with its synthesis step
+        return Molecule(
+            smiles=smiles,
+            inchikey=get_inchi_key(smiles),
+            synthesis_step=synthesis_step,
+            metadata={},
+        )

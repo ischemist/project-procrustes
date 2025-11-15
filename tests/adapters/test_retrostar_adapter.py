@@ -55,7 +55,7 @@ class TestRetroStarAdapterUnit(BaseAdapterTest):
 # ============================================================================
 
 
-@pytest.mark.integration
+@pytest.mark.contract
 class TestRetroStarAdapterContract:
     """Contract tests - verify all routes meet schema requirements."""
 
@@ -159,7 +159,7 @@ class TestRetroStarAdapterContract:
 # ============================================================================
 
 
-@pytest.mark.integration
+@pytest.mark.regression
 class TestRetroStarAdapterRegression:
     """Regression tests - verify specific routes match exact expected values."""
 

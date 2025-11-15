@@ -6,54 +6,84 @@ from pytest_mock import MockerFixture
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.core import process_model_run
-from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, MoleculeNode, TargetInfo
+from retrocast.domain.chem import get_inchi_key
 from retrocast.exceptions import RetroCastIOError
 from retrocast.io import save_json_gz
+from retrocast.schemas import Molecule, Route, TargetInput
 from retrocast.typing import SmilesStr
 from retrocast.utils.hashing import generate_model_hash
 
 
 @pytest.fixture
-def aspirin_target_info() -> TargetInfo:
-    """Provides a standard TargetInfo object for aspirin."""
-    return TargetInfo(
+def aspirin_target_info() -> TargetInput:
+    """Provides a standard TargetInput object for aspirin."""
+    return TargetInput(
         id="aspirin",
         smiles=SmilesStr("CC(=O)OC1=CC=CC=C1C(=O)O"),
     )
 
 
 @pytest.fixture
-def minimal_fake_tree(aspirin_target_info: TargetInfo) -> BenchmarkTree:
-    """Provides a minimal, valid BenchmarkTree for mocking adapter outputs."""
-    root_node = MoleculeNode(
-        id="retrocast-mol-root",
-        molecule_hash="hash_aspirin",
+def minimal_fake_route(aspirin_target_info: TargetInput) -> Route:
+    """Provides a minimal, valid Route for mocking adapter outputs."""
+    target_molecule = Molecule(
         smiles=aspirin_target_info.smiles,
-        is_starting_material=True,
-        reactions=[],
+        inchikey=get_inchi_key(aspirin_target_info.smiles),
+        synthesis_step=None,
     )
-    return BenchmarkTree(
-        target=aspirin_target_info,
-        retrosynthetic_tree=root_node,
-    )
+    return Route(target=target_molecule, rank=1)
 
 
 @pytest.fixture
-def multiple_unique_trees(minimal_fake_tree: BenchmarkTree) -> list[BenchmarkTree]:
-    """Provides a list of three semantically unique BenchmarkTree objects."""
-    tree1 = minimal_fake_tree.model_copy(deep=True)
-    tree2 = minimal_fake_tree.model_copy(deep=True)
-    tree3 = minimal_fake_tree.model_copy(deep=True)
+def multiple_unique_routes(aspirin_target_info: TargetInput) -> list[Route]:
+    """Provides a list of three semantically unique Route objects with different structures."""
+    from retrocast.schemas import ReactionStep
 
-    tree1.retrosynthetic_tree.molecule_hash = "hash_1"
-    tree2.retrosynthetic_tree.molecule_hash = "hash_2"
-    tree3.retrosynthetic_tree.molecule_hash = "hash_3"
+    # Route 1: aspirin as a leaf (no synthesis)
+    route1 = Route(
+        target=Molecule(
+            smiles=aspirin_target_info.smiles,
+            inchikey=get_inchi_key(aspirin_target_info.smiles),
+            synthesis_step=None,
+        ),
+        rank=1,
+    )
 
-    return [tree1, tree2, tree3]
+    # Route 2: aspirin from methanol + ethanol (different starting materials)
+    route2 = Route(
+        target=Molecule(
+            smiles=aspirin_target_info.smiles,
+            inchikey=get_inchi_key(aspirin_target_info.smiles),
+            synthesis_step=ReactionStep(
+                reactants=[
+                    Molecule(smiles="CO", inchikey=get_inchi_key("CO"), synthesis_step=None),
+                    Molecule(smiles="CCO", inchikey=get_inchi_key("CCO"), synthesis_step=None),
+                ]
+            ),
+        ),
+        rank=2,
+    )
+
+    # Route 3: aspirin from propanol + butanol (different starting materials)
+    route3 = Route(
+        target=Molecule(
+            smiles=aspirin_target_info.smiles,
+            inchikey=get_inchi_key(aspirin_target_info.smiles),
+            synthesis_step=ReactionStep(
+                reactants=[
+                    Molecule(smiles="CCCO", inchikey=get_inchi_key("CCCO"), synthesis_step=None),
+                    Molecule(smiles="CCCCO", inchikey=get_inchi_key("CCCCO"), synthesis_step=None),
+                ]
+            ),
+        ),
+        rank=3,
+    )
+
+    return [route1, route2, route3]
 
 
 def test_process_model_run_no_sampling(
-    tmp_path: Path, mocker: MockerFixture, aspirin_target_info: TargetInfo, multiple_unique_trees: list[BenchmarkTree]
+    tmp_path: Path, mocker: MockerFixture, aspirin_target_info: TargetInput, multiple_unique_routes: list[Route]
 ) -> None:
     """
     Tests the full orchestration without any sampling. Verifies correct output
@@ -68,7 +98,7 @@ def test_process_model_run_no_sampling(
     save_json_gz(raw_file_content, raw_file_path)
 
     mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
-    mock_adapter_instance.adapt.return_value = iter(multiple_unique_trees)
+    mock_adapter_instance.adapt.return_value = iter(multiple_unique_routes)
 
     # ACT
     process_model_run(
@@ -92,15 +122,15 @@ def test_process_model_run_no_sampling(
         manifest = json.load(f)
 
     assert "sampling_parameters" not in manifest
-    assert manifest["statistics"]["final_unique_routes_saved"] == len(multiple_unique_trees)
+    assert manifest["statistics"]["final_unique_routes_saved"] == len(multiple_unique_routes)
 
 
 @pytest.mark.parametrize(
     "strategy, k, saved_routes",
     [
-        ("top_k", 2, 2),
-        ("random_k", 1, 1),
-        ("by_length", 2, 2),
+        ("top-k", 2, 2),
+        ("random-k", 1, 1),
+        ("by-length", 2, 2),
     ],
 )
 def test_process_model_run_with_sampling_strategies(
@@ -109,8 +139,8 @@ def test_process_model_run_with_sampling_strategies(
     saved_routes: int,
     tmp_path: Path,
     mocker: MockerFixture,
-    aspirin_target_info: TargetInfo,
-    multiple_unique_trees: list[BenchmarkTree],
+    aspirin_target_info: TargetInput,
+    multiple_unique_routes: list[Route],
 ) -> None:
     """
     Tests that the correct sampling function is called via the strategy map and
@@ -125,10 +155,10 @@ def test_process_model_run_with_sampling_strategies(
     save_json_gz(raw_file_content, raw_file_path)
 
     mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
-    mock_adapter_instance.adapt.return_value = iter(multiple_unique_trees)
+    mock_adapter_instance.adapt.return_value = iter(multiple_unique_routes)
 
     mock_sampling_func = mocker.MagicMock()
-    mock_sampling_func.return_value = multiple_unique_trees[:saved_routes]
+    mock_sampling_func.return_value = multiple_unique_routes[:saved_routes]
     mocker.patch.dict("retrocast.core.SAMPLING_STRATEGY_MAP", {strategy: mock_sampling_func})
 
     # ACT
@@ -144,7 +174,7 @@ def test_process_model_run_with_sampling_strategies(
     )
 
     # ASSERT
-    mock_sampling_func.assert_called_once_with(multiple_unique_trees, k)
+    mock_sampling_func.assert_called_once_with(multiple_unique_routes, k)
 
     expected_model_hash = generate_model_hash(model_name)
     output_dir = processed_dir / expected_model_hash
@@ -161,7 +191,7 @@ def test_process_model_run_with_sampling_strategies(
 
 
 def test_process_model_run_handles_io_error(
-    tmp_path: Path, mocker: MockerFixture, caplog, aspirin_target_info: TargetInfo
+    tmp_path: Path, mocker: MockerFixture, caplog, aspirin_target_info: TargetInput
 ) -> None:
     """
     tests that a fatal error is logged and execution is aborted if the
@@ -201,8 +231,8 @@ def test_process_model_run_warns_on_missing_k(
     tmp_path: Path,
     mocker: MockerFixture,
     caplog,
-    aspirin_target_info: TargetInfo,
-    multiple_unique_trees: list[BenchmarkTree],
+    aspirin_target_info: TargetInput,
+    multiple_unique_routes: list[Route],
 ) -> None:
     """
     tests that a warning is logged if a sampling strategy is given but k is not.
@@ -215,7 +245,7 @@ def test_process_model_run_warns_on_missing_k(
     save_json_gz({"aspirin": [{}]}, raw_file_path)
 
     mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
-    mock_adapter_instance.adapt.return_value = iter(multiple_unique_trees)
+    mock_adapter_instance.adapt.return_value = iter(multiple_unique_routes)
 
     # act
     process_model_run(
@@ -235,15 +265,15 @@ def test_process_model_run_warns_on_missing_k(
     manifest_path = processed_dir / generate_model_hash(model_name) / "manifest.json"
     with manifest_path.open("r") as f:
         manifest = json.load(f)
-    assert manifest["statistics"]["final_unique_routes_saved"] == len(multiple_unique_trees)
+    assert manifest["statistics"]["final_unique_routes_saved"] == len(multiple_unique_routes)
 
 
 def test_process_model_run_warns_on_unknown_strategy(
     tmp_path: Path,
     mocker: MockerFixture,
     caplog,
-    aspirin_target_info: TargetInfo,
-    multiple_unique_trees: list[BenchmarkTree],
+    aspirin_target_info: TargetInput,
+    multiple_unique_routes: list[Route],
 ) -> None:
     """
     tests that a warning is logged if an unknown sampling strategy is provided.
@@ -256,7 +286,7 @@ def test_process_model_run_warns_on_unknown_strategy(
     save_json_gz({"aspirin": [{}]}, raw_file_path)
 
     mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
-    mock_adapter_instance.adapt.return_value = iter(multiple_unique_trees)
+    mock_adapter_instance.adapt.return_value = iter(multiple_unique_routes)
 
     # act
     process_model_run(
@@ -276,4 +306,4 @@ def test_process_model_run_warns_on_unknown_strategy(
     manifest_path = processed_dir / generate_model_hash(model_name) / "manifest.json"
     with manifest_path.open("r") as f:
         manifest = json.load(f)
-    assert manifest["statistics"]["final_unique_routes_saved"] == len(multiple_unique_trees)
+    assert manifest["statistics"]["final_unique_routes_saved"] == len(multiple_unique_routes)

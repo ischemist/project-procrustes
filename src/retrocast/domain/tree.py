@@ -1,53 +1,14 @@
-import hashlib
 import random
 from collections import defaultdict
 
-from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, MoleculeNode
+from retrocast.schemas import Route
 from retrocast.utils.logging import logger
 
 
-def _generate_tree_signature(node: MoleculeNode) -> str:
+def deduplicate_routes(routes: list[Route]) -> list[Route]:
     """
-    Recursively generates a canonical, order-invariant signature for a
-    molecule node and its entire history.
-
-    This version does not use memoization as tree objects should not be large
-    enough to make this a performance bottleneck, and it avoids subtle bugs.
-
-    Args:
-        node: The MoleculeNode to generate a signature for.
-
-    Returns:
-        A hash representing the canonical signature of the tree/subtree.
-    """
-    # Base Case: The node is a starting material. Its signature is its own hash.
-    if node.is_starting_material:
-        return node.molecule_hash
-
-    # Recursive Step: The node is an intermediate.
-    # Its signature depends on the sorted signatures of its reactants.
-    if not node.reactions:  # Should not happen with validation, but good to be safe
-        return node.molecule_hash
-
-    reactant_signatures = []
-    # Assuming one reaction per node as per our schema
-    for reactant_node in node.reactions[0].reactants:
-        reactant_signatures.append(_generate_tree_signature(reactant_node))
-
-    # Sort the signatures to ensure order-invariance (A.B>>C is same as B.A>>C)
-    sorted_signatures = sorted(reactant_signatures)
-
-    # The final signature string incorporates the history and the result.
-    signature_string = "".join(sorted_signatures) + ">>" + node.molecule_hash
-    signature_bytes = signature_string.encode("utf-8")
-
-    # Hash the canonical representation to get the final signature
-    return f"tree_sha256:{hashlib.sha256(signature_bytes).hexdigest()}"
-
-
-def deduplicate_routes(routes: list[BenchmarkTree]) -> list[BenchmarkTree]:
-    """
-    Filters a list of BenchmarkTree objects, returning only the unique routes.
+    Filters a list of Route objects, returning only the unique routes.
+    Uses the Route.get_signature() method for canonical deduplication.
     """
     seen_signatures = set()
     unique_routes = []
@@ -55,7 +16,7 @@ def deduplicate_routes(routes: list[BenchmarkTree]) -> list[BenchmarkTree]:
     logger.debug(f"Deduplicating {len(routes)} routes...")
 
     for route in routes:
-        signature = _generate_tree_signature(route.retrosynthetic_tree)
+        signature = route.get_signature()
 
         if signature not in seen_signatures:
             seen_signatures.add(signature)
@@ -68,30 +29,7 @@ def deduplicate_routes(routes: list[BenchmarkTree]) -> list[BenchmarkTree]:
     return unique_routes
 
 
-def calculate_route_length(node: MoleculeNode) -> int:
-    """
-    Calculate the length of a route (number of reactions/steps).
-
-    This counts the number of reactions in the longest path from the target
-    to any starting material.
-    """
-    if node.is_starting_material:
-        return 0
-
-    if not node.reactions:
-        return 0
-
-    # Find the longest path among all reactants
-    max_length = 0
-    for reaction in node.reactions:
-        for reactant in reaction.reactants:
-            reactant_length = calculate_route_length(reactant)
-            max_length = max(max_length, reactant_length)
-
-    return max_length + 1
-
-
-def sample_top_k(routes: list[BenchmarkTree], k: int) -> list[BenchmarkTree]:
+def sample_top_k(routes: list[Route], k: int) -> list[Route]:
     """Keeps the first k routes from the list."""
     if k <= 0:
         return []
@@ -99,7 +37,7 @@ def sample_top_k(routes: list[BenchmarkTree], k: int) -> list[BenchmarkTree]:
     return routes[:k]
 
 
-def sample_random_k(routes: list[BenchmarkTree], k: int) -> list[BenchmarkTree]:
+def sample_random_k(routes: list[Route], k: int) -> list[Route]:
     """Keeps a random sample of k routes from the list."""
     if k <= 0:
         return []
@@ -109,12 +47,12 @@ def sample_random_k(routes: list[BenchmarkTree], k: int) -> list[BenchmarkTree]:
     return random.sample(routes, k)
 
 
-def sample_k_by_length(routes: list[BenchmarkTree], max_total: int) -> list[BenchmarkTree]:
+def sample_k_by_depth(routes: list[Route], max_total: int) -> list[Route]:
     """
-    Selects up to `max_total` routes by picking one route from each route length
+    Selects up to `max_total` routes by picking one route from each route depth
     in a round-robin fashion, starting with the shortest routes.
 
-    This ensures a diverse set of routes biased towards shorter lengths,
+    This ensures a diverse set of routes biased towards shorter depths,
     without exceeding the total budget.
     """
     if max_total <= 0:
@@ -122,32 +60,32 @@ def sample_k_by_length(routes: list[BenchmarkTree], max_total: int) -> list[Benc
     if len(routes) <= max_total:
         return routes
 
-    routes_by_length = defaultdict(list)
+    routes_by_depth = defaultdict(list)
     for route in routes:
-        length = calculate_route_length(route.retrosynthetic_tree)
-        routes_by_length[length].append(route)
+        depth = route.depth
+        routes_by_depth[depth].append(route)
 
-    filtered_routes: list[BenchmarkTree] = []
-    sorted_lengths = sorted(routes_by_length.keys())
+    filtered_routes: list[Route] = []
+    sorted_depths = sorted(routes_by_depth.keys())
 
-    depth = 0
+    level = 0
     while len(filtered_routes) < max_total:
         routes_added_in_pass = 0
-        for length in sorted_lengths:
-            if depth < len(routes_by_length[length]):
-                filtered_routes.append(routes_by_length[length][depth])
+        for depth in sorted_depths:
+            if level < len(routes_by_depth[depth]):
+                filtered_routes.append(routes_by_depth[depth][level])
                 routes_added_in_pass += 1
                 if len(filtered_routes) == max_total:
                     break
 
         if routes_added_in_pass == 0:
-            # No more routes to add from any length group
+            # No more routes to add from any depth group
             break
 
         if len(filtered_routes) == max_total:
             break
 
-        depth += 1
+        level += 1
 
     logger.debug(f"Filtered {len(routes)} routes to {len(filtered_routes)} diverse routes (max total {max_total}).")
     return filtered_routes

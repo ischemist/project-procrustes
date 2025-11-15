@@ -67,7 +67,7 @@ class TestAskcosAdapterUnit(BaseAdapterTest):
         return TargetInput(id="ethyl_acetate", smiles="CCO")
 
 
-@pytest.mark.integration
+@pytest.mark.contract
 class TestAskcosAdapterContract:
     """Contract tests: verify the adapter produces valid Route objects with required fields populated."""
 
@@ -144,7 +144,7 @@ class TestAskcosAdapterContract:
             check_molecule(route.target)
 
 
-@pytest.mark.integration
+@pytest.mark.regression
 class TestAskcosAdapterRegression:
     """Regression tests: verify specific routes match expected structures and values."""
 
@@ -219,7 +219,7 @@ class TestAskcosAdapterRegression:
         assert step2.reactants[0].is_leaf
 
 
-@pytest.mark.integration
+@pytest.mark.contract
 class TestAskcosAdapterErrorHandling:
     """Tests for error handling and edge cases."""
 

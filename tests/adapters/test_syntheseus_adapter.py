@@ -2,7 +2,7 @@ import pytest
 
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.DEPRECATE_schemas import TargetInfo
+from retrocast.schemas import Route, TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 # derive SMILES from the raw data to ensure canonicalization matches
@@ -43,62 +43,115 @@ class TestSyntheseusAdapterUnit(BaseAdapterTest):
         return [{"smiles": "CCO", "children": []}]
 
     @pytest.fixture
-    def target_info(self):
-        return TargetInfo(id="ethanol", smiles="CCO")
+    def target_input(self):
+        return TargetInput(id="ethanol", smiles="CCO")
 
     @pytest.fixture
-    def mismatched_target_info(self):
-        return TargetInfo(id="ethanol", smiles="CCC")
+    def mismatched_target_input(self):
+        return TargetInput(id="ethanol", smiles="CCC")
 
 
-@pytest.mark.integration
-class TestSyntheseusAdapterIntegration:
-    adapter = SyntheseusAdapter()
+@pytest.mark.contract
+class TestSyntheseusAdapterContract:
+    """Contract tests: verify the adapter produces valid Route objects with required fields populated."""
 
-    def test_adapt_multi_route_complex_target(self, raw_syntheseus_data):
-        """tests a successful run with multiple, complex routes for a single target."""
+    @pytest.fixture(scope="class")
+    def adapter(self) -> SyntheseusAdapter:
+        return SyntheseusAdapter()
+
+    @pytest.fixture(scope="class")
+    def uspto_routes(self, adapter: SyntheseusAdapter, raw_syntheseus_data):
+        """Shared fixture for USPTO-2/190 routes."""
+        target_info = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
+        raw_routes = raw_syntheseus_data["USPTO-2/190"]
+        return list(adapter.adapt(raw_routes, target_info))
+
+    def test_produces_correct_number_of_routes(self, uspto_routes):
+        """Verify the adapter produces the expected number of routes."""
+        assert len(uspto_routes) == 10
+
+    def test_all_routes_have_ranks(self, uspto_routes):
+        """Verify all routes are properly ranked."""
+        ranks = [route.rank for route in uspto_routes]
+        assert ranks == list(range(1, len(uspto_routes) + 1))
+
+    def test_all_routes_are_valid_route_objects(self, uspto_routes):
+        """Verify all routes are Route instances."""
+        for route in uspto_routes:
+            assert isinstance(route, Route)
+
+    def test_all_routes_have_inchikeys(self, uspto_routes):
+        """Verify all target molecules have InChIKeys."""
+        for route in uspto_routes:
+            assert route.target.inchikey is not None
+            assert len(route.target.inchikey) > 0
+
+    def test_all_non_leaf_molecules_have_synthesis_steps(self, uspto_routes):
+        """Verify all non-leaf molecules have synthesis steps."""
+
+        def check_molecule(mol):
+            if not mol.is_leaf:
+                assert mol.synthesis_step is not None
+                for reactant in mol.synthesis_step.reactants:
+                    check_molecule(reactant)
+
+        for route in uspto_routes:
+            check_molecule(route.target)
+
+
+@pytest.mark.regression
+class TestSyntheseusAdapterRegression:
+    """Regression tests: verify specific routes match expected structures and values."""
+
+    @pytest.fixture(scope="class")
+    def adapter(self) -> SyntheseusAdapter:
+        return SyntheseusAdapter()
+
+    def test_adapt_multi_route_complex_target(self, adapter, raw_syntheseus_data):
+        """Tests a successful run with multiple, complex routes for a single target."""
         raw_data = raw_syntheseus_data["USPTO-2/190"]
-        target_info = TargetInfo(id="USPTO-2/190", smiles=USPTO_2_SMILES)
+        target_info = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
 
-        trees = list(self.adapter.adapt(raw_data, target_info))
+        routes = list(adapter.adapt(raw_data, target_info))
 
-        # the file contains 10 distinct routes for this target
-        assert len(trees) == 10
+        # The file contains 10 distinct routes for this target
+        assert len(routes) == 10
 
-        # --- deep inspection of the first tree ---
-        tree = trees[0]
-        root = tree.retrosynthetic_tree
+        # --- Deep inspection of the first route ---
+        first_route = routes[0]
+        target = first_route.target
 
-        assert tree.target.id == "USPTO-2/190"
-        assert root.smiles == USPTO_2_SMILES
-        assert not root.is_starting_material
-        assert len(root.reactions) == 1
+        assert first_route.rank == 1
+        assert target.smiles == USPTO_2_SMILES
+        assert not target.is_leaf
+        assert target.synthesis_step is not None
 
-        # check first step of decomposition
-        reaction = root.reactions[0]
-        assert len(reaction.reactants) == 1
-        intermediate = reaction.reactants[0]
-        assert not intermediate.is_starting_material
+        # Check first step of decomposition
+        synthesis_step = target.synthesis_step
+        assert len(synthesis_step.reactants) == 1
+        intermediate = synthesis_step.reactants[0]
+        assert not intermediate.is_leaf
 
-    def test_adapt_purchasable_target(self, raw_syntheseus_data):
-        """tests a target that is purchasable, resulting in a 0-step route."""
+    def test_adapt_purchasable_target(self, adapter, raw_syntheseus_data):
+        """Tests a target that is purchasable, resulting in a 0-step route."""
         raw_data = raw_syntheseus_data["paracetamol"]
-        target_info = TargetInfo(id="paracetamol", smiles=PARACETAMOL_SMILES)
+        target_info = TargetInput(id="paracetamol", smiles=PARACETAMOL_SMILES)
 
-        trees = list(self.adapter.adapt(raw_data, target_info))
+        routes = list(adapter.adapt(raw_data, target_info))
 
-        assert len(trees) == 1
-        tree = trees[0]
-        root = tree.retrosynthetic_tree
+        assert len(routes) == 1
+        route = routes[0]
+        target = route.target
 
-        assert root.smiles == PARACETAMOL_SMILES
-        assert root.is_starting_material is True
-        assert not root.reactions
+        assert route.rank == 1
+        assert target.smiles == PARACETAMOL_SMILES
+        assert target.is_leaf
+        assert target.synthesis_step is None
 
-    def test_adapt_no_routes_found(self, raw_syntheseus_data):
-        """tests a target for which the model found no routes (empty list)."""
+    def test_adapt_no_routes_found(self, adapter, raw_syntheseus_data):
+        """Tests a target for which the model found no routes (empty list)."""
         raw_data = raw_syntheseus_data["ibuprofen"]
-        target_info = TargetInfo(id="ibuprofen", smiles="CC(C)Cc1ccc(C(C)C(=O)O)cc1")
+        target_info = TargetInput(id="ibuprofen", smiles="CC(C)Cc1ccc(C(C)C(=O)O)cc1")
 
-        trees = list(self.adapter.adapt(raw_data, target_info))
-        assert len(trees) == 0
+        routes = list(adapter.adapt(raw_data, target_info))
+        assert len(routes) == 0
