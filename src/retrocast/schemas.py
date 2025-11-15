@@ -10,11 +10,11 @@ from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
 
 def _get_retrocast_version() -> str:
     """Get the current retrocast version for provenance tracking."""
-    try:
-        from retrocast import __version__
+    from importlib.metadata import PackageNotFoundError, version
 
-        return __version__
-    except ImportError:
+    try:
+        return version("retrocast")
+    except PackageNotFoundError:
         return "0.0.0.dev0+unknown"
 
 
