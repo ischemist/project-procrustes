@@ -1,0 +1,14 @@
+{
+  "dataset": "n5-routes",
+  "source_file": "n5-routes.json.gz",
+  "source_file_hash": "5333b4aeb4e65a2c50e42a8f3a3701c75d76c8045280ec6cc460fbb3ebd605ad",
+  "output_file": "n5-routes.json.gz",
+  "output_file_hash": "9a0ca0ad878117fc762b5f189590b49f18b666ce29414c33673129ce7f24b93d",
+  "output_content_hash": "642531b53e68414d975116cd33e1c187dd16e7efac22b28e54aa40cd56a94f66",
+  "statistics": {
+    "n_routes_source": 10000,
+    "n_routes_saved": 10000
+  },
+  "timestamp": "2025-11-15T22:27:27.277097+00:00",
+  "retrocast_version": "0.3.dev0"
+}

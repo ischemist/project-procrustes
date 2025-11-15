@@ -22,6 +22,7 @@ wheels/
 data/transfers/
 data/**/*.json.gz
 data/**/*.csv
+data/**/*.txt
 data/models/**/*.pickle
 data/models/**/*.pkl
 data/models/**/*.onnx

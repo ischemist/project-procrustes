@@ -16,12 +16,11 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
+from retrocast import Route, TargetInput, adapt_single_route, deduplicate_routes
 from retrocast.curation import create_manifest
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.exceptions import RetroCastException
 from retrocast.io import load_raw_routes, save_json, save_routes
-from retrocast.schemas import Route, TargetInput
 from retrocast.utils.logging import logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -33,8 +32,8 @@ VALID_DATASETS = ["all-routes", "n1-routes", "n5-routes"]
 
 def adapt_routes(raw_routes: list[dict], dataset_prefix: str) -> dict[str, list[Route]]:
     """Cast raw routes to the standard Route schema."""
-    adapter = PaRoutesAdapter()
-    adapted_routes: dict[str, list[Route]] = {}
+    adapted_routes: dict[str, Route] = {}
+    routes: list[Route] = []
     failed_count = 0
 
     pbar = tqdm(enumerate(raw_routes, 1), total=len(raw_routes), desc="Casting routes")
@@ -42,19 +41,21 @@ def adapt_routes(raw_routes: list[dict], dataset_prefix: str) -> dict[str, list[
         target_id = f"{dataset_prefix}-{i}"
         try:
             target_smiles = canonicalize_smiles(raw_route["smiles"])
-            target_info = TargetInput(id=target_id, smiles=target_smiles)
+            target = TargetInput(id=target_id, smiles=target_smiles)
 
             # PaRoutes: each input is a single route, so we expect 0 or 1 trees
-            routes = list(adapter.cast(raw_route, target_info))
-
-            if routes:
-                adapted_routes[target_id] = routes
+            route = adapt_single_route(raw_route, target, "paroutes")
+            if route:
+                routes.append(route)
         except RetroCastException as e:
             logger.debug(f"Could not process route {i}: {e}")
             failed_count += 1
         except (KeyError, TypeError) as e:
             logger.debug(f"Route {i} has invalid structure: {e}")
             failed_count += 1
+
+    unique_routes = deduplicate_routes(routes)
+    adapted_routes = {f"{dataset_prefix}-{i}": [route] for i, route in enumerate(unique_routes)}
 
     logger.info(f"Successfully adapted {len(adapted_routes)}/{len(raw_routes)} routes ({failed_count} failed)")
     return adapted_routes

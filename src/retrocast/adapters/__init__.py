@@ -31,10 +31,7 @@ ADAPTER_MAP: dict[str, BaseAdapter] = {
 
 # Adapters that expect target-centric data format (dict with metadata + nested routes)
 # vs route-centric format (list of route objects)
-TARGET_CENTRIC_ADAPTERS = {
-    "askcos",
-    "retrochimera",
-}
+TARGET_CENTRIC_ADAPTERS = {"askcos", "retrochimera", "paroutes"}
 
 
 def get_adapter(adapter_name: str) -> BaseAdapter:
