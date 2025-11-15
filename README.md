@@ -87,7 +87,35 @@ This will:
 - Deduplicate routes
 - Save canonical output with a deterministic hash
 
-**Converting individual routes** (API coming soon).
+### Use as a Python Library
+
+You can also use RetroCast programmatically to adapt individual routes from any supported model:
+
+```python
+from retrocast import adapt_single_route, TargetInput
+
+# Define your target
+target = TargetInput(id="aspirin", smiles="CC(=O)Oc1ccccc1C(=O)O")
+
+# Your model's raw prediction (e.g., DMS format)
+raw_route = {
+    "smiles": "CC(=O)Oc1ccccc1C(=O)O",
+    "children": [
+        {"smiles": "Oc1ccccc1C(=O)O", "children": []},
+        {"smiles": "CC(=O)Cl", "children": []}
+    ]
+}
+
+# Adapt to unified format - works with both route-centric (DMS, AiZynth)
+# and target-centric (RetroChimera, ASKCOS) adapter formats
+route = adapt_single_route(raw_route, target, adapter_name="dms")
+
+if route:
+    print(f"Route depth: {route.depth}")
+    print(f"Starting materials: {len(route.leaves)}")
+```
+
+See [`docs/api_usage.md`](docs/api_usage.md) for complete API documentation and examples.
 
 ## Available Models
 
@@ -138,6 +166,7 @@ class ReactionStep(BaseModel):
     mapped_smiles: ReactionSmilesStr | None
     template: str | None
     reagents: list[SmilesStr] | None
+    solvents: list[SmilesStr] | None
     metadata: dict[str, Any]
 
 class Route(BaseModel):
