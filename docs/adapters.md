@@ -22,11 +22,14 @@ If the raw output is a JSON tree where molecule nodes point to reaction nodes an
 
 ```python
 # in retrocast/adapters/bipartite_model_adapter.py
+from collections.abc import Generator
 from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, RootModel, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.common import build_tree_from_bipartite_node
-# ... other imports
+from retrocast.adapters.common import build_molecule_from_bipartite_node
+from retrocast.schemas import Route, TargetInput
+from retrocast.exceptions import RetroCastException
+from retrocast.utils.logging import logger
 
 # --- pydantic schemas for raw input validation ---
 class BipartiteBaseNode(BaseModel):
@@ -39,6 +42,7 @@ class BipartiteMoleculeInput(BipartiteBaseNode):
 
 class BipartiteReactionInput(BipartiteBaseNode):
     type: Literal["reaction"]
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 BipartiteNode = Annotated[BipartiteMoleculeInput | BipartiteReactionInput, Field(discriminator="type")]
 
@@ -48,27 +52,27 @@ class BipartiteRouteList(RootModel[list[BipartiteMoleculeInput]]):
 class BipartiteModelAdapter(BaseAdapter):
     def adapt(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         validated_routes = BipartiteRouteList.model_validate(raw_data)
-        for i, root_node in enumerate(validated_routes.root):
+        for i, root_node in enumerate(validated_routes.root, start=1):
             try:
-                # Use the new helper to get a Molecule object
-                tree = build_molecule_from_bipartite_node(root_node)
+                # Use the helper to get a Molecule object
+                target_molecule = build_molecule_from_bipartite_node(root_node)
 
-                # It's good practice to verify the target SMILES matches
-                if tree.smiles != target_input.smiles:
+                # Verify the target SMILES matches
+                if target_molecule.smiles != target_input.smiles:
                     logger.warning(
                         f"Mismatched SMILES for target '{target_input.id}'. "
-                        f"Expected {target_input.smiles}, got {tree.smiles}."
+                        f"Expected {target_input.smiles}, got {target_molecule.smiles}."
                     )
                     continue
 
-                yield Route(target=tree, rank=i + 1)
-            except (RetrocastException, ValidationError) as e:
+                yield Route(target=target_molecule, rank=i, metadata={})
+            except (RetroCastException, ValidationError) as e:
                 logger.warning(f"Route for '{target_input.id}' failed validation or processing: {e}")
 
 **Key points**:
-1. Define Pydantic schemas for the raw input structure
-2. Use `build_tree_from_bipartite_node` from `retrocast.adapters.common`
-3. Yield `Route` objects for each valid route
+1. Define Pydantic schemas for the raw input structure matching the BipartiteMolNode/BipartiteRxnNode protocols
+2. Use `build_molecule_from_bipartite_node` from `retrocast.adapters.common`
+3. Yield `Route` objects with target `Molecule`, rank, and metadata for each valid route
 
 ### Pattern B: Precursor Map
 
@@ -78,9 +82,13 @@ If the raw output can be parsed into a `dict[product_smiles, list[reactant_smile
 
 ```python
 # in retrocast/adapters/precursor_model_adapter.py
+from collections.abc import Generator
+from typing import Any
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.common import PrecursorMap, build_tree_from_precursor_map
-# ... other imports ...
+from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
+from retrocast.schemas import Route, TargetInput
+from retrocast.exceptions import RetroCastException
+from retrocast.utils.logging import logger
 
 class PrecursorModelAdapter(BaseAdapter):
     def _parse_route_string(self, route_str: str) -> PrecursorMap:
@@ -92,16 +100,16 @@ class PrecursorModelAdapter(BaseAdapter):
     def adapt(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         try:
             precursor_map = self._parse_route_string(raw_data["routes"])
-            # Use the new helper to build the tree from the target SMILES
-            tree = build_molecule_from_precursor_map(target_input.smiles, precursor_map)
-            yield Route(target=tree, rank=1)  # Assuming one route per target
-        except (RetrocastException, KeyError) as e:
-            logger.warning(f"route for '{target_input.id}' failed: {e}")
+            # Use the helper to build the tree from the target SMILES
+            target_molecule = build_molecule_from_precursor_map(target_input.smiles, precursor_map)
+            yield Route(target=target_molecule, rank=1, metadata={})
+        except (RetroCastException, KeyError) as e:
+            logger.warning(f"Route for '{target_input.id}' failed: {e}")
 
 **Key points**:
-1. Write a model-specific parser to extract the precursor map
-2. Use `build_tree_from_precursor_map` from `retrocast.adapters.common`
-3. The builder handles reconstruction and validation
+1. Write a model-specific parser to extract the precursor map (`dict[SmilesStr, list[SmilesStr]]`)
+2. Use `build_molecule_from_precursor_map` from `retrocast.adapters.common`
+3. The builder handles recursive tree construction, cycle detection, and validation
 
 ### Pattern C: Custom Recursive
 
@@ -111,40 +119,58 @@ If the raw output is already a recursive tree but with a different schema:
 
 ```python
 # in retrocast/adapters/custom_model_adapter.py
-from pydantic import BaseModel, RootModel
+from collections.abc import Generator
+from typing import Any
+from pydantic import BaseModel, RootModel, Field
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.schemas import Molecule, ReactionStep
-# ... other imports
+from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
+from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
 
 # --- pydantic schemas for raw input validation ---
 class CustomTree(BaseModel):
     smiles: str
-    children: list["CustomTree"]
+    children: list["CustomTree"] = Field(default_factory=list)
 
 class CustomRouteList(RootModel[list[CustomTree]]):
     pass
 
 class CustomModelAdapter(BaseAdapter):
-    def _build_molecule_node(self, custom_node: CustomTree, ...) -> Molecule:
-        # logic to convert one custom node to one retrocast node
+    def _build_molecule(self, custom_node: CustomTree) -> Molecule:
+        # Logic to convert one custom node to one Molecule
         canon_smiles = canonicalize_smiles(custom_node.smiles)
+        inchikey = get_inchi_key(canon_smiles)
+        
         synthesis_step = None
         if custom_node.children:
-            reactants = [self._build_molecule_node(child) for child in custom_node.children]
-            synthesis_step = ReactionStep(reactants=reactants, ...)
-        return Molecule(smiles=canon_smiles, synthesis_step=synthesis_step, ...)
+            reactants = [self._build_molecule(child) for child in custom_node.children]
+            synthesis_step = ReactionStep(
+                reactants=reactants,
+                mapped_smiles=None,
+                template=None,
+                reagents=None,
+                solvents=None,
+                metadata={}
+            )
+        
+        return Molecule(
+            smiles=canon_smiles,
+            inchikey=inchikey,
+            synthesis_step=synthesis_step,
+            metadata={}
+        )
 
-    def adapt(self, raw_data: Any, target_info: TargetInfo) -> Generator[Route, None, None]:
+    def adapt(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         validated_routes = CustomRouteList.model_validate(raw_data)
-        for root_node in validated_routes.root:
-            tree = self._build_molecule_node(root_node)
-            yield Route(target=tree, rank=...)
+        for i, root_node in enumerate(validated_routes.root, start=1):
+            target_molecule = self._build_molecule(root_node)
+            yield Route(target=target_molecule, rank=i, metadata={})
 ```
 
 **Key points**:
 1. Define Pydantic schemas for the raw tree structure
-2. Write a recursive builder (`_build_molecule_node`) that traverses the raw tree
-3. Construct the canonical `Molecule` tree bottom-up
+2. Write a recursive builder (`_build_molecule`) that traverses the raw tree
+3. Construct the canonical `Molecule` tree with `ReactionStep` objects linking reactants
+4. Always canonicalize SMILES and generate InChIKeys for all molecules
 
 ## Integration Steps
 
@@ -337,8 +363,11 @@ Preserve model-specific information in metadata fields:
 ```python
 synthesis_step = ReactionStep(
     reactants=[...],
+    mapped_smiles=reaction_data.get("mapped_smiles"),
+    template=reaction_data.get("template"),
+    reagents=reaction_data.get("reagents"),
+    solvents=reaction_data.get("solvents"),
     metadata={
-        "template_id": reaction_data.get("template"),
         "confidence": reaction_data.get("score"),
         "source": "retro-model-v2",
     }
