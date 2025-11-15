@@ -6,9 +6,9 @@ adapts each route to the standard Route schema, and saves the results along
 with a manifest containing file hashes for verification.
 
 Usage:
-    uv run scripts/paroutes/1-convert-test-sets.py all-routes
-    uv run scripts/paroutes/1-convert-test-sets.py n1-routes
-    uv run scripts/paroutes/1-convert-test-sets.py n5-routes
+    uv run scripts/paroutes/1-cast-raw-routes.py all-routes
+    uv run scripts/paroutes/1-cast-raw-routes.py n1-routes
+    uv run scripts/paroutes/1-cast-raw-routes.py n5-routes
 """
 
 import argparse
@@ -31,28 +31,13 @@ OUTPUT_DIR = PAROUTES_DIR / "processed"
 VALID_DATASETS = ["all-routes", "n1-routes", "n5-routes"]
 
 
-def parse_args() -> argparse.Namespace:
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Convert PaRoutes data to standard retrocast format.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
-    )
-    parser.add_argument(
-        "dataset",
-        choices=VALID_DATASETS,
-        help="Name of the PaRoutes dataset to convert (without .json.gz extension)",
-    )
-    return parser.parse_args()
-
-
 def adapt_routes(raw_routes: list[dict], dataset_prefix: str) -> dict[str, list[Route]]:
-    """Adapt raw routes to the standard Route schema."""
+    """Cast raw routes to the standard Route schema."""
     adapter = PaRoutesAdapter()
     adapted_routes: dict[str, list[Route]] = {}
     failed_count = 0
 
-    pbar = tqdm(enumerate(raw_routes, 1), total=len(raw_routes), desc="Adapting routes")
+    pbar = tqdm(enumerate(raw_routes, 1), total=len(raw_routes), desc="Casting routes")
     for i, raw_route in pbar:
         target_id = f"{dataset_prefix}-{i}"
         try:
@@ -72,28 +57,31 @@ def adapt_routes(raw_routes: list[dict], dataset_prefix: str) -> dict[str, list[
             failed_count += 1
 
     logger.info(f"Successfully adapted {len(adapted_routes)}/{len(raw_routes)} routes ({failed_count} failed)")
-    adapter.report_statistics()
     return adapted_routes
 
 
 def main() -> None:
     """Main script execution."""
-    args = parse_args()
+    parser = argparse.ArgumentParser(
+        description="Convert PaRoutes data to standard retrocast format.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    parser.add_argument(
+        "dataset",
+        choices=VALID_DATASETS,
+        help="Name of the PaRoutes dataset to convert (without .json.gz extension)",
+    )
+    args = parser.parse_args()
     dataset_name = args.dataset
 
     input_file = PAROUTES_DIR / f"{dataset_name}.json.gz"
-    if not input_file.exists():
-        logger.error(f"Input file not found: {input_file}")
-        raise SystemExit(1)
-
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_file = OUTPUT_DIR / f"{dataset_name}.json.gz"
     manifest_file = OUTPUT_DIR / f"{dataset_name}-manifest.json"
 
-    # Load and adapt routes
     raw_routes = load_raw_routes(input_file)
 
-    # Extract dataset prefix for target IDs (e.g., "n1" from "n1-routes")
     dataset_prefix = dataset_name.replace("-routes", "")
     adapted_routes = adapt_routes(raw_routes, dataset_prefix)
 
@@ -101,26 +89,15 @@ def main() -> None:
         logger.error("No routes were successfully adapted. No output files will be written.")
         raise SystemExit(1)
 
-    # Save routes
     logger.info(f"Saving adapted routes to {output_file.relative_to(BASE_DIR)}...")
     save_routes(adapted_routes, output_file)
 
-    # Create and save manifest
     statistics = {
         "n_routes_source": len(raw_routes),
         "n_routes_saved": sum(len(r) for r in adapted_routes.values()),
     }
     manifest = create_manifest(dataset_name, input_file, output_file, adapted_routes, statistics)
-    logger.info(f"Saving manifest to {manifest_file.relative_to(BASE_DIR)}...")
     save_json(manifest, manifest_file)
-
-    # Report summary
-    logger.info("\n--- Conversion Summary ---")
-    logger.info(f"Input file hash:    {manifest['source_file_hash'][:16]}...")
-    logger.info(f"Output file hash:   {manifest['output_file_hash'][:16]}...")
-    logger.info(f"Content hash:       {manifest['output_content_hash'][:16]}...")
-    logger.info(f"Total routes saved: {manifest['statistics']['total_routes_saved']}")
-    logger.info("--- Done ---")
 
 
 if __name__ == "__main__":
