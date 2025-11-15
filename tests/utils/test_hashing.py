@@ -7,28 +7,8 @@ from retrocast.exceptions import RetroCastException
 from retrocast.utils.hashing import (
     generate_file_hash,
     generate_model_hash,
-    generate_molecule_hash,
     generate_source_hash,
 )
-
-
-def test_generate_molecule_hash_is_deterministic() -> None:
-    """Tests that the same SMILES string always produces the same hash."""
-    smiles1 = "CCO"
-    smiles2 = "CCO"
-    hash1 = generate_molecule_hash(smiles1)
-    hash2 = generate_molecule_hash(smiles2)
-    assert hash1 == hash2
-    assert hash1.startswith("sha256-")
-
-
-def test_generate_molecule_hash_is_sensitive() -> None:
-    """Tests that different SMILES strings produce different hashes."""
-    smiles1 = "CCO"  # Ethanol
-    smiles2 = "COC"  # Dimethyl ether
-    hash1 = generate_molecule_hash(smiles1)
-    hash2 = generate_molecule_hash(smiles2)
-    assert hash1 != hash2
 
 
 def test_generate_model_hash_is_deterministic() -> None:

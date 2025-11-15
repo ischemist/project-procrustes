@@ -3,7 +3,6 @@ import hashlib
 from pathlib import Path
 
 from retrocast.exceptions import RetroCastException
-from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
 
@@ -33,22 +32,6 @@ def generate_file_hash(path: Path) -> str:
     except OSError as e:
         logger.error(f"Could not read file for hashing: {path}")
         raise RetroCastException(f"File I/O error on {path}: {e}") from e
-
-
-def generate_molecule_hash(smiles: SmilesStr) -> str:
-    """
-    Generates a deterministic, content-based hash for a canonical SMILES string.
-
-    Args:
-        smiles: The canonical SMILES string.
-
-    Returns:
-        A 'sha256:' prefixed hex digest of the SMILES string.
-    """
-    # we encode to bytes before hashing
-    smiles_bytes = smiles.encode("utf-8")
-    hasher = hashlib.sha256(smiles_bytes)
-    return f"sha256-{hasher.hexdigest()}"
 
 
 def generate_model_hash(model_name: str) -> str:
