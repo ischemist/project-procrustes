@@ -46,15 +46,24 @@ class BipartiteRouteList(RootModel[list[BipartiteMoleculeInput]]):
     pass
 
 class BipartiteModelAdapter(BaseAdapter):
-    def adapt(self, raw_data: Any, target_info: TargetInfo) -> Generator[Route, None, None]:
+    def adapt(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         validated_routes = BipartiteRouteList.model_validate(raw_data)
-        for root_node in validated_routes.root:
+        for i, root_node in enumerate(validated_routes.root):
             try:
-                tree = build_tree_from_bipartite_node(root_node, "retrocast-mol-root")
-                yield Route(target=target_info, retrosynthetic_tree=tree)
-            except RetrocastException as e:
-                logger.warning(f"route for '{target_info.id}' failed: {e}")
-```
+                # Use the new helper to get a Molecule object
+                tree = build_molecule_from_bipartite_node(root_node)
+
+                # It's good practice to verify the target SMILES matches
+                if tree.smiles != target_input.smiles:
+                    logger.warning(
+                        f"Mismatched SMILES for target '{target_input.id}'. "
+                        f"Expected {target_input.smiles}, got {tree.smiles}."
+                    )
+                    continue
+
+                yield Route(target=tree, rank=i + 1)
+            except (RetrocastException, ValidationError) as e:
+                logger.warning(f"Route for '{target_input.id}' failed validation or processing: {e}")
 
 **Key points**:
 1. Define Pydantic schemas for the raw input structure
