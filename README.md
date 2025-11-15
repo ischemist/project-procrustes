@@ -24,7 +24,7 @@ the general pattern is:
 2.  run the numbered scripts in order. these will download assets, prepare data, and finally run the model inference.
 3.  these scripts will save their raw output (usually a `results.json.gz` or similar) to the `data/evaluations/<model-name>/<dataset-name>/` directory.
 
-**example: running `aizynthfinder-mcts` for the `retrocast-bridge-100` dataset**
+**example: running `aizynthfinder-mcts` for the `uspto-190` dataset**
 
 ```bash
 # 1. download model assets (only need to do this once)
@@ -38,8 +38,8 @@ uv run --extra aizyn scripts/AiZynthFinder/2-prepare-stock.py \
     --target hdf5
 
 # 3. run the actual predictions
-# this will generate `data/evaluations/aizynthfinder-mcts/retrocast-bridge-100/results.json.gz`
-uv run --extra aizyn scripts/AiZynthFinder/3-run-aizyn-mcts.py --target-name "retrocast-bridge-100"
+# this will generate `data/evaluations/aizynthfinder-mcts/uspto-190/results.json.gz`
+uv run --extra aizyn scripts/AiZynthFinder/3-run-aizyn-mcts.py --target-name "uspto-190"
 ```
 
 **note**: each python script contains a module-level docstring that describes its purpose and shows example usage.
@@ -50,22 +50,22 @@ once you have the raw output file from stage 1, you can run the main processing 
 
 ```bash
 # process the raw output you just generated
-uv run scripts/process-predictions.py process --model aizynthfinder-mcts --dataset retrocast-bridge-100
+uv run scripts/process-predictions.py process --model aizynthfinder-mcts --dataset uspto-190
 ```
 
 this command will:
 1.  read `retrocast-config.yaml` to find the configuration for `aizynthfinder-mcts`.
-2.  load the raw results from `data/evaluations/aizynthfinder-mcts/retrocast-bridge-100/results.json.gz`.
+2.  load the raw results from `data/evaluations/aizynthfinder-mcts/uspto-190/results.json.gz`.
 3.  use the specified `aizynth` adapter to transform the data.
 4.  perform deduplication and any other processing steps.
-5.  save the final, canonical output and a manifest file to `data/processed/retrocast-bridge-100/retrocast-model-..../`.
+5.  save the final, canonical output and a manifest file to `data/processed/uspto-190/retrocast-model-..../`.
 
 ### stage 3 (optional): verify integrity
 
 you can verify that the processing is reproducible by re-calculating the source hash from the original raw files.
 
 ```bash
-uv run scripts/verify-hash.py --model aizynthfinder-mcts --dataset retrocast-bridge-100
+uv run scripts/verify-hash.py --model aizynthfinder-mcts --dataset uspto-190
 ```
 
 if the hashes match, the process was successful and deterministic.
