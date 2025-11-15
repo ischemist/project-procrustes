@@ -64,7 +64,7 @@ jobs:
       - name: find changed files in src
         id: changed-src-files
         if: github.event_name == 'pull_request'
-        uses: tj-actions/changed-files@v44 # check for the latest version, they update a lot
+        uses: tj-actions/changed-files@v46 # check for the latest version, they update a lot
         with:
           files: src/** # or whatever your source directory is
 
