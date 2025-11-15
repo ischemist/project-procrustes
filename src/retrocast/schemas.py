@@ -136,8 +136,7 @@ class RunStatistics(BaseModel):
     """A Pydantic model to hold and calculate statistics for a processing run."""
 
     total_routes_in_raw_files: int = 0
-    routes_failed_validation: int = 0
-    routes_failed_transformation: int = 0
+    routes_failed_transformation: int = 0  # Includes both validation and transformation failures
     successful_routes_before_dedup: int = 0
     final_unique_routes_saved: int = 0
     targets_with_at_least_one_route: set[str] = Field(default_factory=set)
@@ -146,7 +145,7 @@ class RunStatistics(BaseModel):
     @property
     def total_failures(self) -> int:
         """Total number of routes that were discarded for any reason."""
-        return self.routes_failed_validation + self.routes_failed_transformation
+        return self.routes_failed_transformation
 
     @property
     def num_targets_with_routes(self) -> int:

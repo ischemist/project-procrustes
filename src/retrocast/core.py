@@ -69,7 +69,16 @@ def process_model_run(
             logger.warning(f"Skipping routes for '{target_id}': No target info found.")
             continue
 
+        # Count total routes in raw input files
+        num_raw_routes = len(raw_routes_list)
+        stats.total_routes_in_raw_files += num_raw_routes
+
+        # Transform routes through adapter (handles validation and transformation)
         transformed_trees = list(adapter.adapt(raw_routes_list, targets_map[target_id]))
+
+        # Track failures (both validation and transformation failures)
+        num_failed = num_raw_routes - len(transformed_trees)
+        stats.routes_failed_transformation += num_failed
 
         # Apply filtering based on the chosen strategy
         if sampling_strategy:
