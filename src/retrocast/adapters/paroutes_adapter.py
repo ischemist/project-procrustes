@@ -8,9 +8,9 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.common import build_tree_from_bipartite_node
-from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, TargetInfo
+from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -20,6 +20,7 @@ from retrocast.utils.logging import logger
 
 class PaRoutesReactionMetadata(BaseModel):
     id: str = Field(..., alias="ID")
+    rsmi: str | None = None  # reaction-mapped SMILES
 
 
 class PaRoutesBaseNode(BaseModel):
@@ -46,7 +47,7 @@ PaRoutesReactionInput.model_rebuild()
 
 
 class PaRoutesAdapter(BaseAdapter):
-    """adapter for converting paroutes experimental routes to the benchmarktree schema."""
+    """adapter for converting paroutes experimental routes to the route schema."""
 
     _MODERN_YEAR_PATTERN = re.compile(r"^US(20\d{2})")
     _SPECIAL_PREFIX_PATTERN = re.compile(r"^US[A-Z]+")
@@ -92,7 +93,7 @@ class PaRoutesAdapter(BaseAdapter):
         self.unparsed_categories["unknown_format"] += 1
         return None
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[BenchmarkTree, None, None]:
+    def adapt(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         """
         validates a single paroutes route, checks for patent consistency, and transforms it.
         """
@@ -100,14 +101,14 @@ class PaRoutesAdapter(BaseAdapter):
             # unlike other adapters, the raw data for one target is a single route object, not a list.
             validated_route_root = PaRoutesMoleculeInput.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - raw data for target '{target_info.id}' failed paroutes schema validation. error: {e}")
+            logger.warning(f"  - raw data for target '{target_input.id}' failed paroutes schema validation. error: {e}")
             return
 
         # --- custom validation: ensure all reactions are from the same patent ---
         patent_ids = self._get_patent_ids(validated_route_root)
         if len(patent_ids) > 1:
             logger.warning(
-                f"  - skipping route for '{target_info.id}': contains reactions from multiple patents: {patent_ids}"
+                f"  - skipping route for '{target_input.id}': contains reactions from multiple patents: {patent_ids}"
             )
             return
         elif len(patent_ids) == 1:
@@ -120,30 +121,86 @@ class PaRoutesAdapter(BaseAdapter):
             return
 
         try:
-            tree = self._transform(validated_route_root, target_info)
-            yield tree
+            route = self._transform(validated_route_root, target_input, patent_id=list(patent_ids)[0])
+            yield route
         except RetroCastException as e:
-            logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
+            logger.warning(f"  - route for '{target_input.id}' failed transformation: {e}")
             return
 
-    def _transform(self, paroutes_root: PaRoutesMoleculeInput, target_info: TargetInfo) -> BenchmarkTree:
+    def _transform(self, paroutes_root: PaRoutesMoleculeInput, target_input: TargetInput, patent_id: str) -> Route:
         """
         orchestrates the transformation of a single validated paroutes tree.
         """
-        # this format is a standard bipartite graph, so we reuse the common builder.
-        retrosynthetic_tree = build_tree_from_bipartite_node(
-            raw_mol_node=paroutes_root, path_prefix="retrocast-mol-root"
-        )
+        # build the molecule tree recursively
+        target_molecule = self._build_molecule(paroutes_root)
 
-        if retrosynthetic_tree.smiles != target_info.smiles:
+        if target_molecule.smiles != target_input.smiles:
             msg = (
-                f"mismatched smiles for target {target_info.id}. "
-                f"expected canonical: {target_info.smiles}, but adapter produced: {retrosynthetic_tree.smiles}"
+                f"mismatched smiles for target {target_input.id}. "
+                f"expected canonical: {target_input.smiles}, but adapter produced: {target_molecule.smiles}"
             )
             logger.error(msg)
             raise AdapterLogicError(msg)
 
-        return BenchmarkTree(target=target_info, retrosynthetic_tree=retrosynthetic_tree)
+        # add patent ID to route metadata (everything up to first semicolon)
+        route_metadata = {"patent_id": patent_id}
+
+        return Route(target=target_molecule, rank=1, metadata=route_metadata)
+
+    def _build_molecule(self, raw_mol_node: PaRoutesMoleculeInput) -> Molecule:
+        """
+        recursively builds a molecule from a paroutes bipartite graph node.
+        """
+        if raw_mol_node.type != "mol":
+            raise AdapterLogicError(f"expected node type 'mol' but got '{raw_mol_node.type}'")
+
+        canon_smiles = canonicalize_smiles(raw_mol_node.smiles)
+        is_leaf = raw_mol_node.in_stock or not bool(raw_mol_node.children)
+
+        if is_leaf:
+            return Molecule(
+                smiles=canon_smiles,
+                inchikey=get_inchi_key(canon_smiles),
+                synthesis_step=None,
+                metadata={},
+            )
+
+        # in a valid tree, a molecule has at most one reaction leading to it
+        if len(raw_mol_node.children) > 1:
+            logger.warning(
+                f"molecule {canon_smiles} has multiple child reactions in raw output; only the first is used in a tree."
+            )
+
+        raw_reaction_node: PaRoutesReactionInput = raw_mol_node.children[0]
+        if raw_reaction_node.type != "reaction":
+            raise AdapterLogicError("child of molecule node was not a reaction node")
+
+        # build reactants recursively
+        reactant_molecules: list[Molecule] = []
+        for reactant_mol_input in raw_reaction_node.children:
+            reactant_mol = self._build_molecule(reactant_mol_input)
+            reactant_molecules.append(reactant_mol)
+
+        # extract mapped smiles (rsmi) from metadata
+        rxn_metadata = raw_reaction_node.metadata
+        mapped_smiles = rxn_metadata.rsmi if rxn_metadata else None
+
+        # create the reaction step with full metadata
+        metadata_dict = rxn_metadata.model_dump(by_alias=True) if rxn_metadata else {}
+        synthesis_step = ReactionStep(
+            reactants=reactant_molecules,
+            mapped_smiles=mapped_smiles,
+            reagents=None,
+            solvents=None,
+            metadata=metadata_dict,
+        )
+
+        return Molecule(
+            smiles=canon_smiles,
+            inchikey=get_inchi_key(canon_smiles),
+            synthesis_step=synthesis_step,
+            metadata={},
+        )
 
     def report_statistics(self) -> None:
         """logs the collected patent year statistics."""

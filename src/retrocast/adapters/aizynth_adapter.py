@@ -7,9 +7,8 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_molecule_from_bipartite_node
-from retrocast.domain.DEPRECATE_schemas import TargetInfo
 from retrocast.exceptions import AdapterLogicError, RetroCastException
-from retrocast.schemas import Route
+from retrocast.schemas import Route, TargetInput
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -50,7 +49,7 @@ class AizynthRouteList(RootModel[list[AizynthMoleculeInput]]):
 class AizynthAdapter(BaseAdapter):
     """adapter for converting aizynthfinder-style outputs to the benchmarktree schema."""
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[Route, None, None]:
+    def adapt(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
         """
         validates raw aizynthfinder data, transforms it, and yields route objects.
         """
@@ -68,7 +67,7 @@ class AizynthAdapter(BaseAdapter):
                 logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, aizynth_root: AizynthMoleculeInput, target_info: TargetInfo, rank: int) -> Route:
+    def _transform(self, aizynth_root: AizynthMoleculeInput, target_info: TargetInput, rank: int) -> Route:
         """
         orchestrates the transformation of a single aizynthfinder output tree.
         raises RetroCastException on failure.

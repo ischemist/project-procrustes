@@ -4,7 +4,7 @@ import pytest
 
 from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.DEPRECATE_schemas import TargetInfo
+from retrocast.schemas import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 
@@ -30,17 +30,91 @@ class TestPaRoutesAdapterUnit(BaseAdapterTest):
         return {"smiles": "CCO", "children": []}
 
     @pytest.fixture
-    def target_info(self, raw_paroutes_data):
+    def target_input(self, raw_paroutes_data):
         smiles = raw_paroutes_data["paroutes-ex-1"]["smiles"]
-        return TargetInfo(id="paroutes-ex-1", smiles=canonicalize_smiles(smiles))
+        return TargetInput(id="paroutes-ex-1", smiles=canonicalize_smiles(smiles))
 
     @pytest.fixture
-    def mismatched_target_info(self, raw_paroutes_data):
-        return TargetInfo(id="paroutes-ex-1", smiles="CCO")  # clearly not the same molecule
+    def mismatched_target_input(self, raw_paroutes_data):
+        return TargetInput(id="paroutes-ex-1", smiles="CCO")  # clearly not the same molecule
 
 
 @pytest.mark.integration
-class TestPaRoutesAdapterIntegration:
+class TestPaRoutesAdapterContract:
+    """contract tests: verify the adapter produces valid route objects with required fields populated."""
+
+    @pytest.fixture(scope="class")
+    def adapter(self) -> PaRoutesAdapter:
+        return PaRoutesAdapter()
+
+    @pytest.fixture(scope="class")
+    def routes_ex1(self, adapter, raw_paroutes_data):
+        """shared fixture to avoid re-running adaptation for every test."""
+        target_id = "paroutes-ex-1"
+        raw_route = raw_paroutes_data[target_id]
+        target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
+        return list(adapter.adapt(raw_route, target_input))
+
+    @pytest.fixture(scope="class")
+    def routes_ex2(self, adapter, raw_paroutes_data):
+        """shared fixture for second example."""
+        target_id = "paroutes-ex-2"
+        raw_route = raw_paroutes_data[target_id]
+        target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
+        return list(adapter.adapt(raw_route, target_input))
+
+    def test_produces_single_route(self, routes_ex1):
+        """verify the adapter produces exactly one route per target."""
+        assert len(routes_ex1) == 1
+
+    def test_route_has_rank(self, routes_ex1):
+        """verify the route has rank 1."""
+        assert routes_ex1[0].rank == 1
+
+    def test_route_has_patent_id_metadata(self, routes_ex1):
+        """verify the route metadata contains patent_id."""
+        route = routes_ex1[0]
+        assert "patent_id" in route.metadata
+        assert route.metadata["patent_id"] == "US20150051201A1"
+
+    def test_all_molecules_have_inchikeys(self, routes_ex1):
+        """verify all molecules in the route have inchikeys."""
+
+        def check_molecule(mol):
+            assert mol.inchikey is not None
+            assert len(mol.inchikey) > 0
+            if mol.synthesis_step is not None:
+                for reactant in mol.synthesis_step.reactants:
+                    check_molecule(reactant)
+
+        check_molecule(routes_ex1[0].target)
+
+    def test_all_reaction_steps_have_mapped_smiles(self, routes_ex1):
+        """verify all reaction steps have mapped smiles (rsmi) populated."""
+
+        def check_molecule(mol):
+            if mol.synthesis_step is not None:
+                assert mol.synthesis_step.mapped_smiles is not None
+                assert len(mol.synthesis_step.mapped_smiles) > 0
+                # verify it contains atom mapping (colon followed by digit)
+                assert ":" in mol.synthesis_step.mapped_smiles
+                for reactant in mol.synthesis_step.reactants:
+                    check_molecule(reactant)
+
+        check_molecule(routes_ex1[0].target)
+
+    def test_depth_calculation(self, routes_ex1, routes_ex2):
+        """verify route depth is calculated correctly."""
+        # paroutes-ex-1 has 2 reaction steps (depth 2)
+        assert routes_ex1[0].depth == 2
+        # paroutes-ex-2 has 3 reaction steps (depth 3)
+        assert routes_ex2[0].depth == 3
+
+
+@pytest.mark.integration
+class TestPaRoutesAdapterRegression:
+    """regression tests: verify specific routes match expected structures and values."""
+
     @pytest.fixture(scope="class")
     def adapter(self) -> PaRoutesAdapter:
         return PaRoutesAdapter()
@@ -52,22 +126,22 @@ class TestPaRoutesAdapterIntegration:
         """
         target_id = "paroutes-ex-1"
         raw_route = raw_paroutes_data[target_id]
-        target_info = TargetInfo(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
+        target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
 
         # both reaction steps in this example are from patent 'us20150051201a1'.
-        trees = list(adapter.adapt(raw_route, target_info))
+        routes = list(adapter.adapt(raw_route, target_input))
 
-        assert len(trees) == 1
-        tree = trees[0]
-        assert tree.target.id == target_id
-        assert tree.retrosynthetic_tree.smiles == target_info.smiles
-        assert not tree.retrosynthetic_tree.is_starting_material
+        assert len(routes) == 1
+        route = routes[0]
+        assert route.target.smiles == target_input.smiles
+        assert not route.target.is_leaf
         # check that it has some depth
-        reaction = tree.retrosynthetic_tree.reactions[0]
+        reaction = route.target.synthesis_step
+        assert reaction is not None
         assert len(reaction.reactants) == 2
         # check one level deeper
-        intermediate_mol = next(r for r in reaction.reactants if not r.is_starting_material)
-        assert len(intermediate_mol.reactions) == 1
+        intermediate_mol = next(r for r in reaction.reactants if not r.is_leaf)
+        assert intermediate_mol.synthesis_step is not None
 
     def test_rejects_mixed_patent_route(self, adapter, raw_paroutes_data):
         """
@@ -77,7 +151,7 @@ class TestPaRoutesAdapterIntegration:
         target_id = "paroutes-ex-1"
         # use deepcopy to avoid state leakage between tests
         raw_route = deepcopy(raw_paroutes_data[target_id])
-        target_info = TargetInfo(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
+        target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
 
         # let's mutate the data to create the failure condition.
         # the first reaction id is 'us20150051201a1;0516;1654836'
@@ -87,9 +161,9 @@ class TestPaRoutesAdapterIntegration:
         inner_reaction["metadata"]["ID"] = "SOME-OTHER-PATENT;1234;56789"
 
         # the adapter should now see two different patent ids and yield nothing.
-        trees = list(adapter.adapt(raw_route, target_info))
+        routes = list(adapter.adapt(raw_route, target_input))
 
-        assert len(trees) == 0
+        assert len(routes) == 0
 
     def test_adapt_second_example_route(self, adapter, raw_paroutes_data):
         """
@@ -97,18 +171,18 @@ class TestPaRoutesAdapterIntegration:
         """
         target_id = "paroutes-ex-2"
         raw_route = raw_paroutes_data[target_id]
-        target_info = TargetInfo(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
+        target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
 
         # all reaction steps in this example are from patent 'us08242133b2'.
-        trees = list(adapter.adapt(raw_route, target_info))
+        routes = list(adapter.adapt(raw_route, target_input))
 
-        assert len(trees) == 1
-        tree = trees[0]
-        assert tree.target.id == target_id
-        assert tree.retrosynthetic_tree.smiles == target_info.smiles
+        assert len(routes) == 1
+        route = routes[0]
+        assert route.target.smiles == target_input.smiles
 
         # just check the first reaction's children
-        reaction1 = tree.retrosynthetic_tree.reactions[0]
+        reaction1 = route.target.synthesis_step
+        assert reaction1 is not None
         assert len(reaction1.reactants) == 2
         reactant_smiles = {r.smiles for r in reaction1.reactants}
         expected_smiles = {

@@ -4,11 +4,10 @@ from typing import Any
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.DEPRECATE_schemas import BenchmarkTree, MoleculeNode, ReactionNode, TargetInfo
+from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
-from retrocast.typing import ReactionSmilesStr, SmilesStr
-from retrocast.utils.hashing import generate_molecule_hash
+from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
+from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
 
@@ -33,95 +32,95 @@ class DMSRouteList(RootModel[list[DMSTree]]):
 
 
 class DMSAdapter(BaseAdapter):
-    """Adapter for converting DMS-style model outputs to the BenchmarkTree schema."""
+    """Adapter for converting DMS-style model outputs to the Route schema."""
 
-    def adapt(self, raw_target_data: Any, target_info: TargetInfo) -> Generator[BenchmarkTree, None, None]:
+    def adapt(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         """
-        Validates raw DMS data, transforms it, and yields BenchmarkTree objects.
+        Validates raw DMS data, transforms it, and yields Route objects.
         """
         try:
             # 1. Model-specific validation happens HERE, inside the adapter.
             validated_routes = DMSRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - Raw data for target '{target_info.id}' failed DMS schema validation. Error: {e}")
+            logger.warning(f"  - Raw data for target '{target_input.id}' failed DMS schema validation. Error: {e}")
             return  # Stop processing this target
 
         # 2. Iterate and transform each valid route
-        for dms_tree_root in validated_routes.root:
+        for rank, dms_tree_root in enumerate(validated_routes.root, start=1):
             try:
                 # The private _transform method now only handles one route at a time
-                tree = self._transform(dms_tree_root, target_info)
-                yield tree
+                route = self._transform(dms_tree_root, target_input, rank)
+                yield route
             except RetroCastException as e:
                 # A single route failed, log it and continue with the next one.
-                logger.warning(f"  - Route for '{target_info.id}' failed transformation: {e}")
+                logger.warning(f"  - Route for '{target_input.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, raw_data: DMSTree, target_info: TargetInfo) -> BenchmarkTree:
+    def _transform(self, raw_data: DMSTree, target_input: TargetInput, rank: int) -> Route:
         """
         Orchestrates the transformation of a single DMS output tree.
         Raises RetroCastException on failure.
         """
-        # begin the recursion from the root node
-        retrosynthetic_tree = self._build_molecule_node(dms_node=raw_data, path_prefix="retrocast-mol-root")
+        # Begin the recursion from the root node
+        target_molecule = self._build_molecule(dms_node=raw_data)
 
         # Final validation: does the transformed tree root match the canonical target smiles?
-        if retrosynthetic_tree.smiles != target_info.smiles:
-            # this is a logic error, not a parse error
+        if target_molecule.smiles != target_input.smiles:
+            # This is a logic error, not a parse error
             msg = (
-                f"Mismatched SMILES for target {target_info.id}. "
-                f"Expected canonical: {target_info.smiles}, but adapter produced: {retrosynthetic_tree.smiles}"
+                f"Mismatched SMILES for target {target_input.id}. "
+                f"Expected canonical: {target_input.smiles}, but adapter produced: {target_molecule.smiles}"
             )
             logger.error(msg)
             raise AdapterLogicError(msg)
 
-        return BenchmarkTree(target=target_info, retrosynthetic_tree=retrosynthetic_tree)
+        return Route(target=target_molecule, rank=rank, metadata={})
 
-    def _build_molecule_node(
-        self, dms_node: DMSTree, path_prefix: str, visited_path: set[SmilesStr] | None = None
-    ) -> MoleculeNode:
+    def _build_molecule(self, dms_node: DMSTree, visited: set[SmilesStr] | None = None) -> Molecule:
         """
-        Recursively builds a MoleculeNode. This will propagate InvalidSmilesError if it occurs.
+        Recursively builds a Molecule from a DMS tree node.
+        This will propagate InvalidSmilesError if it occurs.
         """
-        if visited_path is None:
-            visited_path = set()
+        if visited is None:
+            visited = set()
 
         canon_smiles = canonicalize_smiles(dms_node.smiles)
 
-        if canon_smiles in visited_path:
+        if canon_smiles in visited:
             raise AdapterLogicError(f"cycle detected in route graph involving smiles: {canon_smiles}")
 
-        new_visited_path = visited_path | {canon_smiles}
-        is_starting_mat = not bool(dms_node.children)
-        reactions = []
+        new_visited = visited | {canon_smiles}
+        is_leaf = not bool(dms_node.children)
 
-        if not is_starting_mat:
-            reactants: list[MoleculeNode] = []
-            reactant_smiles_list: list[SmilesStr] = []
-
-            for i, child_node in enumerate(dms_node.children):
-                reactant_node = self._build_molecule_node(
-                    dms_node=child_node, path_prefix=f"{path_prefix}-{i}", visited_path=new_visited_path
-                )
-                reactants.append(reactant_node)
-                reactant_smiles_list.append(reactant_node.smiles)
-
-            reaction_smiles = ReactionSmilesStr(f"{'.'.join(sorted(reactant_smiles_list))}>>{canon_smiles}")
-
-            reactions.append(
-                ReactionNode(
-                    id=path_prefix.replace("retrocast-mol", "retrocast-rxn"),
-                    reaction_smiles=reaction_smiles,
-                    reactants=reactants,
-                )
+        if is_leaf:
+            # This is a starting material (leaf node)
+            return Molecule(
+                smiles=canon_smiles,
+                inchikey=get_inchi_key(canon_smiles),
+                synthesis_step=None,
+                metadata={},
             )
 
-        return MoleculeNode(
-            id=path_prefix,
-            molecule_hash=generate_molecule_hash(canon_smiles),
+        # Build reactants recursively
+        reactant_molecules: list[Molecule] = []
+        for child_node in dms_node.children:
+            reactant_mol = self._build_molecule(dms_node=child_node, visited=new_visited)
+            reactant_molecules.append(reactant_mol)
+
+        # Create the reaction step
+        synthesis_step = ReactionStep(
+            reactants=reactant_molecules,
+            mapped_smiles=None,
+            reagents=None,
+            solvents=None,
+            metadata={},
+        )
+
+        return Molecule(
             smiles=canon_smiles,
-            is_starting_material=is_starting_mat,
-            reactions=reactions,
+            inchikey=get_inchi_key(canon_smiles),
+            synthesis_step=synthesis_step,
+            metadata={},
         )
 
     @staticmethod

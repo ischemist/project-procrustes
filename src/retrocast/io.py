@@ -233,7 +233,7 @@ def combine_evaluation_results(targets_csv: str, eval_dir: str, output_path: str
 def load_and_prepare_targets(file_path: Path) -> dict[str, TargetInput]:
     """
     Loads a file containing target IDs and SMILES, canonicalizes the SMILES,
-    and prepares a dictionary of TargetInfo objects.
+    and prepares a dictionary of TargetInput objects.
     """
     logger.info(f"Loading and preparing targets from {file_path}...")
 
