@@ -7,9 +7,8 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_molecule_from_bipartite_node
-from retrocast.domain.DEPRECATE_schemas import TargetInput
 from retrocast.exceptions import AdapterLogicError, RetroCastException
-from retrocast.schemas import Route
+from retrocast.schemas import Route, TargetInput
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import statistics
 from typing import Any
 
 from pydantic import BaseModel, Field, computed_field
@@ -129,3 +130,76 @@ class Route(BaseModel):
 
 # We need to tell Pydantic to rebuild the forward references
 Molecule.model_rebuild()
+
+
+class RunStatistics(BaseModel):
+    """A Pydantic model to hold and calculate statistics for a processing run."""
+
+    total_routes_in_raw_files: int = 0
+    routes_failed_validation: int = 0
+    routes_failed_transformation: int = 0
+    successful_routes_before_dedup: int = 0
+    final_unique_routes_saved: int = 0
+    targets_with_at_least_one_route: set[str] = Field(default_factory=set)
+    routes_per_target: dict[str, int] = Field(default_factory=dict)
+
+    @property
+    def total_failures(self) -> int:
+        """Total number of routes that were discarded for any reason."""
+        return self.routes_failed_validation + self.routes_failed_transformation
+
+    @property
+    def num_targets_with_routes(self) -> int:
+        """The count of unique targets that have at least one valid route."""
+        return len(self.targets_with_at_least_one_route)
+
+    @property
+    def duplication_factor(self) -> float:
+        """Ratio of successful routes before and after deduplication. 1.0 means no duplicates."""
+        if self.final_unique_routes_saved == 0:
+            return 0.0
+        ratio = self.successful_routes_before_dedup / self.final_unique_routes_saved
+        return round(ratio, 2)
+
+    @property
+    def min_routes_per_target(self) -> int:
+        """Minimum number of routes per target that has at least one route."""
+        if not self.routes_per_target:
+            return 0
+        return min(self.routes_per_target.values())
+
+    @property
+    def max_routes_per_target(self) -> int:
+        """Maximum number of routes per target that has at least one route."""
+        if not self.routes_per_target:
+            return 0
+        return max(self.routes_per_target.values())
+
+    @property
+    def avg_routes_per_target(self) -> float:
+        """Average number of routes per target that has at least one route."""
+        if not self.routes_per_target:
+            return 0.0
+        return round(statistics.mean(self.routes_per_target.values()), 2)
+
+    @property
+    def median_routes_per_target(self) -> float:
+        """Median number of routes per target that has at least one route."""
+        if not self.routes_per_target:
+            return 0.0
+        return round(statistics.median(self.routes_per_target.values()), 2)
+
+    def to_manifest_dict(self) -> dict[str, int | float]:
+        """Generates a dictionary suitable for including in the final manifest."""
+        return {
+            "total_routes_in_raw_files": self.total_routes_in_raw_files,
+            "total_routes_failed_or_duplicate": self.total_failures
+            + (self.successful_routes_before_dedup - self.final_unique_routes_saved),
+            "final_unique_routes_saved": self.final_unique_routes_saved,
+            "num_targets_with_at_least_one_route": self.num_targets_with_routes,
+            "duplication_factor": self.duplication_factor,
+            "min_routes_per_target": self.min_routes_per_target,
+            "max_routes_per_target": self.max_routes_per_target,
+            "avg_routes_per_target": self.avg_routes_per_target,
+            "median_routes_per_target": self.median_routes_per_target,
+        }

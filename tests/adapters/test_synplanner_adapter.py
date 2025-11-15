@@ -2,8 +2,7 @@ import pytest
 
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.domain.DEPRECATE_schemas import TargetInput
-from retrocast.schemas import Route
+from retrocast.schemas import Route, TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 # ========================================

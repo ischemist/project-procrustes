@@ -5,23 +5,22 @@ from typing import Any
 from tqdm import tqdm
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.domain.DEPRECATE_schemas import RunStatistics
 from retrocast.domain.tree import (
     deduplicate_routes,
-    sample_k_by_length,
+    sample_k_by_depth,
     sample_random_k,
     sample_top_k,
 )
 from retrocast.exceptions import RetroCastIOError
 from retrocast.io import load_json_gz, save_json, save_json_gz
-from retrocast.schemas import TargetInput
+from retrocast.schemas import RunStatistics, TargetInput
 from retrocast.utils.hashing import generate_file_hash, generate_model_hash, generate_source_hash
 from retrocast.utils.logging import logger
 
 SAMPLING_STRATEGY_MAP = {
     "top-k": sample_top_k,
     "random-k": sample_random_k,
-    "by-length": sample_k_by_length,
+    "by-length": sample_k_by_depth,
 }
 
 
@@ -87,7 +86,9 @@ def process_model_run(
         unique_trees = deduplicate_routes(transformed_trees)
 
         if len(unique_trees):
-            final_output_data[target_id] = [tree.model_dump() for tree in unique_trees]
+            final_output_data[target_id] = [
+                tree.model_dump(mode="json", exclude_computed_fields=True) for tree in unique_trees
+            ]
             stats.targets_with_at_least_one_route.add(target_id)
             stats.routes_per_target[target_id] = len(unique_trees)
 
