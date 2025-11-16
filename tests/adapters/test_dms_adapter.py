@@ -58,7 +58,7 @@ class TestDMSAdapterUnit(BaseAdapterTest):
             }
         ]
         target_input = TargetInput(id="ibuprofen_cycle_test", smiles=canonicalize_smiles(target_smiles))
-        routes = list(adapter_instance.adapt(cyclic_route_data, target_input))
+        routes = list(adapter_instance.cast(cyclic_route_data, target_input))
         assert len(routes) == 0
         assert "cycle detected" in caplog.text
 
@@ -78,7 +78,7 @@ class TestDMSAdapterContract:
         raw_target_data = raw_dms_data["ibuprofen"]
         target_smiles = canonicalize_smiles(raw_target_data[0]["smiles"])
         target_input = TargetInput(id="ibuprofen", smiles=target_smiles)
-        return list(adapter.adapt(raw_target_data, target_input))
+        return list(adapter.cast(raw_target_data, target_input))
 
     def test_produces_multiple_routes(self, routes):
         """Verify the adapter produces multiple routes for ibuprofen."""
@@ -133,7 +133,7 @@ class TestDMSAdapterRegression:
         target_smiles = canonicalize_smiles(raw_route_data["smiles"])
         target_input = TargetInput(id="aspirin", smiles=target_smiles)
 
-        routes = list(adapter.adapt([raw_route_data], target_input))
+        routes = list(adapter.cast([raw_route_data], target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -161,7 +161,7 @@ class TestDMSAdapterRegression:
         target_smiles = canonicalize_smiles(raw_route_data["smiles"])
         target_input = TargetInput(id="paracetamol", smiles=target_smiles)
 
-        routes = list(adapter.adapt([raw_route_data], target_input))
+        routes = list(adapter.cast([raw_route_data], target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -216,7 +216,7 @@ class TestDMSAdapterRegression:
             target_smiles = canonicalize_smiles(raw_route_data["smiles"])
             target_input = TargetInput(id=target_name, smiles=target_smiles)
 
-            routes = list(adapter.adapt([raw_route_data], target_input))
+            routes = list(adapter.cast([raw_route_data], target_input))
             route = routes[0]
 
             dms_tree = DMSTree.model_validate(raw_route_data)

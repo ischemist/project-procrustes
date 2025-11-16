@@ -79,7 +79,7 @@ class TestAskcosAdapterContract:
     def routes(self, adapter: AskcosAdapter, raw_askcos_data: dict[str, Any], methylacetate_target_input: TargetInput):
         """Shared fixture to avoid re-running adaptation for every test."""
         raw_target_data = raw_askcos_data["methylacetate"]
-        return list(adapter.adapt(raw_target_data, methylacetate_target_input))
+        return list(adapter.cast(raw_target_data, methylacetate_target_input))
 
     def test_produces_correct_number_of_routes(self, routes):
         """Verify the adapter produces the expected number of routes."""
@@ -156,7 +156,7 @@ class TestAskcosAdapterRegression:
     def routes(self, adapter: AskcosAdapter, raw_askcos_data: dict[str, Any], methylacetate_target_input: TargetInput):
         """Shared fixture to avoid re-running adaptation for every test."""
         raw_target_data = raw_askcos_data["methylacetate"]
-        return list(adapter.adapt(raw_target_data, methylacetate_target_input))
+        return list(adapter.cast(raw_target_data, methylacetate_target_input))
 
     def test_first_route_is_simple_one_step(self, routes):
         """Verify the first route is a simple one-step synthesis."""
@@ -244,7 +244,7 @@ class TestAskcosAdapterErrorHandling:
         corrupted_data["results"]["uds"]["node_dict"].pop(key_to_remove, None)
 
         # The adapter should still run and produce routes for the non-corrupted pathways
-        routes = list(adapter.adapt(corrupted_data, methylacetate_target_input))
+        routes = list(adapter.cast(corrupted_data, methylacetate_target_input))
 
         # The key assertion: we produced FEWER routes than total pathways.
         total_pathways = len(raw_target_data["results"]["uds"]["pathways"])

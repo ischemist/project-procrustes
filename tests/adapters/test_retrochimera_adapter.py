@@ -74,7 +74,7 @@ class TestRetrochimeraAdapterContract:
     def routes(self, adapter, raw_retrochimera_data, ebastine_target_input):
         """Shared fixture to avoid re-running adaptation for every test."""
         raw_target_data = raw_retrochimera_data["Ebastine"]
-        return list(adapter.adapt(raw_target_data, ebastine_target_input))
+        return list(adapter.cast(raw_target_data, ebastine_target_input))
 
     def test_produces_correct_number_of_routes(self, routes):
         """Verify the adapter produces the expected number of routes."""
@@ -125,7 +125,7 @@ class TestRetrochimeraAdapterRegression:
     def routes(self, adapter, raw_retrochimera_data, ebastine_target_input):
         """Shared fixture to avoid re-running adaptation for every test."""
         raw_target_data = raw_retrochimera_data["Ebastine"]
-        return list(adapter.adapt(raw_target_data, ebastine_target_input))
+        return list(adapter.cast(raw_target_data, ebastine_target_input))
 
     def test_first_route_has_correct_target(self, routes, ebastine_target_input):
         """Verify the first route has the correct target SMILES."""

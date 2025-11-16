@@ -28,7 +28,7 @@ class BaseAdapterTest(ABC):
         Provide a minimal, valid piece of raw data representing one or more successful routes.
 
         Note: This data should match the expected structure for the adapter's `adapt` method.
-        See the docstring for `retrocast.adapters.base_adapter.BaseAdapter.adapt` for a discussion
+        See the docstring for `retrocast.adapters.base_adapter.BaseAdapter.cast` for a discussion
         of "Route-Centric" vs. "Target-Centric" data formats.
         """
         raise NotImplementedError
@@ -61,7 +61,7 @@ class BaseAdapterTest(ABC):
 
     def test_adapt_success(self, adapter_instance, raw_valid_route_data, target_input):
         """Tests that a valid raw route produces at least one Route."""
-        routes = list(adapter_instance.adapt(raw_valid_route_data, target_input))
+        routes = list(adapter_instance.cast(raw_valid_route_data, target_input))
         assert len(routes) >= 1
         route = routes[0]
         assert isinstance(route, Route)
@@ -71,12 +71,12 @@ class BaseAdapterTest(ABC):
 
     def test_adapt_handles_unsuccessful_run(self, adapter_instance, raw_unsuccessful_run_data, target_input):
         """Tests that data for an unsuccessful run yields no routes."""
-        routes = list(adapter_instance.adapt(raw_unsuccessful_run_data, target_input))
+        routes = list(adapter_instance.cast(raw_unsuccessful_run_data, target_input))
         assert len(routes) == 0
 
     def test_adapt_handles_invalid_schema(self, adapter_instance, raw_invalid_schema_data, target_input, caplog):
         """Tests that data failing schema validation yields no routes and logs a warning."""
-        routes = list(adapter_instance.adapt(raw_invalid_schema_data, target_input))
+        routes = list(adapter_instance.cast(raw_invalid_schema_data, target_input))
         assert len(routes) == 0
         assert "failed" in caplog.text and "validation" in caplog.text
 
@@ -84,6 +84,6 @@ class BaseAdapterTest(ABC):
         self, adapter_instance, raw_valid_route_data, mismatched_target_input, caplog
     ):
         """Tests that a SMILES mismatch between target and data yields no routes and logs a warning."""
-        routes = list(adapter_instance.adapt(raw_valid_route_data, mismatched_target_input))
+        routes = list(adapter_instance.cast(raw_valid_route_data, mismatched_target_input))
         assert len(routes) == 0
         assert "mismatched smiles" in caplog.text.lower() or "does not match expected target" in caplog.text.lower()

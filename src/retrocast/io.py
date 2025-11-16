@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.exceptions import RetroCastException, RetroCastIOError, RetroCastSerializationError
-from retrocast.schemas import TargetInput
+from retrocast.schemas import Route, TargetInput
 from retrocast.utils.logging import logger
 
 # This allows us to return the same type that was passed in.
@@ -54,6 +54,41 @@ def load_json_gz(path: Path) -> dict[str, Any]:
     except (OSError, gzip.BadGzipFile, json.JSONDecodeError) as e:
         logger.error(f"Failed to load or parse gzipped JSON file: {path}")
         raise RetroCastIOError(f"Data loading error on {path}: {e}") from e
+
+
+def save_routes(routes: dict[str, list[Route]], path: Path) -> None:
+    """
+    Saves a dictionary of routes to a gzipped JSON file.
+
+    Args:
+        routes: Dictionary mapping target IDs to lists of Route objects.
+        path: Path to the output gzipped JSON file.
+    """
+    data = {
+        target_id: [route.model_dump(mode="json") for route in route_list] for target_id, route_list in routes.items()
+    }
+    save_json_gz(data, path)
+    logger.info(f"Saved {sum(len(r) for r in routes.values())} routes for {len(routes)} targets to {path}")
+
+
+def load_routes(path: Path) -> dict[str, list[Route]]:
+    """
+    Loads routes from a gzipped JSON file.
+
+    Args:
+        path: Path to the gzipped JSON file containing routes.
+
+    Returns:
+        Dictionary mapping target IDs to lists of Route objects.
+    """
+    data = load_json_gz(path)
+    routes = {}
+    for target_id, route_list in data.items():
+        if not isinstance(route_list, list):
+            raise RetroCastIOError(f"Expected list of routes for target '{target_id}', got {type(route_list)}")
+        routes[target_id] = [Route.model_validate(r) for r in route_list]
+    logger.info(f"Loaded {sum(len(r) for r in routes.values())} routes for {len(routes)} targets from {path}")
+    return routes
 
 
 def save_json(data: dict[str, Any], path: Path) -> None:
@@ -230,6 +265,35 @@ def combine_evaluation_results(targets_csv: str, eval_dir: str, output_path: str
         logger.warning(f"Missing files for {len(missing_files)} targets: {missing_files}")
 
 
+def load_raw_routes(input_file: Path) -> list[dict]:
+    """
+    Load raw routes from a gzipped JSON file.
+
+    This function loads a JSON file containing a list of route dictionaries,
+    typically used as input for route conversion/curation scripts.
+
+    Args:
+        input_file: Path to the gzipped JSON file containing raw routes.
+
+    Returns:
+        List of dictionaries, where each dict represents a raw route.
+
+    Raises:
+        RetroCastIOError: If the file cannot be read or parsed.
+    """
+    logger.info(f"Loading raw routes from {input_file}...")
+    try:
+        with gzip.open(input_file, "rt", encoding="utf-8") as f:
+            all_routes = json.load(f)
+        if not isinstance(all_routes, list):
+            raise RetroCastIOError(f"Expected a list of routes in {input_file}, but got {type(all_routes)}")
+        logger.info(f"Loaded {len(all_routes):,} total routes.")
+        return all_routes
+    except (OSError, gzip.BadGzipFile, json.JSONDecodeError) as e:
+        logger.error(f"Failed to load or parse {input_file}: {e}")
+        raise RetroCastIOError(f"Failed to load or parse {input_file}: {e}") from e
+
+
 def load_and_prepare_targets(file_path: Path) -> dict[str, TargetInput]:
     """
     Loads a file containing target IDs and SMILES, canonicalizes the SMILES,
@@ -260,3 +324,28 @@ def load_and_prepare_targets(file_path: Path) -> dict[str, TargetInput]:
 
     logger.info(f"Successfully prepared {len(prepared_targets)} targets.")
     return prepared_targets
+
+
+def save_reaction_smiles(reactions: set[str] | list[str], path: Path) -> None:
+    """
+    Save reaction SMILES strings to a gzipped text file.
+
+    Each reaction is written on its own line. The output is sorted
+    for reproducibility.
+
+    Args:
+        reactions: Set or list of reaction SMILES strings.
+        path: Path to the output .txt.gz file.
+    """
+    sorted_reactions = sorted(reactions)
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with gzip.open(path, "wt", encoding="utf-8") as f:
+            if sorted_reactions:
+                f.write("\n".join(sorted_reactions))
+                f.write("\n")
+        logger.info(f"Saved {len(sorted_reactions)} reaction SMILES to {path}")
+    except OSError as e:
+        logger.error(f"Failed to write reaction SMILES to {path}: {e}")
+        raise RetroCastIOError(f"Failed to save reaction SMILES to {path}: {e}") from e

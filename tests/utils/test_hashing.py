@@ -4,31 +4,14 @@ from pathlib import Path
 import pytest
 
 from retrocast.exceptions import RetroCastException
+from retrocast.schemas import Molecule, Route
+from retrocast.typing import InchiKeyStr, SmilesStr
 from retrocast.utils.hashing import (
+    compute_routes_content_hash,
     generate_file_hash,
     generate_model_hash,
-    generate_molecule_hash,
     generate_source_hash,
 )
-
-
-def test_generate_molecule_hash_is_deterministic() -> None:
-    """Tests that the same SMILES string always produces the same hash."""
-    smiles1 = "CCO"
-    smiles2 = "CCO"
-    hash1 = generate_molecule_hash(smiles1)
-    hash2 = generate_molecule_hash(smiles2)
-    assert hash1 == hash2
-    assert hash1.startswith("sha256-")
-
-
-def test_generate_molecule_hash_is_sensitive() -> None:
-    """Tests that different SMILES strings produce different hashes."""
-    smiles1 = "CCO"  # Ethanol
-    smiles2 = "COC"  # Dimethyl ether
-    hash1 = generate_molecule_hash(smiles1)
-    hash2 = generate_molecule_hash(smiles2)
-    assert hash1 != hash2
 
 
 def test_generate_model_hash_is_deterministic() -> None:
@@ -99,3 +82,107 @@ def test_generate_file_hash_raises_exception_for_missing_file(tmp_path: Path) ->
     non_existent_path = tmp_path / "this_file_does_not_exist.txt"
     with pytest.raises(RetroCastException):
         generate_file_hash(non_existent_path)
+
+
+# ==============================================================================
+# compute_routes_content_hash Tests
+# ==============================================================================
+
+
+@pytest.fixture
+def sample_routes() -> dict[str, list[Route]]:
+    """Create sample routes for testing content hash."""
+    mol1 = Molecule(smiles=SmilesStr("CCO"), inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"))
+    mol2 = Molecule(smiles=SmilesStr("c1ccccc1"), inchikey=InchiKeyStr("UHOVQNZJYSORNB-UHFFFAOYSA-N"))
+
+    route1 = Route(target=mol1, rank=1)
+    route2 = Route(target=mol2, rank=1)
+    route3 = Route(target=mol2, rank=2)
+
+    return {"target_1": [route1], "target_2": [route2, route3]}
+
+
+def test_compute_routes_content_hash_is_deterministic(sample_routes: dict[str, list[Route]]) -> None:
+    """Test that content hash is deterministic."""
+    hash1 = compute_routes_content_hash(sample_routes)
+    hash2 = compute_routes_content_hash(sample_routes)
+    assert hash1 == hash2
+    assert len(hash1) == 64  # SHA256 hex digest
+
+
+def test_compute_routes_content_hash_order_agnostic() -> None:
+    """Test that content hash is the same regardless of dict insertion order."""
+    mol1 = Molecule(smiles=SmilesStr("CCO"), inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"))
+    mol2 = Molecule(smiles=SmilesStr("c1ccccc1"), inchikey=InchiKeyStr("UHOVQNZJYSORNB-UHFFFAOYSA-N"))
+
+    route1 = Route(target=mol1, rank=1)
+    route2 = Route(target=mol2, rank=1)
+
+    # Different insertion order
+    routes_order1 = {"target_a": [route1], "target_b": [route2]}
+    routes_order2 = {"target_b": [route2], "target_a": [route1]}
+
+    hash1 = compute_routes_content_hash(routes_order1)
+    hash2 = compute_routes_content_hash(routes_order2)
+    assert hash1 == hash2
+
+
+def test_compute_routes_content_hash_different_routes_different_hash() -> None:
+    """Test that different route data produces different hashes."""
+    mol1 = Molecule(smiles=SmilesStr("CCO"), inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"))
+    mol2 = Molecule(smiles=SmilesStr("c1ccccc1"), inchikey=InchiKeyStr("UHOVQNZJYSORNB-UHFFFAOYSA-N"))
+
+    routes1 = {"target": [Route(target=mol1, rank=1)]}
+    routes2 = {"target": [Route(target=mol2, rank=1)]}
+
+    hash1 = compute_routes_content_hash(routes1)
+    hash2 = compute_routes_content_hash(routes2)
+    assert hash1 != hash2
+
+
+def test_compute_routes_content_hash_empty_dict() -> None:
+    """Test content hash of empty routes dictionary."""
+    hash1 = compute_routes_content_hash({})
+    hash2 = compute_routes_content_hash({})
+    assert hash1 == hash2
+    assert len(hash1) == 64
+
+
+def test_compute_routes_content_hash_sensitive_to_metadata() -> None:
+    """Test that metadata changes affect the content hash."""
+    mol = Molecule(smiles=SmilesStr("CCO"), inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"))
+
+    routes1 = {"target": [Route(target=mol, rank=1, metadata={"score": 0.9})]}
+    routes2 = {"target": [Route(target=mol, rank=1, metadata={"score": 0.95})]}
+
+    hash1 = compute_routes_content_hash(routes1)
+    hash2 = compute_routes_content_hash(routes2)
+    assert hash1 != hash2
+
+
+def test_compute_routes_content_hash_sensitive_to_rank() -> None:
+    """Test that route rank changes affect the content hash."""
+    mol = Molecule(smiles=SmilesStr("CCO"), inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"))
+
+    routes1 = {"target": [Route(target=mol, rank=1)]}
+    routes2 = {"target": [Route(target=mol, rank=2)]}
+
+    hash1 = compute_routes_content_hash(routes1)
+    hash2 = compute_routes_content_hash(routes2)
+    assert hash1 != hash2
+
+
+def test_compute_routes_content_hash_sorts_by_rank() -> None:
+    """Test that routes are sorted by rank before hashing."""
+    mol = Molecule(smiles=SmilesStr("CCO"), inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"))
+
+    route1 = Route(target=mol, rank=1)
+    route2 = Route(target=mol, rank=2)
+
+    # Different list order, same ranks
+    routes_order1 = {"target": [route1, route2]}
+    routes_order2 = {"target": [route2, route1]}
+
+    hash1 = compute_routes_content_hash(routes_order1)
+    hash2 = compute_routes_content_hash(routes_order2)
+    assert hash1 == hash2

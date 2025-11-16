@@ -34,7 +34,7 @@ class DMSRouteList(RootModel[list[DMSTree]]):
 class DMSAdapter(BaseAdapter):
     """Adapter for converting DMS-style model outputs to the Route schema."""
 
-    def adapt(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         """
         Validates raw DMS data, transforms it, and yields Route objects.
         """

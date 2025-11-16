@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field, computed_field
 
 from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
 
+# Type alias for a reaction signature: (frozenset of reactant InchiKeys, product InchiKey)
+ReactionSignature = tuple[frozenset[str], str]
+
 
 def _get_retrocast_version() -> str:
     """Get the current retrocast version for provenance tracking."""
@@ -142,6 +145,64 @@ class Route(BaseModel):
             return sig_hash
 
         return _get_node_sig(self.target)
+
+    def get_content_hash(self) -> str:
+        """
+        Generates a deterministic hash of the complete route content.
+
+        Unlike get_signature() which only considers tree topology (InchiKeys),
+        this method includes ALL data: rank, metadata, solvability, retrocast_version,
+        and all reaction details (mapped_smiles, templates, reagents, solvents, etc.).
+
+        This is useful for verifying that two routes are semantically identical,
+        including all metadata and provenance information.
+        """
+        import hashlib
+        import json
+
+        # Exclude computed fields to ensure deterministic serialization
+        # (sets like 'leaves' have non-deterministic iteration order across processes)
+        route_dict = self.model_dump(mode="json", exclude={"leaves", "depth"})
+        route_json = json.dumps(route_dict, sort_keys=True)
+        return hashlib.sha256(route_json.encode()).hexdigest()
+
+    def get_reaction_signatures(self) -> set[ReactionSignature]:
+        """
+        Extracts all unique reaction signatures from the route.
+
+        Each reaction is represented as a tuple of (frozenset of reactant InchiKeys, product InchiKey).
+        This provides a lightweight, hashable representation for comparing reactions across routes.
+
+        Returns:
+            Set of ReactionSignature tuples, one for each unique reaction in the route.
+
+        Example use case:
+            # Check if two routes share any reactions
+            route1_reactions = route1.get_reaction_signatures()
+            route2_reactions = route2.get_reaction_signatures()
+            overlapping = route1_reactions & route2_reactions
+        """
+        signatures: set[ReactionSignature] = set()
+
+        def _collect_reactions(node: Molecule) -> None:
+            if node.is_leaf:
+                return
+
+            # Non-leaf node must have a synthesis_step
+            assert node.synthesis_step is not None, "Non-leaf node without synthesis_step"
+
+            # Create signature for this reaction
+            reactant_keys = frozenset(r.inchikey for r in node.synthesis_step.reactants)
+            product_key = node.inchikey
+            sig: ReactionSignature = (reactant_keys, product_key)
+            signatures.add(sig)
+
+            # Recursively collect from reactants
+            for reactant in node.synthesis_step.reactants:
+                _collect_reactions(reactant)
+
+        _collect_reactions(self.target)
+        return signatures
 
 
 # We need to tell Pydantic to rebuild the forward references

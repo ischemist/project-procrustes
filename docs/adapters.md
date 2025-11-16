@@ -50,7 +50,7 @@ class BipartiteRouteList(RootModel[list[BipartiteMoleculeInput]]):
     pass
 
 class BipartiteModelAdapter(BaseAdapter):
-    def adapt(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         validated_routes = BipartiteRouteList.model_validate(raw_data)
         for i, root_node in enumerate(validated_routes.root, start=1):
             try:
@@ -97,7 +97,7 @@ class PrecursorModelAdapter(BaseAdapter):
         # ... your parsing logic here ...
         return precursor_map
 
-    def adapt(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         try:
             precursor_map = self._parse_route_string(raw_data["routes"])
             # Use the helper to build the tree from the target SMILES
@@ -159,7 +159,7 @@ class CustomModelAdapter(BaseAdapter):
             metadata={}
         )
 
-    def adapt(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
         validated_routes = CustomRouteList.model_validate(raw_data)
         for i, root_node in enumerate(validated_routes.root, start=1):
             target_molecule = self._build_molecule(root_node)
