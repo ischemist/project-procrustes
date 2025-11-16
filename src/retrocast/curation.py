@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from retrocast.domain.tree import excise_reactions_from_route
 from retrocast.schemas import ReactionSignature, Route, _get_retrocast_version
 from retrocast.utils.hashing import compute_routes_content_hash, generate_file_hash
 
@@ -56,6 +57,47 @@ def filter_routes_by_reaction_overlap(
         if kept_routes:
             filtered[target_id] = kept_routes
     return filtered
+
+
+def excise_reactions_from_routes(
+    routes: dict[str, list[Route]], exclude_reactions: set[ReactionSignature]
+) -> dict[str, list[Route]]:
+    """
+    Excise specific reactions from routes, keeping valid sub-routes.
+
+    Unlike filter_routes_by_reaction_overlap which removes entire routes,
+    this function removes only the overlapping reactions and retains any
+    valid sub-routes that remain.
+
+    Args:
+        routes: Dictionary mapping target IDs to lists of Route objects.
+        exclude_reactions: Set of ReactionSignatures to excise from routes.
+
+    Returns:
+        Dictionary mapping target IDs to lists of Route objects with
+        overlapping reactions excised. Routes with no remaining reactions
+        are excluded. New sub-routes created from excision are included
+        under their original target ID.
+    """
+    result: dict[str, list[Route]] = {}
+
+    for target_id, route_list in routes.items():
+        kept_routes: list[Route] = []
+        for route in route_list:
+            # Check if route has any overlapping reactions
+            route_reactions = route.get_reaction_signatures()
+            if not route_reactions & exclude_reactions:
+                # No overlap, keep route as-is
+                kept_routes.append(route)
+            else:
+                # Excise overlapping reactions and collect sub-routes
+                sub_routes = excise_reactions_from_route(route, exclude_reactions)
+                kept_routes.extend(sub_routes)
+
+        if kept_routes:
+            result[target_id] = kept_routes
+
+    return result
 
 
 def split_routes(

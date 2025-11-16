@@ -17,7 +17,7 @@ from pathlib import Path
 
 from retrocast.curation import (
     create_manifest,
-    filter_routes_by_reaction_overlap,
+    excise_reactions_from_routes,
     filter_routes_by_signature,
     get_reaction_signatures,
     get_route_signatures,
@@ -98,11 +98,11 @@ def main() -> None:
     save_partition(train_standard, "train-routes", all_routes_file, PROCESSED_DIR, TRAIN_RATIO, RANDOM_SEED)
     save_partition(val_standard, "val-routes", all_routes_file, PROCESSED_DIR, 1 - TRAIN_RATIO, RANDOM_SEED)
 
-    # === Strict split: exclude routes with any reaction overlap ===
-    logger.info("\n=== Creating strict split (exclude routes with reaction overlap) ===")
-    filtered_strict = filter_routes_by_reaction_overlap(all_routes, test_reaction_sigs)
+    # === Strict split: excise overlapping reactions from routes ===
+    logger.info("\n=== Creating strict split (excise overlapping reactions) ===")
+    filtered_strict = excise_reactions_from_routes(all_routes, test_reaction_sigs)
     n_filtered_strict = sum(len(r) for r in filtered_strict.values())
-    logger.info(f"Removed {n_routes_total - n_filtered_strict} routes, {n_filtered_strict} remaining")
+    logger.info(f"Excised test reactions: {n_routes_total} routes -> {n_filtered_strict} routes/sub-routes")
 
     train_strict, val_strict = split_routes(filtered_strict, TRAIN_RATIO, RANDOM_SEED)
     logger.info(f"Train: {len(train_strict)} targets, {sum(len(r) for r in train_strict.values())} routes")
