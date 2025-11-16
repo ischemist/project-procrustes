@@ -23,12 +23,10 @@ OUTPUT_DIR = BASE_DIR / "data" / "analysis" / "paroutes"
 
 def main() -> None:
     """Main script execution."""
-    n1_routes_file = PROCESSED_DIR / "n1-routes.json.gz"
-    n5_routes_file = PROCESSED_DIR / "n5-routes.json.gz"
 
     logger.info("Loading routes...")
-    n1_routes = load_routes(n1_routes_file)
-    n5_routes = load_routes(n5_routes_file)
+    n1_routes = load_routes(PROCESSED_DIR / "n1-routes.json.gz")
+    n5_routes = load_routes(PROCESSED_DIR / "n5-routes.json.gz")
 
     logger.info("Extracting route statistics...")
     n1_stats = extract_route_stats(n1_routes)

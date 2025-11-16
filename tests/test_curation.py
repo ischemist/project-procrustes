@@ -12,10 +12,12 @@ from retrocast.curation import (
     filter_routes_by_signature,
     get_reaction_signatures,
     get_route_signatures,
+    sample_routes_by_length,
+    sample_routes_random,
     split_routes,
 )
 from retrocast.io import save_json_gz
-from retrocast.schemas import Molecule, ReactionSignature, Route
+from retrocast.schemas import Molecule, ReactionSignature, ReactionStep, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
 
 
@@ -380,3 +382,129 @@ def test_split_routes_preserves_routes(sample_routes_with_reactions: dict[str, l
     split_count = sum(len(routes) for routes in train.values()) + sum(len(routes) for routes in val.values())
 
     assert split_count == original_count
+
+
+@pytest.fixture
+def routes_with_varying_depths() -> dict[str, list[Route]]:
+    """Create routes with different depths for sampling tests."""
+    # Depth 1 routes (single reaction)
+    mol_a = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"))
+    mol_b = Molecule(smiles=SmilesStr("CC"), inchikey=InchiKeyStr("OTMSDBZUPAUEDD-UHFFFAOYSA-N"))
+    target_d1 = Molecule(
+        smiles=SmilesStr("CCC"),
+        inchikey=InchiKeyStr("ATUOYWHBWRKTHZ-UHFFFAOYSA-N"),
+        synthesis_step=ReactionStep(reactants=[mol_a, mol_b]),
+    )
+
+    # Depth 2 routes (2 reactions)
+    mol_c = Molecule(smiles=SmilesStr("CCCC"), inchikey=InchiKeyStr("IJDNQMDRQITEOD-UHFFFAOYSA-N"))
+    intermediate = Molecule(
+        smiles=SmilesStr("CCCCC"),
+        inchikey=InchiKeyStr("TVMXDCGIABBOEZ-UHFFFAOYSA-N"),
+        synthesis_step=ReactionStep(reactants=[mol_a, mol_c]),
+    )
+    target_d2 = Molecule(
+        smiles=SmilesStr("CCCCCC"),
+        inchikey=InchiKeyStr("VLKZOEOYAKHREP-UHFFFAOYSA-N"),
+        synthesis_step=ReactionStep(reactants=[intermediate, mol_b]),
+    )
+
+    # Create routes
+    routes: dict[str, list[Route]] = {
+        "t1": [Route(target=target_d1, rank=1)],  # depth 1
+        "t2": [Route(target=target_d1, rank=2)],  # depth 1
+        "t3": [Route(target=target_d2, rank=1)],  # depth 2
+        "t4": [Route(target=target_d2, rank=2)],  # depth 2
+        "t5": [Route(target=target_d2, rank=3)],  # depth 2
+    }
+    return routes
+
+
+def test_sample_routes_random_correct_count(routes_with_varying_depths: dict[str, list[Route]]) -> None:
+    """Test that random sampling returns correct number of routes."""
+    sampled = sample_routes_random(routes_with_varying_depths, 3, seed=42)
+    n_sampled = sum(len(r) for r in sampled.values())
+    assert n_sampled == 3
+
+
+def test_sample_routes_random_deterministic(routes_with_varying_depths: dict[str, list[Route]]) -> None:
+    """Test that same seed produces same sample."""
+    sample1 = sample_routes_random(routes_with_varying_depths, 3, seed=42)
+    sample2 = sample_routes_random(routes_with_varying_depths, 3, seed=42)
+
+    # Same targets and routes
+    assert set(sample1.keys()) == set(sample2.keys())
+    for tid in sample1:
+        assert len(sample1[tid]) == len(sample2[tid])
+
+
+def test_sample_routes_random_different_seeds(routes_with_varying_depths: dict[str, list[Route]]) -> None:
+    """Test that different seeds can produce different samples."""
+    sample1 = sample_routes_random(routes_with_varying_depths, 3, seed=1)
+    sample2 = sample_routes_random(routes_with_varying_depths, 3, seed=999)
+
+    # Just check they're valid samples (might be same by chance)
+    assert sum(len(r) for r in sample1.values()) == 3
+    assert sum(len(r) for r in sample2.values()) == 3
+
+
+def test_sample_routes_random_exceeds_available() -> None:
+    """Test that requesting more routes than available raises error."""
+    routes = {"t1": [Route(target=Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("A")), rank=1)]}
+
+    with pytest.raises(ValueError, match="Cannot sample 10 routes from 1 available"):
+        sample_routes_random(routes, 10, seed=42)
+
+
+def test_sample_routes_by_length_correct_counts(routes_with_varying_depths: dict[str, list[Route]]) -> None:
+    """Test that stratified sampling returns correct counts per depth."""
+    length_counts = {1: 2, 2: 2}
+    sampled = sample_routes_by_length(routes_with_varying_depths, length_counts, seed=42)
+
+    # Count by depth
+    depth_counts: dict[int, int] = {}
+    for route_list in sampled.values():
+        for route in route_list:
+            d = route.depth
+            depth_counts[d] = depth_counts.get(d, 0) + 1
+
+    assert depth_counts[1] == 2
+    assert depth_counts[2] == 2
+
+
+def test_sample_routes_by_length_deterministic(routes_with_varying_depths: dict[str, list[Route]]) -> None:
+    """Test that same seed produces same stratified sample."""
+    length_counts = {1: 1, 2: 2}
+    sample1 = sample_routes_by_length(routes_with_varying_depths, length_counts, seed=42)
+    sample2 = sample_routes_by_length(routes_with_varying_depths, length_counts, seed=42)
+
+    assert set(sample1.keys()) == set(sample2.keys())
+
+
+def test_sample_routes_by_length_exceeds_available(routes_with_varying_depths: dict[str, list[Route]]) -> None:
+    """Test that requesting more routes than available for a depth raises error."""
+    length_counts = {1: 10}  # Only 2 depth-1 routes available
+
+    with pytest.raises(ValueError, match="Cannot sample 10 routes of length 1"):
+        sample_routes_by_length(routes_with_varying_depths, length_counts, seed=42)
+
+
+def test_sample_routes_by_length_missing_depth(routes_with_varying_depths: dict[str, list[Route]]) -> None:
+    """Test that requesting routes of non-existent depth raises error."""
+    length_counts = {5: 1}  # No depth-5 routes
+
+    with pytest.raises(ValueError, match="Cannot sample 1 routes of length 5"):
+        sample_routes_by_length(routes_with_varying_depths, length_counts, seed=42)
+
+
+def test_sample_routes_preserves_route_structure(routes_with_varying_depths: dict[str, list[Route]]) -> None:
+    """Test that sampled routes maintain their complete structure."""
+    sampled = sample_routes_random(routes_with_varying_depths, 2, seed=42)
+
+    for route_list in sampled.values():
+        for route in route_list:
+            # Route should have valid target and rank
+            assert route.target is not None
+            assert route.rank >= 1
+            # Depth should be computable
+            assert route.depth >= 1
