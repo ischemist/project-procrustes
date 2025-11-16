@@ -324,3 +324,28 @@ def load_and_prepare_targets(file_path: Path) -> dict[str, TargetInput]:
 
     logger.info(f"Successfully prepared {len(prepared_targets)} targets.")
     return prepared_targets
+
+
+def save_reaction_smiles(reactions: set[str] | list[str], path: Path) -> None:
+    """
+    Save reaction SMILES strings to a gzipped text file.
+
+    Each reaction is written on its own line. The output is sorted
+    for reproducibility.
+
+    Args:
+        reactions: Set or list of reaction SMILES strings.
+        path: Path to the output .txt.gz file.
+    """
+    sorted_reactions = sorted(reactions)
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with gzip.open(path, "wt", encoding="utf-8") as f:
+            if sorted_reactions:
+                f.write("\n".join(sorted_reactions))
+                f.write("\n")
+        logger.info(f"Saved {len(sorted_reactions)} reaction SMILES to {path}")
+    except OSError as e:
+        logger.error(f"Failed to write reaction SMILES to {path}: {e}")
+        raise RetroCastIOError(f"Failed to save reaction SMILES to {path}: {e}") from e

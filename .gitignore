@@ -65,3 +65,5 @@ collectors/
 
 tests/testing_data/**/results.json
 docs/coding-style.md
+
+*manifest.json

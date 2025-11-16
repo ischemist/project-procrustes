@@ -5,11 +5,13 @@ import random
 from retrocast.domain.chem import get_inchi_key
 from retrocast.domain.tree import (
     deduplicate_routes,
+    excise_reactions_from_route,
     sample_k_by_depth,
     sample_random_k,
     sample_top_k,
 )
-from retrocast.schemas import Molecule, ReactionStep, Route
+from retrocast.schemas import Molecule, ReactionSignature, ReactionStep, Route
+from retrocast.typing import InchiKeyStr, SmilesStr
 
 
 def _build_simple_route(target_smiles: str, reactant_smiles_list: list[str]) -> Route:
@@ -282,3 +284,290 @@ def test_sample_k_by_depth_zero_k() -> None:
 
 def test_sample_k_by_depth_empty_list() -> None:
     assert sample_k_by_depth([], 5) == []
+
+
+# --- Excise Reactions Tests ---
+
+
+def test_excise_reactions_empty_exclusion_set() -> None:
+    """When no reactions to exclude, should return original route unchanged."""
+    route = _build_simple_route("CO", ["CCO", "CCCO"])
+    result = excise_reactions_from_route(route, set())
+
+    assert len(result) == 1
+    assert result[0].get_signature() == route.get_signature()
+
+
+def test_excise_reactions_leaf_route() -> None:
+    """Leaf route (no reactions) with any exclusion set should return empty."""
+    leaf = Molecule(
+        smiles=SmilesStr("CO"),
+        inchikey=InchiKeyStr("OKKJLVBELUTLKV-UHFFFAOYSA-N"),
+    )
+    route = Route(target=leaf, rank=1)
+
+    # Exclude some random reaction
+    exclude: set[ReactionSignature] = {(frozenset(["KEY-A"]), "KEY-B")}
+    result = excise_reactions_from_route(route, exclude)
+
+    # No reactions in route, so nothing to excise, but route has no depth
+    assert len(result) == 0
+
+
+def test_excise_reactions_single_step_route_excise_only_reaction() -> None:
+    """Single step route: excising the only reaction leaves no valid sub-routes."""
+    route = _build_simple_route("CO", ["CCO", "CCCO"])
+
+    # Get the signature of the only reaction
+    sigs = route.get_reaction_signatures()
+    assert len(sigs) == 1
+
+    result = excise_reactions_from_route(route, sigs)
+
+    # The main route becomes a leaf (no reactions), so no valid sub-routes
+    assert len(result) == 0
+
+
+def test_excise_reactions_linear_route_excise_middle() -> None:
+    """
+    Linear route: A -> B -> C (target)
+    Excise A -> B, should leave: B -> C (with B as leaf)
+    """
+    leaf_a = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("KEY-A"))
+    intermediate_b = Molecule(
+        smiles=SmilesStr("CO"),
+        inchikey=InchiKeyStr("KEY-B"),
+        synthesis_step=ReactionStep(reactants=[leaf_a]),
+    )
+    target_c = Molecule(
+        smiles=SmilesStr("COC"),
+        inchikey=InchiKeyStr("KEY-C"),
+        synthesis_step=ReactionStep(reactants=[intermediate_b]),
+    )
+    route = Route(target=target_c, rank=1)
+
+    # Excise the first reaction: A -> B
+    exclude: set[ReactionSignature] = {(frozenset(["KEY-A"]), "KEY-B")}
+    result = excise_reactions_from_route(route, exclude)
+
+    # Should have 1 sub-route: C with B as a leaf
+    assert len(result) == 1
+    main_route = result[0]
+    assert main_route.target.inchikey == "KEY-C"
+    assert main_route.depth == 1  # Only one reaction left
+
+    # B should now be a leaf
+    reactants = main_route.target.synthesis_step.reactants
+    assert len(reactants) == 1
+    assert reactants[0].inchikey == "KEY-B"
+    assert reactants[0].is_leaf
+
+
+def test_excise_reactions_linear_route_excise_last() -> None:
+    """
+    Linear route: A -> B -> C (target)
+    Excise B -> C, should leave: A -> B (as separate sub-route)
+    """
+    leaf_a = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("KEY-A"))
+    intermediate_b = Molecule(
+        smiles=SmilesStr("CO"),
+        inchikey=InchiKeyStr("KEY-B"),
+        synthesis_step=ReactionStep(reactants=[leaf_a]),
+    )
+    target_c = Molecule(
+        smiles=SmilesStr("COC"),
+        inchikey=InchiKeyStr("KEY-C"),
+        synthesis_step=ReactionStep(reactants=[intermediate_b]),
+    )
+    route = Route(target=target_c, rank=1)
+
+    # Excise the last reaction: B -> C
+    exclude: set[ReactionSignature] = {(frozenset(["KEY-B"]), "KEY-C")}
+    result = excise_reactions_from_route(route, exclude)
+
+    # Main route becomes leaf (no valid reactions), but B becomes a sub-route
+    assert len(result) == 1
+    sub_route = result[0]
+    assert sub_route.target.inchikey == "KEY-B"
+    assert sub_route.depth == 1
+
+    # Verify A -> B reaction is preserved
+    reactants = sub_route.target.synthesis_step.reactants
+    assert len(reactants) == 1
+    assert reactants[0].inchikey == "KEY-A"
+
+
+def test_excise_reactions_branched_route() -> None:
+    """
+    Branched route:
+           C (target)
+          /  \
+         B1   B2
+         |    |
+         A1   A2
+    
+    Excise A1 -> B1, should leave C with B1 as leaf and B2 with synthesis
+    """
+    leaf_a1 = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("KEY-A1"))
+    leaf_a2 = Molecule(smiles=SmilesStr("CC"), inchikey=InchiKeyStr("KEY-A2"))
+
+    intermediate_b1 = Molecule(
+        smiles=SmilesStr("CO"),
+        inchikey=InchiKeyStr("KEY-B1"),
+        synthesis_step=ReactionStep(reactants=[leaf_a1]),
+    )
+    intermediate_b2 = Molecule(
+        smiles=SmilesStr("CCO"),
+        inchikey=InchiKeyStr("KEY-B2"),
+        synthesis_step=ReactionStep(reactants=[leaf_a2]),
+    )
+
+    target_c = Molecule(
+        smiles=SmilesStr("CCOC"),
+        inchikey=InchiKeyStr("KEY-C"),
+        synthesis_step=ReactionStep(reactants=[intermediate_b1, intermediate_b2]),
+    )
+    route = Route(target=target_c, rank=1)
+
+    # Excise A1 -> B1
+    exclude: set[ReactionSignature] = {(frozenset(["KEY-A1"]), "KEY-B1")}
+    result = excise_reactions_from_route(route, exclude)
+
+    # Should have 1 sub-route: C with B1 as leaf but B2 with synthesis
+    assert len(result) == 1
+    main_route = result[0]
+    assert main_route.target.inchikey == "KEY-C"
+    assert main_route.depth == 2  # Still has A2 -> B2 -> C
+
+    # B1 should be a leaf, B2 should have synthesis
+    reactants = main_route.target.synthesis_step.reactants
+    b1_node = next(r for r in reactants if r.inchikey == "KEY-B1")
+    b2_node = next(r for r in reactants if r.inchikey == "KEY-B2")
+
+    assert b1_node.is_leaf
+    assert not b2_node.is_leaf
+    assert b2_node.synthesis_step.reactants[0].inchikey == "KEY-A2"
+
+
+def test_excise_reactions_creates_multiple_subroutes() -> None:
+    """
+    Linear route: A -> B -> C -> D (target)
+    Excise B -> C, should create two sub-routes: A -> B and C -> D
+    """
+    leaf_a = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("KEY-A"))
+    node_b = Molecule(
+        smiles=SmilesStr("CO"),
+        inchikey=InchiKeyStr("KEY-B"),
+        synthesis_step=ReactionStep(reactants=[leaf_a]),
+    )
+    node_c = Molecule(
+        smiles=SmilesStr("COC"),
+        inchikey=InchiKeyStr("KEY-C"),
+        synthesis_step=ReactionStep(reactants=[node_b]),
+    )
+    target_d = Molecule(
+        smiles=SmilesStr("COCC"),
+        inchikey=InchiKeyStr("KEY-D"),
+        synthesis_step=ReactionStep(reactants=[node_c]),
+    )
+    route = Route(target=target_d, rank=1)
+
+    # Excise B -> C
+    exclude: set[ReactionSignature] = {(frozenset(["KEY-B"]), "KEY-C")}
+    result = excise_reactions_from_route(route, exclude)
+
+    # Should have 2 sub-routes
+    assert len(result) == 2
+
+    # Main route: D with C as leaf
+    main_route = next(r for r in result if r.target.inchikey == "KEY-D")
+    assert main_route.depth == 1
+    assert main_route.target.synthesis_step.reactants[0].inchikey == "KEY-C"
+    assert main_route.target.synthesis_step.reactants[0].is_leaf
+
+    # Sub-route: B with A as leaf
+    sub_route = next(r for r in result if r.target.inchikey == "KEY-B")
+    assert sub_route.depth == 1
+    assert sub_route.target.synthesis_step.reactants[0].inchikey == "KEY-A"
+
+
+def test_excise_reactions_preserves_metadata() -> None:
+    """Metadata should be preserved on molecules and reactions."""
+    leaf = Molecule(
+        smiles=SmilesStr("C"),
+        inchikey=InchiKeyStr("KEY-A"),
+        metadata={"leaf_data": "preserved"},
+    )
+    step = ReactionStep(
+        reactants=[leaf],
+        mapped_smiles="C>>CO",
+        template="[C:1]>>[C:1]O",
+        reagents=["O"],
+        metadata={"rxn_score": 0.95},
+    )
+    target = Molecule(
+        smiles=SmilesStr("CO"),
+        inchikey=InchiKeyStr("KEY-B"),
+        synthesis_step=step,
+        metadata={"target_data": "also_preserved"},
+    )
+    route = Route(target=target, rank=1, metadata={"route_info": "test"})
+
+    result = excise_reactions_from_route(route, set())
+
+    assert len(result) == 1
+    new_route = result[0]
+
+    # Route metadata preserved
+    assert new_route.metadata == {"route_info": "test"}
+    assert new_route.rank == 1
+
+    # Target metadata preserved
+    assert new_route.target.metadata == {"target_data": "also_preserved"}
+
+    # Reaction metadata preserved
+    assert new_route.target.synthesis_step.mapped_smiles == "C>>CO"
+    assert new_route.target.synthesis_step.template == "[C:1]>>[C:1]O"
+    assert new_route.target.synthesis_step.reagents == ["O"]
+    assert new_route.target.synthesis_step.metadata == {"rxn_score": 0.95}
+
+    # Leaf metadata preserved
+    leaf_mol = new_route.target.synthesis_step.reactants[0]
+    assert leaf_mol.metadata == {"leaf_data": "preserved"}
+
+
+def test_excise_multiple_reactions() -> None:
+    """Excise multiple reactions from the same route."""
+    # Build: A -> B -> C -> D
+    leaf_a = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("KEY-A"))
+    node_b = Molecule(
+        smiles=SmilesStr("CO"),
+        inchikey=InchiKeyStr("KEY-B"),
+        synthesis_step=ReactionStep(reactants=[leaf_a]),
+    )
+    node_c = Molecule(
+        smiles=SmilesStr("COC"),
+        inchikey=InchiKeyStr("KEY-C"),
+        synthesis_step=ReactionStep(reactants=[node_b]),
+    )
+    target_d = Molecule(
+        smiles=SmilesStr("COCC"),
+        inchikey=InchiKeyStr("KEY-D"),
+        synthesis_step=ReactionStep(reactants=[node_c]),
+    )
+    route = Route(target=target_d, rank=1)
+
+    # Excise both A -> B and C -> D
+    exclude: set[ReactionSignature] = {
+        (frozenset(["KEY-A"]), "KEY-B"),
+        (frozenset(["KEY-C"]), "KEY-D"),
+    }
+    result = excise_reactions_from_route(route, exclude)
+
+    # Main route (D) has no reactions (C is a leaf), so it's excluded
+    # C has B -> C reaction, but B is now a leaf (A -> B was excised)
+    # So we should have 1 sub-route: B -> C with B as leaf
+    assert len(result) == 1
+    sub_route = result[0]
+    assert sub_route.target.inchikey == "KEY-C"
+    assert sub_route.depth == 1

@@ -5,12 +5,75 @@ This module provides functions for creating manifests and managing
 metadata for curated route collections.
 """
 
+import random
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from retrocast.schemas import Route, _get_retrocast_version
+from retrocast.schemas import ReactionSignature, Route, _get_retrocast_version
 from retrocast.utils.hashing import compute_routes_content_hash, generate_file_hash
+
+
+def get_route_signatures(routes: dict[str, list[Route]]) -> set[str]:
+    """Extract all route signatures from routes dict."""
+    signatures = set()
+    for route_list in routes.values():
+        for route in route_list:
+            signatures.add(route.get_signature())
+    return signatures
+
+
+def get_reaction_signatures(routes: dict[str, list[Route]]) -> set[ReactionSignature]:
+    """Extract all reaction signatures from routes dict."""
+    signatures: set[ReactionSignature] = set()
+    for route_list in routes.values():
+        for route in route_list:
+            signatures.update(route.get_reaction_signatures())
+    return signatures
+
+
+def filter_routes_by_signature(routes: dict[str, list[Route]], exclude_signatures: set[str]) -> dict[str, list[Route]]:
+    """Remove routes whose signatures are in exclude set."""
+    filtered = {}
+    for target_id, route_list in routes.items():
+        kept_routes = [r for r in route_list if r.get_signature() not in exclude_signatures]
+        if kept_routes:
+            filtered[target_id] = kept_routes
+    return filtered
+
+
+def filter_routes_by_reaction_overlap(
+    routes: dict[str, list[Route]], exclude_reactions: set[ReactionSignature]
+) -> dict[str, list[Route]]:
+    """Remove routes that have any overlapping reactions with exclude set."""
+    filtered = {}
+    for target_id, route_list in routes.items():
+        kept_routes = []
+        for route in route_list:
+            route_reactions = route.get_reaction_signatures()
+            if not route_reactions & exclude_reactions:  # No overlap
+                kept_routes.append(route)
+        if kept_routes:
+            filtered[target_id] = kept_routes
+    return filtered
+
+
+def split_routes(
+    routes: dict[str, list[Route]], train_ratio: float, seed: int
+) -> tuple[dict[str, list[Route]], dict[str, list[Route]]]:
+    """Split routes dict into train/val partitions."""
+    target_ids = list(routes.keys())
+    random.seed(seed)
+    random.shuffle(target_ids)
+
+    split_idx = int(len(target_ids) * train_ratio)
+    train_ids = target_ids[:split_idx]
+    val_ids = target_ids[split_idx:]
+
+    train_routes = {tid: routes[tid] for tid in train_ids}
+    val_routes = {tid: routes[tid] for tid in val_ids}
+
+    return train_routes, val_routes
 
 
 def create_manifest(
