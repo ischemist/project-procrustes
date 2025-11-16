@@ -1,0 +1,16 @@
+{
+  "dataset": "train-routes",
+  "source_file": "all-routes.json.gz",
+  "source_file_hash": "ea09e22e8bcc3ae7d84f1d3b27187816280a1a1a86ded5058e7e3eedc55e5a11",
+  "output_file": "train-routes.json.gz",
+  "output_file_hash": "de140bd7649484508a3eeb3a42d6af6ea030868ddc1d634ddd2f1b9f0aeea380",
+  "output_content_hash": "18f742d730f7f6c21977ce803fcaf151b86b654efe4f2e6377163cb95d751fa2",
+  "statistics": {
+    "n_targets": 147273,
+    "n_routes": 147273,
+    "split_ratio": 0.9,
+    "random_seed": 42
+  },
+  "timestamp": "2025-11-15T22:48:56.314904+00:00",
+  "retrocast_version": "0.3.dev0"
+}
