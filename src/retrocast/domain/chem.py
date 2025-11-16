@@ -1,4 +1,5 @@
 from rdkit import Chem, rdBase
+from rdkit.Chem import rdMolDescriptors
 
 from retrocast.exceptions import InvalidSmilesError, RetroCastException
 from retrocast.typing import InchiKeyStr, SmilesStr
@@ -90,3 +91,69 @@ def get_inchi_key(smiles: str) -> str:
         logger.error(f"An unexpected RDKit error occurred during InChIKey generation for SMILES '{smiles}': {e}")
         # Wrap the unknown error so the rest of the app doesn't need to know about rdkit specifics
         raise RetroCastException(f"An unexpected error occurred during InChIKey generation: {e}") from e
+
+
+def get_heavy_atom_count(smiles: str) -> int:
+    """
+    Returns the number of heavy (non-hydrogen) atoms in a molecule.
+
+    Args:
+        smiles: The input SMILES string.
+
+    Returns:
+        The count of heavy atoms.
+
+    Raises:
+        InvalidSmilesError: If the input SMILES is malformed or cannot be parsed by RDKit.
+        RetroCastException: For any other unexpected errors during processing.
+    """
+    if not isinstance(smiles, str) or not smiles:
+        logger.error("Provided SMILES for HAC calculation is not a valid string or is empty.")
+        raise InvalidSmilesError("SMILES input must be a non-empty string.")
+
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            logger.warning(f"RDKit failed to parse SMILES for HAC calculation: '{smiles}'")
+            raise InvalidSmilesError(f"Invalid SMILES string: {smiles}")
+
+        return mol.GetNumAtoms()
+
+    except InvalidSmilesError:
+        raise
+    except Exception as e:
+        logger.error(f"An unexpected RDKit error occurred during HAC calculation for SMILES '{smiles}': {e}")
+        raise RetroCastException(f"An unexpected error occurred during HAC calculation: {e}") from e
+
+
+def get_molecular_weight(smiles: str) -> float:
+    """
+    Returns the exact molecular weight of a molecule.
+
+    Args:
+        smiles: The input SMILES string.
+
+    Returns:
+        The exact molecular weight in Daltons.
+
+    Raises:
+        InvalidSmilesError: If the input SMILES is malformed or cannot be parsed by RDKit.
+        RetroCastException: For any other unexpected errors during processing.
+    """
+    if not isinstance(smiles, str) or not smiles:
+        logger.error("Provided SMILES for MW calculation is not a valid string or is empty.")
+        raise InvalidSmilesError("SMILES input must be a non-empty string.")
+
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            logger.warning(f"RDKit failed to parse SMILES for MW calculation: '{smiles}'")
+            raise InvalidSmilesError(f"Invalid SMILES string: {smiles}")
+
+        return rdMolDescriptors.CalcExactMolWt(mol)
+
+    except InvalidSmilesError:
+        raise
+    except Exception as e:
+        logger.error(f"An unexpected RDKit error occurred during MW calculation for SMILES '{smiles}': {e}")
+        raise RetroCastException(f"An unexpected error occurred during MW calculation: {e}") from e

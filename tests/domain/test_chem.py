@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
+from retrocast.domain.chem import canonicalize_smiles, get_heavy_atom_count, get_inchi_key, get_molecular_weight
 from retrocast.exceptions import InvalidSmilesError, RetroCastException
 
 
@@ -205,3 +205,35 @@ def test_get_inchi_key_raises_ursa_exception_on_generic_error(mock_moltoinchikey
         get_inchi_key("CCO")
 
     assert "An unexpected error occurred during InChIKey generation" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "smiles,expected_count",
+    [
+        ("C", 1),  # methane
+        ("CCO", 3),  # ethanol
+        ("c1ccccc1", 6),  # benzene
+        ("CC(=O)O", 4),  # acetic acid
+        ("C[C@H](O)C(=O)O", 6),  # lactic acid
+    ],
+)
+def test_get_heavy_atom_count(smiles: str, expected_count: int) -> None:
+    """Tests that heavy atom count is correctly computed for various molecules."""
+    result = get_heavy_atom_count(smiles)
+    assert result == expected_count
+
+
+@pytest.mark.parametrize(
+    "smiles,expected_mw",
+    [
+        ("C", 16.031),  # methane
+        ("CCO", 46.042),  # ethanol
+        ("c1ccccc1", 78.047),  # benzene
+        ("CC(=O)O", 60.021),  # acetic acid
+        ("C[C@H](O)C(=O)O", 90.032),  # lactic acid
+    ],
+)
+def test_get_molecular_weight(smiles: str, expected_mw: float) -> None:
+    """Tests that molecular weight is correctly computed for various molecules."""
+    result = get_molecular_weight(smiles)
+    assert result == pytest.approx(expected_mw, rel=1e-3)

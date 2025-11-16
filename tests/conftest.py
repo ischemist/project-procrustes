@@ -124,3 +124,59 @@ def pharma_routes_data() -> dict[str, Any]:
 def methylacetate_target_input() -> TargetInput:
     """provides the target input object for methyl acetate."""
     return TargetInput(id="methylacetate", smiles=canonicalize_smiles("COC(C)=O"))
+
+
+@pytest.fixture(scope="session")
+def sample_routes_with_reactions() -> dict[str, list]:
+    """
+    Creates a small set of routes with actual reaction steps for testing curation functions.
+
+    Structure:
+    - target_A: 2 routes for ethyl acetate synthesis
+      - Route 1: EtOAc <- (EtOH + AcOH)
+      - Route 2: EtOAc <- (EtOH + Ac2O)
+    - target_B: 1 route for aspirin synthesis
+      - Route 1: Aspirin <- (Salicylic acid + Ac2O) where Salicylic acid <- (Phenol + CO2)
+    """
+    from retrocast.schemas import Molecule, ReactionStep, Route
+    from retrocast.typing import InchiKeyStr, SmilesStr
+
+    # Define leaf molecules (building blocks)
+    ethanol = Molecule(smiles=SmilesStr("CCO"), inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"))
+    acetic_acid = Molecule(smiles=SmilesStr("CC(=O)O"), inchikey=InchiKeyStr("QTBSBXVTEAMEQO-UHFFFAOYSA-N"))
+    acetic_anhydride = Molecule(smiles=SmilesStr("CC(=O)OC(C)=O"), inchikey=InchiKeyStr("WFDIJRYMOXRFFG-UHFFFAOYSA-N"))
+    phenol = Molecule(smiles=SmilesStr("Oc1ccccc1"), inchikey=InchiKeyStr("ISWSIDIOOBJBQZ-UHFFFAOYSA-N"))
+    co2 = Molecule(smiles=SmilesStr("O=C=O"), inchikey=InchiKeyStr("CURLTUGMZLYLDI-UHFFFAOYSA-N"))
+
+    # Route 1 for target_A: EtOAc from EtOH + AcOH
+    ethyl_acetate_1 = Molecule(
+        smiles=SmilesStr("CCOC(C)=O"),
+        inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
+        synthesis_step=ReactionStep(reactants=[ethanol, acetic_acid]),
+    )
+    route_A1 = Route(target=ethyl_acetate_1, rank=1)
+
+    # Route 2 for target_A: EtOAc from EtOH + Ac2O
+    ethyl_acetate_2 = Molecule(
+        smiles=SmilesStr("CCOC(C)=O"),
+        inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
+        synthesis_step=ReactionStep(reactants=[ethanol, acetic_anhydride]),
+    )
+    route_A2 = Route(target=ethyl_acetate_2, rank=2)
+
+    # Route for target_B: Aspirin synthesis (2-step)
+    # Step 1: Salicylic acid from phenol + CO2
+    salicylic_acid = Molecule(
+        smiles=SmilesStr("O=C(O)c1ccccc1O"),
+        inchikey=InchiKeyStr("YGSDEFSMJLZEOE-UHFFFAOYSA-N"),
+        synthesis_step=ReactionStep(reactants=[phenol, co2]),
+    )
+    # Step 2: Aspirin from salicylic acid + Ac2O
+    aspirin = Molecule(
+        smiles=SmilesStr("CC(=O)Oc1ccccc1C(=O)O"),
+        inchikey=InchiKeyStr("BSYNRYMUTXBXSQ-UHFFFAOYSA-N"),
+        synthesis_step=ReactionStep(reactants=[salicylic_acid, acetic_anhydride]),
+    )
+    route_B1 = Route(target=aspirin, rank=1)
+
+    return {"target_A": [route_A1, route_A2], "target_B": [route_B1]}
