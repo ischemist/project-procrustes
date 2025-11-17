@@ -39,7 +39,7 @@ def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_file = OUTPUT_DIR / "route-comparison.html"
     fig.write_html(output_file, include_plotlyjs="cdn", auto_open=True)
-    fig.write_image(output_file.with_suffix(".jpg"), scale=4, width=1200, height=800)
+    fig.write_image(output_file.with_suffix(".jpg"), scale=4, width=1200, height=1000)
     logger.info(f"Saved figure to {output_file.relative_to(BASE_DIR)}")
 
 

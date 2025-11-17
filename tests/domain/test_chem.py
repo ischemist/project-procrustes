@@ -2,7 +2,13 @@ from unittest.mock import patch
 
 import pytest
 
-from retrocast.domain.chem import canonicalize_smiles, get_heavy_atom_count, get_inchi_key, get_molecular_weight
+from retrocast.domain.chem import (
+    canonicalize_smiles,
+    get_chiral_center_count,
+    get_heavy_atom_count,
+    get_inchi_key,
+    get_molecular_weight,
+)
 from retrocast.exceptions import InvalidSmilesError, RetroCastException
 
 
@@ -237,3 +243,21 @@ def test_get_molecular_weight(smiles: str, expected_mw: float) -> None:
     """Tests that molecular weight is correctly computed for various molecules."""
     result = get_molecular_weight(smiles)
     assert result == pytest.approx(expected_mw, rel=1e-3)
+
+
+@pytest.mark.parametrize(
+    "smiles,expected_count",
+    [
+        ("C", 0),  # methane - no chiral centers
+        ("CCO", 0),  # ethanol - no chiral centers
+        ("c1ccccc1", 0),  # benzene - no chiral centers
+        ("C[C@H](O)C(=O)O", 1),  # lactic acid - 1 chiral center
+        ("C[C@@H](C(=O)O)N", 1),  # alanine - 1 chiral center
+        ("C[C@H](O)[C@H](O)C", 2),  # 2,3-butanediol - 2 chiral centers
+        ("C[C@H]1CCCC[C@@H]1C", 2),  # cis-1,2-dimethylcyclohexane - 2 chiral centers
+    ],
+)
+def test_get_chiral_center_count(smiles: str, expected_count: int) -> None:
+    """Tests that chiral center count is correctly computed for various molecules."""
+    result = get_chiral_center_count(smiles)
+    assert result == expected_count

@@ -97,7 +97,6 @@ def main() -> None:
             stats = {
                 "n_targets": len(sampled),
                 "n_routes": n_sampled,
-                "seed": seed,
                 "sampling_type": config["type"],
             }
             if config["type"] == "random":

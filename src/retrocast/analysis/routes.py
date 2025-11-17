@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 from ischemist.plotly import Styler
 from plotly.subplots import make_subplots
 
-from retrocast.domain.chem import get_heavy_atom_count, get_molecular_weight
+from retrocast.domain.chem import get_chiral_center_count, get_heavy_atom_count, get_molecular_weight
 from retrocast.schemas import Route
 
 
@@ -18,6 +18,8 @@ class RouteStats:
     depth: int
     target_hac: int
     target_mw: float
+    target_chiral: int
+    is_convergent: bool
 
 
 def extract_route_stats(routes: dict[str, list[Route]]) -> list[RouteStats]:
@@ -39,6 +41,8 @@ def extract_route_stats(routes: dict[str, list[Route]]) -> list[RouteStats]:
                     depth=route.depth,
                     target_hac=get_heavy_atom_count(smiles),
                     target_mw=get_molecular_weight(smiles),
+                    target_chiral=get_chiral_center_count(smiles),
+                    is_convergent=route.has_convergent_reaction,
                 )
             )
     return stats
@@ -87,10 +91,12 @@ def create_route_comparison_figure(
     """
     Create a plotly figure comparing n1 and n5 route statistics.
 
-    The figure has 3 rows:
-    - Row 1: Bar chart of route counts by depth
-    - Row 2: Box plots of target HAC by depth
-    - Row 3: Box plots of target MW by depth
+    The figure has 5 rows:
+    - Row 1: Bar chart of total route counts by depth
+    - Row 2: Bar chart of convergent route counts by depth
+    - Row 3: Violin plots of target HAC by depth
+    - Row 4: Violin plots of target MW by depth
+    - Row 5: Violin plots of target chiral center count by depth
 
     Args:
         n1_stats: Statistics for n1 routes.
@@ -99,56 +105,117 @@ def create_route_comparison_figure(
     Returns:
         Plotly Figure object.
     """
-    fig = make_subplots(rows=3, cols=1, vertical_spacing=0.12)
+    fig = make_subplots(rows=5, cols=1, vertical_spacing=0.06)
     N1_COLOR = "#5e548e"
     N5_COLOR = "#a53860"
 
     # Collect all depths for consistent x-axis
     all_depths = sorted(set(s.depth for s in n1_stats) | set(s.depth for s in n5_stats))
 
-    # Row 1: Bar chart of counts by depth
-    n1_counts = defaultdict(int)
-    n5_counts = defaultdict(int)
+    # Count total and convergent routes by depth
+    n1_total = defaultdict(int)
+    n1_convergent = defaultdict(int)
+    n5_total = defaultdict(int)
+    n5_convergent = defaultdict(int)
+
     for s in n1_stats:
-        n1_counts[s.depth] += 1
+        n1_total[s.depth] += 1
+        if s.is_convergent:
+            n1_convergent[s.depth] += 1
+
     for s in n5_stats:
-        n5_counts[s.depth] += 1
+        n5_total[s.depth] += 1
+        if s.is_convergent:
+            n5_convergent[s.depth] += 1
 
-    for counts, name, color in [
-        (n1_counts, "n1 evaluation set", N1_COLOR),
-        (n5_counts, "n5 evaluation set", N5_COLOR),
-    ]:
-        y_vals = [counts[d] for d in all_depths]
-        fig.add_trace(
-            go.Bar(
-                x=all_depths,
-                y=y_vals,
-                name=name,
-                marker_color=color,
-                text=y_vals,
-                textposition="outside",
-            ),
-            row=1,
-            col=1,
-        )
+    # Row 1: Bar chart of total route counts
+    n1_total_vals = [n1_total[d] for d in all_depths]
+    n5_total_vals = [n5_total[d] for d in all_depths]
 
-    # Row 2: Violin plots of HAC by depth
-    _add_violin_traces(fig, n1_stats, n5_stats, all_depths, "target_hac", 2, N1_COLOR, N5_COLOR)
+    fig.add_trace(
+        go.Bar(
+            x=all_depths,
+            y=n1_total_vals,
+            name="n1 evaluation set",
+            marker_color=N1_COLOR,
+            legendgroup="n1",
+            text=n1_total_vals,
+            textposition="outside",
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Bar(
+            x=all_depths,
+            y=n5_total_vals,
+            name="n5 evaluation set",
+            marker_color=N5_COLOR,
+            legendgroup="n5",
+            text=n5_total_vals,
+            textposition="outside",
+        ),
+        row=1,
+        col=1,
+    )
 
-    # Row 3: Violin plots of MW by depth
-    _add_violin_traces(fig, n1_stats, n5_stats, all_depths, "target_mw", 3, N1_COLOR, N5_COLOR)
+    # Row 2: Bar chart of convergent route counts
+    n1_conv_vals = [n1_convergent[d] for d in all_depths]
+    n5_conv_vals = [n5_convergent[d] for d in all_depths]
+
+    fig.add_trace(
+        go.Bar(
+            x=all_depths,
+            y=n1_conv_vals,
+            name="n1 convergent",
+            marker_color=N1_COLOR,
+            legendgroup="n1",
+            showlegend=False,
+            text=n1_conv_vals,
+            textposition="outside",
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Bar(
+            x=all_depths,
+            y=n5_conv_vals,
+            name="n5 convergent",
+            marker_color=N5_COLOR,
+            legendgroup="n5",
+            showlegend=False,
+            text=n5_conv_vals,
+            textposition="outside",
+        ),
+        row=2,
+        col=1,
+    )
+
+    # Row 3: Violin plots of HAC by depth
+    _add_violin_traces(fig, n1_stats, n5_stats, all_depths, "target_hac", 3, N1_COLOR, N5_COLOR)
+
+    # Row 4: Violin plots of MW by depth
+    _add_violin_traces(fig, n1_stats, n5_stats, all_depths, "target_mw", 4, N1_COLOR, N5_COLOR)
+
+    # Row 5: Violin plots of chiral center count by depth (exclude zeros)
+    n1_stats_chiral = [s for s in n1_stats if s.target_chiral > 0]
+    n5_stats_chiral = [s for s in n5_stats if s.target_chiral > 0]
+    _add_violin_traces(fig, n1_stats_chiral, n5_stats_chiral, all_depths, "target_chiral", 5, N1_COLOR, N5_COLOR)
 
     # Update layout
     fig.update_layout(
-        height=900,
+        height=1400,
         barmode="group",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         margin=dict(t=40),
     )
 
-    fig.update_xaxes(title_text="Route Length", row=3, col=1)
-    fig.update_yaxes(title_text="Count", range=[0, 5000], row=1, col=1)
-    fig.update_yaxes(title_text="Heavy Atom Count", dtick=10, row=2, col=1)
-    fig.update_yaxes(title_text="Molecular Weight (Da)", dtick=100, row=3, col=1)
+    fig.update_xaxes(title_text="Route Length", row=5, col=1)
+    fig.update_yaxes(title_text="Total Count", range=[0, 5000], row=1, col=1)
+    fig.update_yaxes(title_text="Convergent Count", row=2, col=1)
+    fig.update_yaxes(title_text="Heavy Atom Count", dtick=10, row=3, col=1)
+    fig.update_yaxes(title_text="Molecular Weight (Da)", dtick=100, row=4, col=1)
+    fig.update_yaxes(title_text="Chiral Centers", dtick=1, row=5, col=1)
     Styler().apply_style(fig)
     return fig

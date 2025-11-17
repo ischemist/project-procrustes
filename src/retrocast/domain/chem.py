@@ -157,3 +157,37 @@ def get_molecular_weight(smiles: str) -> float:
     except Exception as e:
         logger.error(f"An unexpected RDKit error occurred during MW calculation for SMILES '{smiles}': {e}")
         raise RetroCastException(f"An unexpected error occurred during MW calculation: {e}") from e
+
+
+def get_chiral_center_count(smiles: str) -> int:
+    """
+    Returns the number of chiral centers in a molecule.
+
+    Args:
+        smiles: The input SMILES string.
+
+    Returns:
+        The count of chiral centers.
+
+    Raises:
+        InvalidSmilesError: If the input SMILES is malformed or cannot be parsed by RDKit.
+        RetroCastException: For any other unexpected errors during processing.
+    """
+    if not isinstance(smiles, str) or not smiles:
+        logger.error("Provided SMILES for chiral center count is not a valid string or is empty.")
+        raise InvalidSmilesError("SMILES input must be a non-empty string.")
+
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            logger.warning(f"RDKit failed to parse SMILES for chiral center count: '{smiles}'")
+            raise InvalidSmilesError(f"Invalid SMILES string: {smiles}")
+
+        chiral_centers = Chem.FindMolChiralCenters(mol)
+        return len(chiral_centers)
+
+    except InvalidSmilesError:
+        raise
+    except Exception as e:
+        logger.error(f"An unexpected RDKit error occurred during chiral center count for SMILES '{smiles}': {e}")
+        raise RetroCastException(f"An unexpected error occurred during chiral center count: {e}") from e

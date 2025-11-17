@@ -80,6 +80,19 @@ class ReactionStep(BaseModel):
     # Generic bucket for reaction-specific data (e.g., template scores, patent IDs).
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @computed_field
+    @property
+    def is_convergent(self) -> bool:
+        """
+        A reaction is convergent if it combines two or more intermediates (non-leaf molecules).
+
+        This identifies a point of convergence where multiple synthesized fragments
+        are joined together, as opposed to linear synthesis where each step adds
+        to a single growing chain.
+        """
+        intermediate_count = sum(1 for r in self.reactants if not r.is_leaf)
+        return intermediate_count >= 2
+
 
 class Route(BaseModel):
     """The root object for a single, complete synthesis route prediction."""
@@ -119,6 +132,32 @@ class Route(BaseModel):
     def leaves(self) -> set[Molecule]:
         """Returns the set of all unique starting materials for the route."""
         return self.target.get_leaves()
+
+    @computed_field
+    @property
+    def has_convergent_reaction(self) -> bool:
+        """
+        Returns True if the route contains at least one convergent reaction.
+
+        A convergent reaction is one that combines two or more intermediates
+        (non-leaf molecules). This property recursively traverses the synthesis
+        tree to find any point of convergence.
+        """
+
+        def _check_convergent(node: Molecule) -> bool:
+            if node.is_leaf:
+                return False
+
+            assert node.synthesis_step is not None, "Non-leaf node without synthesis_step"
+
+            # Check if this reaction step is convergent
+            if node.synthesis_step.is_convergent:
+                return True
+
+            # Recursively check all branches
+            return any(_check_convergent(reactant) for reactant in node.synthesis_step.reactants)
+
+        return _check_convergent(self.target)
 
     def get_signature(self) -> str:
         """
