@@ -201,6 +201,47 @@ def sample_routes_by_length(
     return _unflatten_routes(sampled)
 
 
+def filter_routes_by_convergence(routes: dict[str, list[Route]], keep_convergent: bool) -> dict[str, list[Route]]:
+    """
+    Filter routes by whether they contain convergent reactions.
+
+    Args:
+        routes: Dictionary mapping target IDs to lists of Route objects.
+        keep_convergent: If True, keep only convergent routes. If False, keep only linear routes.
+
+    Returns:
+        Dictionary with filtered routes.
+    """
+    result: dict[str, list[Route]] = {}
+    for target_id, route_list in routes.items():
+        kept = [r for r in route_list if r.has_convergent_reaction == keep_convergent]
+        if kept:
+            result[target_id] = kept
+    return result
+
+
+def merge_routes(*route_dicts: dict[str, list[Route]]) -> dict[str, list[Route]]:
+    """
+    Merge multiple route dictionaries into one.
+
+    Routes are combined by target_id. If the same target appears in multiple
+    dictionaries, all routes are combined into a single list.
+
+    Args:
+        *route_dicts: Variable number of route dictionaries to merge.
+
+    Returns:
+        Merged dictionary of routes.
+    """
+    result: dict[str, list[Route]] = {}
+    for routes in route_dicts:
+        for target_id, route_list in routes.items():
+            if target_id not in result:
+                result[target_id] = []
+            result[target_id].extend(route_list)
+    return result
+
+
 def create_manifest(
     dataset_name: str,
     source_file: Path,

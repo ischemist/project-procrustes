@@ -55,7 +55,7 @@ def adapt_routes(raw_routes: list[dict], dataset_prefix: str) -> dict[str, list[
             failed_count += 1
 
     unique_routes = deduplicate_routes(routes)
-    adapted_routes = {f"{dataset_prefix}-{i}": [route] for i, route in enumerate(unique_routes)}
+    adapted_routes = {f"{dataset_prefix}-{i:05d}": [route] for i, route in enumerate(unique_routes)}
 
     logger.info(f"Successfully adapted {len(adapted_routes)}/{len(raw_routes)} routes ({failed_count} failed)")
     return adapted_routes
