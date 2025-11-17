@@ -22,6 +22,7 @@ from retrocast.io import (
     load_json_gz,
     load_raw_routes,
     load_routes,
+    load_smiles_index,
     load_target_ids,
     load_targets_csv,
     load_targets_json,
@@ -29,6 +30,7 @@ from retrocast.io import (
     save_json,
     save_json_gz,
     save_routes,
+    save_smiles_index,
 )
 from retrocast.schemas import Molecule, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
@@ -610,3 +612,70 @@ def test_load_raw_routes_raises_on_malformed_json(tmp_path: Path) -> None:
 
     with pytest.raises(RetroCastIOError):
         load_raw_routes(file_path)
+
+
+# ==============================================================================
+# save_smiles_index and load_smiles_index Tests
+# ==============================================================================
+
+
+def test_save_and_load_smiles_index_roundtrip(tmp_path: Path) -> None:
+    """Test that SMILES index can be saved and loaded back correctly."""
+    index = {"CCO": "n5-00001", "c1ccccc1": "n5-00002", "CC(=O)O": "n5-00003"}
+    file_path = tmp_path / "smiles_index.json"
+
+    save_smiles_index(index, file_path)
+    loaded_index = load_smiles_index(file_path)
+
+    assert loaded_index == index
+
+
+def test_save_smiles_index_creates_directories(tmp_path: Path) -> None:
+    """Verify that save_smiles_index creates missing parent directories."""
+    index = {"CCO": "n5-00001"}
+    file_path = tmp_path / "nested" / "dir" / "smiles_index.json"
+
+    save_smiles_index(index, file_path)
+    assert file_path.exists()
+
+
+def test_save_smiles_index_empty_dict(tmp_path: Path) -> None:
+    """Test saving an empty SMILES index."""
+    file_path = tmp_path / "empty_index.json"
+    save_smiles_index({}, file_path)
+    loaded = load_smiles_index(file_path)
+    assert loaded == {}
+
+
+def test_load_smiles_index_raises_on_missing_file(tmp_path: Path) -> None:
+    """Missing files raise RetroCastIOError when loading SMILES index."""
+    with pytest.raises(RetroCastIOError):
+        load_smiles_index(tmp_path / "nonexistent.json")
+
+
+def test_load_smiles_index_raises_on_non_dict(tmp_path: Path) -> None:
+    """Non-dict JSON content raises RetroCastIOError."""
+    file_path = tmp_path / "list.json"
+    file_path.write_text('["not", "a", "dict"]')
+    with pytest.raises(RetroCastIOError):
+        load_smiles_index(file_path)
+
+
+def test_load_smiles_index_raises_on_malformed_json(tmp_path: Path) -> None:
+    """Malformed JSON raises RetroCastIOError."""
+    file_path = tmp_path / "bad.json"
+    file_path.write_text("{'invalid': json}")
+    with pytest.raises(RetroCastIOError):
+        load_smiles_index(file_path)
+
+
+def test_save_and_load_smiles_index_gzipped(tmp_path: Path) -> None:
+    """Test that SMILES index can be saved and loaded as gzipped JSON."""
+    index = {"CCO": "n5-00001", "c1ccccc1": "n5-00002"}
+    file_path = tmp_path / "smiles_index.json.gz"
+
+    save_smiles_index(index, file_path)
+    assert file_path.exists()
+
+    loaded_index = load_smiles_index(file_path)
+    assert loaded_index == index
