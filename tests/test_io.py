@@ -627,7 +627,10 @@ def test_save_and_load_smiles_index_roundtrip(tmp_path: Path) -> None:
     save_smiles_index(index, file_path)
     loaded_index = load_smiles_index(file_path)
 
-    assert loaded_index == index
+    for id, ti_obj in loaded_index.items():
+        assert ti_obj.smiles == id
+        assert ti_obj.smiles in index
+        assert ti_obj.id == index[ti_obj.smiles]
 
 
 def test_save_smiles_index_creates_directories(tmp_path: Path) -> None:
@@ -678,4 +681,7 @@ def test_save_and_load_smiles_index_gzipped(tmp_path: Path) -> None:
     assert file_path.exists()
 
     loaded_index = load_smiles_index(file_path)
-    assert loaded_index == index
+    for id, ti_obj in loaded_index.items():
+        assert ti_obj.smiles == id
+        assert ti_obj.smiles in index
+        assert ti_obj.id == index[ti_obj.smiles]

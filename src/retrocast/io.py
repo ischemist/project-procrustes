@@ -366,7 +366,7 @@ def save_smiles_index(index: dict[str, str], path: Path) -> None:
     logger.info(f"Saved SMILES index with {len(index)} entries to {path}")
 
 
-def load_smiles_index(path: Path) -> dict[str, str]:
+def load_smiles_index(path: Path) -> dict[str, TargetInput]:
     """
     Load a SMILES to target ID mapping from JSON.
 
@@ -389,7 +389,10 @@ def load_smiles_index(path: Path) -> dict[str, str]:
         if not isinstance(data, dict):
             raise RetroCastIOError(f"Expected JSON object (dict), found {type(data)} in {path}")
         logger.info(f"Loaded SMILES index with {len(data)} entries from {path}")
-        return data
+
+        converted_data = {smiles: TargetInput(id=target_id, smiles=smiles) for smiles, target_id in data.items()}
+
+        return converted_data
     except (OSError, gzip.BadGzipFile, json.JSONDecodeError) as e:
         logger.error(f"Failed to load or parse SMILES index file: {path}")
         raise RetroCastIOError(f"SMILES index loading error on {path}: {e}") from e

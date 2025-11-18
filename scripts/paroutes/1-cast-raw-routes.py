@@ -65,10 +65,8 @@ def build_smiles_index(routes: dict[str, list[Route]]) -> dict[str, str]:
     """Build a SMILES to target ID index from routes."""
     index = {}
     for target_id, route_list in routes.items():
-        if route_list:
-            # All routes for a target should have the same target SMILES
-            smiles = route_list[0].target.smiles
-            index[smiles] = target_id
+        smiles = route_list[0].target.smiles
+        index[smiles] = target_id
     return index
 
 
@@ -123,7 +121,6 @@ def main() -> None:
     logger.info(f"Saving adapted routes to {output_file.relative_to(BASE_DIR)}...")
     save_routes(adapted_routes, output_file)
 
-    # Save SMILES to target ID index
     smiles_index = build_smiles_index(adapted_routes)
     save_smiles_index(smiles_index, index_file)
 
