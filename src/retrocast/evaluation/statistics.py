@@ -215,7 +215,9 @@ def bootstrap_metric(
 
     # Bootstrap
     bootstrap_values = []
-    for _ in range(n_bootstrap):
+    from tqdm import tqdm
+
+    for _ in tqdm(range(n_bootstrap), desc="Bootstrap"):
         # Resample target IDs with replacement
         resampled_ids = rng.choice(target_ids, size=n, replace=True)
 
@@ -406,12 +408,27 @@ def format_statistics_as_markdown(stats: BenchmarkStatistics) -> str:
     # Overall performance
     lines.append("## Overall Performance")
     lines.append("")
-    lines.append("| Metric | Value |")
-    lines.append("|--------|-------|")
-    lines.append(f"| Solve Rate | {stats.solve_rate:.3f} |")
-    for k in [1, 2, 3, 4, 5, 10, 20, 50]:
-        if k in stats.topk_accuracy:
-            lines.append(f"| Top-{k} Accuracy | {stats.topk_accuracy[k]:.3f} |")
+
+    # Check if we have CIs
+    has_ci = stats.solve_rate_ci is not None
+
+    if has_ci:
+        lines.append("| Metric | Value | 95% CI |")
+        lines.append("|--------|-------|--------|")
+        ci_lower, ci_upper = stats.solve_rate_ci
+        lines.append(f"| Solve Rate | {stats.solve_rate:.3f} | [{ci_lower:.3f}, {ci_upper:.3f}] |")
+        for k in [1, 2, 3, 4, 5, 10, 20, 50]:
+            if k in stats.topk_accuracy:
+                ci_lower, ci_upper = stats.topk_accuracy_ci[k]
+                lines.append(f"| Top-{k} Accuracy | {stats.topk_accuracy[k]:.3f} | [{ci_lower:.3f}, {ci_upper:.3f}] |")
+    else:
+        lines.append("| Metric | Value |")
+        lines.append("|--------|-------|")
+        lines.append(f"| Solve Rate | {stats.solve_rate:.3f} |")
+        for k in [1, 2, 3, 4, 5, 10, 20, 50]:
+            if k in stats.topk_accuracy:
+                lines.append(f"| Top-{k} Accuracy | {stats.topk_accuracy[k]:.3f} |")
+
     lines.append(f"| Total Targets | {stats.n_targets} |")
     lines.append("")
 
@@ -424,30 +441,70 @@ def format_statistics_as_markdown(stats: BenchmarkStatistics) -> str:
         k_values = [1, 2, 3, 4, 5, 10, 20, 50]
         available_k = [k for k in k_values if k in stats.topk_accuracy]
 
-        # Build header
-        header = "| Length | N | Solve Rate |"
-        for k in available_k[:5]:  # Limit to first 5 K values for readability
-            header += f" Top-{k} |"
-        lines.append(header)
+        # Check if we have CIs for stratified metrics
+        has_stratified_ci = len(stats.solve_rate_by_length_ci) > 0
 
-        # Build separator
-        separator = "|--------|---|------------|"
-        for _ in available_k[:5]:
-            separator += "--------|"
-        lines.append(separator)
+        if has_stratified_ci:
+            # Build header with CI columns
+            header = "| Length | N | Solve Rate | 95% CI |"
+            for k in available_k[:4]:  # Limit to 4 K values when showing CIs
+                header += f" Top-{k} | 95% CI |"
+            lines.append(header)
 
-        # Build rows
-        lengths = sorted(stats.n_targets_by_length.keys())
-        for length in lengths:
-            n = stats.n_targets_by_length.get(length, 0)
-            solve_rate = stats.solve_rate_by_length.get(length, 0.0)
-            row = f"| {length} | {n} | {solve_rate:.3f} |"
+            # Build separator
+            separator = "|--------|---|------------|--------|"
+            for _ in available_k[:4]:
+                separator += "--------|--------|"
+            lines.append(separator)
 
-            for k in available_k[:5]:
-                topk_val = stats.topk_by_length.get(length, {}).get(k, 0.0)
-                row += f" {topk_val:.3f} |"
+            # Build rows
+            lengths = sorted(stats.n_targets_by_length.keys())
+            for length in lengths:
+                n = stats.n_targets_by_length.get(length, 0)
+                solve_rate = stats.solve_rate_by_length.get(length, 0.0)
 
-            lines.append(row)
+                # Solve rate with CI
+                if length in stats.solve_rate_by_length_ci:
+                    ci_lower, ci_upper = stats.solve_rate_by_length_ci[length]
+                    row = f"| {length} | {n} | {solve_rate:.3f} | [{ci_lower:.3f}, {ci_upper:.3f}] |"
+                else:
+                    row = f"| {length} | {n} | {solve_rate:.3f} | - |"
+
+                # Top-K with CIs
+                for k in available_k[:4]:
+                    topk_val = stats.topk_by_length.get(length, {}).get(k, 0.0)
+                    if length in stats.topk_by_length_ci and k in stats.topk_by_length_ci[length]:
+                        ci_lower, ci_upper = stats.topk_by_length_ci[length][k]
+                        row += f" {topk_val:.3f} | [{ci_lower:.3f}, {ci_upper:.3f}] |"
+                    else:
+                        row += f" {topk_val:.3f} | - |"
+
+                lines.append(row)
+        else:
+            # Build header without CIs
+            header = "| Length | N | Solve Rate |"
+            for k in available_k[:5]:  # Limit to first 5 K values for readability
+                header += f" Top-{k} |"
+            lines.append(header)
+
+            # Build separator
+            separator = "|--------|---|------------|"
+            for _ in available_k[:5]:
+                separator += "--------|"
+            lines.append(separator)
+
+            # Build rows
+            lengths = sorted(stats.n_targets_by_length.keys())
+            for length in lengths:
+                n = stats.n_targets_by_length.get(length, 0)
+                solve_rate = stats.solve_rate_by_length.get(length, 0.0)
+                row = f"| {length} | {n} | {solve_rate:.3f} |"
+
+                for k in available_k[:5]:
+                    topk_val = stats.topk_by_length.get(length, {}).get(k, 0.0)
+                    row += f" {topk_val:.3f} |"
+
+                lines.append(row)
 
         lines.append("")
 
