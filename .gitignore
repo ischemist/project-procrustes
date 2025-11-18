@@ -69,3 +69,8 @@ docs/coding-style.md
 *manifest.json
 
 data/statistics
+
+data/2-raw
+data/3-processed
+data/4-scored
+data/5-results
