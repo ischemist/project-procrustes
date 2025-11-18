@@ -92,10 +92,10 @@ This will:
 You can also use RetroCast programmatically to adapt individual routes from any supported model:
 
 ```python
-from retrocast import adapt_single_route, TargetInput
+from retrocast import adapt_single_route, TargetIdentity
 
 # Define your target
-target = TargetInput(id="aspirin", smiles="CC(=O)Oc1ccccc1C(=O)O")
+target = TargetIdentity(id="aspirin", smiles="CC(=O)Oc1ccccc1C(=O)O")
 
 # Your model's raw prediction (e.g., DMS format)
 raw_route = {

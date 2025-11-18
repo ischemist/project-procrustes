@@ -7,7 +7,7 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError, RetroCastException
-from retrocast.models.chem import Route, TargetInput
+from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
@@ -15,7 +15,7 @@ from retrocast.utils.logging import logger
 class DreamRetroAdapter(BaseAdapter):
     """adapter for converting dreamretro-style outputs to the route schema."""
 
-    def cast(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
         """
         validates raw dreamretro data, transforms its single route string, and yields a route.
         """
@@ -84,7 +84,7 @@ class DreamRetroAdapter(BaseAdapter):
                 f"failed to parse route string step. invalid format near '{current_step_for_error_reporting[:70]}...'."
             ) from e
 
-    def _transform(self, route_str: str, target_input: TargetInput, raw_data: dict[str, Any]) -> Route:
+    def _transform(self, route_str: str, target_input: TargetIdentity, raw_data: dict[str, Any]) -> Route:
         """
         orchestrates the transformation of a single dreamretro route string.
         """

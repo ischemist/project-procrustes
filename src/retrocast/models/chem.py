@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import statistics
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -19,13 +19,6 @@ def _get_retrocast_version() -> str:
         return version("retrocast")
     except PackageNotFoundError:
         return "0.0.0.dev0+unknown"
-
-
-class TargetInput(BaseModel):
-    """Input data for adapter processing. Provides target molecule identity."""
-
-    id: str = Field(..., description="The original identifier for the target molecule.")
-    smiles: SmilesStr = Field(..., description="The canonical SMILES string of the target molecule.")
 
 
 class Molecule(BaseModel):
@@ -92,6 +85,24 @@ class ReactionStep(BaseModel):
         """
         intermediate_count = sum(1 for r in self.reactants if not r.is_leaf)
         return intermediate_count >= 2
+
+
+@runtime_checkable
+class TargetIdentity(Protocol):
+    """
+    Minimal interface required by adapters.
+    Any object with 'id' and 'smiles' can be used.
+    """
+
+    id: str
+    smiles: str
+
+
+class TargetInput(BaseModel):
+    """Lightweight DTO for ad-hoc adaptation."""
+
+    id: str
+    smiles: str
 
 
 class Route(BaseModel):

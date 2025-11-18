@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
-from retrocast.models.chem import Molecule, ReactionStep, Route, TargetInput
+from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
@@ -113,7 +113,7 @@ class PaRoutesAdapter(BaseAdapter):
         self.unparsed_categories["unknown_format"] += 1
         return None
 
-    def cast(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
         """
         validates a single paroutes route, checks for patent consistency, and transforms it.
         """
@@ -147,7 +147,7 @@ class PaRoutesAdapter(BaseAdapter):
             logger.warning(f"  - route for '{target_input.id}' failed transformation: {e}")
             return
 
-    def _transform(self, paroutes_root: PaRoutesMoleculeInput, target_input: TargetInput, patent_id: str) -> Route:
+    def _transform(self, paroutes_root: PaRoutesMoleculeInput, target_input: TargetIdentity, patent_id: str) -> Route:
         """
         orchestrates the transformation of a single validated paroutes tree.
         """

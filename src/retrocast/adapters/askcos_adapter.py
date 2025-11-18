@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
-from retrocast.models.chem import Molecule, ReactionStep, Route, TargetInput
+from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 from retrocast.utils.logging import logger
 
@@ -89,7 +89,7 @@ class AskcosAdapter(BaseAdapter):
         """
         self.use_full_graph = use_full_graph
 
-    def cast(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
         """validates raw askcos data, transforms its pathways, and yields route objects."""
         if self.use_full_graph:
             raise NotImplementedError("extracting routes from the full askcos search graph is not yet implemented.")
@@ -132,7 +132,7 @@ class AskcosAdapter(BaseAdapter):
         pathway_edges: list[AskcosPathwayEdge],
         uuid2smiles: dict[str, str],
         node_dict: dict[str, AskcosNode],
-        target_input: TargetInput,
+        target_input: TargetIdentity,
         rank: int,
         metadata: dict[str, Any],
     ) -> Route:

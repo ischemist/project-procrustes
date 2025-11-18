@@ -69,9 +69,9 @@ class TestSynPlannerAdapterContract:
     @pytest.fixture(scope="class")
     def paracetamol_routes(self, adapter: SynPlannerAdapter, raw_synplanner_data):
         """Shared fixture for paracetamol routes."""
-        target_info = TargetInput(id="paracetamol", smiles=canonicalize_smiles("c1cc(ccc1O)NC(C)=O"))
+        target = TargetInput(id="paracetamol", smiles=canonicalize_smiles("c1cc(ccc1O)NC(C)=O"))
         raw_routes = raw_synplanner_data["paracetamol"]
-        return list(adapter.cast(raw_routes, target_info))
+        return list(adapter.cast(raw_routes, target))
 
     def test_produces_correct_number_of_routes(self, paracetamol_routes):
         """Verify the adapter produces the expected number of routes."""
@@ -136,13 +136,13 @@ class TestSynPlannerAdapterRegression:
 
     def test_aspirin_first_route_is_multi_step(self, adapter, raw_synplanner_data):
         """Verify the first aspirin route is a multi-step synthesis."""
-        target_info = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
+        target = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
         raw_routes = raw_synplanner_data["aspirin"]
-        routes = list(adapter.cast(raw_routes, target_info))
+        routes = list(adapter.cast(raw_routes, target))
 
         first_route = routes[0]
         assert first_route.rank == 1
-        assert first_route.target.smiles == target_info.smiles
+        assert first_route.target.smiles == target.smiles
         assert not first_route.target.is_leaf
 
         # Check the route structure: aspirin has 2 reactants
@@ -166,16 +166,16 @@ class TestSynPlannerAdapterRegression:
 
     def test_paracetamol_first_route_is_multi_step(self, adapter, raw_synplanner_data):
         """Verify the first paracetamol route has the expected multi-step structure."""
-        target_info = TargetInput(id="paracetamol", smiles=canonicalize_smiles("c1cc(ccc1O)NC(C)=O"))
+        target = TargetInput(id="paracetamol", smiles=canonicalize_smiles("c1cc(ccc1O)NC(C)=O"))
         raw_routes = raw_synplanner_data["paracetamol"]
-        routes = list(adapter.cast(raw_routes, target_info))
+        routes = list(adapter.cast(raw_routes, target))
 
         first_route = routes[0]
         assert first_route.rank == 1
         target = first_route.target
 
         # Verify target molecule
-        assert target.smiles == target_info.smiles
+        assert target.smiles == target.smiles
         assert not target.is_leaf
 
         # Step 1: paracetamol synthesis
@@ -210,9 +210,9 @@ class TestSynPlannerAdapterRegression:
 
     def test_paracetamol_first_route_mapped_smiles(self, adapter, raw_synplanner_data):
         """Verify the mapped SMILES for reactions in the first paracetamol route."""
-        target_info = TargetInput(id="paracetamol", smiles=canonicalize_smiles("c1cc(ccc1O)NC(C)=O"))
+        target = TargetInput(id="paracetamol", smiles=canonicalize_smiles("c1cc(ccc1O)NC(C)=O"))
         raw_routes = raw_synplanner_data["paracetamol"]
-        routes = list(adapter.cast(raw_routes, target_info))
+        routes = list(adapter.cast(raw_routes, target))
 
         first_route = routes[0]
 
@@ -246,9 +246,9 @@ class TestSynPlannerAdapterRegression:
 
     def test_aspirin_first_route_mapped_smiles(self, adapter, raw_synplanner_data):
         """Verify the mapped SMILES for reactions in the first aspirin route."""
-        target_info = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
+        target = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
         raw_routes = raw_synplanner_data["aspirin"]
-        routes = list(adapter.cast(raw_routes, target_info))
+        routes = list(adapter.cast(raw_routes, target))
 
         first_route = routes[0]
 

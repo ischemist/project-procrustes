@@ -62,9 +62,9 @@ class TestSyntheseusAdapterContract:
     @pytest.fixture(scope="class")
     def uspto_routes(self, adapter: SyntheseusAdapter, raw_syntheseus_data):
         """Shared fixture for USPTO-2/190 routes."""
-        target_info = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
+        target = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
         raw_routes = raw_syntheseus_data["USPTO-2/190"]
-        return list(adapter.cast(raw_routes, target_info))
+        return list(adapter.cast(raw_routes, target))
 
     def test_produces_correct_number_of_routes(self, uspto_routes):
         """Verify the adapter produces the expected number of routes."""
@@ -110,9 +110,9 @@ class TestSyntheseusAdapterRegression:
     def test_adapt_multi_route_complex_target(self, adapter, raw_syntheseus_data):
         """Tests a successful run with multiple, complex routes for a single target."""
         raw_data = raw_syntheseus_data["USPTO-2/190"]
-        target_info = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
+        target = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
 
-        routes = list(adapter.cast(raw_data, target_info))
+        routes = list(adapter.cast(raw_data, target))
 
         # The file contains 10 distinct routes for this target
         assert len(routes) == 10
@@ -135,9 +135,9 @@ class TestSyntheseusAdapterRegression:
     def test_adapt_purchasable_target(self, adapter, raw_syntheseus_data):
         """Tests a target that is purchasable, resulting in a 0-step route."""
         raw_data = raw_syntheseus_data["paracetamol"]
-        target_info = TargetInput(id="paracetamol", smiles=PARACETAMOL_SMILES)
+        target = TargetInput(id="paracetamol", smiles=PARACETAMOL_SMILES)
 
-        routes = list(adapter.cast(raw_data, target_info))
+        routes = list(adapter.cast(raw_data, target))
 
         assert len(routes) == 1
         route = routes[0]
@@ -151,7 +151,7 @@ class TestSyntheseusAdapterRegression:
     def test_adapt_no_routes_found(self, adapter, raw_syntheseus_data):
         """Tests a target for which the model found no routes (empty list)."""
         raw_data = raw_syntheseus_data["ibuprofen"]
-        target_info = TargetInput(id="ibuprofen", smiles="CC(C)Cc1ccc(C(C)C(=O)O)cc1")
+        target = TargetInput(id="ibuprofen", smiles="CC(C)Cc1ccc(C(C)C(=O)O)cc1")
 
-        routes = list(adapter.cast(raw_data, target_info))
+        routes = list(adapter.cast(raw_data, target))
         assert len(routes) == 0

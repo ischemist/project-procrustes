@@ -19,7 +19,7 @@ from tqdm import tqdm
 from retrocast.adapters.dms_adapter import DMSAdapter
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.io import load_smiles_index, save_json
-from retrocast.models.chem import TargetInput
+from retrocast.models.chem import TargetIdentity
 from retrocast.utils.hashing import generate_file_hash
 from retrocast.utils.logging import logger
 
@@ -33,7 +33,7 @@ OUTPUT_DIR = base_dir / "data" / "processed"
 
 def load_dms_predictions_from_pickle(
     raw_path: Path,
-    targets_map: dict[str, TargetInput],
+    targets_map: dict[str, TargetIdentity],
 ) -> tuple[dict[str, list[dict]], dict[str, int]]:
     with open(raw_path, "rb") as f:
         predictions_list: list[list[tuple[str, float]]] = pickle.load(f)
@@ -80,7 +80,7 @@ def load_dms_predictions_from_pickle(
 
 def adapt_dms_predictions(
     raw_data_path: Path,
-    targets_map: dict[str, TargetInput],
+    targets_map: dict[str, TargetIdentity],
     output_dir: Path,
     model_name: str,
     dataset_name: str,

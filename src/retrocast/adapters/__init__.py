@@ -13,7 +13,7 @@ from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
 from retrocast.exceptions import RetroCastException
-from retrocast.models.chem import Route, TargetInput
+from retrocast.models.chem import Route, TargetIdentity
 
 ADAPTER_MAP: dict[str, BaseAdapter] = {
     "aizynth": AizynthAdapter(),
@@ -48,7 +48,7 @@ def get_adapter(adapter_name: str) -> BaseAdapter:
 
 def adapt_single_route(
     raw_route: Any,
-    target: TargetInput,
+    target: TargetIdentity,
     adapter_name: str,
 ) -> Route | None:
     """
@@ -74,9 +74,9 @@ def adapt_single_route(
     Examples:
         Route-centric adapter (DMS):
         >>> from retrocast.adapters import adapt_single_route
-        >>> from retrocast.models.chem import TargetInput
+        >>> from retrocast.models.chem import TargetIdentity
         >>>
-        >>> target = TargetInput(id="aspirin", smiles="CC(=O)Oc1ccccc1C(=O)O")
+        >>> target = TargetIdentity(id="aspirin", smiles="CC(=O)Oc1ccccc1C(=O)O")
         >>> raw_dms_route = {"smiles": "CC(=O)Oc1ccccc1C(=O)O", "children": [...]}
         >>>
         >>> route = adapt_single_route(raw_dms_route, target, "dms")
@@ -85,7 +85,7 @@ def adapt_single_route(
         ...     print(f"Starting materials: {len(route.leaves)}")
 
         Target-centric adapter (RetroChimera):
-        >>> target = TargetInput(id="mol1", smiles="CCO")
+        >>> target = TargetIdentity(id="mol1", smiles="CCO")
         >>> retrochimera_data = {
         ...     "smiles": "CCO",
         ...     "result": {"outputs": [{"routes": [...]}]}
@@ -111,7 +111,7 @@ def adapt_single_route(
 
 def adapt_routes(
     raw_routes: Any,
-    target: TargetInput,
+    target: TargetIdentity,
     adapter_name: str,
     max_routes: int | None = None,
 ) -> list[Route]:
@@ -129,9 +129,9 @@ def adapt_routes(
 
     Example:
         >>> from retrocast.adapters import adapt_routes
-        >>> from retrocast.models.chem import TargetInput
+        >>> from retrocast.models.chem import TargetIdentity
         >>>
-        >>> target = TargetInput(id="ibuprofen", smiles="CC(C)Cc1ccc(cc1)C(C)C(=O)O")
+        >>> target = TargetIdentity(id="ibuprofen", smiles="CC(C)Cc1ccc(cc1)C(C)C(=O)O")
         >>> raw_routes = [route1, route2, route3, ...]  # Your model's output
         >>>
         >>> routes = adapt_routes(raw_routes, target, "aizynth", max_routes=10)

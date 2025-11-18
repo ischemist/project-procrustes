@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_molecule_from_bipartite_node
 from retrocast.exceptions import AdapterLogicError, RetroCastException
-from retrocast.models.chem import Route, TargetInput
+from retrocast.models.chem import Route, TargetIdentity
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -50,27 +50,25 @@ class SyntheseusRouteList(RootModel[list[SyntheseusMoleculeInput]]):
 class SyntheseusAdapter(BaseAdapter):
     """adapter for converting serialized syntheseus outputs to the route schema."""
 
-    def cast(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         """
         validates raw syntheseus data, transforms it, and yields route objects.
         """
         try:
             validated_routes = SyntheseusRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(
-                f"  - raw data for target '{target_info.id}' failed syntheseus schema validation. error: {e}"
-            )
+            logger.warning(f"  - raw data for target '{target.id}' failed syntheseus schema validation. error: {e}")
             return
 
         for rank, syntheseus_tree_root in enumerate(validated_routes.root, start=1):
             try:
-                route = self._transform(syntheseus_tree_root, target_info, rank)
+                route = self._transform(syntheseus_tree_root, target, rank)
                 yield route
             except RetroCastException as e:
-                logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
+                logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, syntheseus_root: SyntheseusMoleculeInput, target_info: TargetInput, rank: int) -> Route:
+    def _transform(self, syntheseus_root: SyntheseusMoleculeInput, target: TargetIdentity, rank: int) -> Route:
         """
         orchestrates the transformation of a single serialized syntheseus output tree.
         raises RetroCastException on failure.
@@ -78,10 +76,10 @@ class SyntheseusAdapter(BaseAdapter):
         # use the common recursive builder with new schema
         target_molecule = build_molecule_from_bipartite_node(raw_mol_node=syntheseus_root)
 
-        if target_molecule.smiles != target_info.smiles:
+        if target_molecule.smiles != target.smiles:
             msg = (
-                f"mismatched smiles for target {target_info.id}. "
-                f"expected canonical: {target_info.smiles}, but adapter produced: {target_molecule.smiles}"
+                f"mismatched smiles for target {target.id}. "
+                f"expected canonical: {target.smiles}, but adapter produced: {target_molecule.smiles}"
             )
             logger.error(msg)
             raise AdapterLogicError(msg)

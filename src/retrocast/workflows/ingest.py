@@ -13,7 +13,7 @@
 # )
 # from retrocast.exceptions import RetroCastIOError
 # from retrocast.io import load_json_gz, save_json, save_json_gz
-# from retrocast.models.chem import Route, RunStatistics, TargetInput
+# from retrocast.models.chem import Route, RunStatistics, TargetIdentity
 # from retrocast.utils.hashing import (
 #     compute_routes_content_hash,
 #     generate_file_hash,
@@ -32,7 +32,7 @@
 # def process_raw_data(
 #     raw_data_per_target: dict[str, list[Any]],
 #     adapter: BaseAdapter,
-#     targets_map: dict[str, TargetInput],
+#     targets_map: dict[str, TargetIdentity],
 #     output_path: Path,
 #     sampling_strategy: str | None = None,
 #     sample_k: int | None = None,
@@ -46,7 +46,7 @@
 #     Args:
 #         raw_data_per_target: Dictionary mapping target IDs to lists of raw route data.
 #         adapter: The adapter to use for transforming raw routes.
-#         targets_map: Dictionary mapping target IDs to TargetInput objects.
+#         targets_map: Dictionary mapping target IDs to TargetIdentity objects.
 #         output_path: Path where the results JSON file will be saved.
 #         sampling_strategy: Optional sampling strategy to apply (e.g., "top-k", "random-k", "by-length").
 #         sample_k: Number of routes to sample when using a sampling strategy.
@@ -192,7 +192,7 @@
 #     adapter: BaseAdapter,
 #     raw_results_file: Path,
 #     processed_dir: Path,
-#     targets_map: dict[str, TargetInput],
+#     targets_map: dict[str, TargetIdentity],
 #     sampling_strategy: str | None = None,
 #     sample_k: int | None = None,
 #     anonymize: bool = True,
@@ -209,7 +209,7 @@
 #         adapter: The adapter to use for transforming raw routes.
 #         raw_results_file: Path to the raw results file (gzipped JSON).
 #         processed_dir: Directory where processed results will be saved.
-#         targets_map: Dictionary mapping target IDs to TargetInput objects.
+#         targets_map: Dictionary mapping target IDs to TargetIdentity objects.
 #         sampling_strategy: Optional sampling strategy to apply.
 #         sample_k: Number of routes to sample when using a sampling strategy.
 #         anonymize: If True, use hashed model name for output directory. If False, use model_name directly.

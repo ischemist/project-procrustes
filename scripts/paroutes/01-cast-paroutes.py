@@ -14,7 +14,7 @@ from retrocast.domain.chem import canonicalize_smiles
 from retrocast.io.files import save_json_gz
 from retrocast.io.loaders import load_raw_paroutes_list
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
-from retrocast.models.chem import TargetInput
+from retrocast.models.chem import TargetIdentity
 from retrocast.utils.logging import logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -47,8 +47,8 @@ def process_dataset(name: str):
             smiles = canonicalize_smiles(raw_item["smiles"])
 
             # 2. Adapt the Route
-            # (We construct a temporary TargetInput for the adapter)
-            target_input = TargetInput(id=target_id, smiles=smiles)
+            # (We construct a temporary TargetIdentity for the adapter)
+            target_input = TargetIdentity(id=target_id, smiles=smiles)
             route = adapt_single_route_from_raw(raw_item, target_input)
 
             if not route:

@@ -16,7 +16,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from retrocast import Route, TargetInput, adapt_single_route, deduplicate_routes
+from retrocast import Route, TargetIdentity, adapt_single_route, deduplicate_routes
 from retrocast.curation import create_manifest, filter_routes_by_signature, get_route_signatures
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.exceptions import RetroCastException
@@ -41,7 +41,7 @@ def adapt_routes(raw_routes: list[dict], dataset_prefix: str) -> dict[str, list[
         target_id = f"{dataset_prefix}-{i}"
         try:
             target_smiles = canonicalize_smiles(raw_route["smiles"])
-            target = TargetInput(id=target_id, smiles=target_smiles)
+            target = TargetIdentity(id=target_id, smiles=target_smiles)
 
             # PaRoutes: each input is a single route, so we expect 0 or 1 trees
             route = adapt_single_route(raw_route, target, "paroutes")

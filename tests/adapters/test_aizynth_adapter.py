@@ -60,9 +60,9 @@ class TestAizynthAdapterContract:
     @pytest.fixture(scope="class")
     def aspirin_routes(self, adapter: AizynthAdapter, raw_aizynth_mcts_data):
         """Shared fixture for aspirin routes."""
-        target_info = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
+        target = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
         raw_routes = raw_aizynth_mcts_data["aspirin"]
-        return list(adapter.cast(raw_routes, target_info))
+        return list(adapter.cast(raw_routes, target))
 
     def test_produces_correct_number_of_routes(self, aspirin_routes):
         """Verify the adapter produces the expected number of routes."""
@@ -133,13 +133,13 @@ class TestAizynthAdapterRegression:
 
     def test_aspirin_first_route_is_one_step(self, adapter, raw_aizynth_mcts_data):
         """Verify the first aspirin route is a simple one-step synthesis."""
-        target_info = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
+        target = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
         raw_routes = raw_aizynth_mcts_data["aspirin"]
-        routes = list(adapter.cast(raw_routes, target_info))
+        routes = list(adapter.cast(raw_routes, target))
 
         first_route = routes[0]
         assert first_route.rank == 1
-        assert first_route.target.smiles == target_info.smiles
+        assert first_route.target.smiles == target.smiles
         assert not first_route.target.is_leaf
 
         # Check the route: salicylic acid + acetic anhydride -> aspirin
@@ -157,16 +157,16 @@ class TestAizynthAdapterRegression:
 
     def test_ibuprofen_first_route_is_three_step(self, adapter, raw_aizynth_mcts_data):
         """Verify the first ibuprofen route is a three-step synthesis."""
-        target_info = TargetInput(id="ibuprofen", smiles=canonicalize_smiles("CC(C)Cc1ccc([C@@H](C)C(=O)O)cc1"))
+        target = TargetInput(id="ibuprofen", smiles=canonicalize_smiles("CC(C)Cc1ccc([C@@H](C)C(=O)O)cc1"))
         raw_route = raw_aizynth_mcts_data["ibuprofen"][0]
-        routes = list(adapter.cast([raw_route], target_info))
+        routes = list(adapter.cast([raw_route], target))
 
         assert len(routes) == 1
         route = routes[0]
         target = route.target
 
         # Verify three-step path: ibuprofen -> intermediate 1 -> intermediate 2 -> starting materials
-        assert target.smiles == target_info.smiles
+        assert target.smiles == target.smiles
         assert not target.is_leaf
 
         # Step 1
