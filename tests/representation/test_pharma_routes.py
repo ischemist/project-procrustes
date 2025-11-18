@@ -3,7 +3,7 @@
 from typing import Any
 
 from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
-from retrocast.schemas import Molecule, ReactionStep, Route
+from retrocast.models.chem import Molecule, ReactionStep, Route
 
 # ==============================================================================
 # Contract/Regression Tests using Pharma Routes

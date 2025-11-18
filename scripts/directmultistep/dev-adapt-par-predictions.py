@@ -13,13 +13,13 @@ import logging
 import pickle
 from pathlib import Path
 
+from retrocast.core import create_processing_manifest, process_raw_data
 from tqdm import tqdm
 
 from retrocast.adapters.dms_adapter import DMSAdapter
-from retrocast.core import create_processing_manifest, process_raw_data
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.io import load_smiles_index, save_json
-from retrocast.schemas import TargetInput
+from retrocast.models.chem import TargetInput
 from retrocast.utils.hashing import generate_file_hash
 from retrocast.utils.logging import logger
 

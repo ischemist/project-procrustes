@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
-from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
+from retrocast.models.chem import Molecule, ReactionStep, Route, TargetInput
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---

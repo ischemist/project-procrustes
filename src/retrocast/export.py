@@ -2,7 +2,7 @@
 
 from tqdm import tqdm
 
-from retrocast.schemas import Molecule, ReactionSignature, Route
+from retrocast.models.chem import Molecule, ReactionSignature, Route
 
 
 def collect_reaction_smiles_and_signatures(

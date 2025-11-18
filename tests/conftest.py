@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.schemas import TargetInput
+from retrocast.models.chem import TargetInput
 
 TEST_DATA_DIR = Path("tests/testing_data")
 MODEL_PRED_DIR = TEST_DATA_DIR / "model-predictions"
@@ -138,7 +138,7 @@ def sample_routes_with_reactions() -> dict[str, list]:
     - target_B: 1 route for aspirin synthesis
       - Route 1: Aspirin <- (Salicylic acid + Ac2O) where Salicylic acid <- (Phenol + CO2)
     """
-    from retrocast.schemas import Molecule, ReactionStep, Route
+    from retrocast.models.chem import Molecule, ReactionStep, Route
     from retrocast.typing import InchiKeyStr, SmilesStr
 
     # Define leaf molecules (building blocks)

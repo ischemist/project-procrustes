@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 
 from retrocast.adapters.askcos_adapter import AskcosAdapter
-from retrocast.schemas import TargetInput
+from retrocast.models.chem import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 

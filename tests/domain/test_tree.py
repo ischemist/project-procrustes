@@ -10,7 +10,7 @@ from retrocast.domain.tree import (
     sample_random_k,
     sample_top_k,
 )
-from retrocast.schemas import Molecule, ReactionSignature, ReactionStep, Route
+from retrocast.models.chem import Molecule, ReactionSignature, ReactionStep, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
 
 

@@ -2,7 +2,7 @@ import pytest
 
 from retrocast.adapters.retrostar_adapter import RetroStarAdapter
 from retrocast.exceptions import AdapterLogicError
-from retrocast.schemas import TargetInput
+from retrocast.models.chem import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 ASPIRIN_SMILES = "CC(=O)Oc1ccccc1C(=O)O"

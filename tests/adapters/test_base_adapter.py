@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from retrocast.schemas import Route
+from retrocast.models.chem import Route
 
 
 class BaseAdapterTest(ABC):

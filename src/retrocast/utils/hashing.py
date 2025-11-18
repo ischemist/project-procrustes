@@ -8,7 +8,7 @@ from retrocast.exceptions import RetroCastException
 from retrocast.utils.logging import logger
 
 if TYPE_CHECKING:
-    from retrocast.schemas import Route
+    from retrocast.models.chem import Route
 
 
 def generate_file_hash(path: Path) -> str:

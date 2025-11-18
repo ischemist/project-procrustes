@@ -4,7 +4,7 @@ import pytest
 
 from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.schemas import TargetInput
+from retrocast.models.chem import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 

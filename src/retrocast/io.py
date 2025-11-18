@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.exceptions import RetroCastException, RetroCastIOError, RetroCastSerializationError
-from retrocast.schemas import EvaluationResults, Route, TargetInput
+from retrocast.models.chem import EvaluationResults, Route, TargetInput
 from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
@@ -450,7 +450,7 @@ def load_evaluation_results(path: Path) -> EvaluationResults:
     Raises:
         RetroCastIOError: If the file cannot be read or parsed.
     """
-    from retrocast.schemas import EvaluationResults
+    from retrocast.models.chem import EvaluationResults
 
     data = load_json_gz(path)
     results = EvaluationResults.model_validate(data)

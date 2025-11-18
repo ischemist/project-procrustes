@@ -1,7 +1,7 @@
 import random
 from collections import defaultdict
 
-from retrocast.schemas import Molecule, ReactionSignature, ReactionStep, Route
+from retrocast.models.chem import Molecule, ReactionSignature, ReactionStep, Route
 from retrocast.utils.logging import logger
 
 

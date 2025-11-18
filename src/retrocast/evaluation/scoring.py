@@ -6,7 +6,7 @@ This module provides functions to evaluate predicted routes against:
 2. Experimental routes (if available)
 """
 
-from retrocast.schemas import EvaluationResults, Route, TargetEvaluation
+from retrocast.models.chem import EvaluationResults, Route, TargetEvaluation
 from retrocast.utils.logging import logger
 
 

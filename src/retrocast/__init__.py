@@ -6,7 +6,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 from retrocast.adapters import ADAPTER_MAP, adapt_routes, adapt_single_route, get_adapter
 from retrocast.domain.tree import deduplicate_routes, sample_k_by_depth, sample_random_k, sample_top_k
-from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
+from retrocast.models.chem import Molecule, ReactionStep, Route, TargetInput
 from retrocast.utils.logging import setup_logging
 
 setup_logging()

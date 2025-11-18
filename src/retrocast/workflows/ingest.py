@@ -13,7 +13,7 @@ from retrocast.domain.tree import (
 )
 from retrocast.exceptions import RetroCastIOError
 from retrocast.io import load_json_gz, save_json, save_json_gz
-from retrocast.schemas import RunStatistics, TargetInput
+from retrocast.models.chem import Route, RunStatistics, TargetInput
 from retrocast.utils.hashing import (
     compute_routes_content_hash,
     generate_file_hash,
@@ -57,7 +57,6 @@ def process_raw_data(
         - SHA256 hash of the output file.
         - Content hash of all routes (order-agnostic).
     """
-    from retrocast.schemas import Route
 
     final_output_data: dict[str, list[dict[str, Any]]] = {}
     routes_objects: dict[str, list[Route]] = {}

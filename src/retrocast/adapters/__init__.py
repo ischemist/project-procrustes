@@ -13,7 +13,7 @@ from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
 from retrocast.exceptions import RetroCastException
-from retrocast.schemas import Route, TargetInput
+from retrocast.models.chem import Route, TargetInput
 
 ADAPTER_MAP: dict[str, BaseAdapter] = {
     "aizynth": AizynthAdapter(),
@@ -74,7 +74,7 @@ def adapt_single_route(
     Examples:
         Route-centric adapter (DMS):
         >>> from retrocast.adapters import adapt_single_route
-        >>> from retrocast.schemas import TargetInput
+        >>> from retrocast.models.chem import TargetInput
         >>>
         >>> target = TargetInput(id="aspirin", smiles="CC(=O)Oc1ccccc1C(=O)O")
         >>> raw_dms_route = {"smiles": "CC(=O)Oc1ccccc1C(=O)O", "children": [...]}
@@ -129,7 +129,7 @@ def adapt_routes(
 
     Example:
         >>> from retrocast.adapters import adapt_routes
-        >>> from retrocast.schemas import TargetInput
+        >>> from retrocast.models.chem import TargetInput
         >>>
         >>> target = TargetInput(id="ibuprofen", smiles="CC(C)Cc1ccc(cc1)C(C)C(=O)O")
         >>> raw_routes = [route1, route2, route3, ...]  # Your model's output

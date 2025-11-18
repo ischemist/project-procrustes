@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from retrocast.exceptions import RetroCastException
-from retrocast.schemas import Molecule, Route
+from retrocast.models.chem import Molecule, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
 from retrocast.utils.hashing import (
     compute_routes_content_hash,

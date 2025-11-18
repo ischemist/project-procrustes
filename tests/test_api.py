@@ -7,7 +7,7 @@ import pytest
 from retrocast import ADAPTER_MAP, adapt_routes, adapt_single_route, get_adapter
 from retrocast.domain.tree import deduplicate_routes, sample_top_k
 from retrocast.exceptions import RetroCastException
-from retrocast.schemas import Route, TargetInput
+from retrocast.models.chem import Route, TargetInput
 
 
 class TestGetAdapter:

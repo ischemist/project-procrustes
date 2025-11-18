@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from retrocast.domain.chem import canonicalize_smiles
-from retrocast.schemas import Molecule, ReactionStep, TargetInput
+from retrocast.models.chem import Molecule, ReactionStep, TargetInput
 from retrocast.typing import InchiKeyStr, SmilesStr
 
 # ==============================================================================

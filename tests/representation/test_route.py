@@ -1,6 +1,6 @@
 """Unit tests for Route class."""
 
-from retrocast.schemas import Molecule, ReactionStep, Route
+from retrocast.models.chem import Molecule, ReactionStep, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
 
 # ==============================================================================

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from retrocast.schemas import Molecule, ReactionSignature, ReactionStep, Route
+from retrocast.models.chem import Molecule, ReactionSignature, ReactionStep, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
 
 # ==============================================================================

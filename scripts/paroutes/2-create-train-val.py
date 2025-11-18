@@ -24,7 +24,7 @@ from retrocast.curation import (
     split_routes,
 )
 from retrocast.io import load_routes, save_json, save_routes
-from retrocast.schemas import Route
+from retrocast.models.chem import Route
 from retrocast.utils.logging import logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]

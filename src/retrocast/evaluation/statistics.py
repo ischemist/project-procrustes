@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 from pydantic import BaseModel, Field
 
-from retrocast.schemas import EvaluationResults, TargetEvaluation
+from retrocast.models.chem import EvaluationResults, TargetEvaluation
 from retrocast.utils.logging import logger
 
 

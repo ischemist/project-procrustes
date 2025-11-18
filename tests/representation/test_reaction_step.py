@@ -1,6 +1,6 @@
 """Unit tests for ReactionStep class."""
 
-from retrocast.schemas import Molecule, ReactionStep
+from retrocast.models.chem import Molecule, ReactionStep
 from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
 
 # ==============================================================================

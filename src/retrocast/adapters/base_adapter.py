@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from typing import Any
 
-from retrocast.schemas import Route, TargetInput
+from retrocast.models.chem import Route, TargetInput
 
 
 class BaseAdapter(ABC):

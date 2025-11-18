@@ -27,7 +27,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, RootModel, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_molecule_from_bipartite_node
-from retrocast.schemas import Route, TargetInput
+from retrocast.models.chem import Route, TargetInput
 from retrocast.exceptions import RetroCastException
 from retrocast.utils.logging import logger
 
@@ -86,7 +86,7 @@ from collections.abc import Generator
 from typing import Any
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
-from retrocast.schemas import Route, TargetInput
+from retrocast.models.chem import Route, TargetInput
 from retrocast.exceptions import RetroCastException
 from retrocast.utils.logging import logger
 
@@ -124,7 +124,7 @@ from typing import Any
 from pydantic import BaseModel, RootModel, Field
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
-from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
+from retrocast.models.chem import Molecule, ReactionStep, Route, TargetInput
 
 # --- pydantic schemas for raw input validation ---
 class CustomTree(BaseModel):
@@ -185,7 +185,7 @@ Create `tests/adapters/test_new_adapter.py` and inherit from `BaseAdapterTest`:
 import pytest
 from tests.adapters.test_base_adapter import BaseAdapterTest
 from retrocast.adapters.new_model_adapter import NewModelAdapter
-from retrocast.schemas import TargetInput
+from retrocast.models.chem import TargetInput
 
 class TestNewModelAdapterUnit(BaseAdapterTest):
     @pytest.fixture

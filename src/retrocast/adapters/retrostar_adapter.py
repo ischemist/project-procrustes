@@ -7,7 +7,7 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError, RetroCastException
-from retrocast.schemas import Route, TargetInput
+from retrocast.models.chem import Route, TargetInput
 from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 

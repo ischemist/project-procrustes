@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from retrocast.domain.tree import excise_reactions_from_route
-from retrocast.schemas import ReactionSignature, Route, _get_retrocast_version
+from retrocast.models.chem import ReactionSignature, Route, _get_retrocast_version
 from retrocast.utils.hashing import compute_routes_content_hash, generate_file_hash
 
 
