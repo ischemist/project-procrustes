@@ -5,11 +5,11 @@ import pytest
 from pytest_mock import MockerFixture
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.core import process_model_run
+from retrocast.core import create_processing_manifest, process_model_run, process_raw_data
 from retrocast.domain.chem import get_inchi_key
 from retrocast.exceptions import RetroCastIOError
 from retrocast.io import save_json_gz
-from retrocast.schemas import Molecule, Route, TargetInput
+from retrocast.schemas import Molecule, Route, RunStatistics, TargetInput
 from retrocast.typing import SmilesStr
 from retrocast.utils.hashing import generate_model_hash
 
@@ -434,3 +434,161 @@ def test_process_model_run_tracks_duplicates(
     # 0 routes failed processing, but 1 duplicate was removed
     assert stats["total_routes_failed_or_duplicate"] == 1
     assert stats["duplication_factor"] == 1.5  # 3 successful / 2 unique = 1.5
+
+
+def test_process_raw_data_returns_correct_structure(
+    tmp_path: Path,
+    mocker: MockerFixture,
+    aspirin_target_info: TargetInput,
+    multiple_unique_routes: list[Route],
+) -> None:
+    """
+    Tests that process_raw_data returns the expected tuple of stats and hashes.
+    """
+    # ARRANGE
+    raw_data = {
+        "aspirin": [
+            {"smiles": "route1", "children": []},
+            {"smiles": "route2", "children": []},
+            {"smiles": "route3", "children": []},
+        ]
+    }
+    mock_adapter = mocker.MagicMock(spec=BaseAdapter)
+    mock_adapter.cast.return_value = iter(multiple_unique_routes)
+
+    output_path = tmp_path / "results.json.gz"
+
+    # ACT
+    stats, output_file_hash, routes_content_hash = process_raw_data(
+        raw_data_per_target=raw_data,
+        adapter=mock_adapter,
+        targets_map={"aspirin": aspirin_target_info},
+        output_path=output_path,
+    )
+
+    # ASSERT
+    assert isinstance(stats, RunStatistics)
+    assert isinstance(output_file_hash, str)
+    assert isinstance(routes_content_hash, str)
+    assert len(output_file_hash) == 64  # SHA256 hex digest length
+    assert len(routes_content_hash) == 64  # SHA256 hex digest length
+    assert output_path.exists()
+    assert stats.total_routes_in_raw_files == 3
+    assert stats.final_unique_routes_saved == 3
+
+
+def test_create_processing_manifest_includes_all_fields(
+    aspirin_target_info: TargetInput,
+) -> None:
+    """
+    Tests that create_processing_manifest includes all expected fields.
+    """
+    # ARRANGE
+    stats = RunStatistics()
+    stats.total_routes_in_raw_files = 10
+    stats.final_unique_routes_saved = 8
+    stats.targets_with_at_least_one_route.add("aspirin")
+
+    source_files = {"results.json.gz": "abc123"}
+    output_file_hash = "def456" * 10  # Mock SHA256 hash
+    routes_content_hash = "789ghi" * 10  # Mock content hash
+
+    # ACT
+    manifest = create_processing_manifest(
+        model_name="test_model",
+        dataset_name="test_dataset",
+        source_files=source_files,
+        output_file="results.json.gz",
+        stats=stats,
+        output_file_hash=output_file_hash,
+        routes_content_hash=routes_content_hash,
+        sampling_strategy="top-k",
+        sample_k=5,
+    )
+
+    # ASSERT
+    assert manifest["model_name"] == "test_model"
+    assert manifest["dataset_name"] == "test_dataset"
+    assert "output_files" in manifest
+    assert "results.json.gz" in manifest["output_files"]
+    assert manifest["output_files"]["results.json.gz"]["file_hash"] == output_file_hash
+    assert manifest["output_files"]["results.json.gz"]["content_hash"] == routes_content_hash
+    assert "model_hash" in manifest
+    assert "source_hash" in manifest
+    assert "processing_timestamp_utc" in manifest
+    assert manifest["source_files"] == source_files
+    assert manifest["sampling_parameters"]["strategy"] == "top-k"
+    assert manifest["sampling_parameters"]["k"] == 5
+    assert "statistics" in manifest
+
+
+def test_create_processing_manifest_respects_custom_model_hash() -> None:
+    """
+    Tests that create_processing_manifest uses a custom model_hash when provided.
+    """
+    # ARRANGE
+    stats = RunStatistics()
+    custom_hash = "custom_model_hash_123"
+    output_file_hash = ""
+    routes_content_hash = ""
+
+    # ACT
+    manifest = create_processing_manifest(
+        model_name="test_model",
+        dataset_name="test_dataset",
+        source_files={},
+        output_file=None,
+        stats=stats,
+        output_file_hash=output_file_hash,
+        routes_content_hash=routes_content_hash,
+        model_hash=custom_hash,
+    )
+
+    # ASSERT
+    assert manifest["model_hash"] == custom_hash
+
+
+def test_process_model_run_with_anonymize_false(
+    tmp_path: Path, mocker: MockerFixture, aspirin_target_info: TargetInput, multiple_unique_routes: list[Route]
+) -> None:
+    """
+    Tests that when anonymize=False, the output directory uses the model name directly.
+    """
+    # ARRANGE
+    raw_dir, processed_dir = tmp_path / "raw", tmp_path / "processed"
+    raw_dir.mkdir(), processed_dir.mkdir()
+    model_name, dataset_name = "my-test-model", "test_dataset"
+    raw_file_content = {"aspirin": [{"smiles": "...", "children": []}]}
+    raw_file_path = raw_dir / "results.json.gz"
+    save_json_gz(raw_file_content, raw_file_path)
+
+    mock_adapter_instance = mocker.MagicMock(spec=BaseAdapter)
+    mock_adapter_instance.cast.return_value = iter(multiple_unique_routes)
+
+    # ACT
+    process_model_run(
+        model_name=model_name,
+        dataset_name=dataset_name,
+        adapter=mock_adapter_instance,
+        raw_results_file=raw_file_path,
+        processed_dir=processed_dir,
+        targets_map={"aspirin": aspirin_target_info},
+        anonymize=False,  # Key part of this test
+    )
+
+    # ASSERT
+    # Output should be in model_name directory, not hashed
+    output_dir = processed_dir / model_name
+    assert output_dir.exists()
+    assert (output_dir / "manifest.json").exists()
+    assert (output_dir / "results.json.gz").exists()
+
+    # Hashed directory should NOT exist
+    hashed_dir = processed_dir / generate_model_hash(model_name)
+    assert not hashed_dir.exists()
+
+    # Manifest should still contain the hash
+    with (output_dir / "manifest.json").open("r") as f:
+        manifest = json.load(f)
+    assert manifest["model_name"] == model_name
+    assert manifest["model_hash"] == generate_model_hash(model_name)

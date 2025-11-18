@@ -77,3 +77,96 @@ class TestReactionStep:
         )
         assert len(step.reagents) == 2
         assert len(step.solvents) == 2
+
+    def test_is_convergent_single_leaf_reactant(self):
+        """Test that single leaf reactant is not convergent."""
+        reactant = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+        )
+        step = ReactionStep(reactants=[reactant])
+        assert step.is_convergent is False
+
+    def test_is_convergent_two_leaf_reactants(self):
+        """Test that two leaf reactants is not convergent (both are leaves)."""
+        reactant1 = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+        )
+        reactant2 = Molecule(
+            smiles=SmilesStr("CC(=O)O"),
+            inchikey=InchiKeyStr("QTBSBXVTEAMEQO-UHFFFAOYSA-N"),
+        )
+        step = ReactionStep(reactants=[reactant1, reactant2])
+        assert step.is_convergent is False
+
+    def test_is_convergent_one_intermediate_one_leaf(self):
+        """Test that one intermediate + one leaf is not convergent."""
+        leaf = Molecule(
+            smiles=SmilesStr("C"),
+            inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"),
+        )
+        intermediate = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf]),
+        )
+        another_leaf = Molecule(
+            smiles=SmilesStr("CC(=O)O"),
+            inchikey=InchiKeyStr("QTBSBXVTEAMEQO-UHFFFAOYSA-N"),
+        )
+        step = ReactionStep(reactants=[intermediate, another_leaf])
+        assert step.is_convergent is False
+
+    def test_is_convergent_two_intermediates(self):
+        """Test that two intermediates is convergent."""
+        leaf1 = Molecule(
+            smiles=SmilesStr("C"),
+            inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"),
+        )
+        intermediate1 = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf1]),
+        )
+        leaf2 = Molecule(
+            smiles=SmilesStr("O"),
+            inchikey=InchiKeyStr("XLYOFNOQVPJJNP-UHFFFAOYSA-M"),
+        )
+        intermediate2 = Molecule(
+            smiles=SmilesStr("CC(=O)O"),
+            inchikey=InchiKeyStr("QTBSBXVTEAMEQO-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf2]),
+        )
+        step = ReactionStep(reactants=[intermediate1, intermediate2])
+        assert step.is_convergent is True
+
+    def test_is_convergent_three_intermediates(self):
+        """Test that three intermediates is convergent."""
+        leaf1 = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"))
+        leaf2 = Molecule(smiles=SmilesStr("O"), inchikey=InchiKeyStr("XLYOFNOQVPJJNP-UHFFFAOYSA-M"))
+        leaf3 = Molecule(smiles=SmilesStr("N"), inchikey=InchiKeyStr("QGZKDVFQNNGYKY-UHFFFAOYSA-N"))
+
+        intermediate1 = Molecule(
+            smiles=SmilesStr("CO"),
+            inchikey=InchiKeyStr("OKKJLVBELUTLKV-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf1]),
+        )
+        intermediate2 = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf2]),
+        )
+        intermediate3 = Molecule(
+            smiles=SmilesStr("CC(=O)O"),
+            inchikey=InchiKeyStr("QTBSBXVTEAMEQO-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf3]),
+        )
+
+        step = ReactionStep(reactants=[intermediate1, intermediate2, intermediate3])
+        assert step.is_convergent is True
+
+    def test_is_convergent_empty_reactants(self):
+        """Test that empty reactants list is not convergent."""
+        step = ReactionStep(reactants=[])
+        assert step.is_convergent is False

@@ -349,3 +349,50 @@ def save_reaction_smiles(reactions: set[str] | list[str], path: Path) -> None:
     except OSError as e:
         logger.error(f"Failed to write reaction SMILES to {path}: {e}")
         raise RetroCastIOError(f"Failed to save reaction SMILES to {path}: {e}") from e
+
+
+def save_smiles_index(index: dict[str, str], path: Path) -> None:
+    """
+    Save a SMILES to target ID mapping as gzipped JSON.
+
+    Args:
+        index: Dictionary mapping SMILES strings to target IDs.
+        path: Path to the output JSON file (can be .json or .json.gz).
+    """
+    if path.suffix == ".gz":
+        save_json_gz(index, path)
+    else:
+        save_json(index, path)
+    logger.info(f"Saved SMILES index with {len(index)} entries to {path}")
+
+
+def load_smiles_index(path: Path) -> dict[str, TargetInput]:
+    """
+    Load a SMILES to target ID mapping from JSON.
+
+    Args:
+        path: Path to the JSON file containing the SMILES index (can be .json or .json.gz).
+
+    Returns:
+        Dictionary mapping SMILES strings to target IDs.
+
+    Raises:
+        RetroCastIOError: If the file cannot be read or parsed.
+    """
+    try:
+        if path.suffix == ".gz":
+            with gzip.open(path, "rt", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+        if not isinstance(data, dict):
+            raise RetroCastIOError(f"Expected JSON object (dict), found {type(data)} in {path}")
+        logger.info(f"Loaded SMILES index with {len(data)} entries from {path}")
+
+        converted_data = {smiles: TargetInput(id=target_id, smiles=smiles) for smiles, target_id in data.items()}
+
+        return converted_data
+    except (OSError, gzip.BadGzipFile, json.JSONDecodeError) as e:
+        logger.error(f"Failed to load or parse SMILES index file: {path}")
+        raise RetroCastIOError(f"SMILES index loading error on {path}: {e}") from e

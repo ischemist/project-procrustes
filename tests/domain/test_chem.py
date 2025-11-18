@@ -2,7 +2,13 @@ from unittest.mock import patch
 
 import pytest
 
-from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
+from retrocast.domain.chem import (
+    canonicalize_smiles,
+    get_chiral_center_count,
+    get_heavy_atom_count,
+    get_inchi_key,
+    get_molecular_weight,
+)
 from retrocast.exceptions import InvalidSmilesError, RetroCastException
 
 
@@ -205,3 +211,53 @@ def test_get_inchi_key_raises_ursa_exception_on_generic_error(mock_moltoinchikey
         get_inchi_key("CCO")
 
     assert "An unexpected error occurred during InChIKey generation" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "smiles,expected_count",
+    [
+        ("C", 1),  # methane
+        ("CCO", 3),  # ethanol
+        ("c1ccccc1", 6),  # benzene
+        ("CC(=O)O", 4),  # acetic acid
+        ("C[C@H](O)C(=O)O", 6),  # lactic acid
+    ],
+)
+def test_get_heavy_atom_count(smiles: str, expected_count: int) -> None:
+    """Tests that heavy atom count is correctly computed for various molecules."""
+    result = get_heavy_atom_count(smiles)
+    assert result == expected_count
+
+
+@pytest.mark.parametrize(
+    "smiles,expected_mw",
+    [
+        ("C", 16.031),  # methane
+        ("CCO", 46.042),  # ethanol
+        ("c1ccccc1", 78.047),  # benzene
+        ("CC(=O)O", 60.021),  # acetic acid
+        ("C[C@H](O)C(=O)O", 90.032),  # lactic acid
+    ],
+)
+def test_get_molecular_weight(smiles: str, expected_mw: float) -> None:
+    """Tests that molecular weight is correctly computed for various molecules."""
+    result = get_molecular_weight(smiles)
+    assert result == pytest.approx(expected_mw, rel=1e-3)
+
+
+@pytest.mark.parametrize(
+    "smiles,expected_count",
+    [
+        ("C", 0),  # methane - no chiral centers
+        ("CCO", 0),  # ethanol - no chiral centers
+        ("c1ccccc1", 0),  # benzene - no chiral centers
+        ("C[C@H](O)C(=O)O", 1),  # lactic acid - 1 chiral center
+        ("C[C@@H](C(=O)O)N", 1),  # alanine - 1 chiral center
+        ("C[C@H](O)[C@H](O)C", 2),  # 2,3-butanediol - 2 chiral centers
+        ("C[C@H]1CCCC[C@@H]1C", 2),  # cis-1,2-dimethylcyclohexane - 2 chiral centers
+    ],
+)
+def test_get_chiral_center_count(smiles: str, expected_count: int) -> None:
+    """Tests that chiral center count is correctly computed for various molecules."""
+    result = get_chiral_center_count(smiles)
+    assert result == expected_count

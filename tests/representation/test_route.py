@@ -353,3 +353,140 @@ class TestRoute:
         route = Route(target=target, rank=1, metadata=metadata)
         assert route.metadata["total_score"] == 0.95
         assert route.metadata["search_time"] == 42.5
+
+    def test_has_convergent_reaction_single_leaf(self):
+        """Test that single leaf molecule has no convergent reaction."""
+        target = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+        )
+        route = Route(target=target, rank=1)
+        assert route.has_convergent_reaction is False
+
+    def test_has_convergent_reaction_linear_route(self):
+        """Test that linear route (single reactant per step) has no convergent reaction."""
+        # Build linear route: A → B → C → D
+        leaf = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"))
+
+        intermediate1 = Molecule(
+            smiles=SmilesStr("CO"),
+            inchikey=InchiKeyStr("OKKJLVBELUTLKV-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf]),
+        )
+
+        intermediate2 = Molecule(
+            smiles=SmilesStr("COC"),
+            inchikey=InchiKeyStr("FAKE-KEY-1"),
+            synthesis_step=ReactionStep(reactants=[intermediate1]),
+        )
+
+        target = Molecule(
+            smiles=SmilesStr("COCOC"),
+            inchikey=InchiKeyStr("FAKE-KEY-2"),
+            synthesis_step=ReactionStep(reactants=[intermediate2]),
+        )
+
+        route = Route(target=target, rank=1)
+        assert route.has_convergent_reaction is False
+
+    def test_has_convergent_reaction_two_leaves_combine(self):
+        """Test that combining two leaves is not convergent."""
+        reactant1 = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+        )
+        reactant2 = Molecule(
+            smiles=SmilesStr("CC(=O)O"),
+            inchikey=InchiKeyStr("QTBSBXVTEAMEQO-UHFFFAOYSA-N"),
+        )
+        step = ReactionStep(reactants=[reactant1, reactant2])
+        target = Molecule(
+            smiles=SmilesStr("CCOC(C)=O"),
+            inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
+            synthesis_step=step,
+        )
+        route = Route(target=target, rank=1)
+        assert route.has_convergent_reaction is False
+
+    def test_has_convergent_reaction_two_intermediates_combine(self):
+        """Test that combining two intermediates is convergent."""
+        # Branch 1: leaf1 → intermediate1
+        leaf1 = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"))
+        intermediate1 = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf1]),
+        )
+
+        # Branch 2: leaf2 → intermediate2
+        leaf2 = Molecule(smiles=SmilesStr("O"), inchikey=InchiKeyStr("XLYOFNOQVPJJNP-UHFFFAOYSA-M"))
+        intermediate2 = Molecule(
+            smiles=SmilesStr("CC(=O)O"),
+            inchikey=InchiKeyStr("QTBSBXVTEAMEQO-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf2]),
+        )
+
+        # Convergent step: combine two intermediates
+        target = Molecule(
+            smiles=SmilesStr("CCOC(C)=O"),
+            inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[intermediate1, intermediate2]),
+        )
+
+        route = Route(target=target, rank=1)
+        assert route.has_convergent_reaction is True
+
+    def test_has_convergent_reaction_nested_convergence(self):
+        """Test detection of convergent reaction deeper in the tree."""
+        # Build convergent step deep in tree:
+        # leaf1 → int1, leaf2 → int2, (int1 + int2) → int3, int3 → target
+        leaf1 = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"))
+        leaf2 = Molecule(smiles=SmilesStr("O"), inchikey=InchiKeyStr("XLYOFNOQVPJJNP-UHFFFAOYSA-M"))
+
+        intermediate1 = Molecule(
+            smiles=SmilesStr("CO"),
+            inchikey=InchiKeyStr("OKKJLVBELUTLKV-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf1]),
+        )
+        intermediate2 = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf2]),
+        )
+
+        # Convergent step: int1 + int2 → int3
+        intermediate3 = Molecule(
+            smiles=SmilesStr("COCO"),
+            inchikey=InchiKeyStr("FAKE-CONV-KEY"),
+            synthesis_step=ReactionStep(reactants=[intermediate1, intermediate2]),
+        )
+
+        # Linear step: int3 → target
+        target = Molecule(
+            smiles=SmilesStr("COCOC"),
+            inchikey=InchiKeyStr("FAKE-TARGET-KEY"),
+            synthesis_step=ReactionStep(reactants=[intermediate3]),
+        )
+
+        route = Route(target=target, rank=1)
+        assert route.has_convergent_reaction is True
+
+    def test_has_convergent_reaction_one_intermediate_one_leaf(self):
+        """Test that combining one intermediate and one leaf is not convergent."""
+        leaf1 = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"))
+        intermediate = Molecule(
+            smiles=SmilesStr("CO"),
+            inchikey=InchiKeyStr("OKKJLVBELUTLKV-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf1]),
+        )
+
+        leaf2 = Molecule(smiles=SmilesStr("O"), inchikey=InchiKeyStr("XLYOFNOQVPJJNP-UHFFFAOYSA-M"))
+
+        target = Molecule(
+            smiles=SmilesStr("COO"),
+            inchikey=InchiKeyStr("FAKE-TARGET-KEY"),
+            synthesis_step=ReactionStep(reactants=[intermediate, leaf2]),
+        )
+
+        route = Route(target=target, rank=1)
+        assert route.has_convergent_reaction is False
