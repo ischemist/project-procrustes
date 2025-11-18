@@ -105,15 +105,16 @@ def main():
 
     # 5. Create Random Legacy Set (from n5 only, to match PaRoutes spirit)
     n5_pool = list(n5.targets.values())
-    targets_random = sample_random(n5_pool, 100, seed=CANONICAL_SEED)
+    for n in [100, 250, 500, 1000]:
+        targets_random = sample_random(n5_pool, n, seed=CANONICAL_SEED)
 
-    create_subset(
-        name="random-n5-100",
-        targets=targets_random,
-        source_paths=[n5_path],
-        stock_name="n5-stock",  # Uses its own stock
-        description="Random sample of 100 routes from n5 (legacy comparison).",
-    )
+        create_subset(
+            name=f"random-n5-{n}",
+            targets=targets_random,
+            source_paths=[n5_path],
+            stock_name="n5-stock",  # Uses its own stock
+            description=f"Random sample of {n} routes from n5 (legacy comparison).",
+        )
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ from retrocast.utils.logging import logger
 BASE_DIR = Path(__file__).resolve().parents[2]
 ds = "n5"
 PICKLE_PATH = BASE_DIR / "data" / "2-raw" / "dms-flash-fp16" / ds / f"{ds}_correct_paths_NS2n.pkl"
-BENCHMARK_NAME = "random-n5-100"
+BENCHMARK_NAME = "stratified-convergent-250"
 
 
 def load_legacy_pickle(path: Path) -> list[list[tuple[str, float]]]:
