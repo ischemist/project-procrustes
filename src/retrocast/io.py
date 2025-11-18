@@ -9,7 +9,8 @@ from tqdm import tqdm
 
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.exceptions import RetroCastException, RetroCastIOError, RetroCastSerializationError
-from retrocast.schemas import Route, TargetInput
+from retrocast.schemas import EvaluationResults, Route, TargetInput
+from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
 # This allows us to return the same type that was passed in.
@@ -396,3 +397,62 @@ def load_smiles_index(path: Path) -> dict[str, TargetInput]:
     except (OSError, gzip.BadGzipFile, json.JSONDecodeError) as e:
         logger.error(f"Failed to load or parse SMILES index file: {path}")
         raise RetroCastIOError(f"SMILES index loading error on {path}: {e}") from e
+
+
+def load_stock(path: Path) -> set[SmilesStr]:
+    """
+    Load stock molecules from a text file.
+
+    Args:
+        path: Path to the stock file (.txt). Each line contains one SMILES string.
+
+    Returns:
+        Set of SMILES strings (already canonicalized in the stock files).
+
+    Raises:
+        RetroCastIOError: If the file cannot be read.
+    """
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            stock = {line.strip() for line in f if line.strip()}
+        logger.info(f"Loaded {len(stock)} molecules from stock file {path}")
+        return stock
+    except OSError as e:
+        logger.error(f"Failed to read stock file: {path}")
+        raise RetroCastIOError(f"Stock loading error on {path}: {e}") from e
+
+
+def save_evaluation_results(results: EvaluationResults, path: Path) -> None:
+    """
+    Save evaluation results to a gzipped JSON file.
+
+    Args:
+        results: EvaluationResults object to save.
+        path: Path to output .json.gz file.
+    """
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = results.model_dump(mode="json")
+    save_json_gz(data, path)
+    logger.info(f"Saved evaluation results to {path}")
+
+
+def load_evaluation_results(path: Path) -> EvaluationResults:
+    """
+    Load evaluation results from a gzipped JSON file.
+
+    Args:
+        path: Path to the .json.gz file containing evaluation results.
+
+    Returns:
+        EvaluationResults object.
+
+    Raises:
+        RetroCastIOError: If the file cannot be read or parsed.
+    """
+    from retrocast.schemas import EvaluationResults
+
+    data = load_json_gz(path)
+    results = EvaluationResults.model_validate(data)
+    logger.info(f"Loaded evaluation results from {path}")
+    return results
