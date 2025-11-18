@@ -59,7 +59,7 @@ def main() -> None:
     conv_by_depth: dict[int, int] = {}
     for route_list in all_convergent.values():
         for route in route_list:
-            d = route.depth
+            d = route.length
             conv_by_depth[d] = conv_by_depth.get(d, 0) + 1
     logger.info(f"Combined convergent by depth: {dict(sorted(conv_by_depth.items()))}")
 

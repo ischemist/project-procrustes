@@ -7,14 +7,14 @@ Usage:
 
 from pathlib import Path
 
-from retrocast.adapters.paroutes import adapt_single_route_from_raw
 from tqdm import tqdm
 
+from retrocast import adapt_single_route
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.io.files import save_json_gz
 from retrocast.io.loaders import load_raw_paroutes_list
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
-from retrocast.models.chem import TargetIdentity
+from retrocast.models.chem import TargetInput
 from retrocast.utils.logging import logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -42,33 +42,28 @@ def process_dataset(name: str):
         # n5-00001, n5-00002...
         target_id = f"{name}-{i + 1:05d}"
 
-        try:
-            # 1. Canonicalize SMILES
-            smiles = canonicalize_smiles(raw_item["smiles"])
+        # 1. Canonicalize SMILES
+        smiles = canonicalize_smiles(raw_item["smiles"])
 
-            # 2. Adapt the Route
-            # (We construct a temporary TargetIdentity for the adapter)
-            target_input = TargetIdentity(id=target_id, smiles=smiles)
-            route = adapt_single_route_from_raw(raw_item, target_input)
+        # 2. Adapt the Route
+        # (We construct a temporary TargetIdentity for the adapter)
+        target_input = TargetInput(id=target_id, smiles=smiles)
+        route = adapt_single_route(raw_item, target_input, "paroutes")
 
-            if not route:
-                failures += 1
-                continue
-
-            # 3. Create BenchmarkTarget
-            # Calculate metadata immediately so we can query it later
-            target = BenchmarkTarget(
-                id=target_id,
-                smiles=smiles,
-                ground_truth=route,
-                metadata={"depth": route.depth, "is_convergent": route.has_convergent_reaction, "original_index": i},
-            )
-
-            benchmark.targets[target_id] = target
-
-        except Exception as e:
-            logger.debug(f"Failed to process {target_id}: {e}")
+        if not route:
             failures += 1
+            continue
+
+        # 3. Create BenchmarkTarget
+        # Calculate metadata immediately so we can query it later
+        target = BenchmarkTarget(
+            id=target_id,
+            smiles=smiles,
+            ground_truth=route,
+            metadata={"depth": route.length, "is_convergent": route.has_convergent_reaction, "original_index": i},
+        )
+
+        benchmark.targets[target_id] = target
 
     logger.info(f"Created {len(benchmark.targets)} targets. {failures} failed.")
     save_json_gz(benchmark, out_path)

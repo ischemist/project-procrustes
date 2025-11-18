@@ -114,7 +114,7 @@ class TestDMSAdapterContract:
         """Verify the depth property is computed correctly."""
         for route in routes:
             # Just verify it doesn't crash and returns a non-negative integer
-            depth = route.depth
+            depth = route.length
             assert isinstance(depth, int)
             assert depth >= 0
 
@@ -210,7 +210,7 @@ class TestDMSAdapterRegression:
         assert adapter.calculate_route_length(dms_tree_2) == 2
 
     def test_route_depth_matches_calculate_route_length(self, adapter, raw_dms_data):
-        """Verify that the Route.depth property matches calculate_route_length."""
+        """Verify that the route.length property matches calculate_route_length."""
         for target_name in ["aspirin", "paracetamol"]:
             raw_route_data = raw_dms_data[target_name][0]
             target_smiles = canonicalize_smiles(raw_route_data["smiles"])
@@ -222,4 +222,4 @@ class TestDMSAdapterRegression:
             dms_tree = DMSTree.model_validate(raw_route_data)
             expected_depth = adapter.calculate_route_length(dms_tree)
 
-            assert route.depth == expected_depth
+            assert route.length == expected_depth

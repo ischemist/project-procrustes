@@ -38,7 +38,7 @@ def extract_route_stats(routes: dict[str, list[Route]]) -> list[RouteStats]:
             smiles = route.target.smiles
             stats.append(
                 RouteStats(
-                    depth=route.depth,
+                    depth=route.length,
                     target_hac=get_heavy_atom_count(smiles),
                     target_mw=get_molecular_weight(smiles),
                     target_chiral=get_chiral_center_count(smiles),

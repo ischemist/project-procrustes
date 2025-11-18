@@ -47,12 +47,12 @@ def sample_random_k(routes: list[Route], k: int) -> list[Route]:
     return random.sample(routes, k)
 
 
-def sample_k_by_depth(routes: list[Route], max_total: int) -> list[Route]:
+def sample_k_by_length(routes: list[Route], max_total: int) -> list[Route]:
     """
-    Selects up to `max_total` routes by picking one route from each route depth
+    Selects up to `max_total` routes by picking one route from each route length
     in a round-robin fashion, starting with the shortest routes.
 
-    This ensures a diverse set of routes biased towards shorter depths,
+    This ensures a diverse set of routes biased towards shorter lengths,
     without exceeding the total budget.
     """
     if max_total <= 0:
@@ -60,26 +60,25 @@ def sample_k_by_depth(routes: list[Route], max_total: int) -> list[Route]:
     if len(routes) <= max_total:
         return routes
 
-    routes_by_depth = defaultdict(list)
+    routes_by_length = defaultdict(list)
     for route in routes:
-        depth = route.depth
-        routes_by_depth[depth].append(route)
+        routes_by_length[route.length].append(route)
 
     filtered_routes: list[Route] = []
-    sorted_depths = sorted(routes_by_depth.keys())
+    sorted_lengths = sorted(routes_by_length.keys())
 
     level = 0
     while len(filtered_routes) < max_total:
         routes_added_in_pass = 0
-        for depth in sorted_depths:
-            if level < len(routes_by_depth[depth]):
-                filtered_routes.append(routes_by_depth[depth][level])
+        for length in sorted_lengths:
+            if level < len(routes_by_length[length]):
+                filtered_routes.append(routes_by_length[length][level])
                 routes_added_in_pass += 1
                 if len(filtered_routes) == max_total:
                     break
 
         if routes_added_in_pass == 0:
-            # No more routes to add from any depth group
+            # No more routes to add from any length group
             break
 
         if len(filtered_routes) == max_total:
@@ -107,7 +106,7 @@ def excise_reactions_from_route(
         exclude: Set of ReactionSignatures to remove from the route.
 
     Returns:
-        List of valid sub-routes (routes with depth > 0) after excision.
+        List of valid sub-routes (routes with length > 0) after excision.
         The main route (if still valid) is first, followed by any sub-routes
         created from excised reactants.
 

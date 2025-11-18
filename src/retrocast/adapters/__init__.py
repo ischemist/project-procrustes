@@ -81,7 +81,7 @@ def adapt_single_route(
         >>>
         >>> route = adapt_single_route(raw_dms_route, target, "dms")
         >>> if route:
-        ...     print(f"Route depth: {route.depth}")
+        ...     print(f"Route depth: {route.length}")
         ...     print(f"Starting materials: {len(route.leaves)}")
 
         Target-centric adapter (RetroChimera):

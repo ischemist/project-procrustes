@@ -44,7 +44,7 @@ route = adapt_single_route(raw_route, target, adapter_name="dms")
 
 if route:
     print(f"✓ Route successfully adapted!")
-    print(f"  Depth: {route.depth} steps")
+    print(f"  Depth: {route.length} steps")
     print(f"  Starting materials: {len(route.leaves)}")
     print(f"  Route signature: {route.get_signature()[:16]}...")
 
@@ -146,7 +146,7 @@ target = TargetIdentity(id="mol1", smiles="CCO")
 raw_data = [...]  # Your model's output
 
 for route in adapter.cast(raw_data, target):
-    print(f"Route {route.rank}: depth={route.depth}")
+    print(f"Route {route.rank}: depth={route.length}")
 ```
 
 ## Post-Processing Routes
@@ -182,7 +182,7 @@ from retrocast import (
     deduplicate_routes,
     sample_top_k,
     sample_random_k,
-    sample_k_by_depth,
+    sample_k_by_length,
     TargetIdentity
 )
 
@@ -197,7 +197,7 @@ top_5 = sample_top_k(unique_routes, k=5)
 random_10 = sample_random_k(unique_routes, k=10)
 
 # Take diverse routes by depth (round-robin from each depth level)
-diverse_20 = sample_k_by_depth(unique_routes, max_total=20)
+diverse_20 = sample_k_by_length(unique_routes, max_total=20)
 ```
 
 ## Exploring Route Structure
@@ -212,7 +212,7 @@ route = adapt_single_route(raw_route, target, "dms")
 
 # Route properties
 print(f"Rank: {route.rank}")
-print(f"Depth: {route.depth}")  # Number of reaction steps
+print(f"Depth: {route.length}")  # Number of reaction steps
 print(f"Signature: {route.get_signature()}")
 
 # Access the target molecule
@@ -281,7 +281,7 @@ print(f"  ✓ Selected top 10 routes")
 for i, route in enumerate(top_10, start=1):
     print(f"\nRoute {i}:")
     print(f"  Rank: {route.rank}")
-    print(f"  Depth: {route.depth} steps")
+    print(f"  Depth: {route.length} steps")
     print(f"  Starting materials: {len(route.leaves)}")
     print(f"  Materials:")
     for leaf in route.leaves:
@@ -329,8 +329,8 @@ target = TargetIdentity(id="test", smiles="CCO")
 # The adapt method is a generator - yields routes one at a time
 for route in adapter.cast(raw_data, target):
     # Process route immediately without loading all into memory
-    if route.depth <= 3:
-        print(f"Found short route with depth {route.depth}")
+    if route.length <= 3:
+        print(f"Found short route with depth {route.length}")
         # Store or process this route
         break  # Can stop early if you found what you need
 ```
@@ -345,7 +345,7 @@ from retrocast import Route, Molecule, ReactionStep, TargetIdentity
 def analyze_route(route: Route) -> dict[str, int]:
     """Example function with type hints."""
     return {
-        "depth": route.depth,
+        "depth": route.length,
         "num_leaves": len(route.leaves),
         "rank": route.rank
     }

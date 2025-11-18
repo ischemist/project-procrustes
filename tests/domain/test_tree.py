@@ -6,7 +6,7 @@ from retrocast.domain.chem import get_inchi_key
 from retrocast.domain.tree import (
     deduplicate_routes,
     excise_reactions_from_route,
-    sample_k_by_depth,
+    sample_k_by_length,
     sample_random_k,
     sample_top_k,
 )
@@ -36,13 +36,13 @@ def _build_simple_route(target_smiles: str, reactant_smiles_list: list[str]) -> 
     return Route(target=root_molecule, rank=1)
 
 
-def _build_route_of_depth(target_id: str, depth: int) -> Route:
-    """Builds a linear route of a specific depth for testing filtering.
+def _build_route_of_length(target_id: str, length: int) -> Route:
+    """Builds a linear route of a specific length for testing filtering.
 
     Uses a simple alkane chain strategy where each step adds carbons.
-    For a route of depth N, we build backwards from the target.
+    For a route of length N, we build backwards from the target.
     """
-    if depth == 0:
+    if length == 0:
         # Leaf molecule (no synthesis) - use methanol as a simple valid SMILES
         node = Molecule(
             smiles="CO",
@@ -76,8 +76,8 @@ def _build_route_of_depth(target_id: str, depth: int) -> Route:
         synthesis_step=reaction,
     )
 
-    # Build up the chain for remaining depth
-    for i in range(1, depth):
+    # Build up the chain for remaining length
+    for i in range(1, length):
         # Each step adds one more carbon to the chain
         reactant = Molecule(
             smiles="C" * (i + 2) + "O",  # butanol, pentanol, etc.
@@ -85,12 +85,12 @@ def _build_route_of_depth(target_id: str, depth: int) -> Route:
             synthesis_step=None,
         )
 
-        if i < depth - 1:
+        if i < length - 1:
             # Intermediate product - longer alcohol
             current_smiles = "C" * (i + 4) + "O"
         else:
-            # Final target - use a unique alkane based on seed and depth
-            current_smiles = "C" * (seed + depth + i + 5)
+            # Final target - use a unique alkane based on seed and length
+            current_smiles = "C" * (seed + length + i + 5)
 
         reaction = ReactionStep(reactants=[product_node, reactant])
         product_node = Molecule(
@@ -211,66 +211,66 @@ def test_sample_random_k_empty_list() -> None:
     assert sample_random_k([], 5) == []
 
 
-# --- Test sample_k_by_depth ---
+# --- Test sample_k_by_length ---
 
 
-def test_sample_k_by_depth_basic_round_robin() -> None:
+def test_sample_k_by_length_basic_round_robin() -> None:
     """Tests the round-robin selection works as expected."""
     routes = [
-        _build_route_of_depth("L1-R1", 1),
-        _build_route_of_depth("L1-R2", 1),
-        _build_route_of_depth("L2-R1", 2),
-        _build_route_of_depth("L2-R2", 2),
-        _build_route_of_depth("L3-R1", 3),
+        _build_route_of_length("L1-R1", 1),
+        _build_route_of_length("L1-R2", 1),
+        _build_route_of_length("L2-R1", 2),
+        _build_route_of_length("L2-R2", 2),
+        _build_route_of_length("L3-R1", 3),
     ]
     k = 4
-    result = sample_k_by_depth(routes, k)
+    result = sample_k_by_length(routes, k)
     assert len(result) == 4
-    depths = [r.depth for r in result]
-    assert depths.count(1) == 2
-    assert depths.count(2) == 1
-    assert depths.count(3) == 1
+    lengths = [r.length for r in result]
+    assert lengths.count(1) == 2
+    assert lengths.count(2) == 1
+    assert lengths.count(3) == 1
 
 
 def test_sample_k_by_depth_users_scenario() -> None:
     """Tests the 10-route budget with 3 depth groups, expecting a 4/3/3 split."""
     routes = (
-        [_build_route_of_depth(f"L5-R{i}", 5) for i in range(10)]
-        + [_build_route_of_depth(f"L6-R{i}", 6) for i in range(10)]
-        + [_build_route_of_depth(f"L7-R{i}", 7) for i in range(10)]
+        [_build_route_of_length(f"L5-R{i}", 5) for i in range(10)]
+        + [_build_route_of_length(f"L6-R{i}", 6) for i in range(10)]
+        + [_build_route_of_length(f"L7-R{i}", 7) for i in range(10)]
     )
     k = 10
-    result = sample_k_by_depth(routes, k)
+    result = sample_k_by_length(routes, k)
     assert len(result) == 10
-    depths = [r.depth for r in result]
-    assert depths.count(5) == 4
-    assert depths.count(6) == 3
-    assert depths.count(7) == 3
+    lengths = [r.length for r in result]
+    assert lengths.count(5) == 4
+    assert lengths.count(6) == 3
+    assert lengths.count(7) == 3
 
 
 def test_sample_k_by_depth_uneven_distribution() -> None:
     """Tests when some depth groups are exhausted before others."""
     routes = [
-        _build_route_of_depth("L1-R1", 1),
-        _build_route_of_depth("L2-R1", 2),
-        _build_route_of_depth("L2-R2", 2),
-        _build_route_of_depth("L3-R1", 3),
-        _build_route_of_depth("L3-R2", 3),
-        _build_route_of_depth("L3-R3", 3),
+        _build_route_of_length("L1-R1", 1),
+        _build_route_of_length("L2-R1", 2),
+        _build_route_of_length("L2-R2", 2),
+        _build_route_of_length("L3-R1", 3),
+        _build_route_of_length("L3-R2", 3),
+        _build_route_of_length("L3-R3", 3),
     ]
     k = 5
-    result = sample_k_by_depth(routes, k)
+    result = sample_k_by_length(routes, k)
     assert len(result) == 5
-    depths = [r.depth for r in result]
-    assert depths.count(1) == 1
-    assert depths.count(2) == 2
-    assert depths.count(3) == 2
+    lengths = [r.length for r in result]
+    assert lengths.count(1) == 1
+    assert lengths.count(2) == 2
+    assert lengths.count(3) == 2
 
 
 def test_sample_k_by_depth_k_larger_than_list() -> None:
-    routes = [_build_route_of_depth("L1-R1", 1), _build_route_of_depth("L2-R1", 2)]
+    routes = [_build_route_of_length("L1-R1", 1), _build_route_of_length("L2-R1", 2)]
     k = 5
-    result = sample_k_by_depth(routes, k)
+    result = sample_k_by_length(routes, k)
     assert len(result) == 2
     # Just verify we got 2 routes back, don't check specific SMILES since they're generated
     assert len({r.target.smiles for r in result}) == 2
@@ -278,12 +278,12 @@ def test_sample_k_by_depth_k_larger_than_list() -> None:
 
 def test_sample_k_by_depth_zero_k() -> None:
     alkanes = ["C" + "C" * i for i in range(5)]
-    routes = [_build_route_of_depth(alkanes[i], 1) for i in range(5)]
-    assert sample_k_by_depth(routes, 0) == []
+    routes = [_build_route_of_length(alkanes[i], 1) for i in range(5)]
+    assert sample_k_by_length(routes, 0) == []
 
 
 def test_sample_k_by_depth_empty_list() -> None:
-    assert sample_k_by_depth([], 5) == []
+    assert sample_k_by_length([], 5) == []
 
 
 # --- Excise Reactions Tests ---
@@ -354,7 +354,7 @@ def test_excise_reactions_linear_route_excise_middle() -> None:
     assert len(result) == 1
     main_route = result[0]
     assert main_route.target.inchikey == "KEY-C"
-    assert main_route.depth == 1  # Only one reaction left
+    assert main_route.length == 1  # Only one reaction left
 
     # B should now be a leaf
     reactants = main_route.target.synthesis_step.reactants
@@ -389,7 +389,7 @@ def test_excise_reactions_linear_route_excise_last() -> None:
     assert len(result) == 1
     sub_route = result[0]
     assert sub_route.target.inchikey == "KEY-B"
-    assert sub_route.depth == 1
+    assert sub_route.length == 1
 
     # Verify A -> B reaction is preserved
     reactants = sub_route.target.synthesis_step.reactants
@@ -405,7 +405,7 @@ def test_excise_reactions_branched_route() -> None:
          B1   B2
          |    |
          A1   A2
-    
+
     Excise A1 -> B1, should leave C with B1 as leaf and B2 with synthesis
     """
     leaf_a1 = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("KEY-A1"))
@@ -437,7 +437,7 @@ def test_excise_reactions_branched_route() -> None:
     assert len(result) == 1
     main_route = result[0]
     assert main_route.target.inchikey == "KEY-C"
-    assert main_route.depth == 2  # Still has A2 -> B2 -> C
+    assert main_route.length == 2  # Still has A2 -> B2 -> C
 
     # B1 should be a leaf, B2 should have synthesis
     reactants = main_route.target.synthesis_step.reactants
@@ -481,13 +481,13 @@ def test_excise_reactions_creates_multiple_subroutes() -> None:
 
     # Main route: D with C as leaf
     main_route = next(r for r in result if r.target.inchikey == "KEY-D")
-    assert main_route.depth == 1
+    assert main_route.length == 1
     assert main_route.target.synthesis_step.reactants[0].inchikey == "KEY-C"
     assert main_route.target.synthesis_step.reactants[0].is_leaf
 
     # Sub-route: B with A as leaf
     sub_route = next(r for r in result if r.target.inchikey == "KEY-B")
-    assert sub_route.depth == 1
+    assert sub_route.length == 1
     assert sub_route.target.synthesis_step.reactants[0].inchikey == "KEY-A"
 
 
@@ -570,4 +570,4 @@ def test_excise_multiple_reactions() -> None:
     assert len(result) == 1
     sub_route = result[0]
     assert sub_route.target.inchikey == "KEY-C"
-    assert sub_route.depth == 1
+    assert sub_route.length == 1

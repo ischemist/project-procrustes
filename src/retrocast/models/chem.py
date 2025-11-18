@@ -126,17 +126,17 @@ class Route(BaseModel):
 
     @computed_field
     @property
-    def depth(self) -> int:
-        """Calculates the depth (longest path of reactions) of the route."""
+    def length(self) -> int:
+        """Calculates the length (longest path of reactions) of the route."""
 
-        def _get_depth(node: Molecule) -> int:
+        def _get_length(node: Molecule) -> int:
             if node.is_leaf:
                 return 0
             # A non-leaf must have a synthesis_step
             assert node.synthesis_step is not None, "Non-leaf node without synthesis_step"
-            return 1 + max(_get_depth(r) for r in node.synthesis_step.reactants)
+            return 1 + max(_get_length(r) for r in node.synthesis_step.reactants)
 
-        return _get_depth(self.target)
+        return _get_length(self.target)
 
     @computed_field
     @property

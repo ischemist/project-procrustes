@@ -183,7 +183,7 @@ def sample_routes_by_length(
     by_depth: dict[int, list[tuple[str, Route]]] = {}
     flat = _flatten_routes(routes)
     for target_id, route in flat:
-        depth = route.depth
+        depth = route.length
         if depth not in by_depth:
             by_depth[depth] = []
         by_depth[depth].append((target_id, route))

@@ -30,7 +30,7 @@ class TestRoute:
             inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
         )
         route = Route(target=target, rank=1)
-        assert route.depth == 0
+        assert route.length == 0
 
     def test_depth_single_step(self):
         """Test depth calculation for single synthesis step."""
@@ -49,7 +49,7 @@ class TestRoute:
             synthesis_step=step,
         )
         route = Route(target=target, rank=1)
-        assert route.depth == 1
+        assert route.length == 1
 
     def test_depth_multi_step_linear(self):
         """Test depth calculation for multi-step linear route."""
@@ -75,7 +75,7 @@ class TestRoute:
         )
 
         route = Route(target=target, rank=1)
-        assert route.depth == 3
+        assert route.length == 3
 
     def test_depth_branched_route(self):
         """Test depth calculation for branched route (should return max depth)."""
@@ -101,7 +101,7 @@ class TestRoute:
         # Max depth: 1 (to intermediate_left) + 1 (to leaf1) = 2 for left branch
         # Right branch is just 1 (to leaf2)
         # So max is 2
-        assert route.depth == 2
+        assert route.length == 2
 
     def test_leaves_property_single_leaf(self):
         """Test leaves property for single leaf molecule."""

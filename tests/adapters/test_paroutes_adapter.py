@@ -103,12 +103,12 @@ class TestPaRoutesAdapterContract:
 
         check_molecule(routes_ex1[0].target)
 
-    def test_depth_calculation(self, routes_ex1, routes_ex2):
-        """verify route depth is calculated correctly."""
-        # paroutes-ex-1 has 2 reaction steps (depth 2)
-        assert routes_ex1[0].depth == 2
-        # paroutes-ex-2 has 3 reaction steps (depth 3)
-        assert routes_ex2[0].depth == 3
+    def test_length_calculation(self, routes_ex1, routes_ex2):
+        """verify route length is calculated correctly."""
+        # paroutes-ex-1 has 2 reaction steps (length 2)
+        assert routes_ex1[0].length == 2
+        # paroutes-ex-2 has 3 reaction steps (length 3)
+        assert routes_ex2[0].length == 3
 
 
 @pytest.mark.integration
@@ -425,7 +425,7 @@ class TestPaRoutesAdapterCycleDetection:
         # Should successfully process the route
         assert len(routes) == 1
         assert routes[0].target.smiles == target_input.smiles
-        assert routes[0].depth == 2
+        assert routes[0].length == 2
 
     def test_branching_route_with_same_leaf_molecule(self, adapter):
         """
@@ -506,4 +506,4 @@ class TestPaRoutesAdapterCycleDetection:
         # Should successfully process - shared leaves are OK
         routes = list(adapter.cast(raw_route_branching, target_input))
         assert len(routes) == 1
-        assert routes[0].depth == 2
+        assert routes[0].length == 2

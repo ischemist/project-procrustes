@@ -38,7 +38,7 @@ def test_core_exports():
     assert hasattr(retrocast, "deduplicate_routes")
     assert hasattr(retrocast, "sample_top_k")
     assert hasattr(retrocast, "sample_random_k")
-    assert hasattr(retrocast, "sample_k_by_depth")
+    assert hasattr(retrocast, "sample_k_by_length")
 
 
 def test_basic_adaptation():
@@ -59,7 +59,7 @@ def test_basic_adaptation():
     assert route is not None
     assert isinstance(route, Route)
     assert route.target.smiles == "CCO"
-    assert route.depth == 1
+    assert route.length == 1
     assert len(route.leaves) == 2
 
 

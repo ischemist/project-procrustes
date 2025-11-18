@@ -52,7 +52,7 @@ class TestAdaptSingleRoute:
         assert route is not None
         assert isinstance(route, Route)
         assert route.target.smiles == "CCO"
-        assert route.depth == 1  # One reaction step
+        assert route.length == 1  # One reaction step
         assert len(route.leaves) == 2  # Two starting materials
 
     def test_adapt_single_route_with_list(self):
@@ -142,7 +142,7 @@ class TestAdaptSingleRoute:
         assert route is not None
         assert isinstance(route, Route)
         assert route.target.smiles == target_smiles
-        assert route.depth == 1
+        assert route.length == 1
         assert len(route.leaves) == 2  # Two reactants
 
     def test_adapt_single_route_target_centric_askcos(self):
@@ -184,7 +184,7 @@ class TestAdaptSingleRoute:
         assert route is not None
         assert isinstance(route, Route)
         assert route.target.smiles == target_smiles
-        assert route.depth == 1
+        assert route.length == 1
         assert len(route.leaves) == 2
 
 

@@ -91,7 +91,7 @@ class TestTtlRetroAdapterContract:
 
         for route, raw_route in zip(routes, serialized_ibuprofen_data, strict=False):
             expected_steps = raw_route["metadata"]["steps"]
-            assert route.depth == expected_steps
+            assert route.length == expected_steps
 
     def test_all_molecules_have_inchikeys(self, serialized_ibuprofen_data):
         """all molecules in route should have inchikeys."""

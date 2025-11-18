@@ -111,7 +111,7 @@ raw_route = {
 route = adapt_single_route(raw_route, target, adapter_name="dms")
 
 if route:
-    print(f"Route depth: {route.depth}")
+    print(f"Route depth: {route.length}")
     print(f"Starting materials: {len(route.leaves)}")
 ```
 

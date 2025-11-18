@@ -7,7 +7,7 @@
 # from retrocast.adapters.base_adapter import BaseAdapter
 # from retrocast.domain.tree import (
 #     deduplicate_routes,
-#     sample_k_by_depth,
+#     sample_k_by_length,
 #     sample_random_k,
 #     sample_top_k,
 # )
@@ -25,7 +25,7 @@
 # SAMPLING_STRATEGY_MAP = {
 #     "top-k": sample_top_k,
 #     "random-k": sample_random_k,
-#     "by-length": sample_k_by_depth,
+#     "by-length": sample_k_by_length,
 # }
 
 
