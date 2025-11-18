@@ -1,7 +1,9 @@
 from pathlib import Path
 
+from retrocast.exceptions import RetroCastIOError
 from retrocast.io.files import load_json_gz
 from retrocast.models.benchmark import BenchmarkSet
+from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
 
@@ -26,3 +28,21 @@ def load_raw_paroutes_list(path: Path) -> list[dict]:
     if not isinstance(data, list):
         raise ValueError(f"Expected list, got {type(data)}")
     return data
+
+
+def load_stock_file(path: Path) -> set[SmilesStr]:
+    """
+    Loads a set of stock SMILES from a text file (one per line).
+    Assumes the file is already canonicalized.
+    """
+    logger.debug(f"Loading stock from {path}...")
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            stock = {line.strip() for line in f if line.strip()}
+
+        logger.info(f"Loaded {len(stock)} molecules from stock file.")
+        return stock
+
+    except OSError as e:
+        logger.error(f"Failed to read stock file: {path}")
+        raise RetroCastIOError(f"Stock loading error on {path}: {e}") from e
