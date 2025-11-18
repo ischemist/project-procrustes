@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections import defaultdict
 from typing import Any
 
@@ -16,16 +18,17 @@ class BenchmarkTarget(BaseModel):
     id: str = Field(..., description="Unique identifier within the benchmark (e.g., 'n5-00123').")
     smiles: SmilesStr = Field(..., description="The canonical SMILES of the target.")
 
-    # First-class properties for stratification
-    route_depth: int = Field(..., description="The length of the longest linear path in the ground truth route.")
-    is_convergent: bool = Field(..., description="True if the ground truth route contains convergent steps.")
-
     # Bucket for anything else (e.g. "source_patent_id", "reaction_classes", "original_index")
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     # The "Gold Standard" route from the literature/patent.
     # Optional, because some benchmarks might be pure prediction tasks.
     ground_truth: Route | None = None
+    # First-class properties for stratification
+    is_convergent: bool | None = Field(..., description="True if the ground truth route contains convergent steps.")
+    route_length: int | None = Field(
+        ..., description="The length of the longest linear path in the ground truth route."
+    )
 
 
 class BenchmarkSet(BaseModel):
@@ -62,7 +65,7 @@ class BenchmarkSet(BaseModel):
         """Returns a sorted list of all target IDs."""
         return sorted(self.targets.keys())
 
-    def subset(self, ids: list[str], new_name_suffix: str) -> "BenchmarkSet":
+    def subset(self, ids: list[str], new_name_suffix: str) -> BenchmarkSet:
         """
         Creates a new BenchmarkSet containing only the specified IDs.
         """

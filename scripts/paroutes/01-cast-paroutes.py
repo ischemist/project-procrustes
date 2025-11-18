@@ -13,6 +13,7 @@ from retrocast import adapt_single_route
 from retrocast.domain.chem import canonicalize_smiles
 from retrocast.io.files import save_json_gz
 from retrocast.io.loaders import load_raw_paroutes_list
+from retrocast.io.manifests import create_manifest
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import TargetInput
 from retrocast.utils.logging import logger
@@ -60,13 +61,28 @@ def process_dataset(name: str):
             id=target_id,
             smiles=smiles,
             ground_truth=route,
-            metadata={"depth": route.length, "is_convergent": route.has_convergent_reaction, "original_index": i},
+            route_length=route.length,
+            is_convergent=route.has_convergent_reaction,
         )
 
         benchmark.targets[target_id] = target
 
     logger.info(f"Created {len(benchmark.targets)} targets. {failures} failed.")
     save_json_gz(benchmark, out_path)
+
+    manifest_path = DEF_DIR / f"paroutes-{name}.manifest.json"
+    manifest = create_manifest(
+        action="scripts/paroutes/01-cast-paroutes",
+        sources=[raw_path],
+        outputs=[(out_path, benchmark)],
+        parameters={"dataset": name},
+        statistics={"n_targets": len(benchmark.targets), "n_failures": failures},
+    )
+    # Save Manifest (plain JSON, not gzipped, so it's readable)
+    with open(manifest_path, "w") as f:
+        f.write(manifest.model_dump_json(indent=2))
+
+    logger.info(f"Manifest saved to {manifest_path}")
 
 
 def main():
