@@ -334,6 +334,9 @@ class TargetEvaluation(BaseModel):
     num_solved_routes: dict[str, int] = Field(
         default_factory=dict, description="Map of stock name to count of routes solvable with that stock"
     )
+    experimental_route_length: int | None = Field(
+        default=None, description="Length (depth) of experimental route if available"
+    )
 
 
 class EvaluationResults(BaseModel):

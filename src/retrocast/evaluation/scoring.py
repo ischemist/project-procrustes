@@ -1,5 +1,5 @@
 """
-Evaluation metrics for retrosynthesis routes.
+Per-target evaluation (scoring) for retrosynthesis routes.
 
 This module provides functions to evaluate predicted routes against:
 1. Stock availability (solvability)
@@ -88,6 +88,11 @@ def evaluate_predictions(
 
     for target_id, routes in predictions.items():
         target_eval = TargetEvaluation(target_id=target_id)
+
+        # Store experimental route length if available
+        if experimental_routes and target_id in experimental_routes:
+            exp_route = experimental_routes[target_id]
+            target_eval.experimental_route_length = exp_route.depth
 
         # For each stock, compute metrics
         for stock_name, stock in stocks.items():

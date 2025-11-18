@@ -32,14 +32,14 @@ OUTPUT_DIR = base_dir / "data" / "processed"
 
 
 def load_dms_predictions_from_pickle(
-    raw_path: Path, n1_map: dict[str, TargetInput], n5_map: dict[str, TargetInput]
-) -> tuple[dict[str, list[dict]], dict[str, TargetInput], dict[str, int]]:
+    raw_path: Path,
+    targets_map: dict[str, TargetInput],
+) -> tuple[dict[str, list[dict]], dict[str, int]]:
     with open(raw_path, "rb") as f:
         predictions_list: list[list[tuple[str, float]]] = pickle.load(f)
 
     # Convert to {target_id: [routes]} format
     raw_data_per_target: dict[str, list[dict]] = {}
-    targets_map: dict[str, TargetInput] = {}
     load_stats = {
         "total_targets_in_pickle": len(predictions_list),
         "empty_targets": 0,
@@ -60,11 +60,7 @@ def load_dms_predictions_from_pickle(
         target_smiles = canonicalize_smiles(first_route["smiles"])
 
         # Look up target ID from SMILES
-        if target_smiles in n5_map:
-            target_id = n5_map[target_smiles].id
-        elif target_smiles in n1_map:
-            target_id = n1_map[target_smiles].id
-        else:
+        if target_smiles not in targets_map:
             load_stats["unmapped_targets"] += 1
             continue
 
@@ -77,16 +73,14 @@ def load_dms_predictions_from_pickle(
             routes.append(route)
             load_stats["total_routes_loaded"] += 1
 
-        raw_data_per_target[target_id] = routes
-        targets_map[target_id] = n5_map[target_smiles] if target_smiles in n5_map else n1_map[target_smiles]
+        raw_data_per_target[targets_map[target_smiles].id] = routes
 
-    return raw_data_per_target, targets_map, load_stats
+    return raw_data_per_target, load_stats
 
 
 def adapt_dms_predictions(
     raw_data_path: Path,
-    n1_map: dict[str, TargetInput],
-    n5_map: dict[str, TargetInput],
+    targets_map: dict[str, TargetInput],
     output_dir: Path,
     model_name: str,
     dataset_name: str,
@@ -102,9 +96,7 @@ def adapt_dms_predictions(
         dataset_name: Name of the dataset (used in manifest).
     """
     # 1. Load data from pickle
-    raw_data_per_target, targets_map, load_stats = load_dms_predictions_from_pickle(
-        raw_path=raw_data_path, n1_map=n1_map, n5_map=n5_map
-    )
+    raw_data_per_target, load_stats = load_dms_predictions_from_pickle(raw_path=raw_data_path, targets_map=targets_map)
 
     if not raw_data_per_target:
         logger.warning("No valid targets found. Skipping.")
@@ -164,15 +156,16 @@ def main():
     # we're not merging the two maps because there are ~17 targets that have different routes in n1 and n5
 
     model_name = "dms-flash-fp16"
-    for ds in ["n1", "n5"]:
-        adapt_dms_predictions(
-            raw_data_path=EVAL_DIR / model_name / ds / f"{ds}_correct_paths_NS2n.pkl",
-            n1_map=n1_map,
-            n5_map=n5_map,
-            output_dir=OUTPUT_DIR / model_name / ds,
-            model_name=model_name,
-            dataset_name=f"paroutes-{ds}",
-        )
+    ds = "n5"
+    targets_map = n5_map
+
+    adapt_dms_predictions(
+        raw_data_path=EVAL_DIR / model_name / ds / f"{ds}_correct_paths_NS2n.pkl",
+        targets_map=targets_map,
+        output_dir=OUTPUT_DIR / model_name / ds,
+        model_name=model_name,
+        dataset_name=f"paroutes-{ds}",
+    )
 
 
 if __name__ == "__main__":

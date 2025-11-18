@@ -26,11 +26,10 @@ def main():
 
     # Load stocks
     stocks = {
-        "n1-stock": load_stock(PAROUTES_DIR / "n1-stock.txt"),
         "n5-stock": load_stock(PAROUTES_DIR / "n5-stock.txt"),
     }
 
-    for dataset in ["n1", "n5"]:
+    for dataset in ["n5"]:
         logger.info(f"\n{'=' * 60}")
         logger.info(f"Evaluating {model_name} on {dataset}")
         logger.info(f"{'=' * 60}")

@@ -63,18 +63,18 @@ def process_raw_data(
     routes_objects: dict[str, list[Route]] = {}
     stats = RunStatistics()
 
-    pbar = tqdm(raw_data_per_target.items(), desc="Processing targets", unit="target")
-    for target_id, raw_routes_list in pbar:
-        if target_id not in targets_map:
-            logger.warning(f"Skipping routes for '{target_id}': No target info found.")
-            continue
+    pbar = tqdm(targets_map.items(), desc="Processing targets", unit="target")
+    for _, target_input in pbar:
+        target_id = target_input.id
+        # Get raw routes for this target (if any exist)
+        raw_routes_list = raw_data_per_target.get(target_id, [])
 
         # Count total routes in raw input files
         num_raw_routes = len(raw_routes_list)
         stats.total_routes_in_raw_files += num_raw_routes
 
         # Transform routes through adapter (handles validation and transformation)
-        transformed_trees = list(adapter.cast(raw_routes_list, targets_map[target_id]))
+        transformed_trees = list(adapter.cast(raw_routes_list, target_input))
 
         # Track failures (both validation and transformation failures)
         num_failed = num_raw_routes - len(transformed_trees)
@@ -94,6 +94,7 @@ def process_raw_data(
 
         unique_trees = deduplicate_routes(transformed_trees)
 
+        # Always save an entry for the target (even if empty) to track denominator for solvability
         if len(unique_trees):
             final_output_data[target_id] = [
                 tree.model_dump(mode="json", exclude_computed_fields=True) for tree in unique_trees
@@ -101,6 +102,11 @@ def process_raw_data(
             routes_objects[target_id] = unique_trees
             stats.targets_with_at_least_one_route.add(target_id)
             stats.routes_per_target[target_id] = len(unique_trees)
+        else:
+            # Save empty list to maintain target in output for correct solvability denominator
+            final_output_data[target_id] = []
+            routes_objects[target_id] = []
+            stats.routes_per_target[target_id] = 0
 
         stats.successful_routes_before_dedup += len(transformed_trees)
         stats.final_unique_routes_saved += len(unique_trees)

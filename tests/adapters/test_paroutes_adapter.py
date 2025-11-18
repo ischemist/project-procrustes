@@ -233,3 +233,277 @@ class TestPaRoutesYearParsing:
             assert not adapter.unparsed_categories
 
         assert not adapter.year_counts  # this should only be touched by the main adapt loop
+
+
+class TestPaRoutesAdapterCycleDetection:
+    """tests for cycle detection in paroutes adapter."""
+
+    @pytest.fixture
+    def adapter(self) -> PaRoutesAdapter:
+        return PaRoutesAdapter()
+
+    def test_simple_cycle_detection_a_to_b_to_a(self, adapter):
+        """
+        tests that a simple cycle (A -> B -> A) is detected and raises AdapterLogicError.
+
+        Structure:
+        Target (A)
+          -> Reaction
+            -> Reactant (B)
+              -> Reaction
+                -> Reactant (A)  [CYCLE!]
+        """
+        # Create cyclic structure where molecule A appears twice
+        smiles_a = "CCO"  # ethanol
+        smiles_b = "CC(C)O"  # isopropanol
+
+        raw_route_with_cycle = {
+            "type": "mol",
+            "smiles": smiles_a,
+            "in_stock": False,
+            "children": [
+                {
+                    "type": "reaction",
+                    "smiles": smiles_a,
+                    "metadata": {"ID": "US20150051201A1;0516;1654836"},
+                    "children": [
+                        {
+                            "type": "mol",
+                            "smiles": smiles_b,
+                            "in_stock": False,
+                            "children": [
+                                {
+                                    "type": "reaction",
+                                    "smiles": smiles_b,
+                                    "metadata": {
+                                        "ID": "US20150051201A1;0517;1654837",
+                                        "rsmi": f"{smiles_a}>>{smiles_b}",
+                                    },
+                                    "children": [
+                                        {
+                                            "type": "mol",
+                                            "smiles": smiles_a,  # Same as target - creates cycle!
+                                            "in_stock": False,
+                                            "children": [],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        target_input = TargetInput(id="cycle-test-1", smiles=canonicalize_smiles(smiles_a))
+
+        # Should raise AdapterLogicError due to cycle
+        routes = list(adapter.cast(raw_route_with_cycle, target_input))
+        assert len(routes) == 0  # Cycle should cause transformation to fail
+
+    def test_self_loop_cycle_detection(self, adapter):
+        """
+        tests that a self-loop (A -> A) is detected and raises AdapterLogicError.
+
+        Structure:
+        Target (A)
+          -> Reaction
+            -> Reactant (A)  [CYCLE!]
+        """
+        smiles_a = "CCO"
+
+        raw_route_with_self_loop = {
+            "type": "mol",
+            "smiles": smiles_a,
+            "in_stock": False,
+            "children": [
+                {
+                    "type": "reaction",
+                    "smiles": smiles_a,
+                    "metadata": {"ID": "US20150051201A1;0516;1654836", "rsmi": f"{smiles_a}>>{smiles_a}"},
+                    "children": [
+                        {
+                            "type": "mol",
+                            "smiles": smiles_a,  # Same as target - self loop!
+                            "in_stock": False,
+                            "children": [],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        target_input = TargetInput(id="self-loop-test", smiles=canonicalize_smiles(smiles_a))
+
+        # Should raise AdapterLogicError due to self-loop
+        routes = list(adapter.cast(raw_route_with_self_loop, target_input))
+        assert len(routes) == 0
+
+    def test_deep_cycle_detection_a_to_b_to_c_to_b(self, adapter):
+        """
+        tests that a deeper cycle (A -> B -> C -> B) is detected.
+
+        Structure:
+        Target (A)
+          -> Reaction
+            -> Reactant (B)
+              -> Reaction
+                -> Reactant (C)
+                  -> Reaction
+                    -> Reactant (B)  [CYCLE!]
+        """
+        smiles_a = "CCO"  # ethanol
+        smiles_b = "CC(C)O"  # isopropanol
+        smiles_c = "CCCO"  # propanol
+
+        raw_route_with_deep_cycle = {
+            "type": "mol",
+            "smiles": smiles_a,
+            "in_stock": False,
+            "children": [
+                {
+                    "type": "reaction",
+                    "smiles": smiles_a,
+                    "metadata": {"ID": "US20150051201A1;0516;1654836"},
+                    "children": [
+                        {
+                            "type": "mol",
+                            "smiles": smiles_b,
+                            "in_stock": False,
+                            "children": [
+                                {
+                                    "type": "reaction",
+                                    "smiles": smiles_b,
+                                    "metadata": {"ID": "US20150051201A1;0517;1654837"},
+                                    "children": [
+                                        {
+                                            "type": "mol",
+                                            "smiles": smiles_c,
+                                            "in_stock": False,
+                                            "children": [
+                                                {
+                                                    "type": "reaction",
+                                                    "smiles": smiles_c,
+                                                    "metadata": {"ID": "US20150051201A1;0518;1654838"},
+                                                    "children": [
+                                                        {
+                                                            "type": "mol",
+                                                            "smiles": smiles_b,  # B appears again - cycle!
+                                                            "in_stock": False,
+                                                            "children": [],
+                                                        }
+                                                    ],
+                                                }
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+
+        target_input = TargetInput(id="deep-cycle-test", smiles=canonicalize_smiles(smiles_a))
+
+        # Should raise AdapterLogicError due to deep cycle
+        routes = list(adapter.cast(raw_route_with_deep_cycle, target_input))
+        assert len(routes) == 0
+
+    def test_valid_acyclic_route_no_false_positives(self, adapter, raw_paroutes_data):
+        """
+        tests that valid acyclic routes still work correctly (no regression).
+        This ensures cycle detection doesn't break existing functionality.
+        """
+        target_id = "paroutes-ex-1"
+        raw_route = raw_paroutes_data[target_id]
+        target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
+
+        routes = list(adapter.cast(raw_route, target_input))
+
+        # Should successfully process the route
+        assert len(routes) == 1
+        assert routes[0].target.smiles == target_input.smiles
+        assert routes[0].depth == 2
+
+    def test_branching_route_with_same_leaf_molecule(self, adapter):
+        """
+        tests that having the same leaf molecule in different branches is NOT a cycle.
+
+        Structure:
+        Target (A)
+          -> Reaction
+            -> Reactant (B)
+              -> Reaction
+                -> Reactant (C) [leaf]
+            -> Reactant (D)
+              -> Reaction
+                -> Reactant (C) [same leaf, but different path - OK!]
+        """
+        smiles_a = "CCO"  # target
+        smiles_b = "CC(C)O"  # reactant 1
+        smiles_c = "C"  # shared leaf (methane)
+        smiles_d = "CCCO"  # reactant 2
+
+        raw_route_branching = {
+            "type": "mol",
+            "smiles": smiles_a,
+            "in_stock": False,
+            "children": [
+                {
+                    "type": "reaction",
+                    "smiles": smiles_a,
+                    "metadata": {"ID": "US20150051201A1;0516;1654836"},
+                    "children": [
+                        {
+                            "type": "mol",
+                            "smiles": smiles_b,
+                            "in_stock": False,
+                            "children": [
+                                {
+                                    "type": "reaction",
+                                    "smiles": smiles_b,
+                                    "metadata": {"ID": "US20150051201A1;0517;1654837"},
+                                    "children": [
+                                        {
+                                            "type": "mol",
+                                            "smiles": smiles_c,
+                                            "in_stock": True,
+                                            "children": [],
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                        {
+                            "type": "mol",
+                            "smiles": smiles_d,
+                            "in_stock": False,
+                            "children": [
+                                {
+                                    "type": "reaction",
+                                    "smiles": smiles_d,
+                                    "metadata": {"ID": "US20150051201A1;0518;1654838"},
+                                    "children": [
+                                        {
+                                            "type": "mol",
+                                            "smiles": smiles_c,  # Same leaf as in other branch
+                                            "in_stock": True,
+                                            "children": [],
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                    ],
+                }
+            ],
+        }
+
+        target_input = TargetInput(id="branching-test", smiles=canonicalize_smiles(smiles_a))
+
+        # Should successfully process - shared leaves are OK
+        routes = list(adapter.cast(raw_route_branching, target_input))
+        assert len(routes) == 1
+        assert routes[0].depth == 2

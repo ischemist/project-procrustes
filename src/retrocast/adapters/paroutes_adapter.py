@@ -11,6 +11,7 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
+from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -57,9 +58,28 @@ class PaRoutesAdapter(BaseAdapter):
         self.year_counts: dict[str, int] = defaultdict(int)
         self.unparsed_categories: dict[str, int] = defaultdict(int)
 
-    def _get_patent_ids(self, node: PaRoutesMoleculeInput) -> set[str]:
-        """recursively traverses the raw tree to collect all unique patent ids from reaction nodes."""
+    def _get_patent_ids(self, node: PaRoutesMoleculeInput, visited: set[str] | None = None) -> set[str]:
+        """
+        recursively traverses the raw tree to collect all unique patent ids from reaction nodes.
+
+        Args:
+            node: The molecule node to traverse
+            visited: Set of SMILES already visited (for cycle detection)
+
+        Returns:
+            Set of unique patent IDs found in the tree
+        """
+        if visited is None:
+            visited = set()
+
+        # Use raw SMILES for cycle detection (before canonicalization)
+        if node.smiles in visited:
+            logger.warning(f"cycle detected in _get_patent_ids for smiles: {node.smiles}")
+            return set()
+
+        new_visited = visited | {node.smiles}
         patent_ids: set[str] = set()
+
         for reaction_node in node.children:
             try:
                 # the patent id is the part before the first semicolon
@@ -69,7 +89,7 @@ class PaRoutesAdapter(BaseAdapter):
                 logger.warning(f"could not parse patent id from metadata: {reaction_node.metadata}")
 
             for reactant_node in reaction_node.children:
-                patent_ids.update(self._get_patent_ids(reactant_node))
+                patent_ids.update(self._get_patent_ids(reactant_node, visited=new_visited))
         return patent_ids
 
     def _get_year_from_patent_id(self, patent_id: str) -> str | None:
@@ -131,8 +151,8 @@ class PaRoutesAdapter(BaseAdapter):
         """
         orchestrates the transformation of a single validated paroutes tree.
         """
-        # build the molecule tree recursively
-        target_molecule = self._build_molecule(paroutes_root)
+        # build the molecule tree recursively with cycle detection
+        target_molecule = self._build_molecule(paroutes_root, visited=set())
 
         if target_molecule.smiles != target_input.smiles:
             msg = (
@@ -147,14 +167,32 @@ class PaRoutesAdapter(BaseAdapter):
 
         return Route(target=target_molecule, rank=1, metadata=route_metadata)
 
-    def _build_molecule(self, raw_mol_node: PaRoutesMoleculeInput) -> Molecule:
+    def _build_molecule(self, raw_mol_node: PaRoutesMoleculeInput, visited: set[SmilesStr] | None = None) -> Molecule:
         """
         recursively builds a molecule from a paroutes bipartite graph node.
+
+        Args:
+            raw_mol_node: The raw molecule node from paroutes data
+            visited: Set of canonical SMILES already visited (for cycle detection)
+
+        Raises:
+            AdapterLogicError: If a cycle is detected in the route graph
         """
         if raw_mol_node.type != "mol":
             raise AdapterLogicError(f"expected node type 'mol' but got '{raw_mol_node.type}'")
 
+        if visited is None:
+            visited = set()
+
         canon_smiles = canonicalize_smiles(raw_mol_node.smiles)
+
+        # Cycle detection: check if we've seen this molecule before in the current path
+        if canon_smiles in visited:
+            raise AdapterLogicError(f"cycle detected in route graph involving smiles: {canon_smiles}")
+
+        # Create new visited set with current molecule added
+        new_visited = visited | {canon_smiles}
+
         is_leaf = raw_mol_node.in_stock or not bool(raw_mol_node.children)
 
         if is_leaf:
@@ -175,10 +213,10 @@ class PaRoutesAdapter(BaseAdapter):
         if raw_reaction_node.type != "reaction":
             raise AdapterLogicError("child of molecule node was not a reaction node")
 
-        # build reactants recursively
+        # build reactants recursively with updated visited set
         reactant_molecules: list[Molecule] = []
         for reactant_mol_input in raw_reaction_node.children:
-            reactant_mol = self._build_molecule(reactant_mol_input)
+            reactant_mol = self._build_molecule(reactant_mol_input, visited=new_visited)
             reactant_molecules.append(reactant_mol)
 
         # extract mapped smiles (rsmi) from metadata
