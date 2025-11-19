@@ -329,34 +329,3 @@ class RunStatistics(BaseModel):
             "avg_routes_per_target": self.avg_routes_per_target,
             "median_routes_per_target": self.median_routes_per_target,
         }
-
-
-class TargetEvaluation(BaseModel):
-    """Evaluation results for a single target molecule."""
-
-    target_id: str
-    solvability: dict[str, bool] = Field(
-        default_factory=dict, description="Map of stock name to whether target is solvable with that stock"
-    )
-    experimental_route_rank: dict[str, int | None] = Field(
-        default_factory=dict,
-        description="Map of stock name to rank of experimental route (None if not found or no experimental route)",
-    )
-    num_solved_routes: dict[str, int] = Field(
-        default_factory=dict, description="Map of stock name to count of routes solvable with that stock"
-    )
-    experimental_route_length: int | None = Field(
-        default=None, description="Length (depth) of experimental route if available"
-    )
-
-
-class EvaluationResults(BaseModel):
-    """Complete evaluation results for all targets."""
-
-    model_name: str
-    dataset_name: str
-    stock_names: list[str] = Field(description="List of stock names used in evaluation")
-    targets: dict[str, TargetEvaluation] = Field(
-        default_factory=dict, description="Map of target_id to evaluation results"
-    )
-    metadata: dict[str, Any] = Field(default_factory=dict, description="Additional metadata about the evaluation")

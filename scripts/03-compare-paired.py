@@ -95,7 +95,7 @@ def main() -> None:
         sig_icon = "✅" if c.is_significant else "  "
 
         # Colorize difference?
-        # If baseline is better (positive diff), that's usually "good" for the baseline.
+        # If challenger is better (positive diff), that's usually "good" for the baseline.
         diff_str = f"{c.diff_mean:+.1%}"
         ci_str = f"[{c.diff_ci_lower:+.1%}, {c.diff_ci_upper:+.1%}]"
 
