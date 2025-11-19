@@ -12,8 +12,9 @@ from tqdm import tqdm
 from retrocast import adapt_single_route
 from retrocast.chem import canonicalize_smiles
 from retrocast.io.files import save_json_gz
-from retrocast.io.loaders import load_raw_paroutes_list
+from retrocast.io.loaders import load_raw_paroutes_list, load_stock_file
 from retrocast.io.manifests import create_manifest
+from retrocast.metrics.solvability import is_route_solved
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import TargetInput
 from retrocast.utils.logging import logger
@@ -21,13 +22,15 @@ from retrocast.utils.logging import logger
 BASE_DIR = Path(__file__).resolve().parents[2]
 RAW_DIR = BASE_DIR / "data" / "0-paroutes"  # Where raw n1/n5 json.gz live
 DEF_DIR = BASE_DIR / "data" / "1-benchmarks" / "definitions"
+stock_dir = BASE_DIR / "data" / "1-benchmarks" / "stocks"
 
 DATASETS = ["n1", "n5"]
+buyables = load_stock_file(stock_dir / "buyables-stock.txt")
 
 
 def process_dataset(name: str):
     raw_path = RAW_DIR / f"{name}-routes.json.gz"
-    out_path = DEF_DIR / f"paroutes-{name}-full.json.gz"
+    out_path = DEF_DIR / f"paroutes-{name}-full-buyables.json.gz"
 
     logger.info(f"Processing {name}...")
     raw_list = load_raw_paroutes_list(raw_path)
@@ -53,6 +56,10 @@ def process_dataset(name: str):
 
         if not route:
             failures += 1
+            continue
+
+        is_solved = is_route_solved(route, buyables)
+        if not is_solved:
             continue
 
         # 3. Create BenchmarkTarget

@@ -18,6 +18,10 @@ license = { text = "MIT" }
 Homepage = "https://github.com/ischemist/project-procrustes"
 Issues = "https://github.com/ischemist/project-procrustes/issues"
 
+
+[project.scripts]
+retrocast = "retrocast.cli.main:main"
+
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
@@ -46,72 +50,69 @@ dev = [
 ]
 
 [project.optional-dependencies]
-dms = ["directmultistep"]
+# dms = ["directmultistep"]
 aizyn = [
-    "aizynthfinder",
+    "aizynthfinder==4.4.0",
     "numpy<=2.2",    # Numba needs NumPy 2.2 or less. Got NumPy 2.3.
 ]
-synplanner = ["synplanner==1.2.0"]
-torch-gpu = ["torch"]
-torch-cpu = ["torch"]
-syntheseus = [
-    "syntheseus[retro-knn]>=0.5.0",
-    "numpy<2",
-    "dgl",
-    "torch<=2.1",
-    "torchdata<=0.7.0",
-    "faiss-cpu",
-    "torch-scatter"
-]
-syntheseus-linux = [
-    "syntheseus[retro-knn]>=0.5.0",
-    "numpy<2",
-    "dgl",
-    "torch<=2.1",
-    "torchdata<=0.7.0",
-    "faiss-cpu",
-    "torch-scatter"
-]
+# synplanner = ["synplanner==1.2.0"]
+# syntheseus = [
+#     "syntheseus[retro-knn]>=0.5.0",
+#     "numpy<2",
+#     "dgl",
+#     "torch<=2.1",
+#     "torchdata<=0.7.0",
+#     "faiss-cpu",
+#     "torch-scatter"
+# ]
+# syntheseus-linux = [
+#     "syntheseus[retro-knn]>=0.5.0",
+#     "numpy<2",
+#     "dgl",
+#     "torch<=2.1",
+#     "torchdata<=0.7.0",
+#     "faiss-cpu",
+#     "torch-scatter"
+# ]
 viz = [
     "ischemist>=0.2.0",
     "kaleido>=1.1.0",
-    "openpyxl>=3.1.5",
     "plotly>=6.3.0",
 ]
-retro-star = [
-    "retro-star>=0.1.0",
-    "numpy==2.3.3",
-    "pandas==2.3.2"
-]
-analysis = []
+# retro-star = [
+#     "retro-star>=0.1.0",
+#     "numpy==2.3.3",
+#     "pandas==2.3.2"
+# ]
+# analysis = []
 
 
-[tool.uv]
-conflicts = [
-    [
-        { extra = "torch-gpu" },
-        { extra = "torch-cpu" },
-    ],
-    [
-        { extra = "syntheseus" },
-        { extra = "syntheseus-linux" },
-        { extra = "synp" },
-        { extra = "dms" },
-        { extra = "retro-star" },
-        { extra = "aizyn" },
-        { extra = "synplanner" },
-    ]
-]
+# [tool.uv]
+# conflicts = [
+#     [
+#         { extra = "torch-gpu" },
+#         { extra = "torch-cpu" },
+#     ],
+#     [
+#         { extra = "syntheseus" },
+#         { extra = "syntheseus-linux" },
+#         { extra = "synp" },
+#         { extra = "dms" },
+#         { extra = "retro-star" },
+#         { extra = "aizyn" },
+#         { extra = "synplanner" },
+#     ]
+# ]
 
 
 [tool.uv.sources]
 dgl = [
 { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin'" },
 ]
-torch = [
-    { index = "pytorch-cpu", extra = "torch-cpu" },
-    { index = "pytorch-cu126", extra = "torch-gpu" },
-]
+# torch = [
+#     { index = "pytorch-cpu", extra = "torch-cpu" },
+#     { index = "pytorch-cu126", extra = "torch-gpu" },
+# ]
 retro_star = { git = "https://github.com/anmorgunov/retro_star", branch = "master" }
 
 [[tool.uv.index]]

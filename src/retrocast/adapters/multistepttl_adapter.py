@@ -9,6 +9,7 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
+from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
 
@@ -57,7 +58,7 @@ class TtlRetroAdapter(BaseAdapter):
         if not route.reactions:
             # no reactions means the target is already a starting material
             target_molecule = Molecule(
-                smiles=target_input.smiles,
+                smiles=SmilesStr(target_input.smiles),
                 inchikey=get_inchi_key(target_input.smiles),
                 synthesis_step=None,
                 metadata={},

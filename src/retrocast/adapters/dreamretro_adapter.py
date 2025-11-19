@@ -98,7 +98,7 @@ class DreamRetroAdapter(BaseAdapter):
             raise AdapterLogicError(msg)
 
         # build molecule tree from precursor map
-        molecule = build_molecule_from_precursor_map(smiles=target_input.smiles, precursor_map=precursor_map)
+        molecule = build_molecule_from_precursor_map(smiles=SmilesStr(target_input.smiles), precursor_map=precursor_map)
 
         # extract metadata
         metadata = {

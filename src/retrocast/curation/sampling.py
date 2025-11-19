@@ -131,3 +131,10 @@ def sample_random(items: list[T], n: int, seed: int) -> list[T]:
 
     rng = random.Random(seed)
     return rng.sample(items, n)
+
+
+SAMPLING_STRATEGIES = {
+    "top-k": sample_top_k,
+    "random-k": sample_random_k,
+    "by-length": sample_k_by_length,
+}

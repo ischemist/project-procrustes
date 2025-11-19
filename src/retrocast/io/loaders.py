@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from retrocast.exceptions import RetroCastIOError
-from retrocast.io.files import load_json_gz
-from retrocast.models.benchmark import BenchmarkSet
+from retrocast.io.files import load_json_gz, save_json_gz
+from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
 from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
@@ -40,9 +40,33 @@ def load_stock_file(path: Path) -> set[SmilesStr]:
         with path.open("r", encoding="utf-8") as f:
             stock = {line.strip() for line in f if line.strip()}
 
-        logger.info(f"Loaded {len(stock)} molecules from stock file.")
+        logger.info(f"Loaded {len(stock):,} molecules from stock file.")
         return stock
 
     except OSError as e:
         logger.error(f"Failed to read stock file: {path}")
         raise RetroCastIOError(f"Stock loading error on {path}: {e}") from e
+
+
+def load_execution_stats(path: Path) -> ExecutionStats:
+    """
+    Loads ExecutionStats from a gzipped JSON file.
+    """
+    logger.info(f"Loading execution stats from {path}...")
+    data = load_json_gz(path)
+    stats = ExecutionStats.model_validate(data)
+    logger.info(
+        f"Loaded execution stats with {len(stats.wall_time)} wall_time and {len(stats.cpu_time)} cpu_time entries."
+    )
+    return stats
+
+
+def save_execution_stats(stats: ExecutionStats, path: Path) -> None:
+    """
+    Saves ExecutionStats to a gzipped JSON file.
+    """
+    logger.info(f"Saving execution stats to {path}...")
+    save_json_gz(stats, path)
+    logger.info(
+        f"Saved execution stats with {len(stats.wall_time)} wall_time and {len(stats.cpu_time)} cpu_time entries."
+    )

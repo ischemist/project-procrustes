@@ -9,6 +9,11 @@ from retrocast.models.chem import Route
 from retrocast.typing import SmilesStr
 
 
+class ExecutionStats(BaseModel):
+    wall_time: dict[str, float] = Field(default_factory=dict)
+    cpu_time: dict[str, float] = Field(default_factory=dict)
+
+
 class BenchmarkTarget(BaseModel):
     """
     Atomic unit of a benchmark.

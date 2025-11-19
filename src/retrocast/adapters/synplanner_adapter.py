@@ -9,6 +9,7 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
+from retrocast.typing import ReactionSmilesStr
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -111,18 +112,22 @@ class SynPlannerAdapter(BaseAdapter):
                 f"Molecule {canon_smiles} has multiple child reactions in raw output; only the first is used in a tree."
             )
 
-        raw_reaction_node: SynPlannerReactionInput = raw_mol_node.children[0]
-        if raw_reaction_node.type != "reaction":
+        first_child = raw_mol_node.children[0]
+        if not isinstance(first_child, SynPlannerReactionInput):
             raise AdapterLogicError("Child of molecule node was not a reaction node")
+        raw_reaction_node: SynPlannerReactionInput = first_child
 
         # Build reactants recursively
         reactant_molecules: list[Molecule] = []
         for reactant_mol_input in raw_reaction_node.children:
+            # Type guard: children of reaction nodes should be molecule nodes
+            if not isinstance(reactant_mol_input, SynPlannerMoleculeInput):
+                raise AdapterLogicError("Child of reaction node was not a molecule node")
             reactant_mol = self._build_molecule_from_synplanner_node(reactant_mol_input)
             reactant_molecules.append(reactant_mol)
 
         # Extract mapped_smiles from the 'smiles' field of the reaction node
-        mapped_smiles = raw_reaction_node.smiles if hasattr(raw_reaction_node, "smiles") else None
+        mapped_smiles = ReactionSmilesStr(raw_reaction_node.smiles) if hasattr(raw_reaction_node, "smiles") else None
 
         # Create the reaction step
         synthesis_step = ReactionStep(

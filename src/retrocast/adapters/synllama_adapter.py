@@ -60,7 +60,9 @@ class SynLlaMaAdapter(BaseAdapter):
             raise AdapterLogicError(msg)
 
         precursor_map = self._parse_synthesis_string(route.synthesis_string)
-        target_molecule = self._build_molecule_from_precursor_map(smiles=target.smiles, precursor_map=precursor_map)
+        target_molecule = self._build_molecule_from_precursor_map(
+            smiles=SmilesStr(target.smiles), precursor_map=precursor_map
+        )
         return Route(target=target_molecule, rank=rank, metadata={})
 
     def _build_molecule_from_precursor_map(

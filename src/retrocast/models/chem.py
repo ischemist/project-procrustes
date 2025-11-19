@@ -91,11 +91,14 @@ class ReactionStep(BaseModel):
 class TargetIdentity(Protocol):
     """
     Minimal interface required by adapters.
-    Any object with 'id' and 'smiles' can be used.
+    Read-only protocol allows covariance (SmilesStr -> str).
     """
 
-    id: str
-    smiles: str
+    @property
+    def id(self) -> str: ...
+
+    @property
+    def smiles(self) -> str: ...
 
 
 class TargetInput(BaseModel):

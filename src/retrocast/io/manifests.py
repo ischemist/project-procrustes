@@ -132,11 +132,16 @@ def create_manifest(
         c_hash = None
         if isinstance(obj, BenchmarkSet):
             c_hash = _calculate_benchmark_content_hash(obj)
-        elif isinstance(obj, dict) and len(obj) > 0 and isinstance(next(iter(obj.values())), list):
-            # Heuristic for dict[str, list[Route]]
-            # We check the first value to see if it's a list.
-            # We assume it's a prediction dict.
-            c_hash = _calculate_predictions_content_hash(obj)
+        elif isinstance(obj, dict) and len(obj) > 0:
+            # Check if this is truly a dict[str, list[Route]]
+            first_value = next(iter(obj.values()))
+            if (
+                isinstance(first_value, list)
+                and len(first_value) > 0
+                and all(isinstance(r, Route) for r in first_value)
+            ):
+                c_hash = _calculate_predictions_content_hash(obj)
+            # Otherwise, fall through and only use file hash
 
         output_infos.append(FileInfo(path=path.name, file_hash=f_hash, content_hash=c_hash))
 
