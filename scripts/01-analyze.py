@@ -82,7 +82,7 @@ def main():
     print("\n" + report)
 
     fig = plot_single_model_diagnostics(final_stats)
-    fig.write_html(output_dir / "diagnostics.html", include_plotlyjs="cdn", auto_open=True)
+    fig.write_html(output_dir / "diagnostics.html", include_plotlyjs="cdn", auto_open=False)
     logger.info(f"Diagnostics plot saved to {output_dir / 'diagnostics.html'}")
 
 

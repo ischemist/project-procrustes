@@ -35,9 +35,6 @@ def main():
     parser.add_argument("--model", type=str, default="model_name", help="Name of the model")
     args = parser.parse_args()
 
-    ds = "n5"
-    PICKLE_PATH = BASE_DIR / "data" / "2-raw" / args.model / ds / f"{ds}_correct_paths_NS2n.pkl"
-
     # 1. Load the Benchmark Definition
     bench_def_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
     benchmark = load_benchmark(bench_def_path)
@@ -46,7 +43,10 @@ def main():
     smiles_map = benchmark.get_smiles_map()
 
     # 2. Load Predictions
-    raw_data = load_legacy_pickle(PICKLE_PATH)
+    n1_pickle = BASE_DIR / "data" / "2-raw" / args.model / "n1" / "n1_correct_paths_NS2n.pkl"
+    n5_pickle = BASE_DIR / "data" / "2-raw" / args.model / "n5" / "n5_correct_paths_NS2n.pkl"
+    raw_data_n1 = load_legacy_pickle(n1_pickle)
+    raw_data_n5 = load_legacy_pickle(n5_pickle)
 
     # 2. Initialize with EMPTY lists for ALL targets
     # This ensures we have a denominator for every target in the benchmark
@@ -55,17 +55,21 @@ def main():
     hits = 0
 
     # 3. Iterate and Match
-    for prediction_group in raw_data:
+    matched = set()
+    for prediction_group in raw_data_n5 + raw_data_n1:
         if not prediction_group:
             continue
 
         first_route_str = prediction_group[0][0]
         first_route_dict = eval(first_route_str)
         canon_smiles = canonicalize_smiles(first_route_dict.get("smiles"))
+        if canon_smiles in matched:
+            continue
 
         if canon_smiles in smiles_map:
             target_ids = smiles_map[canon_smiles]
             raw_routes = [eval(p[0]) for p in prediction_group]
+            matched.add(canon_smiles)
 
             for tid in target_ids:
                 target_obj = benchmark.targets[tid]
@@ -86,7 +90,7 @@ def main():
     # 5. Manifest
     manifest = create_manifest(
         action="scripts/directmultistep/ingest-dms-legacy",
-        sources=[PICKLE_PATH],
+        sources=[n1_pickle, n5_pickle],
         outputs=[(out_path, processed_predictions)],
         parameters={"benchmark": args.benchmark, "model": model_name},
         statistics={"n_targets_found": hits},

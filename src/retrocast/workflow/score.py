@@ -29,6 +29,8 @@ def score_model(
 
         scored_routes = []
         found_gt_rank = None
+        # Counter for the "Effective Rank" (only increments on solvable routes)
+        effective_rank_counter = 1
 
         for route in predicted_routes:
             # 1. Metric: Solvability
@@ -37,13 +39,13 @@ def score_model(
             # 2. Metric: Similarity (Exact Match)
             match = (gt_sig is not None) and is_exact_match(route, gt_sig)
 
+            if solved:
+                if match and found_gt_rank is None:
+                    found_gt_rank = effective_rank_counter
+                effective_rank_counter += 1
+
             # Store pre-computed flags for fast stats later
             scored_routes.append(ScoredRoute(rank=route.rank, is_solved=solved, is_gt_match=match))
-
-            # Track rank of first VALID solution (Solved + Match)
-            # This is what counts for "Top-K Accuracy"
-            if solved and match and found_gt_rank is None:
-                found_gt_rank = route.rank
 
         # Summary for this target
         is_solvable = any(r.is_solved for r in scored_routes)
