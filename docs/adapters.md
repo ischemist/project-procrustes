@@ -27,7 +27,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, RootModel, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_molecule_from_bipartite_node
-from retrocast.schemas import Route, TargetInput
+from retrocast.models.chem import Route, TargetIdentity
 from retrocast.exceptions import RetroCastException
 from retrocast.utils.logging import logger
 
@@ -50,7 +50,7 @@ class BipartiteRouteList(RootModel[list[BipartiteMoleculeInput]]):
     pass
 
 class BipartiteModelAdapter(BaseAdapter):
-    def cast(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
         validated_routes = BipartiteRouteList.model_validate(raw_data)
         for i, root_node in enumerate(validated_routes.root, start=1):
             try:
@@ -86,7 +86,7 @@ from collections.abc import Generator
 from typing import Any
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
-from retrocast.schemas import Route, TargetInput
+from retrocast.models.chem import Route, TargetIdentity
 from retrocast.exceptions import RetroCastException
 from retrocast.utils.logging import logger
 
@@ -97,7 +97,7 @@ class PrecursorModelAdapter(BaseAdapter):
         # ... your parsing logic here ...
         return precursor_map
 
-    def cast(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
         try:
             precursor_map = self._parse_route_string(raw_data["routes"])
             # Use the helper to build the tree from the target SMILES
@@ -123,8 +123,8 @@ from collections.abc import Generator
 from typing import Any
 from pydantic import BaseModel, RootModel, Field
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
-from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
+from retrocast.chem import canonicalize_smiles, get_inchi_key
+from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 
 # --- pydantic schemas for raw input validation ---
 class CustomTree(BaseModel):
@@ -159,7 +159,7 @@ class CustomModelAdapter(BaseAdapter):
             metadata={}
         )
 
-    def cast(self, raw_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
         validated_routes = CustomRouteList.model_validate(raw_data)
         for i, root_node in enumerate(validated_routes.root, start=1):
             target_molecule = self._build_molecule(root_node)
@@ -185,7 +185,7 @@ Create `tests/adapters/test_new_adapter.py` and inherit from `BaseAdapterTest`:
 import pytest
 from tests.adapters.test_base_adapter import BaseAdapterTest
 from retrocast.adapters.new_model_adapter import NewModelAdapter
-from retrocast.schemas import TargetInput
+from retrocast.models.chem import TargetIdentity
 
 class TestNewModelAdapterUnit(BaseAdapterTest):
     @pytest.fixture
@@ -208,11 +208,11 @@ class TestNewModelAdapterUnit(BaseAdapterTest):
         ...
 
     @pytest.fixture
-    def target_input(self) -> TargetInput:
+    def target_input(self) -> TargetIdentity:
         # return target info matching your valid route
 
     @pytest.fixture
-    def mismatched_target_info(self) -> TargetInput:
+    def mismatched_target_info(self) -> TargetIdentity:
         # return target info that doesn't match your route
         ...
 ```
@@ -319,7 +319,7 @@ uv run scripts/verify-hash.py --model new-model --dataset uspto-190
 
 1. **SMILES canonicalization**: Always canonicalize SMILES using `canonicalize_smiles()` before creating nodes. Different SMILES for the same molecule will break deduplication.
 
-2. **Target mismatch**: Ensure the root molecule in your tree matches `target_info.smiles` (after canonicalization).
+2. **Target mismatch**: Ensure the root molecule in your tree matches `target.smiles` (after canonicalization).
 
 3. **Circular references**: The tree must be acyclic. If a molecule appears multiple times, create separate `Molecule` instances (deduplication happens later).
 
@@ -335,8 +335,8 @@ If your model has special validation requirements, override the `validate()` met
 
 ```python
 class NewModelAdapter(BaseAdapter):
-    def validate(self, raw_data: Any, target_info: TargetInput) -> None:
-        super().validate(raw_data, target_info)
+    def validate(self, raw_data: Any, target: TargetIdentity) -> None:
+        super().validate(raw_data, target)
         # additional model-specific checks
         if not isinstance(raw_data, dict):
             raise ValueError("NewModel output must be a dictionary")

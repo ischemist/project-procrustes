@@ -6,9 +6,9 @@ from typing import Any
 from pydantic import BaseModel, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
+from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
-from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
+from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.utils.logging import logger
 
 
@@ -29,7 +29,7 @@ class TtlRouteList(RootModel[list[TtlRoute]]):
 class TtlRetroAdapter(BaseAdapter):
     """adapter for converting pre-processed ttlretro outputs to the route schema."""
 
-    def cast(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
         """
         validates the pre-processed json data for ttlretro, transforms it, and yields route objects.
         """
@@ -49,7 +49,7 @@ class TtlRetroAdapter(BaseAdapter):
                 logger.warning(f"  - route for '{target_input.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, route: TtlRoute, target_input: TargetInput, rank: int) -> Route:
+    def _transform(self, route: TtlRoute, target_input: TargetIdentity, rank: int) -> Route:
         """
         orchestrates the transformation of a single ttlretro route.
         raises RetroCastException on failure.

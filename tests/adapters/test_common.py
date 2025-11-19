@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from retrocast.adapters.common import build_molecule_from_bipartite_node, build_molecule_from_precursor_map
-from retrocast.domain.chem import canonicalize_smiles
+from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError
 
 

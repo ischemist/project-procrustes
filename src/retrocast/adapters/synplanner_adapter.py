@@ -6,9 +6,9 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
+from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
-from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
+from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -50,27 +50,25 @@ class SynPlannerRouteList(RootModel[list[SynPlannerMoleculeInput]]):
 class SynPlannerAdapter(BaseAdapter):
     """adapter for converting synplanner-style outputs to the route schema."""
 
-    def cast(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         """
         validates raw synplanner data, transforms it, and yields route objects.
         """
         try:
             validated_routes = SynPlannerRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(
-                f"  - raw data for target '{target_info.id}' failed synplanner schema validation. error: {e}"
-            )
+            logger.warning(f"  - raw data for target '{target.id}' failed synplanner schema validation. error: {e}")
             return
 
         for rank, synplanner_tree_root in enumerate(validated_routes.root, start=1):
             try:
-                route = self._transform(synplanner_tree_root, target_info, rank)
+                route = self._transform(synplanner_tree_root, target, rank)
                 yield route
             except RetroCastException as e:
-                logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
+                logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, synplanner_root: SynPlannerMoleculeInput, target_info: TargetInput, rank: int) -> Route:
+    def _transform(self, synplanner_root: SynPlannerMoleculeInput, target: TargetIdentity, rank: int) -> Route:
         """
         orchestrates the transformation of a single synplanner output tree.
         raises RetroCastException on failure.
@@ -78,10 +76,10 @@ class SynPlannerAdapter(BaseAdapter):
         # use the custom recursive builder for synplanner (has mapped_smiles on reaction nodes)
         target_molecule = self._build_molecule_from_synplanner_node(synplanner_root)
 
-        if target_molecule.smiles != target_info.smiles:
+        if target_molecule.smiles != target.smiles:
             msg = (
-                f"mismatched smiles for target {target_info.id}. "
-                f"expected canonical: {target_info.smiles}, but adapter produced: {target_molecule.smiles}"
+                f"mismatched smiles for target {target.id}. "
+                f"expected canonical: {target.smiles}, but adapter produced: {target_molecule.smiles}"
             )
             logger.error(msg)
             raise AdapterLogicError(msg)

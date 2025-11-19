@@ -2,8 +2,8 @@
 
 from typing import Any
 
-from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
-from retrocast.schemas import Molecule, ReactionStep, Route
+from retrocast.chem import canonicalize_smiles, get_inchi_key
+from retrocast.models.chem import Molecule, ReactionStep, Route
 
 # ==============================================================================
 # Contract/Regression Tests using Pharma Routes
@@ -37,7 +37,7 @@ class TestPharmaRoutesContract:
         # Verify route properties
         assert route.rank == 1
         assert not route.target.is_leaf
-        assert route.depth > 0
+        assert route.length > 0
 
         # Expected leaves based on pharma_routes.json structure
         # Vonoprazan has 3 leaf nodes: "O=Cc1c[nH]c(-c2ccccc2F)c1", "O=S(=O)(Cl)c1cccnc1", "CN"
@@ -57,7 +57,7 @@ class TestPharmaRoutesContract:
         # Verify route properties
         assert route.rank == 1
         assert not route.target.is_leaf
-        assert route.depth >= 3  # Mitapivat has a deeper tree
+        assert route.length >= 3  # Mitapivat has a deeper tree
 
         # Count leaves
         leaves = route.leaves
@@ -121,7 +121,7 @@ class TestPharmaRoutesContract:
         # vonoprazan-1 has 2 levels of reactions
         # Level 1: target -> [intermediate, "CN"]
         # Level 2: intermediate -> ["O=Cc1c[nH]c(-c2ccccc2F)c1", "O=S(=O)(Cl)c1cccnc1"]
-        assert route.depth == 2
+        assert route.length == 2
 
     def test_mitapivat_depth_calculation(self, pharma_routes_data: dict[str, Any]):
         """Test specific depth calculation for mitapivat route."""
@@ -131,4 +131,4 @@ class TestPharmaRoutesContract:
 
         # Mitapivat has a deeper tree structure
         # Should have depth >= 4 based on the nested structure
-        assert route.depth >= 4
+        assert route.length >= 4

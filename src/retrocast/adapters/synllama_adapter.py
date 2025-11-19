@@ -6,9 +6,9 @@ from typing import Any
 from pydantic import BaseModel, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
+from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
-from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
+from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
@@ -26,23 +26,23 @@ class SynLlamaRouteList(RootModel[list[SynLlamaRouteInput]]):
 class SynLlaMaAdapter(BaseAdapter):
     """adapter for converting pre-processed synllama outputs to the Route schema."""
 
-    def cast(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         """validates the pre-processed json data for synllama and yields Route objects."""
         try:
             validated_routes = SynLlamaRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - data for target '{target_info.id}' failed synllama schema validation. error: {e}")
+            logger.warning(f"  - data for target '{target.id}' failed synllama schema validation. error: {e}")
             return
 
         for rank, route in enumerate(validated_routes.root, start=1):
             try:
-                route_obj = self._transform(route, target_info, rank=rank)
+                route_obj = self._transform(route, target, rank=rank)
                 yield route_obj
             except RetroCastException as e:
-                logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
+                logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, route: SynLlamaRouteInput, target_info: TargetInput, rank: int) -> Route:
+    def _transform(self, route: SynLlamaRouteInput, target: TargetIdentity, rank: int) -> Route:
         """orchestrates the transformation of a single synllama route string."""
         # the final product is always the last element in the semicolon-delimited string.
         # this is the most reliable way to identify it.
@@ -52,17 +52,15 @@ class SynLlaMaAdapter(BaseAdapter):
 
         # the final product is always the last element. this is the most reliable way to identify it.
         parsed_target_smiles = canonicalize_smiles(synthesis_parts[-1])
-        if parsed_target_smiles != target_info.smiles:
+        if parsed_target_smiles != target.smiles:
             msg = (
-                f"mismatched smiles for target {target_info.id}. "
-                f"expected canonical: {target_info.smiles}, but adapter produced: {parsed_target_smiles}"
+                f"mismatched smiles for target {target.id}. "
+                f"expected canonical: {target.smiles}, but adapter produced: {parsed_target_smiles}"
             )
             raise AdapterLogicError(msg)
 
         precursor_map = self._parse_synthesis_string(route.synthesis_string)
-        target_molecule = self._build_molecule_from_precursor_map(
-            smiles=target_info.smiles, precursor_map=precursor_map
-        )
+        target_molecule = self._build_molecule_from_precursor_map(smiles=target.smiles, precursor_map=precursor_map)
         return Route(target=target_molecule, rank=rank, metadata={})
 
     def _build_molecule_from_precursor_map(

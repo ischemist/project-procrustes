@@ -1,8 +1,8 @@
 import pytest
 
 from retrocast.adapters.multistepttl_adapter import TtlRetroAdapter
-from retrocast.domain.chem import canonicalize_smiles
-from retrocast.schemas import TargetInput
+from retrocast.chem import canonicalize_smiles
+from retrocast.models.chem import TargetInput
 from retrocast.utils.serializers import serialize_multistepttl_directory
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
@@ -91,7 +91,7 @@ class TestTtlRetroAdapterContract:
 
         for route, raw_route in zip(routes, serialized_ibuprofen_data, strict=False):
             expected_steps = raw_route["metadata"]["steps"]
-            assert route.depth == expected_steps
+            assert route.length == expected_steps
 
     def test_all_molecules_have_inchikeys(self, serialized_ibuprofen_data):
         """all molecules in route should have inchikeys."""

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from typing import Any
 
-from retrocast.schemas import Route, TargetInput
+from retrocast.models.chem import Route, TargetIdentity
 
 
 class BaseAdapter(ABC):
@@ -14,7 +14,7 @@ class BaseAdapter(ABC):
     """
 
     @abstractmethod
-    def cast(self, raw_target_data: Any, target_input: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         """
         Validates, transforms, and yields Routes from raw model data.
 
@@ -35,7 +35,7 @@ class BaseAdapter(ABC):
                     routes (e.g., RetroChimera). `raw_target_data` is typically a `dict`.
 
                 The adapter is responsible for handling the specific structure of its model.
-            target_input: The identity of the target molecule (id and canonical SMILES).
+            target: The identity of the target molecule (id and canonical SMILES).
 
         Yields:
             Successfully transformed Route objects.

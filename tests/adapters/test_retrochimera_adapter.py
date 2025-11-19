@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 from retrocast.adapters.retrochimera_adapter import RetrochimeraAdapter
-from retrocast.domain.chem import canonicalize_smiles
-from retrocast.schemas import TargetInput
+from retrocast.chem import canonicalize_smiles
+from retrocast.models.chem import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 

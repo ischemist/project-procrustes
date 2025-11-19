@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from retrocast.schemas import Route
+from retrocast.models.chem import Route
 
 
 class BaseAdapterTest(ABC):
@@ -48,13 +48,13 @@ class BaseAdapterTest(ABC):
     @pytest.fixture
     @abstractmethod
     def target_input(self) -> Any:
-        """Provide the correct TargetInput for the `raw_valid_route_data` fixture."""
+        """Provide the correct TargetIdentity for the `raw_valid_route_data` fixture."""
         raise NotImplementedError
 
     @pytest.fixture
     @abstractmethod
     def mismatched_target_input(self) -> Any:
-        """Provide a TargetInput whose smiles does NOT match the root of `raw_valid_route_data`."""
+        """Provide a TargetIdentity whose smiles does NOT match the root of `raw_valid_route_data`."""
         raise NotImplementedError
 
     # --- Common tests, inherited by all adapter tests ---

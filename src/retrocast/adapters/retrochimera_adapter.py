@@ -6,9 +6,9 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
+from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import RetroCastException
-from retrocast.schemas import Molecule, ReactionStep, Route, TargetInput
+from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
@@ -57,55 +57,51 @@ class RetrochimeraData(BaseModel):
 class RetrochimeraAdapter(BaseAdapter):
     """adapter for converting retrochimera-style outputs to the Route schema."""
 
-    def cast(self, raw_target_data: Any, target_info: TargetInput) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         """
         validates raw retrochimera data, transforms it, and yields Route objects.
         """
         try:
             validated_data = RetrochimeraData.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(
-                f"  - raw data for target '{target_info.id}' failed retrochimera schema validation. error: {e}"
-            )
+            logger.warning(f"  - raw data for target '{target.id}' failed retrochimera schema validation. error: {e}")
             return
 
         if validated_data.result.error is not None:
             error_msg = validated_data.result.error.get("message", "unknown error")
             error_type = validated_data.result.error.get("type", "unknown")
-            logger.warning(
-                f"  - retrochimera reported an error for target '{target_info.id}': {error_type} - {error_msg}"
-            )
+            logger.warning(f"  - retrochimera reported an error for target '{target.id}': {error_type} - {error_msg}")
             return
 
-        if canonicalize_smiles(validated_data.smiles) != target_info.smiles:
+        if canonicalize_smiles(validated_data.smiles) != target.smiles:
             logger.warning(
-                f"  - mismatched smiles for target '{target_info.id}': expected {target_info.smiles}, got {canonicalize_smiles(validated_data.smiles)}"
+                f"  - mismatched smiles for target '{target.id}': expected {target.smiles}, got {canonicalize_smiles(validated_data.smiles)}"
             )
             return
 
         if validated_data.result.outputs is None:
-            logger.warning(f"  - no outputs found for target '{target_info.id}'")
+            logger.warning(f"  - no outputs found for target '{target.id}'")
             return
 
         rank = 1
         for output in validated_data.result.outputs:
             for route in output.routes:
                 try:
-                    route_obj = self._transform(route, target_info, rank=rank)
+                    route_obj = self._transform(route, target, rank=rank)
                     yield route_obj
                     rank += 1
                 except RetroCastException as e:
-                    logger.warning(f"  - route for '{target_info.id}' failed transformation: {e}")
+                    logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
                     continue
 
-    def _transform(self, route: RetrochimeraRoute, target_info: TargetInput, rank: int) -> Route:
+    def _transform(self, route: RetrochimeraRoute, target: TargetIdentity, rank: int) -> Route:
         """
         orchestrates the transformation of a single retrochimera route.
         raises RetroCastException on failure.
         """
         precursor_map = self._build_precursor_map(route)
         target_molecule = self._build_molecule_from_precursor_map(
-            smiles=target_info.smiles,
+            smiles=target.smiles,
             precursor_map=precursor_map,
         )
 

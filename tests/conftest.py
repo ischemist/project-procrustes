@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
-from retrocast.domain.chem import canonicalize_smiles
-from retrocast.schemas import TargetInput
+from retrocast.chem import canonicalize_smiles
+from retrocast.models.chem import TargetIdentity, TargetInput
 
 TEST_DATA_DIR = Path("tests/testing_data")
 MODEL_PRED_DIR = TEST_DATA_DIR / "model-predictions"
@@ -121,7 +121,7 @@ def pharma_routes_data() -> dict[str, Any]:
 
 
 @pytest.fixture(scope="session")
-def methylacetate_target_input() -> TargetInput:
+def methylacetate_target_input() -> TargetIdentity:
     """provides the target input object for methyl acetate."""
     return TargetInput(id="methylacetate", smiles=canonicalize_smiles("COC(C)=O"))
 
@@ -138,7 +138,7 @@ def sample_routes_with_reactions() -> dict[str, list]:
     - target_B: 1 route for aspirin synthesis
       - Route 1: Aspirin <- (Salicylic acid + Ac2O) where Salicylic acid <- (Phenol + CO2)
     """
-    from retrocast.schemas import Molecule, ReactionStep, Route
+    from retrocast.models.chem import Molecule, ReactionStep, Route
     from retrocast.typing import InchiKeyStr, SmilesStr
 
     # Define leaf molecules (building blocks)
