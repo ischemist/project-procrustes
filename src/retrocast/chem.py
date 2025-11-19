@@ -51,7 +51,7 @@ def canonicalize_smiles(smiles: str, remove_mapping: bool = False) -> SmilesStr:
         raise RetroCastException(f"An unexpected error occurred during SMILES processing: {e}") from e
 
 
-def get_inchi_key(smiles: str) -> str:
+def get_inchi_key(smiles: str) -> InchiKeyStr:
     """
     Generates a standard InChIKey from a SMILES string.
 

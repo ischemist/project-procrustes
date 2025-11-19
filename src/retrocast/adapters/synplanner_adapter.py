@@ -9,6 +9,7 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
+from retrocast.typing import ReactionSmilesStr
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -122,7 +123,7 @@ class SynPlannerAdapter(BaseAdapter):
             reactant_molecules.append(reactant_mol)
 
         # Extract mapped_smiles from the 'smiles' field of the reaction node
-        mapped_smiles = raw_reaction_node.smiles if hasattr(raw_reaction_node, "smiles") else None
+        mapped_smiles = ReactionSmilesStr(raw_reaction_node.smiles) if hasattr(raw_reaction_node, "smiles") else None
 
         # Create the reaction step
         synthesis_step = ReactionStep(

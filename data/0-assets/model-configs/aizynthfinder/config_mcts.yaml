@@ -6,7 +6,7 @@ expansion:
     - data/0-assets/model-configs/aizynthfinder/uspto_ringbreaker_model.onnx
     - data/0-assets/model-configs/aizynthfinder/uspto_ringbreaker_templates.csv.gz
 filter:
-  buyables-bb: data/0-assets/model-configs/assets/buyables-stock.hdf5
-  n1-n5-bb: data/0-assets/model-configs/assets/n1-n5-stock.hdf5
+  uspto: /Users/morgunov/Developer/batista/ursa-evaluations/data/models/aizynthfinder/uspto_filter_model.onnx
 stock:
-  retrocast-bb: data/0-assets/model-configs/aizynthfinder/retrocast-bb-stock-v3.hdf5
+  buyables-bb: data/1-benchmarks/stocks/buyables-stock.hdf5
+  n1-n5-bb: data/1-benchmarks/stocks/n1-n5-stock.hdf5

@@ -6,13 +6,12 @@ from tqdm import tqdm
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.curation.filtering import deduplicate_routes
 from retrocast.curation.sampling import sample_k_by_length, sample_random_k, sample_top_k
-from retrocast.io.files import save_json_gz
 from retrocast.io.manifests import generate_model_hash
+from retrocast.io.routes import save_routes
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.chem import Route
 from retrocast.utils.logging import logger
 
-# Registry of sampling functions
 SAMPLING_STRATEGIES = {
     "top-k": sample_top_k,
     "random-k": sample_random_k,
@@ -26,16 +25,16 @@ def ingest_model_predictions(
     raw_data: Any,
     adapter: BaseAdapter,
     output_dir: Path,
-    anonymize: bool = True,
+    anonymize: bool = False,
     sampling_strategy: str | None = None,
     sample_k: int | None = None,
 ) -> tuple[dict[str, list[Route]], Path, dict[str, int]]:
     """
     Converts raw model outputs into standard format.
+    Handles raw data keyed by Target ID (preferred) or SMILES (fallback).
     """
     logger.info(f"Ingesting results for {model_name} on {benchmark.name}...")
 
-    # 1. Validate Sampling Config
     if sampling_strategy:
         if sampling_strategy not in SAMPLING_STRATEGIES:
             raise ValueError(f"Unknown sampling strategy: {sampling_strategy}")
@@ -45,46 +44,78 @@ def ingest_model_predictions(
         logger.info(f"Applying sampling: {sampling_strategy} (k={sample_k})")
 
     processed_routes: dict[str, list[Route]] = {}
-    stats = {"n_raw_inputs": 0, "n_targets_matched": 0, "n_routes_generated": 0, "n_routes_saved": 0}
 
-    # 3. Iterate Raw Data
+    # Expanded stats tracking
+    stats = {
+        "n_benchmark_targets": len(benchmark.targets),
+        "n_found_in_raw": 0,
+        "n_targets_with_routes": 0,
+        "n_total_routes_generated": 0,
+        "n_total_routes_saved": 0,
+    }
+
+    # 3. Iterate Benchmark Targets (The Source of Truth)
     for target_id, target in tqdm(benchmark.targets.items(), desc="Ingesting"):
-        stats["n_raw_inputs"] += 1
+        # --- Resolution Logic ---
+        raw_payload = None
 
-        if target_id not in raw_data:
-            # Missing prediction (failed run or timeout)
-            # We store empty list for solvability denominator
+        # Strategy A: Direct ID Match (Preferred)
+        if target_id in raw_data:
+            raw_payload = raw_data[target_id]
+
+        # Strategy B: SMILES Match (Fallback)
+        elif target.smiles in raw_data:
+            # Warning: If multiple targets have same SMILES, raw_data might be ambiguous.
+            # But for ingestion, taking the result for that SMILES is usually correct behavior.
+            raw_payload = raw_data[target.smiles]
+
+        if raw_payload is None:
+            # Target was not found in the raw predictions
             processed_routes[target_id] = []
             continue
 
-        raw_payload = raw_data[target_id]
-        routes = list(adapter.cast(raw_payload, target=target))
+        stats["n_found_in_raw"] += 1
+
+        # --- Adaptation ---
+        try:
+            # Adapter returns an iterator of Routes
+            routes = list(adapter.cast(raw_payload, target=target))
+        except Exception as e:
+            logger.warning(f"Adapter failed for {target_id}: {e}")
+            routes = []
+
         if not routes:
             processed_routes[target_id] = []
             continue
 
-        # 4. Deduplicate & Sample
+        # --- Deduplication & Sampling ---
         unique_routes = deduplicate_routes(routes)
 
         if sampling_strategy:
-            assert sample_k is not None, "sample_k must be provided when using a sampling strategy"
-            # Apply the chosen sampling logic (e.g. keep only top 50)
+            assert sample_k is not None
             unique_routes = sampler_fn(unique_routes, sample_k)
 
         processed_routes[target_id] = unique_routes
-        stats["n_routes_generated"] += len(routes)
-        stats["n_routes_saved"] += len(unique_routes)
+
+        # --- Stats Update ---
+        stats["n_total_routes_generated"] += len(routes)
+        stats["n_total_routes_saved"] += len(unique_routes)
+        if len(unique_routes) > 0:
+            stats["n_targets_with_routes"] += 1
 
     # 6. Save
     model_hash = generate_model_hash(model_name)
     folder_name = model_hash if anonymize else model_name
 
-    # Structure: data/processed/{benchmark}/{model}/routes.json.gz
     save_path_dir = output_dir / benchmark.name / folder_name
     save_path_dir.mkdir(parents=True, exist_ok=True)
     save_file = save_path_dir / "routes.json.gz"
 
-    save_json_gz(processed_routes, save_file)
+    save_routes(processed_routes, save_file)
 
-    logger.info(f"Saved {stats['n_routes_saved']} routes covering {stats['n_targets_matched']} targets.")
+    logger.info(
+        f"Ingestion complete. Found data for {stats['n_found_in_raw']}/{stats['n_benchmark_targets']} targets. "
+        f"Saved {stats['n_total_routes_saved']} valid routes."
+    )
+
     return processed_routes, save_file, stats
