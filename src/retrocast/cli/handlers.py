@@ -97,10 +97,7 @@ def _ingest_single(model_name: str, benchmark_name: str, config: dict, paths: di
         if raw_path.suffix == ".gz":
             raw_data = load_json_gz(raw_path)
         else:
-            # Fallback for pickles if needed, or raise error
-            import pandas as pd  # or pickle
-
-            raw_data = pd.read_pickle(raw_path)  # example
+            raise NotImplementedError("Unsupported file format")
 
         # 4. Run Workflow
         processed_routes, out_path, stats = ingest.ingest_model_predictions(

@@ -31,7 +31,6 @@ from retrocast.models.benchmark import ExecutionStats
 from retrocast.utils.logging import logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
-base_dir = Path(__file__).resolve().parents[2]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -49,7 +48,7 @@ if __name__ == "__main__":
     save_dir = BASE_DIR / "data" / "2-raw" / "aizynthfinder-mcts" / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    config_path = base_dir / "data" / "0-assets" / "model-configs" / "aizynthfinder" / "config_mcts.yaml"
+    config_path = BASE_DIR / "data" / "0-assets" / "model-configs" / "aizynthfinder" / "config_mcts.yaml"
 
     results: dict[str, dict[str, Any]] = {}
     solved_count = 0
@@ -75,7 +74,8 @@ if __name__ == "__main__":
                 solved_count += 1
             else:
                 results[target.id] = {}
-        except Exception:
+        except Exception as e:
+            logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
             results[target.id] = {}
         finally:
             t_end_wall = time.perf_counter()

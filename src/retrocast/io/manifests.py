@@ -135,8 +135,11 @@ def create_manifest(
         elif isinstance(obj, dict) and len(obj) > 0:
             # Check if this is truly a dict[str, list[Route]]
             first_value = next(iter(obj.values()))
-            if isinstance(first_value, list) and len(first_value) > 0 and isinstance(first_value[0], Route):
-                # This is a predictions dict with Route objects
+            if (
+                isinstance(first_value, list)
+                and len(first_value) > 0
+                and all(isinstance(r, Route) for r in first_value)
+            ):
                 c_hash = _calculate_predictions_content_hash(obj)
             # Otherwise, fall through and only use file hash
 
