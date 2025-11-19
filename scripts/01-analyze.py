@@ -15,6 +15,7 @@ from retrocast.metrics.bootstrap import compute_metric_with_ci, get_is_solvable,
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.stats import ModelStatistics
 from retrocast.utils.logging import logger
+from retrocast.visualization.plots import plot_single_model_diagnostics
 from retrocast.visualization.report import generate_markdown_report
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -79,6 +80,10 @@ def main():
 
     logger.info(f"Analysis complete. Report saved to {output_dir / 'report.md'}")
     print("\n" + report)
+
+    fig = plot_single_model_diagnostics(final_stats)
+    fig.write_html(output_dir / "diagnostics.html", include_plotlyjs="cdn", auto_open=True)
+    logger.info(f"Diagnostics plot saved to {output_dir / 'diagnostics.html'}")
 
 
 if __name__ == "__main__":
