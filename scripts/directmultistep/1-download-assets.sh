@@ -29,7 +29,7 @@ case "$all_choice" in
             info="${model_info[$i]}"
             IFS="|" read -r filename size <<< "$info"
             echo "Downloading ${model} model ckpt (${size} MB)..."
-            curl -o "data/models/dms/checkpoints/${filename}" "${CKPT_URL}/${filename}"
+            curl -o "data/0-assets/model-configs/dms/checkpoints/${filename}" "${CKPT_URL}/${filename}"
         done
         ;;
     * )
@@ -40,7 +40,7 @@ case "$all_choice" in
             read -p "Do you want to download ${model} model ckpt? (${size} MB) [y/N]: " choice
             case "$choice" in
                 y|Y )
-                    curl -o "data/models/dms/checkpoints/${filename}" "${CKPT_URL}/${filename}"
+                    curl -o "data/0-assets/model-configs/dms/checkpoints/${filename}" "${CKPT_URL}/${filename}"
                     ;;
                 * )
                     echo "Skipping ${model} ckpt."

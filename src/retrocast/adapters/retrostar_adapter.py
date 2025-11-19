@@ -15,35 +15,33 @@ from retrocast.utils.logging import logger
 class RetroStarAdapter(BaseAdapter):
     """Adapter for converting RetroStar-style outputs to the Route schema."""
 
-    def cast(self, raw_target_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         """
         Validates raw RetroStar data, transforms its single route string, and yields a Route.
         """
         if not isinstance(raw_target_data, dict):
             logger.warning(
-                f"  - Raw data for target '{target_input.id}' failed validation: expected a dict, got {type(raw_target_data).__name__}."
+                f"  - Raw data for target '{target.id}' failed validation: expected a dict, got {type(raw_target_data).__name__}."
             )
             return
 
         if not raw_target_data.get("succ"):
-            logger.debug(f"Skipping raw data for '{target_input.id}': 'succ' is not true.")
+            logger.debug(f"Skipping raw data for '{target.id}': 'succ' is not true.")
             return
 
         route_str = raw_target_data.get("routes")
         if not isinstance(route_str, str) or not route_str:
-            logger.warning(
-                f"  - Raw data for target '{target_input.id}' failed validation: no valid 'routes' string found."
-            )
+            logger.warning(f"  - Raw data for target '{target.id}' failed validation: no valid 'routes' string found.")
             return
 
         # Extract route_cost if available
         route_cost = raw_target_data.get("route_cost")
 
         try:
-            route = self._transform(route_str, target_input, route_cost=route_cost)
+            route = self._transform(route_str, target, route_cost=route_cost)
             yield route
         except RetroCastException as e:
-            logger.warning(f"  - Route for '{target_input.id}' failed transformation: {e}")
+            logger.warning(f"  - Route for '{target.id}' failed transformation: {e}")
             return
 
     def _parse_route_string(self, route_str: str) -> tuple[SmilesStr, PrecursorMap]:
@@ -87,23 +85,23 @@ class RetroStarAdapter(BaseAdapter):
                 f"Failed to parse route string step. Invalid format near '{current_step_for_error_reporting[:70]}...'."
             ) from e
 
-    def _transform(self, route_str: str, target_input: TargetIdentity, route_cost: float | None = None) -> Route:
+    def _transform(self, route_str: str, target: TargetIdentity, route_cost: float | None = None) -> Route:
         """
         Orchestrates the transformation of a single RetroStar route string.
         Raises RetroCastException on failure.
         """
         parsed_target_smiles, precursor_map = self._parse_route_string(route_str)
 
-        if parsed_target_smiles != target_input.smiles:
+        if parsed_target_smiles != target.smiles:
             msg = (
-                f"Mismatched SMILES for target {target_input.id}. "
-                f"Expected canonical: {target_input.smiles}, but adapter produced: {parsed_target_smiles}"
+                f"Mismatched SMILES for target {target.id}. "
+                f"Expected canonical: {target.smiles}, but adapter produced: {parsed_target_smiles}"
             )
             raise AdapterLogicError(msg)
 
         # Build the molecule tree using the new schema helper
         target_molecule = build_molecule_from_precursor_map(
-            smiles=SmilesStr(target_input.smiles), precursor_map=precursor_map
+            smiles=SmilesStr(target.smiles), precursor_map=precursor_map
         )
 
         # Build metadata

@@ -26,6 +26,7 @@ aizyn = [
   "numpy<=2.2",  # Numba needs NumPy 2.2 or less. Got NumPy 2.3.
 ]
 dms = ["directmultistep"]
+retro-star = ["retro-star>=0.1.0", "numpy", "pandas"]
 # synplanner = ["synplanner==1.2.0"]
 # syntheseus = [
 #     "syntheseus[retro-knn]>=0.5.0",
@@ -50,18 +51,12 @@ viz = [
   "kaleido>=1.1.0",
   "plotly>=6.3.0",
 ]
-# retro-star = [
-#     "retro-star>=0.1.0",
-#     "numpy==2.3.3",
-#     "pandas==2.3.2"
-# ]
 # analysis = []
 
 [dependency-groups]
 dev = [
   "ipykernel>=6.29.5",
   "mypy",
-  "pandas>=2.1.4",
   "pytest",
   "pytest-cov",
   "pytest-mock>=3.14.1",
@@ -146,6 +141,7 @@ conflicts = [
   [
     { extra = "dms" },
     { extra = "aizyn" },
+    { extra = "retro-star" },
   ]
 ]
 # conflicts = [

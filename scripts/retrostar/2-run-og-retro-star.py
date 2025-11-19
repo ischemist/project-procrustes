@@ -1,15 +1,18 @@
 """
 Run Retro* retrosynthesis predictions on a batch of targets.
 
-Example usage:
-    uv run --extra retro-star --extra torch-cpu scripts/retrostar/2-run-og-retro-star.py --target-name "uspto-190"
+This script processes targets from a benchmark using Retro* algorithm
+and saves results in a structured format matching other prediction scripts.
 
-The target CSV file should be located at: data/targets/{target_name}.csv
-Results are saved to: data/evaluations/retro-star/{target_name}/
+Example usage:
+    uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark random-n5-2-seed=20251030 --stock n1-n5-stock
+    uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark random-n5-2-seed=20251030 --stock n1-n5-stock --effort high
+
+The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
+Results are saved to: data/2-raw/retro-star-{stock}[-{effort}]/{benchmark_name}/
 """
 
 import argparse
-import json
 import time
 from pathlib import Path
 from typing import Any
@@ -18,9 +21,16 @@ import numpy as np
 from retro_star.api import RSPlanner
 from tqdm import tqdm
 
-from retrocast.io import load_targets_csv, save_json_gz
+from retrocast.io.files import save_json_gz
+from retrocast.io.loaders import load_benchmark, load_stock_file, save_execution_stats
+from retrocast.io.manifests import create_manifest
+from retrocast.models.benchmark import ExecutionStats
+from retrocast.utils.logging import logger
 
-base_dir = Path(__file__).resolve().parents[2]
+BASE_DIR = Path(__file__).resolve().parents[2]
+
+RETROSTAR_DIR = BASE_DIR / "data" / "0-assets" / "model-configs" / "retro-star"
+STOCKS_DIR = BASE_DIR / "data" / "1-benchmarks" / "stocks"
 
 
 def convert_numpy(obj: Any) -> Any:
@@ -39,58 +49,95 @@ def convert_numpy(obj: Any) -> Any:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--target-name", type=str, required=True, help="Name of the target set")
+    parser.add_argument(
+        "--benchmark", type=str, required=True, help="Name of the benchmark set (e.g. stratified-linear-600)"
+    )
+    parser.add_argument("--stock", type=str, required=True, help="Name of the stock set (e.g. n1-n5-bb)")
+    parser.add_argument(
+        "--effort",
+        type=str,
+        default="normal",
+        choices=["normal", "high"],
+        help="Search effort level: normal (100 iterations) or high (500 iterations)",
+    )
     args = parser.parse_args()
 
-    # Load targets
-    target_file = base_dir / "data" / "targets" / f"{args.target_name}.csv"
-    targets = load_targets_csv(target_file)
+    # Set iterations based on effort level
+    iterations = 500 if args.effort == "high" else 100
 
-    # Setup save directory
-    save_dir = base_dir / "data" / "evaluations" / "retro-star" / args.target_name
+    # 1. Load Benchmark
+    bench_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
+    benchmark = load_benchmark(bench_path)
+
+    # 2. Load Stock
+    stock_path = STOCKS_DIR / f"{args.stock}.txt"
+    stock_set = load_stock_file(stock_path)
+
+    # 3. Setup Output
+    folder_name = f"retro-star-{args.stock}" if args.effort == "normal" else f"retro-star-{args.stock}-{args.effort}"
+    save_dir = BASE_DIR / "data" / "2-raw" / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    # Initialize planner
-    starting_molecules = base_dir / "data" / "models" / "assets" / "retrocast-bb-stock-v3-canon.csv"
-    retro_star_dir = base_dir / "data" / "models" / "retro-star"
+    logger.info(f"stock: {args.stock}")
 
+    logger.info(f"effort: {args.effort} (iterations={iterations})")
+
+    # Initialize planner with the specified stock and iterations
     planner = RSPlanner(
         gpu=-1,
         use_value_fn=True,
-        iterations=100,
+        iterations=iterations,
         expansion_topk=50,
-        starting_molecules=str(starting_molecules),
-        mlp_templates=str(retro_star_dir / "one_step_model" / "template_rules_1.dat"),
-        mlp_model_dump=str(retro_star_dir / "one_step_model" / "saved_rollout_state_1_2048.ckpt"),
-        save_folder=str(retro_star_dir / "saved_models"),
+        starting_molecules=str(stock_path),
+        mlp_templates=str(RETROSTAR_DIR / "one_step_model" / "template_rules_1.dat"),
+        mlp_model_dump=str(RETROSTAR_DIR / "one_step_model" / "saved_rollout_state_1_2048.ckpt"),
+        save_folder=str(RETROSTAR_DIR / "saved_models"),
     )
 
-    results = {}
+    logger.info("Retrosynthesis starting")
+
+    results: dict[str, dict[str, Any]] = {}
     solved_count = 0
-    start = time.time()
+    runtime = ExecutionStats()
 
-    for target_key, target_smiles in tqdm(targets.items()):
-        result = planner.plan(target_smiles)
+    for target in tqdm(benchmark.targets.values(), desc="Finding retrosynthetic paths"):
+        t_start_wall = time.perf_counter()
+        t_start_cpu = time.process_time()
 
-        if result and result["succ"]:
-            # Convert numpy types to native python types for JSON serialization
-            results[target_key] = convert_numpy(result)
-            solved_count += 1
-        else:
-            results[target_key] = {}
+        try:
+            result = planner.plan(target.smiles)
 
-    end = time.time()
+            if result and result["succ"]:
+                # Convert numpy types to native python types for JSON serialization
+                results[target.id] = convert_numpy(result)
+                solved_count += 1
+            else:
+                results[target.id] = {}
+        except Exception as e:
+            logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
+            results[target.id] = {}
+        finally:
+            t_end_wall = time.perf_counter()
+            t_end_cpu = time.process_time()
+            runtime.wall_time[target.id] = t_end_wall - t_start_wall
+            runtime.cpu_time[target.id] = t_end_cpu - t_start_cpu
 
     summary = {
         "solved_count": solved_count,
-        "total_targets": len(targets),
-        "time_elapsed": end - start,
+        "total_targets": len(benchmark.targets),
     }
 
-    with open(save_dir / "summary.json", "w") as f:
-        json.dump(summary, f)
     save_json_gz(results, save_dir / "results.json.gz")
+    save_execution_stats(runtime, save_dir / "execution_stats.json.gz")
+    manifest = create_manifest(
+        action="scripts/retrostar/2-run-og-retro-star.py",
+        sources=[bench_path, stock_path],
+        outputs=[(save_dir / "results.json.gz", results)],
+        statistics=summary,
+    )
 
-    print(f"Completed processing {len(targets)} targets")
-    print(f"Solved: {solved_count}")
-    print(f"Time elapsed: {end - start:.2f} seconds")
+    with open(save_dir / "manifest.json", "w") as f:
+        f.write(manifest.model_dump_json(indent=2))
+
+    logger.info(f"Completed processing {len(benchmark.targets)} targets")
+    logger.info(f"Solved: {solved_count}")

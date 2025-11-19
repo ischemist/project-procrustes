@@ -34,7 +34,7 @@ class DMSRouteList(RootModel[list[DMSTree]]):
 class DMSAdapter(BaseAdapter):
     """Adapter for converting DMS-style model outputs to the Route schema."""
 
-    def cast(self, raw_target_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         """
         Validates raw DMS data, transforms it, and yields Route objects.
         """
@@ -42,21 +42,21 @@ class DMSAdapter(BaseAdapter):
             # 1. Model-specific validation happens HERE, inside the adapter.
             validated_routes = DMSRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.debug(f"  - Raw data for target '{target_input.id}' failed DMS schema validation. Error: {e}")
+            logger.debug(f"  - Raw data for target '{target.id}' failed DMS schema validation. Error: {e}")
             return  # Stop processing this target
 
         # 2. Iterate and transform each valid route
         for rank, dms_tree_root in enumerate(validated_routes.root, start=1):
             try:
                 # The private _transform method now only handles one route at a time
-                route = self._transform(dms_tree_root, target_input, rank)
+                route = self._transform(dms_tree_root, target, rank)
                 yield route
             except RetroCastException as e:
                 # A single route failed, log it and continue with the next one.
-                logger.debug(f"  - Route for '{target_input.id}' failed transformation: {e}")
+                logger.debug(f"  - Route for '{target.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, raw_data: DMSTree, target_input: TargetIdentity, rank: int) -> Route:
+    def _transform(self, raw_data: DMSTree, target: TargetIdentity, rank: int) -> Route:
         """
         Orchestrates the transformation of a single DMS output tree.
         Raises RetroCastException on failure.
@@ -65,11 +65,11 @@ class DMSAdapter(BaseAdapter):
         target_molecule = self._build_molecule(dms_node=raw_data)
 
         # Final validation: does the transformed tree root match the canonical target smiles?
-        if target_molecule.smiles != target_input.smiles:
+        if target_molecule.smiles != target.smiles:
             # This is a logic error, not a parse error
             msg = (
-                f"Mismatched SMILES for target {target_input.id}. "
-                f"Expected canonical: {target_input.smiles}, but adapter produced: {target_molecule.smiles}"
+                f"Mismatched SMILES for target {target.id}. "
+                f"Expected canonical: {target.smiles}, but adapter produced: {target_molecule.smiles}"
             )
             logger.error(msg)
             raise AdapterLogicError(msg)
