@@ -12,36 +12,33 @@ Usage:
 
 from pathlib import Path
 
-from retrocast.curation.filtering import filter_by_route_type, merge_target_pools
-from retrocast.curation.sampling import sample_random, sample_stratified
+from retrocast.curation.filtering import clean_and_prioritize_pools, filter_by_route_type
+from retrocast.curation.sampling import sample_random, sample_stratified_priority
 from retrocast.io.files import save_json_gz
 from retrocast.io.loaders import load_benchmark
 from retrocast.io.manifests import create_manifest
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.utils.logging import logger
 
-# CONFIG
 BASE_DIR = Path(__file__).resolve().parents[2]
-DEF_DIR = BASE_DIR / "data" / "1-benchmarks" / "definitions"
-
-# The seed that defines the benchmark forever.
-CANONICAL_SEED = 42
 
 
-def create_subset(name: str, targets: list, source_paths: list[Path], stock_name: str, description: str) -> None:
+def create_subset(
+    name: str, targets: list, source_paths: list[Path], stock_name: str, description: str, out_dir: Path, seed: int
+) -> None:
     """Helper to assemble, save, and manifest a subset."""
     subset = BenchmarkSet(name=name, description=description, stock_name=stock_name, targets={t.id: t for t in targets})
 
-    out_path = DEF_DIR / f"{name}.json.gz"
+    out_path = out_dir / f"{name}.json.gz"
     save_json_gz(subset, out_path)
 
     # Create manifest
-    manifest_path = DEF_DIR / f"{name}.manifest.json"
+    manifest_path = out_dir / f"{name}.manifest.json"
     manifest = create_manifest(
         action="create_subset",
         sources=source_paths,
         outputs=[(out_path, subset)],
-        parameters={"seed": CANONICAL_SEED, "name": name},
+        parameters={"seed": seed, "name": name},
         statistics={"n_targets": len(subset.targets)},
     )
 
@@ -52,6 +49,9 @@ def create_subset(name: str, targets: list, source_paths: list[Path], stock_name
 
 
 def main():
+    CANONICAL_SEED = 42
+    DEF_DIR = BASE_DIR / "data" / "1-benchmarks" / "definitions"
+
     # 1. Load Universe
     n1_path = DEF_DIR / "paroutes-n1-full.json.gz"
     n5_path = DEF_DIR / "paroutes-n5-full.json.gz"
@@ -65,18 +65,20 @@ def main():
 
     # 2. Prepare Pools
     # We use n5 as primary, n1 as fallback
-    pool_linear = merge_target_pools(filter_by_route_type(n5, "linear"), filter_by_route_type(n1, "linear"))
+    n5_linear, n1_linear = clean_and_prioritize_pools(
+        filter_by_route_type(n5, "linear"), filter_by_route_type(n1, "linear")
+    )
 
-    pool_convergent = merge_target_pools(filter_by_route_type(n5, "convergent"), filter_by_route_type(n1, "convergent"))
-
-    logger.info(f"Pool size - Linear: {len(pool_linear)}, Convergent: {len(pool_convergent)}")
+    n5_conv, n1_conv = clean_and_prioritize_pools(
+        filter_by_route_type(n5, "convergent"), filter_by_route_type(n1, "convergent")
+    )
 
     # 3. Create Stratified Linear
     # 100 routes for lengths 2-7
     linear_counts = {d: 100 for d in range(2, 8)}
 
-    targets_linear = sample_stratified(
-        pool_linear, group_fn=lambda t: t.route_length, counts=linear_counts, seed=CANONICAL_SEED
+    targets_linear = sample_stratified_priority(
+        pools=[n5_linear, n1_linear], group_fn=lambda t: t.route_length, counts=linear_counts, seed=CANONICAL_SEED
     )
 
     create_subset(
@@ -85,14 +87,16 @@ def main():
         source_paths=[n5_path, n1_path],
         stock_name="n5-stock",  # Using n5 stock as standard
         description="Stratified set of 600 linear routes (100 each for lengths 2-7).",
+        out_dir=DEF_DIR,
+        seed=CANONICAL_SEED,
     )
 
     # 4. Create Stratified Convergent
     # 50 routes for lengths 2-6
     convergent_counts = {d: 50 for d in range(2, 7)}
 
-    targets_convergent = sample_stratified(
-        pool_convergent, group_fn=lambda t: t.route_length, counts=convergent_counts, seed=CANONICAL_SEED
+    targets_convergent = sample_stratified_priority(
+        pools=[n5_linear, n1_linear], group_fn=lambda t: t.route_length, counts=convergent_counts, seed=CANONICAL_SEED
     )
 
     create_subset(
@@ -101,6 +105,8 @@ def main():
         source_paths=[n5_path, n1_path],
         stock_name="n5-stock",
         description="Stratified set of 250 convergent routes (50 each for lengths 2-6).",
+        out_dir=DEF_DIR,
+        seed=CANONICAL_SEED,
     )
 
     # 5. Create Random Legacy Set (from n5 only, to match PaRoutes spirit)
@@ -114,6 +120,8 @@ def main():
             source_paths=[n5_path],
             stock_name="n5-stock",  # Uses its own stock
             description=f"Random sample of {n} routes from n5 (legacy comparison).",
+            out_dir=DEF_DIR,
+            seed=CANONICAL_SEED,
         )
 
 

@@ -2,7 +2,9 @@
 Generates statistics and report for a scored model.
 
 Usage:
-    uv run scripts/01-analyze.py --model dms-flash-fp16 --benchmark random-n5-100 --stock n5-stock
+    uv run scripts/01-analyze.py --model dms-flash-fp16 --stock n5-stock --benchmark random-n5-500
+    uv run scripts/01-analyze.py --model dms-flash-fp16 --stock n5-stock --benchmark stratified-linear-600
+    uv run scripts/01-analyze.py --model dms-flash-fp16 --stock n5-stock --benchmark stratified-convergent-250
 """
 
 import argparse

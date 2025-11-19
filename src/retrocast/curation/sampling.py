@@ -6,49 +6,56 @@ from typing import TypeVar
 T = TypeVar("T")
 
 
-def sample_stratified(
-    items: list[T],
+def sample_stratified_priority(
+    pools: list[list[T]],  # Priority ordered: [n5_pool, n1_pool]
     group_fn: Callable[[T], int],  # Function that takes item and returns group key (e.g. length)
     counts: dict[int, int],
     seed: int,
 ) -> list[T]:
     """
-    Samples items to meet specific counts per group.
-
-    Args:
-        items: List of objects to sample from.
-        group_fn: Function to extract the group key (e.g. lambda x: x.route_length).
-        counts: Dict mapping group key to required count (e.g. {2: 100, 3: 100}).
-        seed: Random seed for reproducibility.
-
-    Returns:
-        List of sampled items.
-
-    Raises:
-        ValueError: If not enough items exist for a requested group count.
+    Samples items to meet counts, exhausting pools in order.
     """
-    # 1. Group items
-    grouped = defaultdict(list)
-    for item in items:
-        key = group_fn(item)
-        if key in counts:  # Only store if we care about this group
-            grouped[key].append(item)
+    # 1. Group all pools individually
+    grouped_pools = []
+    for pool in pools:
+        g = defaultdict(list)
+        for item in pool:
+            key = group_fn(item)
+            if key in counts:
+                g[key].append(item)
+        grouped_pools.append(g)
 
-    # 2. Sample
     rng = random.Random(seed)
     sampled = []
 
-    for key, count in counts.items():
-        available = grouped[key]
-        if len(available) < count:
-            raise ValueError(f"Cannot sample {count} items for group {key}; only {len(available)} available.")
+    for key, target_count in counts.items():
+        collected_for_group = []
 
-        # Stable sampling: sort first so RNG choice is deterministic given the seed
-        # We assume items are comparable or have a consistent order from the input list
-        # If input 'items' is stable, this is stable.
+        # Iterate through pools in priority order
+        for group_pool in grouped_pools:
+            available = group_pool[key]
+            needed = target_count - len(collected_for_group)
 
-        selected = rng.sample(available, count)
-        sampled.extend(selected)
+            if needed <= 0:
+                break
+
+            if len(available) >= needed:
+                # We have enough in this pool to finish
+                # Sort for stability before sampling
+                # (assuming T is not comparable, rely on list order which should be stable from loader)
+                selection = rng.sample(available, needed)
+                collected_for_group.extend(selection)
+            else:
+                # Take everything and move to next pool
+                collected_for_group.extend(available)
+
+        if len(collected_for_group) < target_count:
+            raise ValueError(
+                f"Cannot sample {target_count} items for group {key}; "
+                f"only found {len(collected_for_group)} across all pools."
+            )
+
+        sampled.extend(collected_for_group)
 
     return sampled
 

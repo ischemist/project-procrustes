@@ -22,7 +22,7 @@ class RouteStats:
     is_convergent: bool
 
 
-def extract_route_stats(routes: dict[str, list[Route]]) -> list[RouteStats]:
+def extract_route_stats(routes: dict[str, Route]) -> list[RouteStats]:
     """
     Extract statistics from routes.
 
@@ -33,18 +33,17 @@ def extract_route_stats(routes: dict[str, list[Route]]) -> list[RouteStats]:
         List of RouteStats, one per route.
     """
     stats = []
-    for route_list in routes.values():
-        for route in route_list:
-            smiles = route.target.smiles
-            stats.append(
-                RouteStats(
-                    depth=route.length,
-                    target_hac=get_heavy_atom_count(smiles),
-                    target_mw=get_molecular_weight(smiles),
-                    target_chiral=get_chiral_center_count(smiles),
-                    is_convergent=route.has_convergent_reaction,
-                )
+    for route in routes.values():
+        smiles = route.target.smiles
+        stats.append(
+            RouteStats(
+                depth=route.length,
+                target_hac=get_heavy_atom_count(smiles),
+                target_mw=get_molecular_weight(smiles),
+                target_chiral=get_chiral_center_count(smiles),
+                is_convergent=route.has_convergent_reaction,
             )
+        )
     return stats
 
 

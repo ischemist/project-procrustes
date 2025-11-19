@@ -1,4 +1,13 @@
+from typing import Literal
+
 from pydantic import BaseModel
+
+
+class ReliabilityFlag(BaseModel):
+    """Warning about the statistical reliability of a result."""
+
+    code: Literal["LOW_N", "EXTREME_P", "OK"]
+    message: str
 
 
 class MetricResult(BaseModel):
@@ -8,6 +17,8 @@ class MetricResult(BaseModel):
     ci_lower: float
     ci_upper: float
     n_samples: int
+
+    reliability: ReliabilityFlag
 
 
 class StratifiedMetric(BaseModel):

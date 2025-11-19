@@ -2,9 +2,12 @@
 Ingests legacy DMS predictions (pickle format) into the retrocast processed format.
 
 Usage:
-    uv run scripts/directmultistep/ingest-dms-legacy.py
+    uv run scripts/directmultistep/ingest-dms-legacy.py --benchmark stratified-convergent-250
+    uv run scripts/directmultistep/ingest-dms-legacy.py --benchmark stratified-linear-600
+    uv run scripts/directmultistep/ingest-dms-legacy.py --benchmark random-n5-500
 """
 
+import argparse
 import pickle
 from pathlib import Path
 
@@ -19,7 +22,6 @@ from retrocast.utils.logging import logger
 BASE_DIR = Path(__file__).resolve().parents[2]
 ds = "n5"
 PICKLE_PATH = BASE_DIR / "data" / "2-raw" / "dms-flash-fp16" / ds / f"{ds}_correct_paths_NS2n.pkl"
-BENCHMARK_NAME = "stratified-convergent-250"
 
 
 def load_legacy_pickle(path: Path) -> list[list[tuple[str, float]]]:
@@ -30,8 +32,11 @@ def load_legacy_pickle(path: Path) -> list[list[tuple[str, float]]]:
 
 
 def main():
+    parser = argparse.ArgumentParser("Ingest DMS Legacy Data")
+    parser.add_argument("--benchmark", type=str, default="benchmark_name", help="Name of the benchmark")
+    args = parser.parse_args()
     # 1. Load the Benchmark Definition
-    bench_def_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{BENCHMARK_NAME}.json.gz"
+    bench_def_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
     benchmark = load_benchmark(bench_def_path)
 
     # Create lookup map: {SMILES -> [target_id_1, target_id_2]}
@@ -69,7 +74,7 @@ def main():
 
     # 4. Save
     model_name = "dms-flash-fp16"
-    output_dir = BASE_DIR / "data" / "3-processed" / BENCHMARK_NAME / model_name
+    output_dir = BASE_DIR / "data" / "3-processed" / args.benchmark / model_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     out_path = output_dir / "routes.json.gz"
@@ -80,7 +85,7 @@ def main():
         action="scripts/directmultistep/ingest-dms-legacy",
         sources=[PICKLE_PATH],
         outputs=[(out_path, processed_predictions)],
-        parameters={"benchmark": BENCHMARK_NAME, "model": model_name},
+        parameters={"benchmark": args.benchmark, "model": model_name},
         statistics={"n_targets_found": hits},
     )
 

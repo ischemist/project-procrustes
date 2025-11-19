@@ -6,6 +6,8 @@ This step generates the intermediate data needed for statistical analysis.
 
 Usage:
     uv run scripts/00-score.py --model dms-flash-fp16 --benchmark random-n5-100
+    uv run scripts/00-score.py --model dms-flash-fp16 --benchmark stratified-linear-600
+    uv run scripts/00-score.py --model dms-flash-fp16 --benchmark stratified-convergent-250
 """
 
 import argparse

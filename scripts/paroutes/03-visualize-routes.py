@@ -7,26 +7,29 @@ Loads processed n1 and n5 routes and creates a comparison figure with:
 - Target molecular weight by depth
 
 Usage:
-    uv run scripts/paroutes/3-visualize-routes.py
+    uv run scripts/paroutes/03-visualize-routes.py
 """
 
 from pathlib import Path
 
 from retrocast.analysis.routes import create_route_comparison_figure, extract_route_stats
-from retrocast.io import load_routes
+from retrocast.io.loaders import load_benchmark
 from retrocast.utils.logging import logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
-PROCESSED_DIR = BASE_DIR / "data" / "paroutes" / "processed"
-OUTPUT_DIR = BASE_DIR / "data" / "analysis" / "paroutes"
+PROCESSED_DIR = BASE_DIR / "data" / "1-benchmarks" / "definitions"
+OUTPUT_DIR = BASE_DIR / "data" / "5-results" / "paroutes"
 
 
 def main() -> None:
     """Main script execution."""
 
     logger.info("Loading routes...")
-    n1_routes = load_routes(PROCESSED_DIR / "n1-routes.json.gz")
-    n5_routes = load_routes(PROCESSED_DIR / "n5-routes.json.gz")
+    n1_set = load_benchmark(PROCESSED_DIR / "paroutes-n1-full.json.gz")
+    n5_set = load_benchmark(PROCESSED_DIR / "paroutes-n5-full.json.gz")
+
+    n1_routes = {k: v.ground_truth for k, v in n1_set.targets.items()}
+    n5_routes = {k: v.ground_truth for k, v in n5_set.targets.items()}
 
     logger.info("Extracting route statistics...")
     n1_stats = extract_route_stats(n1_routes)

@@ -2,26 +2,44 @@ from retrocast.models.stats import ModelStatistics, StratifiedMetric
 
 
 def format_metric_table(stats: StratifiedMetric) -> str:
-    """Markdown table generator."""
+    """Markdown table generator with reliability flags."""
     lines = []
-    lines.append(f"**Overall**: {stats.overall.value:.1%} (N={stats.overall.n_samples})")
+
+    # Add warning for Overall if needed
+    flag_icon = ""
+    if stats.overall.reliability.code != "OK":
+        flag_icon = f" ⚠️ {stats.overall.reliability.code}"
+
+    lines.append(f"**Overall**: {stats.overall.value:.1%} (N={stats.overall.n_samples}){flag_icon}")
     lines.append(f"CI: [{stats.overall.ci_lower:.1%}, {stats.overall.ci_upper:.1%}]")
+
+    if stats.overall.reliability.code != "OK":
+        lines.append(f"*{stats.overall.reliability.message}*")
+
     lines.append("")
 
     if not stats.by_group:
         return "\n".join(lines)
 
-    lines.append("| Group | N | Value | 95% CI |")
-    lines.append("|-------|---|-------|--------|")
+    # Add "Reliability" column
+    lines.append("| Group | N | Value | 95% CI | Flags |")
+    lines.append("|-------|---|-------|--------|-------|")
 
-    # Sort by group key (assuming int depth)
     sorted_keys = sorted(stats.by_group.keys())
 
     for key in sorted_keys:
         res = stats.by_group[key]
         ci = f"[{res.ci_lower:.1%}, {res.ci_upper:.1%}]"
         val = f"{res.value:.1%}"
-        lines.append(f"| {key} | {res.n_samples} | {val} | {ci} |")
+
+        # Determine flag
+        flag = ""
+        if res.reliability.code == "LOW_N":
+            flag = "⚠️ Low N"
+        elif res.reliability.code == "EXTREME_P":
+            flag = "⚠️ Boundary"
+
+        lines.append(f"| {key} | {res.n_samples} | {val} | {ci} | {flag} |")
 
     return "\n".join(lines)
 
