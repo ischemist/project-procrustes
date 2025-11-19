@@ -17,7 +17,7 @@ from retrocast.metrics.bootstrap import get_is_solvable, make_get_top_k
 from retrocast.metrics.ranking import compute_probabilistic_ranking
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.utils.logging import logger
-from retrocast.visualization.plots import plot_probabilistic_ranking
+from retrocast.visualization.model_performance import plot_probabilistic_ranking
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"

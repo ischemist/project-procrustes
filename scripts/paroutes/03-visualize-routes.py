@@ -12,9 +12,9 @@ Usage:
 
 from pathlib import Path
 
-from retrocast.analysis.routes import create_route_comparison_figure, extract_route_stats
 from retrocast.io.loaders import load_benchmark
 from retrocast.utils.logging import logger
+from retrocast.visualization.routes import create_route_comparison_figure, extract_route_stats
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 PROCESSED_DIR = BASE_DIR / "data" / "1-benchmarks" / "definitions"

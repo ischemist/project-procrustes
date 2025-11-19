@@ -14,7 +14,7 @@ from retrocast.metrics.bootstrap import get_is_solvable, make_get_top_k
 from retrocast.metrics.ranking import compute_pairwise_tournament
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.utils.logging import logger
-from retrocast.visualization.plots import plot_pairwise_matrix
+from retrocast.visualization.model_performance import plot_pairwise_matrix
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"

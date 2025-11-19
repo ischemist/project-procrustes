@@ -11,7 +11,7 @@ from pathlib import Path
 from retrocast.io.files import load_json_gz
 from retrocast.models.stats import ModelStatistics
 from retrocast.utils.logging import logger
-from retrocast.visualization.plots import plot_multi_model_comparison, plot_overall_comparison
+from retrocast.visualization.model_performance import plot_multi_model_comparison, plot_overall_comparison
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
