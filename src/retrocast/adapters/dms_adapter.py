@@ -42,7 +42,7 @@ class DMSAdapter(BaseAdapter):
             # 1. Model-specific validation happens HERE, inside the adapter.
             validated_routes = DMSRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - Raw data for target '{target_input.id}' failed DMS schema validation. Error: {e}")
+            logger.debug(f"  - Raw data for target '{target_input.id}' failed DMS schema validation. Error: {e}")
             return  # Stop processing this target
 
         # 2. Iterate and transform each valid route
@@ -53,7 +53,7 @@ class DMSAdapter(BaseAdapter):
                 yield route
             except RetroCastException as e:
                 # A single route failed, log it and continue with the next one.
-                logger.warning(f"  - Route for '{target_input.id}' failed transformation: {e}")
+                logger.debug(f"  - Route for '{target_input.id}' failed transformation: {e}")
                 continue
 
     def _transform(self, raw_data: DMSTree, target_input: TargetIdentity, rank: int) -> Route:

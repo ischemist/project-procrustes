@@ -97,3 +97,238 @@ def plot_single_model_diagnostics(stats: ModelStatistics) -> go.Figure:
     Styler().apply_style(fig)
 
     return fig
+
+
+def plot_multi_model_comparison(
+    models_stats: list[ModelStatistics], metric_type: str = "Top-1", k: int = 1
+) -> go.Figure:
+    fig = go.Figure()
+
+    # 1. Gather all depths
+    all_depths = set()
+    for m in models_stats:
+        if metric_type == "Solvability":
+            all_depths.update(m.solvability.by_group.keys())
+        else:
+            if k in m.top_k_accuracy:
+                all_depths.update(m.top_k_accuracy[k].by_group.keys())
+
+    sorted_depths = sorted(list(all_depths))  # e.g. [2, 3, 4, 5, 6]
+
+    colors = [
+        "#1f77b4",
+        "#ff7f0e",
+        "#2ca02c",
+        "#d62728",
+        "#9467bd",
+        "#8c564b",
+        "#e377c2",
+        "#7f7f7f",
+        "#bcbd22",
+        "#17becf",
+    ]
+
+    # 2. Calculate Offsets
+    # We want to center the cluster around the integer Depth.
+    # e.g. Depth 2 with 3 models: 1.9, 2.0, 2.1
+    num_models = len(models_stats)
+    width_per_cluster = 0.6  # How much space the cluster takes (out of 1.0)
+    offset_step = width_per_cluster / max(1, (num_models - 1))
+    start_offset = -width_per_cluster / 2
+
+    # If only 1 model, offset is 0.
+    if num_models == 1:
+        offsets = [0]
+    else:
+        offsets = [start_offset + (i * offset_step) for i in range(num_models)]
+
+    for i, model in enumerate(models_stats):
+        if metric_type == "Solvability":
+            metric_obj = model.solvability
+            label = "Solvability"
+        else:
+            metric_obj = model.top_k_accuracy.get(k)
+            label = f"Top-{k}"
+            if not metric_obj:
+                continue
+
+        x_vals = []  # These will be floats now!
+        y_vals = []
+        y_upper = []
+        y_lower = []
+        hover_texts = []
+
+        for depth in sorted_depths:
+            if depth in metric_obj.by_group:
+                res = metric_obj.by_group[depth]
+
+                # Apply Jitter
+                # X = Integer Depth + Model Offset
+                x_pos = int(depth) + offsets[i]
+
+                x_vals.append(x_pos)
+                y_vals.append(res.value * 100)
+                y_upper.append((res.ci_upper - res.value) * 100)
+                y_lower.append((res.value - res.ci_lower) * 100)
+
+                hover_texts.append(
+                    f"<b>{model.model_name}</b><br>"
+                    f"Depth {depth}<br>"
+                    f"{label}: {res.value:.1%}<br>"
+                    f"CI: [{res.ci_lower:.1%}, {res.ci_upper:.1%}]<br>"
+                    f"N={res.n_samples}"
+                )
+
+        fig.add_trace(
+            go.Scatter(
+                name=model.model_name,
+                x=x_vals,
+                y=y_vals,
+                mode="markers",
+                marker=dict(color=colors[i % len(colors)], size=10, symbol="circle"),
+                error_y=dict(
+                    type="data",
+                    array=y_upper,
+                    arrayminus=y_lower,
+                    visible=True,
+                    width=4,  # Slightly wider whiskers
+                    thickness=1.5,
+                ),
+                hovertext=hover_texts,
+                hoverinfo="text",
+            )
+        )
+
+    # 3. Polish Layout
+    fig.update_layout(
+        title=f"Model Comparison: {metric_type} (k={k} if applicable)",
+        yaxis=dict(title="Percentage (%)", range=[0, 100], gridcolor="#ecf0f1"),
+        xaxis=dict(
+            title="Route Difficulty (Depth)",
+            gridcolor="#ecf0f1",
+            # Force X-axis to show integer ticks for Depths
+            tickmode="array",
+            tickvals=sorted_depths,
+            ticktext=[f"Depth {d}" for d in sorted_depths],
+        ),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    Styler().apply_style(fig)
+
+    return fig
+
+
+def plot_overall_comparison(models_stats: list[ModelStatistics]) -> go.Figure:
+    """
+    Creates a summary plot comparing Overall performance across key metrics.
+    X-Axis: Metric (Solvability, Top-1, Top-5, Top-10)
+    Y-Axis: Percentage
+    Grouped by Model.
+    """
+    fig = go.Figure()
+
+    # Define the metrics we want to show in order
+    metrics_config = [
+        {"key": "solvability", "label": "Solvability"},
+        {"key": "top-1", "label": "Top-1"},
+        {"key": "top-5", "label": "Top-5"},
+        {"key": "top-10", "label": "Top-10"},
+    ]
+
+    # Colors
+    colors = [
+        "#1f77b4",
+        "#ff7f0e",
+        "#2ca02c",
+        "#d62728",
+        "#9467bd",
+        "#8c564b",
+        "#e377c2",
+        "#7f7f7f",
+        "#bcbd22",
+        "#17becf",
+    ]
+
+    # Jitter Setup
+    # We treat the metrics as integer positions 0, 1, 2, 3
+    num_models = len(models_stats)
+    width_per_cluster = 0.6
+    offset_step = width_per_cluster / max(1, (num_models - 1))
+    start_offset = -width_per_cluster / 2
+
+    if num_models == 1:
+        offsets = [0]
+    else:
+        offsets = [start_offset + (i * offset_step) for i in range(num_models)]
+
+    for i, model in enumerate(models_stats):
+        x_vals = []
+        y_vals = []
+        y_upper = []
+        y_lower = []
+        hover_texts = []
+
+        for m_idx, config in enumerate(metrics_config):
+            key = config["key"]
+            label = config["label"]
+
+            # Fetch the data object
+            res = None
+            if key == "solvability":
+                res = model.solvability.overall
+            elif key.startswith("top-"):
+                k = int(key.split("-")[1])
+                if k in model.top_k_accuracy:
+                    res = model.top_k_accuracy[k].overall
+
+            if res:
+                # X = Integer Metric Position + Model Offset
+                x_pos = m_idx + offsets[i]
+
+                x_vals.append(x_pos)
+                y_vals.append(res.value * 100)
+                y_upper.append((res.ci_upper - res.value) * 100)
+                y_lower.append((res.value - res.ci_lower) * 100)
+
+                # Reliability Icon
+                flag = ""
+                if res.reliability.code != "OK":
+                    flag = f" (⚠️ {res.reliability.code})"
+
+                hover_texts.append(
+                    f"<b>{model.model_name}</b><br>"
+                    f"{label}<br>"
+                    f"Value: {res.value:.1%}<br>"
+                    f"CI: [{res.ci_lower:.1%}, {res.ci_upper:.1%}]<br>"
+                    f"N={res.n_samples}{flag}"
+                )
+
+        fig.add_trace(
+            go.Scatter(
+                name=model.model_name,
+                x=x_vals,
+                y=y_vals,
+                mode="markers",
+                marker=dict(color=colors[i % len(colors)], size=12, symbol="circle"),
+                error_y=dict(type="data", array=y_upper, arrayminus=y_lower, visible=True, width=4, thickness=1.5),
+                hovertext=hover_texts,
+                hoverinfo="text",
+            )
+        )
+
+    # Layout
+    fig.update_layout(
+        title="Overall Performance Summary",
+        yaxis=dict(title="Percentage (%)", range=[0, 100], gridcolor="#ecf0f1"),
+        xaxis=dict(
+            title="Metric",
+            gridcolor="#ecf0f1",
+            tickmode="array",
+            tickvals=[0, 1, 2, 3],
+            ticktext=[m["label"] for m in metrics_config],
+        ),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    Styler().apply_style(fig)
+
+    return fig

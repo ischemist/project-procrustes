@@ -2,9 +2,9 @@
 Ingests legacy DMS predictions (pickle format) into the retrocast processed format.
 
 Usage:
-    uv run scripts/directmultistep/ingest-dms-legacy.py --benchmark stratified-convergent-250
-    uv run scripts/directmultistep/ingest-dms-legacy.py --benchmark stratified-linear-600
-    uv run scripts/directmultistep/ingest-dms-legacy.py --benchmark random-n5-500
+    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-flash-fp16 --benchmark stratified-convergent-250
+    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-flash-fp16 --benchmark stratified-linear-600
+    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-flash-fp16 --benchmark random-n5-500
 """
 
 import argparse
@@ -20,8 +20,6 @@ from retrocast.models.chem import Route
 from retrocast.utils.logging import logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
-ds = "n5"
-PICKLE_PATH = BASE_DIR / "data" / "2-raw" / "dms-flash-fp16" / ds / f"{ds}_correct_paths_NS2n.pkl"
 
 
 def load_legacy_pickle(path: Path) -> list[list[tuple[str, float]]]:
@@ -34,7 +32,12 @@ def load_legacy_pickle(path: Path) -> list[list[tuple[str, float]]]:
 def main():
     parser = argparse.ArgumentParser("Ingest DMS Legacy Data")
     parser.add_argument("--benchmark", type=str, default="benchmark_name", help="Name of the benchmark")
+    parser.add_argument("--model", type=str, default="model_name", help="Name of the model")
     args = parser.parse_args()
+
+    ds = "n5"
+    PICKLE_PATH = BASE_DIR / "data" / "2-raw" / args.model / ds / f"{ds}_correct_paths_NS2n.pkl"
+
     # 1. Load the Benchmark Definition
     bench_def_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
     benchmark = load_benchmark(bench_def_path)
@@ -73,7 +76,7 @@ def main():
     logger.info(f"Matched {hits} targets from pickle out of {len(benchmark.targets)} in benchmark.")
 
     # 4. Save
-    model_name = "dms-flash-fp16"
+    model_name = args.model
     output_dir = BASE_DIR / "data" / "3-processed" / args.benchmark / model_name
     output_dir.mkdir(parents=True, exist_ok=True)
 

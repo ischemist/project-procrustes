@@ -100,11 +100,11 @@ def main():
     )
 
     create_subset(
-        name="stratified-convergent-250",
+        name="stratified-convergent-450",
         targets=targets_convergent,
         source_paths=[n5_path, n1_path],
         stock_name="n5-stock",
-        description="Stratified set of 250 convergent routes (50 each for lengths 2-6).",
+        description="Stratified set of 450 convergent routes (100 each for lengths 2-5, 50 for length 6).",
         out_dir=DEF_DIR,
         seed=CANONICAL_SEED,
     )
