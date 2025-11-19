@@ -1,0 +1,12 @@
+expansion:
+  uspto:
+    - data/0-assets/model-configs/aizynthfinder/uspto_model.onnx
+    - data/0-assets/model-configs/aizynthfinder/uspto_templates.csv.gz
+  ringbreaker:
+    - data/0-assets/model-configs/aizynthfinder/uspto_ringbreaker_model.onnx
+    - data/0-assets/model-configs/aizynthfinder/uspto_ringbreaker_templates.csv.gz
+filter:
+  buyables-bb: data/0-assets/model-configs/assets/buyables-stock.hdf5
+  n1-n5-bb: data/0-assets/model-configs/assets/n1-n5-stock.hdf5
+stock:
+  retrocast-bb: data/0-assets/model-configs/aizynthfinder/retrocast-bb-stock-v3.hdf5

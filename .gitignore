@@ -23,20 +23,20 @@ data/transfers/
 data/**/*.json.gz
 data/**/*.csv
 data/**/*.txt
-data/models/**/*.pickle
-data/models/**/*.pkl
-data/models/**/*.onnx
-data/models/**/*.csv*
-data/models/**/*.ckpt*
-data/models/**/*.pt*
-data/models/**/*.smi*
-data/models/**/*.sdf*
-data/models/**/*.zip*
-data/models/**/*.hdf5*
-data/models/**/*.txt*
-data/models/**/*.dat*
-data/models/**/.*
-data/models/**/*.md
+data/0-assets/model-configs/**/*.pickle
+data/0-assets/model-configs/**/*.pkl
+data/0-assets/model-configs/**/*.onnx
+data/0-assets/model-configs/**/*.csv*
+data/0-assets/model-configs/**/*.ckpt*
+data/0-assets/model-configs/**/*.pt*
+data/0-assets/model-configs/**/*.smi*
+data/0-assets/model-configs/**/*.sdf*
+data/0-assets/model-configs/**/*.zip*
+data/0-assets/model-configs/**/*.hdf5*
+data/0-assets/model-configs/**/*.txt*
+data/0-assets/model-configs/**/*.dat*
+data/0-assets/model-configs/**/.*
+data/0-assets/model-configs/**/*.md
 data/analysis/**/*.html
 data/analysis/**/*.json
 data/analysis/**/*.txt
@@ -70,6 +70,7 @@ docs/coding-style.md
 
 data/statistics
 
+data/1-benchmarks
 data/2-raw
 data/3-processed
 data/4-scored

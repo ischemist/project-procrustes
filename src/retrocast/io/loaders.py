@@ -40,7 +40,7 @@ def load_stock_file(path: Path) -> set[SmilesStr]:
         with path.open("r", encoding="utf-8") as f:
             stock = {line.strip() for line in f if line.strip()}
 
-        logger.info(f"Loaded {len(stock)} molecules from stock file.")
+        logger.info(f"Loaded {len(stock):,} molecules from stock file.")
         return stock
 
     except OSError as e:
