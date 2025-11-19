@@ -11,7 +11,7 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
-from retrocast.typing import SmilesStr
+from retrocast.typing import ReactionSmilesStr, SmilesStr
 from retrocast.utils.logging import logger
 
 # --- pydantic models for input validation ---
@@ -81,6 +81,10 @@ class PaRoutesAdapter(BaseAdapter):
         patent_ids: set[str] = set()
 
         for reaction_node in node.children:
+            # Type guard: reaction nodes should have metadata
+            if not isinstance(reaction_node, PaRoutesReactionInput):
+                continue
+
             try:
                 # the patent id is the part before the first semicolon
                 patent_id = reaction_node.metadata.id.split(";")[0]
@@ -209,9 +213,10 @@ class PaRoutesAdapter(BaseAdapter):
                 f"molecule {canon_smiles} has multiple child reactions in raw output; only the first is used in a tree."
             )
 
-        raw_reaction_node: PaRoutesReactionInput = raw_mol_node.children[0]
-        if raw_reaction_node.type != "reaction":
+        first_child = raw_mol_node.children[0]
+        if not isinstance(first_child, PaRoutesReactionInput):
             raise AdapterLogicError("child of molecule node was not a reaction node")
+        raw_reaction_node: PaRoutesReactionInput = first_child
 
         # build reactants recursively with updated visited set
         reactant_molecules: list[Molecule] = []
@@ -221,7 +226,8 @@ class PaRoutesAdapter(BaseAdapter):
 
         # extract mapped smiles (rsmi) from metadata
         rxn_metadata = raw_reaction_node.metadata
-        mapped_smiles = rxn_metadata.rsmi if rxn_metadata else None
+        mapped_smiles_str = rxn_metadata.rsmi if rxn_metadata else None
+        mapped_smiles = ReactionSmilesStr(mapped_smiles_str) if mapped_smiles_str else None
 
         # create the reaction step with full metadata
         metadata_dict = rxn_metadata.model_dump(by_alias=True) if rxn_metadata else {}

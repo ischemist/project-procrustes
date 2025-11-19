@@ -101,7 +101,7 @@ class RetrochimeraAdapter(BaseAdapter):
         """
         precursor_map = self._build_precursor_map(route)
         target_molecule = self._build_molecule_from_precursor_map(
-            smiles=target.smiles,
+            smiles=SmilesStr(target.smiles),
             precursor_map=precursor_map,
         )
 

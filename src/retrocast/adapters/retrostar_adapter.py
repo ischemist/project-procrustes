@@ -102,7 +102,9 @@ class RetroStarAdapter(BaseAdapter):
             raise AdapterLogicError(msg)
 
         # Build the molecule tree using the new schema helper
-        target_molecule = build_molecule_from_precursor_map(smiles=target_input.smiles, precursor_map=precursor_map)
+        target_molecule = build_molecule_from_precursor_map(
+            smiles=SmilesStr(target_input.smiles), precursor_map=precursor_map
+        )
 
         # Build metadata
         metadata = {}
