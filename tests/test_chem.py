@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from retrocast.domain.chem import (
+from retrocast.chem import (
     canonicalize_smiles,
     get_chiral_center_count,
     get_heavy_atom_count,
@@ -165,7 +165,7 @@ def test_get_inchi_key_bad_input_raises_error(bad_input) -> None:
         get_inchi_key(bad_input)
 
 
-@patch("retrocast.domain.chem.Chem.MolToSmiles")
+@patch("retrocast.chem.Chem.MolToSmiles")
 def test_canonicalize_smiles_raises_ursa_exception_on_generic_error(mock_moltosmiles) -> None:
     """
     tests that a generic, unexpected rdkit error is wrapped in our RetroCastException.
@@ -181,7 +181,7 @@ def test_canonicalize_smiles_raises_ursa_exception_on_generic_error(mock_moltosm
     assert "An unexpected error occurred during SMILES processing" in str(exc_info.value)
 
 
-@patch("retrocast.domain.chem.Chem.MolToInchiKey")
+@patch("retrocast.chem.Chem.MolToInchiKey")
 def test_get_inchi_key_raises_ursa_exception_on_empty_result(mock_moltoinchikey) -> None:
     """
     tests that our guard for an empty inchikey from rdkit works.
@@ -197,7 +197,7 @@ def test_get_inchi_key_raises_ursa_exception_on_empty_result(mock_moltoinchikey)
     assert "produced an empty InChIKey" in str(exc_info.value)
 
 
-@patch("retrocast.domain.chem.Chem.MolToInchiKey")
+@patch("retrocast.chem.Chem.MolToInchiKey")
 def test_get_inchi_key_raises_ursa_exception_on_generic_error(mock_moltoinchikey) -> None:
     """
     tests that a generic, unexpected rdkit error is wrapped in our RetroCastException.

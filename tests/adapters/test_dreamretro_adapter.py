@@ -1,7 +1,7 @@
 import pytest
 
 from retrocast.adapters.dreamretro_adapter import DreamRetroAdapter
-from retrocast.domain.chem import canonicalize_smiles
+from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest

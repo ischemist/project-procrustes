@@ -5,8 +5,9 @@ Usage:
 
 from pathlib import Path
 
-from retrocast.curation import get_reaction_signatures
 from retrocast.export import extract_reactions_from_routes
+
+from retrocast.curation import get_reaction_signatures
 from retrocast.io import load_routes, save_reaction_smiles
 
 # Load data

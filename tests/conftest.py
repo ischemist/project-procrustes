@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from retrocast.domain.chem import canonicalize_smiles
+from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import TargetIdentity, TargetInput
 
 TEST_DATA_DIR = Path("tests/testing_data")

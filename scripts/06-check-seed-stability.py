@@ -182,7 +182,7 @@ def main():
     # Sort by deviation score and show most stable seeds
     seed_deviations.sort(key=lambda x: x[1])
     print("\n=== Most Stable Seeds (Lowest Deviation) ===")
-    for i, (seed, dev, z1, zs, z10) in enumerate(seed_deviations[:5], 1):
+    for i, (seed, dev) in enumerate(seed_deviations[:2], 1):
         print(f"{i}. Seed {seed}: Deviation={dev:.4f}")
 
 

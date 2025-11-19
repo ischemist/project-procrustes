@@ -12,7 +12,7 @@ import pickle
 from pathlib import Path
 
 from retrocast import adapt_routes
-from retrocast.domain.chem import canonicalize_smiles
+from retrocast.chem import canonicalize_smiles
 from retrocast.io.loaders import load_benchmark
 from retrocast.io.manifests import create_manifest
 from retrocast.io.routes import save_routes

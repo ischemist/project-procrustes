@@ -10,7 +10,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 from retrocast import adapt_single_route
-from retrocast.domain.chem import canonicalize_smiles
+from retrocast.chem import canonicalize_smiles
 from retrocast.io.files import save_json_gz
 from retrocast.io.loaders import load_raw_paroutes_list
 from retrocast.io.manifests import create_manifest

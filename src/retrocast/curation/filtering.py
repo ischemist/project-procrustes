@@ -1,9 +1,145 @@
 from typing import Literal
 
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
+from retrocast.models.chem import Molecule, ReactionSignature, ReactionStep, Route
 from retrocast.utils.logging import logger
 
 RouteType = Literal["linear", "convergent"]
+
+
+def excise_reactions_from_route(
+    route: Route,
+    exclude: set[ReactionSignature],
+) -> list[Route]:
+    """
+    Remove specific reactions from a route, yielding sub-routes.
+
+    When a reaction is in the exclusion set, the product of that reaction becomes
+    a leaf node in its parent tree. Each reactant of the excised reaction that has
+    its own synthesis path becomes the root of a new sub-route.
+
+    Args:
+        route: The route to process.
+        exclude: Set of ReactionSignatures to remove from the route.
+
+    Returns:
+        List of valid sub-routes (routes with length > 0) after excision.
+        The main route (if still valid) is first, followed by any sub-routes
+        created from excised reactants.
+
+    Example:
+        Given route: R <- A1 <- A2 <- I1 <- I2 <- A3
+        Excluding: I1 <- I2 (i.e., the reaction where I2 produces I1)
+        Result:
+        - Main route: R <- A1 <- A2 <- I1 (I1 is now a leaf)
+        - Sub-route: I2 <- A3 (I2 becomes a new target)
+    """
+    if route.target.is_leaf:
+        # No reactions to excise
+        return []
+
+    sub_routes: list[Route] = []
+
+    def _rebuild(node: Molecule) -> Molecule:
+        """Recursively rebuild tree, cutting at excluded reactions."""
+        if node.is_leaf:
+            # Leaf nodes are returned as-is
+            return Molecule(
+                smiles=node.smiles,
+                inchikey=node.inchikey,
+                metadata=node.metadata.copy(),
+            )
+
+        # Non-leaf node has a synthesis_step
+        assert node.synthesis_step is not None
+
+        rxn = node.synthesis_step
+        sig: ReactionSignature = (
+            frozenset(r.inchikey for r in rxn.reactants),
+            node.inchikey,
+        )
+
+        if sig in exclude:
+            # Cut here: this node becomes a leaf
+            # Each non-leaf reactant becomes a new sub-route
+            for reactant in rxn.reactants:
+                if not reactant.is_leaf:
+                    rebuilt_reactant = _rebuild(reactant)
+                    if rebuilt_reactant.synthesis_step is not None:
+                        # Reactant still has reactions, create sub-route
+                        new_route = Route(
+                            target=rebuilt_reactant,
+                            rank=route.rank,
+                            metadata=route.metadata.copy(),
+                        )
+                        sub_routes.append(new_route)
+
+            # Return this node as a leaf (no synthesis_step)
+            return Molecule(
+                smiles=node.smiles,
+                inchikey=node.inchikey,
+                metadata=node.metadata.copy(),
+            )
+        else:
+            # Keep this reaction, but recursively check reactants
+            new_reactants = [_rebuild(r) for r in rxn.reactants]
+            new_step = ReactionStep(
+                reactants=new_reactants,
+                mapped_smiles=rxn.mapped_smiles,
+                template=rxn.template,
+                reagents=rxn.reagents,
+                solvents=rxn.solvents,
+                metadata=rxn.metadata.copy(),
+            )
+            return Molecule(
+                smiles=node.smiles,
+                inchikey=node.inchikey,
+                synthesis_step=new_step,
+                metadata=node.metadata.copy(),
+            )
+
+    main_target = _rebuild(route.target)
+
+    result: list[Route] = []
+
+    # Only include main route if it still has reactions
+    if main_target.synthesis_step is not None:
+        main_route = Route(
+            target=main_target,
+            rank=route.rank,
+            solvability=route.solvability.copy(),
+            metadata=route.metadata.copy(),
+        )
+        result.append(main_route)
+
+    # Add sub-routes (already filtered for having reactions)
+    result.extend(sub_routes)
+
+    return result
+
+
+def deduplicate_routes(routes: list[Route]) -> list[Route]:
+    """
+    Filters a list of Route objects, returning only the unique routes.
+    Uses the Route.get_signature() method for canonical deduplication.
+    """
+    seen_signatures = set()
+    unique_routes = []
+
+    logger.debug(f"Deduplicating {len(routes)} routes...")
+
+    for route in routes:
+        signature = route.get_signature()
+
+        if signature not in seen_signatures:
+            seen_signatures.add(signature)
+            unique_routes.append(route)
+
+    num_removed = len(routes) - len(unique_routes)
+    if num_removed > 0:
+        logger.debug(f"Removed {num_removed} duplicate routes.")
+
+    return unique_routes
 
 
 def filter_by_route_type(benchmark: BenchmarkSet, route_type: RouteType) -> list[BenchmarkTarget]:

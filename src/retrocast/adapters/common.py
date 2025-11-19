@@ -1,6 +1,6 @@
 from typing import Any, Protocol
 
-from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
+from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import Molecule, ReactionStep
 from retrocast.typing import SmilesStr

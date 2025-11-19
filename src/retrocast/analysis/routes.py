@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 from ischemist.plotly import Styler
 from plotly.subplots import make_subplots
 
-from retrocast.domain.chem import get_chiral_center_count, get_heavy_atom_count, get_molecular_weight
+from retrocast.chem import get_chiral_center_count, get_heavy_atom_count, get_molecular_weight
 from retrocast.models.chem import Route
 
 

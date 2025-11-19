@@ -1,7 +1,7 @@
 import pytest
 
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
-from retrocast.domain.chem import canonicalize_smiles
+from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import Route, TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 

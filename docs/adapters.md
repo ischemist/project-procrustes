@@ -123,7 +123,7 @@ from collections.abc import Generator
 from typing import Any
 from pydantic import BaseModel, RootModel, Field
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.domain.chem import canonicalize_smiles, get_inchi_key
+from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 
 # --- pydantic schemas for raw input validation ---
