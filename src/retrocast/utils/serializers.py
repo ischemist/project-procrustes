@@ -2,12 +2,11 @@ import gzip
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
+
+import pandas as pd
 
 from retrocast.exceptions import SyntheseusSerializationError, TtlRetroSerializationError
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 
 def _build_tree_recursive(
@@ -195,7 +194,6 @@ def serialize_multistepttl_directory(target_dir: Path) -> list[dict[str, Any]] |
     returns:
         the serialized route data as a list of dicts, or none if files are not found.
     """
-    import pandas as pd
 
     try:
         tree_pkl = next(target_dir.glob("*__tree.pkl"))

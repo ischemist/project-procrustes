@@ -57,6 +57,7 @@ viz = [
 dev = [
   "ipykernel>=6.29.5",
   "mypy",
+  "pandas>=2.3.3",
   "pytest",
   "pytest-cov",
   "pytest-mock>=3.14.1",
