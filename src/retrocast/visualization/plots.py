@@ -1,7 +1,7 @@
 import plotly.graph_objects as go
 from ischemist.plotly import Styler
 
-from retrocast.models.stats import ModelStatistics, StratifiedMetric
+from retrocast.models.stats import ModelComparison, ModelStatistics, RankResult, StratifiedMetric
 
 
 def _create_metric_trace(metric: StratifiedMetric, name: str, color: str) -> go.Bar:
@@ -328,6 +328,136 @@ def plot_overall_comparison(models_stats: list[ModelStatistics]) -> go.Figure:
             ticktext=[m["label"] for m in metrics_config],
         ),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    Styler().apply_style(fig)
+
+    return fig
+
+
+def plot_probabilistic_ranking(ranking: list[RankResult], metric_name: str) -> go.Figure:
+    """
+    Creates a Heatmap of Model vs Rank Probability.
+    """
+    # Prepare data for Heatmap
+    # Y-axis: Model Names (sorted by expected rank, which `ranking` already is)
+    y_labels = [r.model_name for r in ranking]
+
+    # X-axis: Ranks (1, 2, 3...)
+    n_models = len(ranking)
+    x_labels = [f"Rank {i}" for i in range(1, n_models + 1)]
+
+    # Z-matrix: shape (n_models, n_ranks)
+    z_values = []
+    annotation_text = []
+
+    for r in ranking:
+        row_probs = []
+        row_text = []
+        for rank in range(1, n_models + 1):
+            prob = r.rank_probs.get(rank, 0.0)
+            row_probs.append(prob)
+            # Only show text if > 1% to keep it clean
+            txt = f"{prob:.0%}" if prob > 0.01 else ""
+            row_text.append(txt)
+        z_values.append(row_probs)
+        annotation_text.append(row_text)
+
+    # Because Plotly Heatmap draws bottom-to-top by default for Y-axis?
+    # No, standard matrix convention puts index 0 at top usually, but let's check.
+    # Actually, let's just reverse the lists so the #1 model is at the TOP visually.
+    y_labels = y_labels[::-1]
+    z_values = z_values[::-1]
+    annotation_text = annotation_text[::-1]
+
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=z_values,
+            x=x_labels,
+            y=y_labels,
+            text=annotation_text,
+            texttemplate="%{text}",  # Show the percentage text
+            colorscale="Blues",
+            zmin=0,
+            zmax=1,
+            xgap=1,
+            ygap=1,  # Grid lines
+        )
+    )
+
+    fig.update_layout(
+        title=f"Probabilistic Ranking: {metric_name}",
+        xaxis_title="Rank",
+        yaxis_title="Model",
+        # Remove colorbar if the text is sufficient
+        # coloraxis_showscale=False
+    )
+    Styler().apply_style(fig)
+
+    return fig
+
+
+def plot_pairwise_matrix(comparisons: list[ModelComparison], metric_name: str) -> go.Figure:
+    """
+    Plots a Win/Loss matrix.
+    Row Model vs Column Model.
+    """
+    # 1. Extract unique models
+    models = sorted(list(set([c.model_a for c in comparisons])))
+    model_map = {m: i for i, m in enumerate(models)}
+    n = len(models)
+
+    # 2. Initialize Matrix
+    z_values = [[None] * n for _ in range(n)]
+    text_values = [[""] * n for _ in range(n)]
+
+    # Track max value for symmetric color scaling
+    max_diff = 0.0
+
+    for c in comparisons:
+        row = model_map[c.model_a]
+        col = model_map[c.model_b]
+
+        # Value is the mean difference
+        diff = c.diff_mean
+        z_values[row][col] = diff
+        max_diff = max(max_diff, abs(diff))
+
+        # Text annotation
+        # We add a star if the CI excludes zero (Significant)
+        sig_mark = "★" if c.is_significant else ""
+        text_values[row][col] = f"{diff:+.1%}{sig_mark}"
+
+    # 3. Plot
+    # We reverse the Y-axis list so the matrix reads Top-to-Bottom, Left-to-Right
+    # (i.e. Model A at top row)
+    models_y = models[::-1]
+    z_values = z_values[::-1]
+    text_values = text_values[::-1]
+
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=z_values,
+            x=models,
+            y=models_y,
+            text=text_values,
+            texttemplate="%{text}",
+            # RdBu: Red (negative/loss) to Blue (positive/win).
+            # Or RdYlGn (Red-Yellow-Green). Let's use RdBu for scientific look.
+            colorscale="RdBu",
+            zmid=0,
+            zmin=-max_diff,
+            zmax=max_diff,
+            xgap=2,
+            ygap=2,
+        )
+    )
+
+    fig.update_layout(
+        title=f"Pairwise Comparison Matrix: {metric_name}",
+        xaxis_title="Opponent",
+        yaxis_title="Model (Row - Col)",
+        height=600 + (n * 20),  # Auto-scale height
+        width=700 + (n * 20),
     )
     Styler().apply_style(fig)
 

@@ -51,3 +51,9 @@ class ModelComparison(BaseModel):
     diff_ci_lower: float
     diff_ci_upper: float
     is_significant: bool
+
+
+class RankResult(BaseModel):
+    model_name: str
+    rank_probs: dict[int, float]
+    expected_rank: float

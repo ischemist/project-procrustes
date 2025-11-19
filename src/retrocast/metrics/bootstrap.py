@@ -5,7 +5,7 @@ from typing import Any, TypeVar
 import numpy as np
 
 from retrocast.models.evaluation import TargetEvaluation
-from retrocast.models.stats import MetricResult, ReliabilityFlag, StratifiedMetric
+from retrocast.models.stats import MetricResult, ModelComparison, ReliabilityFlag, StratifiedMetric
 
 T = TypeVar("T")
 
@@ -114,3 +114,87 @@ def make_get_top_k(k: int) -> Callable[[TargetEvaluation], float]:
         return 1.0 if (t.gt_rank is not None and t.gt_rank <= k) else 0.0
 
     return _get_top_k
+
+
+def compute_paired_difference(
+    targets_a: list[TargetEvaluation],
+    targets_b: list[TargetEvaluation],
+    metric_extractor: Callable[[TargetEvaluation], float],
+    model_a_name: str,
+    model_b_name: str,
+    metric_name: str,
+    n_boot: int = 10000,
+    seed: int = 42,
+) -> ModelComparison:
+    """
+    Computes the paired difference (B - A) with bootstrap CI.
+    Assumes targets_a and targets_b are aligned (same target IDs in same order).
+    """
+    # 1. Align Data
+    # We must ensure we are comparing Target X to Target X.
+    # Convert to dict for safety, then align.
+    dict_a = {t.target_id: t for t in targets_a}
+    dict_b = {t.target_id: t for t in targets_b}
+
+    # Intersection keys (should be all of them, but let's be safe)
+    common_ids = sorted(list(set(dict_a.keys()) & set(dict_b.keys())))
+
+    if len(common_ids) == 0:
+        raise ValueError("No common targets found between models.")
+
+    # Extract metric vectors
+    vec_a = np.array([metric_extractor(dict_a[tid]) for tid in common_ids])
+    vec_b = np.array([metric_extractor(dict_b[tid]) for tid in common_ids])
+
+    # 2. Bootstrap the Difference
+    n = len(vec_a)
+    rng = np.random.default_rng(seed)
+
+    # Calculate observed difference
+    diff_obs = float(np.mean(vec_b) - np.mean(vec_a))
+
+    # Resample indices (n_boot, n)
+    indices = rng.integers(0, n, (n_boot, n))
+
+    # Compute means for A and B using the SAME indices (This is the "Paired" part)
+    means_a = np.mean(vec_a[indices], axis=1)
+    means_b = np.mean(vec_b[indices], axis=1)
+
+    # Distribution of differences
+    diffs = means_b - means_a
+
+    # 3. CI & Significance
+    ci_lower = float(np.percentile(diffs, 2.5))
+    ci_upper = float(np.percentile(diffs, 97.5))
+
+    # Significant if 0 is not in the interval
+    is_significant = not (ci_lower <= 0 <= ci_upper)
+
+    return ModelComparison(
+        metric=metric_name,
+        model_a=model_a_name,
+        model_b=model_b_name,
+        diff_mean=diff_obs,
+        diff_ci_lower=ci_lower,
+        diff_ci_upper=ci_upper,
+        is_significant=is_significant,
+    )
+
+
+def get_bootstrap_distribution(
+    targets: list[TargetEvaluation], extractor: Callable[[TargetEvaluation], float], n_boot: int = 10000, seed: int = 42
+) -> np.ndarray:
+    """
+    Returns the raw array of bootstrap means. Shape: (n_boot,)
+    Useful for probabilistic ranking and advanced hypothesis testing.
+    """
+    values = np.array([extractor(t) for t in targets])
+    n = len(values)
+    if n == 0:
+        return np.zeros(n_boot)
+
+    rng = np.random.default_rng(seed)
+    indices = rng.integers(0, n, (n_boot, n))
+
+    # Calculate means for all 10k samples
+    return np.mean(values[indices], axis=1)
