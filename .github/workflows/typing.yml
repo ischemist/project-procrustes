@@ -1,4 +1,4 @@
-name: Type Checking
+name: Linting & Type Checking
 
 on:
   push:
@@ -18,10 +18,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.13
+      - name: Set up Python 3.11
         uses: actions/setup-python@v4
         with:
-          python-version: "3.13"
+          python-version: "3.11"
 
       - name: Install uv
         run: |
@@ -41,6 +41,12 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --extra viz
+
+      - name: Run ruff (linter)
+        run: uv run ruff check
+
+      - name: Run ruff (formatter)
+        run: uv run ruff format --check
 
       - name: Run ty
         run: uv run ty check .
