@@ -11,9 +11,7 @@ from tqdm import tqdm
 
 from retrocast import adapt_single_route
 from retrocast.chem import canonicalize_smiles
-from retrocast.io.files import save_json_gz
-from retrocast.io.loaders import load_raw_paroutes_list, load_stock_file
-from retrocast.io.manifests import create_manifest
+from retrocast.io import create_manifest, load_raw_paroutes_list, load_stock_file, save_json_gz
 from retrocast.metrics.solvability import is_route_solved
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import TargetInput

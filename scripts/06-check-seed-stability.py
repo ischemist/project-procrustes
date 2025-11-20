@@ -15,7 +15,7 @@ import numpy as np
 import plotly.graph_objects as go
 from ischemist.plotly import Styler
 
-from retrocast.io.files import load_json_gz
+from retrocast.io import load_json_gz
 from retrocast.metrics.bootstrap import compute_metric_with_ci, get_is_solvable, make_get_top_k
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.utils.logging import logger

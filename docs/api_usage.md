@@ -21,10 +21,10 @@ The simplest way to adapt a route is using `adapt_single_route`. This function w
 For route-centric models, pass a single route object from the model's output:
 
 ```python
-from retrocast import adapt_single_route, TargetIdentity
+from retrocast import adapt_single_route, TargetInput
 
 # Define your target molecule
-target = TargetIdentity(
+target = TargetInput(
     id="aspirin",
     smiles="CC(=O)Oc1ccccc1C(=O)O"
 )
@@ -60,9 +60,9 @@ else:
 For target-centric models, pass the complete target data dict (containing metadata and routes):
 
 ```python
-from retrocast import adapt_single_route, TargetIdentity
+from retrocast import adapt_single_route, TargetInput
 
-target = TargetIdentity(id="mol1", smiles="CCO")
+target = TargetInput(id="mol1", smiles="CCO")
 
 # RetroChimera format: complete target data with nested routes
 retrochimera_data = {
@@ -89,9 +89,9 @@ route = adapt_single_route(retrochimera_data, target, adapter_name="retrochimera
 Use `adapt_routes` to process multiple routes at once:
 
 ```python
-from retrocast import adapt_routes, TargetIdentity
+from retrocast import adapt_routes, TargetInput
 
-target = TargetIdentity(
+target = TargetInput(
     id="ibuprofen",
     smiles="CC(C)Cc1ccc(cc1)C(C)C(=O)O"
 )
@@ -142,7 +142,7 @@ from retrocast import get_adapter
 adapter = get_adapter("dms")
 
 # Use the adapter directly
-target = TargetIdentity(id="mol1", smiles="CCO")
+target = TargetInput(id="mol1", smiles="CCO")
 raw_data = [...]  # Your model's output
 
 for route in adapter.cast(raw_data, target):
@@ -158,9 +158,9 @@ RetroCast provides utilities for filtering and deduplicating routes:
 Remove duplicate routes based on their structural signature:
 
 ```python
-from retrocast import adapt_routes, deduplicate_routes, TargetIdentity
+from retrocast import adapt_routes, deduplicate_routes, TargetInput
 
-target = TargetIdentity(id="test", smiles="CCO")
+target = TargetInput(id="test", smiles="CCO")
 raw_routes = [...]  # May contain duplicates
 
 # Adapt all routes
@@ -183,10 +183,10 @@ from retrocast import (
     sample_top_k,
     sample_random_k,
     sample_k_by_length,
-    TargetIdentity
+    TargetInput
 )
 
-target = TargetIdentity(id="test", smiles="CCO")
+target = TargetInput(id="test", smiles="CCO")
 routes = adapt_routes([...], target, "dms")
 unique_routes = deduplicate_routes(routes)
 
@@ -205,9 +205,9 @@ diverse_20 = sample_k_by_length(unique_routes, max_total=20)
 The `Route` object provides access to the complete retrosynthetic tree:
 
 ```python
-from retrocast import adapt_single_route, TargetIdentity
+from retrocast import adapt_single_route, TargetInput
 
-target = TargetIdentity(id="mol", smiles="CCO")
+target = TargetInput(id="mol", smiles="CCO")
 route = adapt_single_route(raw_route, target, "dms")
 
 # Route properties
@@ -250,12 +250,12 @@ from retrocast import (
     adapt_routes,
     deduplicate_routes,
     sample_top_k,
-    TargetIdentity,
+    TargetInput,
     ADAPTER_MAP
 )
 
 # 1. Define your target
-target = TargetIdentity(
+target = TargetInput(
     id="my_molecule",
     smiles="CC(=O)Oc1ccccc1C(=O)O"  # Aspirin
 )
@@ -299,10 +299,10 @@ with open("output_routes.json", "w") as f:
 The API handles errors gracefully:
 
 ```python
-from retrocast import adapt_single_route, TargetIdentity
+from retrocast import adapt_single_route, TargetInput
 from retrocast.exceptions import RetroCastException
 
-target = TargetIdentity(id="test", smiles="CCO")
+target = TargetInput(id="test", smiles="CCO")
 
 # Invalid data returns None instead of raising
 route = adapt_single_route({"invalid": "data"}, target, "dms")
@@ -321,10 +321,10 @@ except RetroCastException as e:
 For advanced use cases, you can work directly with adapter instances:
 
 ```python
-from retrocast import get_adapter, TargetIdentity
+from retrocast import get_adapter, TargetInput
 
 adapter = get_adapter("dms")
-target = TargetIdentity(id="test", smiles="CCO")
+target = TargetInput(id="test", smiles="CCO")
 
 # The adapt method is a generator - yields routes one at a time
 for route in adapter.cast(raw_data, target):
@@ -340,7 +340,7 @@ for route in adapter.cast(raw_data, target):
 RetroCast is fully typed for excellent IDE support:
 
 ```python
-from retrocast import Route, Molecule, ReactionStep, TargetIdentity
+from retrocast import Route, Molecule, ReactionStep, TargetInput
 
 def analyze_route(route: Route) -> dict[str, int]:
     """Example function with type hints."""

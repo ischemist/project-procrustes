@@ -4,21 +4,28 @@ from typing import Any
 
 from retrocast.adapters.factory import get_adapter
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
-from retrocast.io.files import load_json_gz
-from retrocast.io.loaders import load_benchmark
-from retrocast.io.manifests import create_manifest
+from retrocast.io.blob import load_json_gz, save_json_gz
+from retrocast.io.data import load_benchmark, load_routes, load_stock_file
+from retrocast.io.provenance import create_manifest
+from retrocast.metrics.bootstrap import compute_metric_with_ci, get_is_solvable, make_get_top_k
+from retrocast.models.evaluation import EvaluationResults
+from retrocast.models.stats import ModelStatistics
 from retrocast.utils.logging import logger
-from retrocast.workflow import ingest
+from retrocast.visualization.model_performance import plot_single_model_diagnostics
+from retrocast.visualization.report import generate_markdown_report
+from retrocast.workflow import ingest, score
 
 
 def _get_paths(config: dict) -> dict[str, Path]:
     """Resolve standard directory layout."""
-    # default to current dir/data if not specified
     base = Path(config.get("data_dir", "data"))
     return {
         "benchmarks": base / "1-benchmarks" / "definitions",
+        "stocks": base / "1-benchmarks" / "stocks",
         "raw": base / "2-raw",
         "processed": base / "3-processed",
+        "scored": base / "4-scored",
+        "results": base / "5-results",
     }
 
 
@@ -41,14 +48,13 @@ def _resolve_models(args: Any, config: dict) -> list[str]:
 
 def _resolve_benchmarks(args: Any, paths: dict[str, Path]) -> list[str]:
     """Determine which benchmarks to process by looking at files."""
-    # Find all valid benchmark definition files
     avail_files = list(paths["benchmarks"].glob("*.json.gz"))
     avail_names = [p.name.replace(".json.gz", "") for p in avail_files]
 
-    if args.all_datasets:
+    if hasattr(args, "all_datasets") and args.all_datasets:
         return avail_names
 
-    if args.dataset:
+    if hasattr(args, "dataset") and args.dataset:
         if args.dataset not in avail_names:
             logger.error(f"Benchmark '{args.dataset}' not found in {paths['benchmarks']}")
             sys.exit(1)
@@ -58,11 +64,13 @@ def _resolve_benchmarks(args: Any, paths: dict[str, Path]) -> list[str]:
     sys.exit(1)
 
 
+# --- INGESTION ---
+
+
 def _ingest_single(model_name: str, benchmark_name: str, config: dict, paths: dict, args: Any) -> None:
-    """The core logic for a single run."""
+    """The core logic for ingestion."""
     model_conf = config["models"][model_name]
 
-    # 1. Resolve Raw File Path
     # Convention: data/raw/{model}/{benchmark}/{filename}
     raw_filename = model_conf.get("raw_results_filename", "results.json.gz")
     raw_path = paths["raw"] / model_name / benchmark_name / raw_filename
@@ -71,13 +79,11 @@ def _ingest_single(model_name: str, benchmark_name: str, config: dict, paths: di
         logger.warning(f"Skipping {model_name}/{benchmark_name}: File not found at {raw_path}")
         return
 
-    # 2. Resolve Sampling
-    # CLI overrides Config overrides None
-    strategy = args.sampling_strategy
-    k = args.k
+    # Resolve Sampling
+    strategy = getattr(args, "sampling_strategy", None)
+    k = getattr(args, "k", None)
 
     if not strategy:
-        # Fallback to config
         samp_conf = model_conf.get("sampling")
         if samp_conf:
             strategy = samp_conf.get("strategy")
@@ -87,19 +93,15 @@ def _ingest_single(model_name: str, benchmark_name: str, config: dict, paths: di
         logger.error(f"Invalid sampling strategy: {strategy}")
         return
 
-    # 3. Load Artifacts
     try:
         benchmark = load_benchmark(paths["benchmarks"] / f"{benchmark_name}.json.gz")
         adapter = get_adapter(model_conf["adapter"])
 
-        # Handle loading based on extension (assuming JSON/GZ mostly)
-        # If you have pickles, you might want a helper here
         if raw_path.suffix == ".gz":
             raw_data = load_json_gz(raw_path)
         else:
-            raise NotImplementedError("Unsupported file format")
+            raise NotImplementedError("Unsupported file format (only .json.gz supported currently)")
 
-        # 4. Run Workflow
         processed_routes, out_path, stats = ingest.ingest_model_predictions(
             model_name=model_name,
             benchmark=benchmark,
@@ -111,7 +113,6 @@ def _ingest_single(model_name: str, benchmark_name: str, config: dict, paths: di
             sample_k=k,
         )
 
-        # 5. Manifest
         manifest = create_manifest(
             action="ingest",
             sources=[raw_path, paths["benchmarks"] / f"{benchmark_name}.json.gz"],
@@ -140,6 +141,167 @@ def handle_ingest(args: Any, config: dict[str, Any]) -> None:
             _ingest_single(model, bench, config, paths, args)
 
 
+# --- SCORING ---
+
+
+def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) -> None:
+    bench_path = paths["benchmarks"] / f"{benchmark_name}.json.gz"
+    routes_path = paths["processed"] / benchmark_name / model_name / "routes.json.gz"
+
+    if not routes_path.exists():
+        logger.warning(f"Skipping score for {model_name}/{benchmark_name}: Routes not found. Run ingest first.")
+        return
+
+    try:
+        benchmark = load_benchmark(bench_path)
+
+        # Determine Stock
+        # 1. CLI Arg -> 2. Benchmark Def -> 3. Fail
+        stock_name = getattr(args, "stock", None) or benchmark.stock_name
+        if not stock_name:
+            logger.error(f"Skipping {benchmark_name}: No stock specified in definition or CLI.")
+            return
+
+        stock_path = paths["stocks"] / f"{stock_name}.txt"
+        if not stock_path.exists():
+            logger.error(f"Stock file missing: {stock_path}")
+            return
+
+        stock_set = load_stock_file(stock_path)
+        predictions = load_routes(routes_path)
+
+        eval_results = score.score_model(
+            benchmark=benchmark, predictions=predictions, stock=stock_set, stock_name=stock_name, model_name=model_name
+        )
+
+        # Save Output: data/4-scored/{benchmark}/{model}/{stock}/evaluation.json.gz
+        output_dir = paths["scored"] / benchmark_name / model_name / stock_name
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        out_path = output_dir / "evaluation.json.gz"
+        save_json_gz(eval_results, out_path)
+
+        # Manifest
+        manifest = create_manifest(
+            action="score_model",
+            sources=[bench_path, routes_path, stock_path],
+            outputs=[(out_path, eval_results)],
+            parameters={"model": model_name, "benchmark": benchmark_name, "stock": stock_name},
+            statistics={
+                "n_targets": len(eval_results.results),
+                "n_solvable": sum(1 for r in eval_results.results.values() if r.is_solvable),
+            },
+        )
+
+        with open(output_dir / "manifest.json", "w") as f:
+            f.write(manifest.model_dump_json(indent=2))
+
+        logger.info(f"Scored {model_name} on {benchmark_name} (Stock: {stock_name}). Saved to {out_path}")
+
+    except Exception as e:
+        logger.error(f"Failed to score {model_name} on {benchmark_name}: {e}", exc_info=True)
+
+
+def handle_score(args: Any, config: dict[str, Any]) -> None:
+    paths = _get_paths(config)
+    models = _resolve_models(args, config)
+    benchmarks = _resolve_benchmarks(args, paths)
+
+    logger.info(f"Queued scoring: {len(models)} models x {len(benchmarks)} benchmarks.")
+
+    for model in models:
+        for bench in benchmarks:
+            _score_single(model, bench, paths, args)
+
+
+# --- ANALYSIS ---
+
+
+def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any) -> None:
+    # We need to know WHICH stock was used for scoring.
+    # If CLI arg provided, use it. Else, check directory for single entry.
+    stock_arg = getattr(args, "stock", None)
+    scored_base = paths["scored"] / benchmark_name / model_name
+
+    if not scored_base.exists():
+        logger.warning(f"Skipping analysis for {model_name}/{benchmark_name}: No scored data found.")
+        return
+
+    if stock_arg:
+        stocks_to_process = [stock_arg]
+    else:
+        # Auto-discover scored stocks
+        stocks_to_process = [d.name for d in scored_base.iterdir() if d.is_dir()]
+        if not stocks_to_process:
+            logger.warning(f"No stock directories found in {scored_base}")
+            return
+
+    for stock_name in stocks_to_process:
+        score_path = scored_base / stock_name / "evaluation.json.gz"
+        if not score_path.exists():
+            logger.warning(f"Missing evaluation file: {score_path}")
+            continue
+
+        try:
+            logger.info(f"Analyzing {model_name} | {benchmark_name} | {stock_name}...")
+            raw_data = load_json_gz(score_path)
+            eval_results = EvaluationResults.model_validate(raw_data)
+            targets = list(eval_results.results.values())
+
+            # Bootstrapping
+            # Helper grouping key
+            def get_length(t):
+                return t.route_length
+
+            stat_solvability = compute_metric_with_ci(targets, get_is_solvable, "Solvability", group_by=get_length)
+
+            stat_topk = {}
+            for k in [1, 5, 10]:
+                stat_topk[k] = compute_metric_with_ci(targets, make_get_top_k(k), f"Top-{k}", group_by=get_length)
+
+            final_stats = ModelStatistics(
+                model_name=model_name,
+                benchmark=benchmark_name,
+                stock=stock_name,
+                solvability=stat_solvability,
+                top_k_accuracy=stat_topk,
+            )
+
+            # Save Output: data/5-results/{benchmark}/{model}/{stock}/
+            output_dir = paths["results"] / benchmark_name / model_name / stock_name
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            save_json_gz(final_stats, output_dir / "statistics.json.gz")
+
+            # Reports
+            report = generate_markdown_report(final_stats)
+            with open(output_dir / "report.md", "w") as f:
+                f.write(report)
+
+            fig = plot_single_model_diagnostics(final_stats)
+            fig.write_html(output_dir / "diagnostics.html", include_plotlyjs="cdn", auto_open=False)
+
+            logger.info(f"Analysis generated: {output_dir}")
+
+        except Exception as e:
+            logger.error(f"Failed analysis for {model_name} ({stock_name}): {e}", exc_info=True)
+
+
+def handle_analyze(args: Any, config: dict[str, Any]) -> None:
+    paths = _get_paths(config)
+    models = _resolve_models(args, config)
+    benchmarks = _resolve_benchmarks(args, paths)
+
+    logger.info(f"Queued analysis: {len(models)} models x {len(benchmarks)} benchmarks.")
+
+    for model in models:
+        for bench in benchmarks:
+            _analyze_single(model, bench, paths, args)
+
+
+# --- UTILS ---
+
+
 def handle_list(config: dict[str, Any]) -> None:
     """List available models."""
     models = config.get("models", {})
@@ -157,12 +319,3 @@ def handle_info(config: dict[str, Any], model_name: str) -> None:
     import yaml
 
     print(yaml.dump({model_name: conf}))
-
-
-# Placeholder handlers
-def handle_score(args: Any, config: dict[str, Any]) -> None:
-    pass
-
-
-def handle_analyze(args: Any, config: dict[str, Any]) -> None:
-    pass

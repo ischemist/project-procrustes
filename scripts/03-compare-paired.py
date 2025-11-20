@@ -9,7 +9,7 @@ Usage:
 import argparse
 from pathlib import Path
 
-from retrocast.io.files import load_json_gz
+from retrocast.io import load_json_gz
 from retrocast.metrics.bootstrap import (
     compute_paired_difference,
     get_is_solvable,

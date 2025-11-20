@@ -6,7 +6,7 @@ from typing import Any
 import yaml
 
 from retrocast import __version__
-from retrocast.cli import handlers
+from retrocast.cli import adhoc, handlers
 from retrocast.utils.logging import logger
 
 
@@ -62,14 +62,47 @@ def main() -> None:
 
     # --- SCORE ---
     score_parser = subparsers.add_parser("score", help="Run evaluation")
-    score_parser.add_argument("--model", required=True)
-    score_parser.add_argument("--dataset", required=True)
+    # Model selection
+    m_group_s = score_parser.add_mutually_exclusive_group(required=True)
+    m_group_s.add_argument("--model", help="Single model name")
+    m_group_s.add_argument("--all-models", action="store_true", help="Process all models")
+
+    # Dataset selection
+    d_group_s = score_parser.add_mutually_exclusive_group(required=True)
+    d_group_s.add_argument("--dataset", help="Single benchmark name")
+    d_group_s.add_argument("--all-datasets", action="store_true", help="Process all benchmarks")
+
+    score_parser.add_argument("--stock", help="Override stock file name")
+
+    # --- SCORE FILE (Ad-Hoc) ---
+    # CHANGE: Add this new subparser block
+    sf_parser = subparsers.add_parser("score-file", help="Run evaluation on specific files (adhoc mode)")
+    sf_parser.add_argument("--benchmark", required=True, help="Path to benchmark .json.gz")
+    sf_parser.add_argument("--routes", required=True, help="Path to predictions .json.gz")
+    sf_parser.add_argument("--stock", required=True, help="Path to stock .txt")
+    sf_parser.add_argument("--output", required=True, help="Path to output .json.gz")
+    sf_parser.add_argument("--model-name", default="adhoc-model", help="Name of model for report")
 
     # --- ANALYZE ---
-    # analyze_parser = subparsers.add_parser("analyze", help="Generate reports")
+    analyze_parser = subparsers.add_parser("analyze", help="Generate reports")
 
+    # Model selection
+    m_group_a = analyze_parser.add_mutually_exclusive_group(required=True)
+    m_group_a.add_argument("--model", help="Single model name")
+    m_group_a.add_argument("--all-models", action="store_true", help="Process all models")
+
+    # Dataset selection
+    d_group_a = analyze_parser.add_mutually_exclusive_group(required=True)
+    d_group_a.add_argument("--dataset", help="Single benchmark name")
+    d_group_a.add_argument("--all-datasets", action="store_true", help="Process all benchmarks")
+
+    analyze_parser.add_argument("--stock", help="Specific stock to analyze (optional, auto-detects if omitted)")
     args = parser.parse_args()
-    config = load_config(args.config)
+
+    if args.command != "score-file":
+        config = load_config(args.config)
+    else:
+        config = {}  # dummy
 
     try:
         if args.command == "list":
@@ -82,6 +115,8 @@ def main() -> None:
             handlers.handle_score(args, config)
         elif args.command == "analyze":
             handlers.handle_analyze(args, config)
+        elif args.command == "score-file":
+            adhoc.handle_score_file(args)
 
     except Exception as e:
         logger.critical(f"Command failed: {e}", exc_info=True)
