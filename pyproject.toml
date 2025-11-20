@@ -46,12 +46,13 @@ viz = [
 
 [dependency-groups]
 dev = [
+  "hypothesis>=6.148.2",
   "ipykernel>=6.29.5",
-  "mypy",
   "pandas<2.2",
   "pytest",
   "pytest-cov",
   "pytest-mock>=3.14.1",
+  "pytest-sugar>=1.1.1",
   "requests>=2.32.5",
   "rich>=13.9.4",
   "ruff",
@@ -72,7 +73,7 @@ omit = [
   "*/retrocast/types.py",
   "*/retrocast/utils/logging.py",
   "*/retrocast/exceptions.py",
-  "src/directmultistep/training/runner.py"
+  "*/retrocast/visualization/*.py"
 ]
 
 [tool.coverage.report]
@@ -100,10 +101,10 @@ ignore_errors = true
 
 [tool.pytest.ini_options]
 markers = [
-  "unit: fast, isolated, deterministic logic tests.",
-  "contract: fast, cpu-based tests for module i/o contracts (shapes/dtypes).",
-  "integration: slow, cpu-based tests for inter-module interactions.",
-  "regression: slow, numerically-sensitive tests against a golden baseline.",
+  "unit: runs in <10ms, tests single functions/classes, no IO",
+  "integration: tests workflow glue, uses tmp_path",
+  "contract: verifies adapters output valid retrocast objects",
+  "regression: runs against frozen json.gz files",
 ]
 
 [tool.ruff]

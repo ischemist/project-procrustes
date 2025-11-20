@@ -1,7 +1,11 @@
 """Unit tests for Route.get_content_hash() method."""
 
+import pytest
+
 from retrocast.models.chem import Molecule, ReactionStep, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
+
+pytestmark = pytest.mark.unit
 
 # ==============================================================================
 # Route.get_content_hash Tests
