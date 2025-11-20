@@ -14,7 +14,6 @@ from retrocast.metrics.ranking import compute_probabilistic_ranking
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.typing import SmilesStr
-from retrocast.visualization.model_performance import plot_single_model_diagnostics
 from retrocast.workflow import score as score_workflow
 
 __all__ = [
@@ -24,7 +23,6 @@ __all__ = [
     "score_predictions",
     "compute_metric_with_ci",
     "compute_probabilistic_ranking",
-    "plot_single_model_diagnostics",
 ]
 
 

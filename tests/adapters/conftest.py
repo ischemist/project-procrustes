@@ -83,7 +83,7 @@ def raw_syntheseus_data() -> dict[str, Any]:
 
 @pytest.fixture(scope="session")
 def raw_synllama_data() -> dict[str, Any]:
-    """loads the raw syntheseus prediction data from the test file."""
+    """loads the raw synllama prediction data from the test file."""
     path = Path(MODEL_PRED_DIR / "synllama/results.json.gz")
     with gzip.open(path, "rt", encoding="utf-8") as f:
         return json.load(f)
@@ -91,7 +91,7 @@ def raw_synllama_data() -> dict[str, Any]:
 
 @pytest.fixture(scope="session")
 def raw_paroutes_data() -> dict[str, Any]:
-    """loads the raw syntheseus prediction data from the test file."""
+    """loads the raw paroutes prediction data from the test file."""
     path = Path(TEST_DATA_DIR / "paroutes.json.gz")
     with gzip.open(path, "rt", encoding="utf-8") as f:
         return json.load(f)
