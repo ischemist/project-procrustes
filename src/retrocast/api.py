@@ -9,9 +9,12 @@ without relying on the specific directory structure of the CLI.
 from pathlib import Path
 
 from retrocast.io import load_benchmark, load_routes, load_stock_file
+from retrocast.metrics.bootstrap import compute_metric_with_ci
+from retrocast.metrics.ranking import compute_probabilistic_ranking
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.typing import SmilesStr
+from retrocast.visualization.model_performance import plot_single_model_diagnostics
 from retrocast.workflow import score as score_workflow
 
 __all__ = [
@@ -19,6 +22,9 @@ __all__ = [
     "load_routes",
     "load_stock_file",
     "score_predictions",
+    "compute_metric_with_ci",
+    "compute_probabilistic_ranking",
+    "plot_single_model_diagnostics",
 ]
 
 
