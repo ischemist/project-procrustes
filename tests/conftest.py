@@ -1,5 +1,4 @@
 import gzip
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -9,6 +8,7 @@ import pytest
 from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity, TargetInput
 from retrocast.typing import InchiKeyStr, SmilesStr
+from tests.helpers import _make_leaf_molecule, _synthetic_inchikey
 
 TEST_DATA_DIR = Path("tests/testing_data")
 MODEL_PRED_DIR = TEST_DATA_DIR / "model-predictions"
@@ -24,24 +24,6 @@ def _carbon_chain_smiles(n: int) -> str:
     if n <= 0:
         raise ValueError("Carbon chain length must be positive")
     return "C" * n
-
-
-def _synthetic_inchikey(smiles: str) -> str:
-    """
-    Generate a deterministic fake InchiKey from SMILES for testing.
-    Format mimics real InchiKey structure: XXXXXXXXXXXXXX-XXXXXXXXXX-X
-    """
-    h = hashlib.sha256(smiles.encode()).hexdigest().upper()
-    return f"{h[:14]}-{h[14:24]}-N"
-
-
-def _make_leaf_molecule(smiles: str) -> Molecule:
-    """Create a leaf molecule (no synthesis step) from SMILES."""
-    return Molecule(
-        smiles=SmilesStr(smiles),
-        inchikey=InchiKeyStr(_synthetic_inchikey(smiles)),
-        synthesis_step=None,
-    )
 
 
 def _make_linear_route(depth: int) -> Route:

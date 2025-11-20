@@ -13,10 +13,11 @@ import pytest
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.io.data import load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
-from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
-from retrocast.typing import InchiKeyStr, SmilesStr
+from retrocast.models.chem import Route, TargetIdentity
+from retrocast.typing import SmilesStr
 from retrocast.workflow.ingest import ingest_model_predictions
 from retrocast.workflow.score import score_model
+from tests.helpers import _make_simple_route, _make_two_step_route
 
 # =============================================================================
 # Test Adapter - Minimal adapter for synthetic data
@@ -49,50 +50,6 @@ class SyntheticAdapter(BaseAdapter):
 # =============================================================================
 # Fixtures
 # =============================================================================
-
-
-def _synthetic_inchikey(smiles: str) -> str:
-    """Generate deterministic fake InchiKey from SMILES."""
-    import hashlib
-
-    h = hashlib.sha256(smiles.encode()).hexdigest().upper()
-    return f"{h[:14]}-{h[14:24]}-N"
-
-
-def _make_leaf(smiles: str) -> Molecule:
-    """Create a leaf molecule."""
-    return Molecule(
-        smiles=SmilesStr(smiles),
-        inchikey=InchiKeyStr(_synthetic_inchikey(smiles)),
-        synthesis_step=None,
-    )
-
-
-def _make_simple_route(target_smiles: str, leaf_smiles: str, rank: int = 1) -> Route:
-    """Create a simple one-step route: target <- leaf."""
-    leaf = _make_leaf(leaf_smiles)
-    target = Molecule(
-        smiles=SmilesStr(target_smiles),
-        inchikey=InchiKeyStr(_synthetic_inchikey(target_smiles)),
-        synthesis_step=ReactionStep(reactants=[leaf]),
-    )
-    return Route(target=target, rank=rank)
-
-
-def _make_two_step_route(target_smiles: str, intermediate_smiles: str, leaf_smiles: str, rank: int = 1) -> Route:
-    """Create a two-step route: target <- intermediate <- leaf."""
-    leaf = _make_leaf(leaf_smiles)
-    intermediate = Molecule(
-        smiles=SmilesStr(intermediate_smiles),
-        inchikey=InchiKeyStr(_synthetic_inchikey(intermediate_smiles)),
-        synthesis_step=ReactionStep(reactants=[leaf]),
-    )
-    target = Molecule(
-        smiles=SmilesStr(target_smiles),
-        inchikey=InchiKeyStr(_synthetic_inchikey(target_smiles)),
-        synthesis_step=ReactionStep(reactants=[intermediate]),
-    )
-    return Route(target=target, rank=rank)
 
 
 @pytest.fixture
