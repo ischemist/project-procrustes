@@ -141,7 +141,7 @@ def main():
                 name=f"random-n5-{n}-seed={CANONICAL_SEED}",
                 targets=targets_random,
                 source_paths=[n5_path],
-                stock_name="n5-stock",  # Uses its own stock
+                stock_name="n1-n5-stock",
                 description=f"Random sample of {n} routes from n5 (legacy comparison).",
                 out_dir=DEF_DIR,
                 seed=CANONICAL_SEED,

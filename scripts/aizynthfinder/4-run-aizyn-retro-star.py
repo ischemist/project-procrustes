@@ -1,73 +1,99 @@
 """
 Run AiZynthFinder Retro* retrosynthesis predictions on a batch of targets.
 
-This script processes targets from a CSV file using AiZynthFinder's Retro* algorithm
-and saves results in a structured format similar to the DMS predictions script.
+This script processes targets from a benchmark using AiZynthFinder's Retro* algorithm
+and saves results in a structured format similar to the MCTS predictions script.
 
 Example usage:
-    uv run --extra aizyn scripts/aizynthfinder/4-run-aizyn-retro-star.py --target-name "uspto-190"
+    uv run --extra aizyn scripts/aizynthfinder/4-run-aizyn-retro-star.py --benchmark random-n5-2-seed=20251030
 
-The target CSV file should be located at: data/{target_name}.csv
-Results are saved to: data/evaluations/aizynthfinder-retro-star/{target_name}/
+The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
+Results are saved to: data/2-raw/aizynthfinder-retro-star/{benchmark_name}/
 """
 
 import argparse
-import json
 import time
 from pathlib import Path
+from typing import Any
 
 from aizynthfinder.aizynthfinder import AiZynthFinder
 from tqdm import tqdm
 
-from retrocast.io import load_targets_csv, save_json_gz
+from retrocast.io.files import save_json_gz
+from retrocast.io.loaders import load_benchmark, save_execution_stats
+from retrocast.io.manifests import create_manifest
+from retrocast.models.benchmark import ExecutionStats
+from retrocast.utils.logging import logger
 
-base_dir = Path(__file__).resolve().parents[2]
+BASE_DIR = Path(__file__).resolve().parents[2]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--target-name", type=str, required=True, help="Name of the target")
+    parser.add_argument(
+        "--benchmark", type=str, required=True, help="Name of the benchmark set (e.g. stratified-linear-600)"
+    )
     args = parser.parse_args()
 
-    targets = load_targets_csv(base_dir / "data" / "targets" / f"{args.target_name}.csv")
+    # 1. Load Benchmark
+    bench_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
+    benchmark = load_benchmark(bench_path)
+    assert benchmark.stock_name is not None, f"Stock name not found in benchmark {args.benchmark}"
 
-    config_path = base_dir / "data" / "models" / "aizynthfinder" / "config_retrostar.yaml"
-
-    save_dir = base_dir / "data" / "evaluations" / "aizynthfinder-retro-star" / args.target_name
+    # 2. Setup Output
+    save_dir = BASE_DIR / "data" / "2-raw" / "aizynthfinder-retro-star" / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    results = {}
-    solved_count = 0
-    start = time.time()
+    config_path = BASE_DIR / "data" / "0-assets" / "model-configs" / "aizynthfinder" / "config_retrostar.yaml"
 
-    for target_key, target_smiles in tqdm(targets.items()):
+    results: dict[str, dict[str, Any]] = {}
+    solved_count = 0
+    runtime = ExecutionStats()
+
+    for target in tqdm(benchmark.targets.values()):
+        t_start_wall = time.perf_counter()
+        t_start_cpu = time.process_time()
+
         finder = AiZynthFinder(configfile=str(config_path))
-        finder.stock.select("retrocast-bb")
+        finder.stock.select(benchmark.stock_name)
         finder.expansion_policy.select("uspto")
         finder.filter_policy.select("uspto")
-        finder.target_smiles = target_smiles
 
-        finder.tree_search()
-        finder.build_routes()
+        try:
+            finder.target_smiles = target.smiles
+            finder.tree_search()
+            finder.build_routes()
 
-        if finder.routes:
-            routes_dict = finder.routes.dict_with_extra(include_metadata=False, include_scores=True)
-            results[target_key] = routes_dict
-            solved_count += 1
-        else:
-            results[target_key] = {}
-
-    end = time.time()
+            if finder.routes:
+                routes_dict = finder.routes.dict_with_extra(include_metadata=False, include_scores=True)
+                results[target.id] = routes_dict
+                solved_count += 1
+            else:
+                results[target.id] = {}
+        except Exception as e:
+            logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
+            results[target.id] = {}
+        finally:
+            t_end_wall = time.perf_counter()
+            t_end_cpu = time.process_time()
+            runtime.wall_time[target.id] = t_end_wall - t_start_wall
+            runtime.cpu_time[target.id] = t_end_cpu - t_start_cpu
 
     summary = {
         "solved_count": solved_count,
-        "total_targets": len(targets),
-        "time_elapsed": end - start,
+        "total_targets": len(benchmark.targets),
     }
 
-    with open(save_dir / "summary.json", "w") as f:
-        json.dump(summary, f)
     save_json_gz(results, save_dir / "results.json.gz")
+    save_execution_stats(runtime, save_dir / "execution_stats.json.gz")
+    manifest = create_manifest(
+        action="scripts/aizynthfinder/4-run-aizyn-retro-star.py",
+        sources=[bench_path, config_path],
+        outputs=[(save_dir / "results.json.gz", results)],
+        statistics=summary,
+    )
 
-    print(f"Completed processing {len(targets)} targets")
-    print(f"Solved: {solved_count}")
-    print(f"Time elapsed: {end - start:.2f} seconds")
+    with open(save_dir / "manifest.json", "w") as f:
+        f.write(manifest.model_dump_json(indent=2))
+
+    logger.info(f"Completed processing {len(benchmark.targets)} targets")
+    logger.info(f"Solved: {solved_count}")

@@ -6,91 +6,45 @@ models:
   aizynthfinder-mcts:
     adapter: aizynth
     raw_results_filename: results.json.gz
-    sampling:
-      strategy: top-k
-      k: 10
   aizynthfinder-retro-star:
     adapter: aizynth
     raw_results_filename: results.json.gz
-    sampling:
-      strategy: top-k
-      k: 10
   askcos:
     adapter: askcos
     raw_results_filename: results.json.gz
-    preprocess_script: scripts/askcos/gather-askcos-results.py
-    sampling:
-      strategy: top-k
-      k: 10
   retrochimera:
     adapter: retrochimera
     raw_results_filename: results.json.gz
-    preprocess_script: scripts/retrochimera/gather-chimera-results.py
-    sampling:
-      strategy: top-k
-      k: 10
   dream-retroer:
     adapter: dreamretro
     raw_results_filename: results.json.gz
-    preprocess_script: scripts/dream-retroer/create-summary.py
-    # this model only ever returns one route, so sampling is moot.
-    sampling: null
   retro-star:
     adapter: retrostar
     raw_results_filename: results.json.gz
-    sampling: null # only returns one route
   multistep-ttl:
     adapter: multistepttl
     raw_results_filename: results.json.gz
-    preprocess_script: scripts/multistep-ttl/1-serialize-pickles.py
-    sampling:
-      strategy: top-k
-      k: 10
   dms-flash-fp16:
     adapter: dms
-    raw_results_filename: ursa_bb_results.json.gz
-    sampling:
-      strategy: by-length
-      k: 10
+    raw_results_filename: valid_results.json.gz
   dms-wide-fp16:
     adapter: dms
-    raw_results_filename: ursa_bb_results.json.gz
-    sampling:
-      strategy: by-length
-      k: 10
+    raw_results_filename: valid_results.json.gz
   dms-explorer-XL-fp16:
     adapter: dms
-    raw_results_filename: ursa_bb_results.json.gz
-    sampling:
-      strategy: top-k
-      k: 10
+    raw_results_filename: valid_results.json.gz
   synplanner-mcts:
     adapter: synplanner
     raw_results_filename: results.json.gz
-    sampling:
-      strategy: top-k
-      k: 10
   synplanner-eval:
     adapter: synplanner
     raw_results_filename: results.json.gz
-    sampling:
-      strategy: top-k
-      k: 10
   syntheseus-bfs-local-retro:
     adapter: syntheseus
     raw_results_filename: results.json.gz
-    sampling:
-      strategy: top-k
-      k: 10
   syntheseus-retro0-local-retro:
     adapter: syntheseus
     raw_results_filename: results.json.gz
-    sampling:
-      strategy: top-k
-      k: 10
   synllama:
     adapter: synllama
     raw_results_filename: results.json.gz
-    sampling:
-      strategy: top-k
-      k: 10

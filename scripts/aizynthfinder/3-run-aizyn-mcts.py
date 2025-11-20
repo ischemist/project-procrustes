@@ -5,7 +5,7 @@ This script processes targets from a CSV file using AiZynthFinder's MCTS algorit
 and saves results in a structured format similar to the DMS predictions script.
 
 Example usage:
-    uv run --extra aizyn scripts/aizynthfinder/3-run-aizyn-mcts.py --benchmark random-n5-2-seed=20251030 --stock n1-n5-bb
+    uv run --extra aizyn scripts/aizynthfinder/3-run-aizyn-mcts.py --benchmark random-n5-2-seed=20251030
 
 The target CSV file should be located at: data/{target_name}.csv
 Results are saved to: data/evaluations/aizynthfinder-mcts/{target_name}/
@@ -37,12 +37,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--benchmark", type=str, required=True, help="Name of the benchmark set (e.g. stratified-linear-600)"
     )
-    parser.add_argument("--stock", type=str, required=True, help="Name of the stock set (e.g. n1-n5-bb)")
     args = parser.parse_args()
 
     # 1. Load Benchmark
     bench_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
     benchmark = load_benchmark(bench_path)
+    assert benchmark.stock_name is not None, f"Stock name not found in benchmark {args.benchmark}"
 
     # 2. Setup Output
     save_dir = BASE_DIR / "data" / "2-raw" / "aizynthfinder-mcts" / benchmark.name
@@ -59,7 +59,7 @@ if __name__ == "__main__":
         t_start_cpu = time.process_time()
 
         finder = AiZynthFinder(configfile=str(config_path))
-        finder.stock.select(args.stock)
+        finder.stock.select(benchmark.stock_name)
         finder.expansion_policy.select("uspto")
         finder.filter_policy.select("uspto")
 

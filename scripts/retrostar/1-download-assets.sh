@@ -3,7 +3,7 @@
 set -e
 
 BASE_URL="https://files.ischemist.com/retro-star"
-TARGET_DIR="data/models/retro-star"
+TARGET_DIR="data/0-assets/model-configs/retro-star"
 
 mkdir -p "${TARGET_DIR}/one_step_model"
 mkdir -p "${TARGET_DIR}/saved_models"

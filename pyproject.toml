@@ -1,118 +1,148 @@
 [project]
 name = "retrocast"
-dynamic = ["version"]
 description = "a framework for ingesting, validating, canonicalizing, and adapting retrosynthesis model outputs to a unified benchmark standard."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = [
-    "pydantic",
-    "pyyaml>=6.0.3",
-    "rdkit",
-    "tqdm>=4.67.1",
-]
-authors = [{ name = "Anton Morgunov", email = "anton@ischemist.com" }]
 license = { text = "MIT" }
-
+authors = [{ name = "Anton Morgunov", email = "anton@ischemist.com" }]
+dependencies = [
+  "pydantic",
+  "pyyaml>=6.0.3",
+  "rdkit",
+  "tqdm>=4.67.1",
+]
+dynamic = ["version"]
 
 [project.urls]
 Homepage = "https://github.com/ischemist/project-procrustes"
 Issues = "https://github.com/ischemist/project-procrustes/issues"
 
-
 [project.scripts]
 retrocast = "retrocast.cli.main:main"
+
+[project.optional-dependencies]
+aizyn = [
+  "aizynthfinder==4.4.0",
+  "numpy<=2.2",  # Numba needs NumPy 2.2 or less. Got NumPy 2.3.
+]
+dms = ["directmultistep"]
+retro-star = ["retro-star>=0.1.0", "numpy", "pandas"]
+synplanner = ["synplanner==1.2.0"]
+syntheseus = [
+  "syntheseus[local-retro]>=0.5.0",
+  "numpy<2",
+  "pandas<2.2",
+  "dgl",
+  "torch<=2.1",
+  "torchdata<=0.7.0",
+  "faiss-cpu",
+  "torch-scatter"
+]
+viz = [
+  "ischemist>=0.2.0",
+  "kaleido>=1.1.0",
+  "plotly>=6.3.0",
+]
+
+[dependency-groups]
+dev = [
+  "ipykernel>=6.29.5",
+  "mypy",
+  "pandas<2.2",
+  "pytest",
+  "pytest-cov",
+  "pytest-mock>=3.14.1",
+  "requests>=2.32.5",
+  "rich>=13.9.4",
+  "ruff",
+  "ty>=0.0.1a24",
+  "types-pyyaml>=6.0.12.20250822",
+  "types-tqdm>=4.67.0.20241221",
+]
 
 [build-system]
 requires = ["setuptools>=64", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools_scm]
-version_scheme = "guess-next-dev"
-local_scheme = "no-local-version"
+[tool.coverage.run]
+omit = [
+  "*/analysis/*.py",
+  "*/constants/*",
+  "*/__init__.py",
+  "*/retrocast/types.py",
+  "*/retrocast/utils/logging.py",
+  "*/retrocast/exceptions.py",
+  "src/directmultistep/training/runner.py"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "def __repr__",
+  "def __str__",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+  "pass",
+  "logger\\."
+]
+
+[tool.mypy]
+strict = true
+ignore_missing_imports = true
+exclude = ["tests"]
+disable_error_code = ["unused-ignore"]
+
+[[tool.mypy.overrides]]
+# RDKit is not typed, so we ignore all errors in it
+module = ["rdkit-stubs.*", "rdkit.*"]
+ignore_errors = true
+
+[tool.pytest.ini_options]
+markers = [
+  "unit: fast, isolated, deterministic logic tests.",
+  "contract: fast, cpu-based tests for module i/o contracts (shapes/dtypes).",
+  "integration: slow, cpu-based tests for inter-module interactions.",
+  "regression: slow, numerically-sensitive tests against a golden baseline.",
+]
+
+[tool.ruff]
+line-length = 120
+lint.select = [
+  "E",  # pycodestyle
+  "F",  # Pyflakes
+  "UP",  # pyupgrade
+  "B",  # flake8-bugbear
+  "SIM",  # flake8-simplify
+  "I",  # isort
+]
+lint.ignore = ["E501", "SIM108"]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
 
-[dependency-groups]
-dev = [
-    "ipykernel>=6.29.5",
-    "rich>=13.9.4",
-    "ruff",
-    "pytest",
-    "mypy",
-    "types-tqdm>=4.67.0.20241221",
-    "pytest-cov",
-    "pytest-mock>=3.14.1",
-    "types-pyyaml>=6.0.12.20250822",
-    "pandas>=2.1.4",
-    "requests>=2.32.5",
-    "ty>=0.0.1a24",
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
+
+[tool.ty.src]
+exclude = ["tests", "scripts"]
+
+[tool.uv]
+conflicts = [
+  [
+    { extra = "dms" },
+    { extra = "aizyn" },
+    { extra = "retro-star" },
+    { extra = "synplanner" },
+    { extra = "syntheseus" },
+  ]
 ]
-
-[project.optional-dependencies]
-# dms = ["directmultistep"]
-aizyn = [
-    "aizynthfinder==4.4.0",
-    "numpy<=2.2",    # Numba needs NumPy 2.2 or less. Got NumPy 2.3.
-]
-# synplanner = ["synplanner==1.2.0"]
-# syntheseus = [
-#     "syntheseus[retro-knn]>=0.5.0",
-#     "numpy<2",
-#     "dgl",
-#     "torch<=2.1",
-#     "torchdata<=0.7.0",
-#     "faiss-cpu",
-#     "torch-scatter"
-# ]
-# syntheseus-linux = [
-#     "syntheseus[retro-knn]>=0.5.0",
-#     "numpy<2",
-#     "dgl",
-#     "torch<=2.1",
-#     "torchdata<=0.7.0",
-#     "faiss-cpu",
-#     "torch-scatter"
-# ]
-viz = [
-    "ischemist>=0.2.0",
-    "kaleido>=1.1.0",
-    "plotly>=6.3.0",
-]
-# retro-star = [
-#     "retro-star>=0.1.0",
-#     "numpy==2.3.3",
-#     "pandas==2.3.2"
-# ]
-# analysis = []
-
-
-# [tool.uv]
-# conflicts = [
-#     [
-#         { extra = "torch-gpu" },
-#         { extra = "torch-cpu" },
-#     ],
-#     [
-#         { extra = "syntheseus" },
-#         { extra = "syntheseus-linux" },
-#         { extra = "synp" },
-#         { extra = "dms" },
-#         { extra = "retro-star" },
-#         { extra = "aizyn" },
-#         { extra = "synplanner" },
-#     ]
-# ]
-
 
 [tool.uv.sources]
 dgl = [
-{ url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin'" },
+  { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin'" },
 ]
-# torch = [
-#     { index = "pytorch-cpu", extra = "torch-cpu" },
-#     { index = "pytorch-cu126", extra = "torch-gpu" },
-# ]
 retro_star = { git = "https://github.com/anmorgunov/retro_star", branch = "master" }
 
 [[tool.uv.index]]
@@ -124,64 +154,3 @@ explicit = true
 name = "pytorch-cu126"
 url = "https://download.pytorch.org/whl/cu126"
 explicit = true
-
-[tool.mypy]
-strict = true
-ignore_missing_imports = true
-exclude = ["tests"]
-disable_error_code = ["unused-ignore"]
-
-[tool.ty.src]
-exclude = [
-"tests",
-"scripts"
-]
-
-
-[[tool.mypy.overrides]]
-# RDKit is not typed, so we ignore all errors in it
-module = ["rdkit-stubs.*", "rdkit.*"]
-ignore_errors = true
-
-[tool.ruff]
-line-length = 120
-lint.select = [
-    "E",   # pycodestyle
-    "F",   # Pyflakes
-    "UP",  # pyupgrade
-    "B",   # flake8-bugbear
-    "SIM", # flake8-simplify
-    "I",   # isort
-]
-lint.ignore = ["E501", "SIM108"]
-
-[tool.coverage.run]
-omit = [
-    "*/analysis/*.py",
-    "*/constants/*",
-    "*/__init__.py",
-    "*/retrocast/types.py",
-    "*/retrocast/utils/logging.py",
-    "*/retrocast/exceptions.py",
-    "src/directmultistep/training/runner.py"
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "def __str__",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-    "pass",
-    "logger\\."
-]
-
-[tool.pytest.ini_options]
-markers = [
-    "unit: fast, isolated, deterministic logic tests.",
-    "contract: fast, cpu-based tests for module i/o contracts (shapes/dtypes).",
-    "integration: slow, cpu-based tests for inter-module interactions.",
-    "regression: slow, numerically-sensitive tests against a golden baseline.",
-]

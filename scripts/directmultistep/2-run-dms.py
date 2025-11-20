@@ -1,17 +1,23 @@
 """
-Example usage:
- DIRECTMULTISTEP_LOG_LEVEL=WARNING uv run --extra dms --extra torch-gpu scripts/directmultistep/2-run-dms.py --model-name "explorer XL" --use_fp16 --target-name "uspto-190"
- DIRECTMULTISTEP_LOG_LEVEL=WARNING uv run --extra dms --extra torch-gpu scripts/directmultistep/2-run-dms.py --model-name "flex-20M" --use_fp16 --target-name "uspto-190"
- DIRECTMULTISTEP_LOG_LEVEL=WARNING uv run --extra dms --extra torch-gpu scripts/directmultistep/2-run-dms.py --model-name "flash" --use_fp16 --target-name "uspto-190"
- DIRECTMULTISTEP_LOG_LEVEL=WARNING uv run --extra dms --extra torch-gpu scripts/directmultistep/2-run-dms.py --model-name "wide" --use_fp16 --target-name "uspto-190-pt2"
+Run DirectMultiStep (DMS) retrosynthesis predictions on a batch of targets.
 
- uv run --extra dms scripts/directmultistep/2-run-dms.py --model-name "flash" --use_fp16 --target-name "test-targets" --device "cpu"
+This script processes targets from a benchmark using DirectMultiStep algorithm
+and saves results in a structured format matching other prediction scripts.
+
+Example usage:
+    uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark random-n5-2-seed=20251030 --model-name "flash" --device cpu --use_fp16
+
+    uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark random-n5-2-seed=20251030 --model-name "flash" --device cuda --use_fp16
+
+The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
+Results are saved to: data/2-raw/dms-{model_name}/{benchmark_name}/
 """
 
 import argparse
-import json
+import logging
 import time
 from pathlib import Path
+from typing import Any
 
 from directmultistep.generate import create_beam_search, load_published_model, prepare_input_tensors
 from directmultistep.model import ModelFactory
@@ -26,131 +32,158 @@ from directmultistep.utils.post_process import (
 from directmultistep.utils.pre_process import canonicalize_smiles
 from tqdm import tqdm
 
-from retrocast.io import load_targets_csv, save_json_gz
+from retrocast.io.files import save_json_gz
+from retrocast.io.loaders import load_benchmark, load_stock_file, save_execution_stats
+from retrocast.io.manifests import create_manifest
+from retrocast.models.benchmark import ExecutionStats
 
-base_dir = Path(__file__).resolve().parents[2]
+logger.setLevel(logging.WARNING)
 
+BASE_DIR = Path(__file__).resolve().parents[2]
 
-dms_dir = base_dir / "data" / "models" / "dms"
-stocks_dir = base_dir / "data" / "models" / "assets"
+DMS_DIR = BASE_DIR / "data" / "0-assets" / "model-configs" / "dms"
+STOCKS_DIR = BASE_DIR / "data" / "1-benchmarks" / "stocks"
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model-name", type=str, required=True, help="Name of the model")
+    parser.add_argument(
+        "--benchmark", type=str, required=True, help="Name of the benchmark set (e.g. stratified-linear-600)"
+    )
+    parser.add_argument(
+        "--model-name", type=str, required=True, help="Name of the model (e.g. flash, wide, explorer XL)"
+    )
     parser.add_argument("--ckpt-path", type=Path, help="path to the checkpoint file (if not using a published model)")
     parser.add_argument("--use_fp16", action="store_true", help="Whether to use FP16")
     parser.add_argument("--device", type=str, default="cuda", help="Device to use for model inference")
-    parser.add_argument("--target-name", type=str, required=True, help="Name of the target")
-    desired_device = parser.parse_args().device
     args = parser.parse_args()
 
-    targets = load_targets_csv(base_dir / "data" / "targets" / f"{args.target_name}.csv")
+    # 1. Load Benchmark
+    bench_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
+    benchmark = load_benchmark(bench_path)
 
     logger.info(f"model_name: {args.model_name}")
     logger.info(f"use_fp16: {args.use_fp16}")
 
-    logger.info("Loading targets and stock compounds")
-
-    with open(stocks_dir / "retrocast-bb-stock-v3-canon.csv") as f:
-        ursa_bb_stock_set = set(f.read().splitlines())
+    logger.info("Loading stock compounds")
+    stocks = {
+        "n1-n5": load_stock_file(STOCKS_DIR / "n1-n5-stock.txt"),
+        "buyables": load_stock_file(STOCKS_DIR / "buyables-stock.txt"),
+    }
 
     model_name = args.model_name.replace("_", "-").replace(" ", "-")
     folder_name = f"dms-{model_name}-fp16" if args.use_fp16 else f"dms-{model_name}"
-    save_dir = base_dir / "data" / "evaluations" / folder_name / args.target_name
+    save_dir = BASE_DIR / "data" / "2-raw" / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Retrosythesis starting")
-    start = time.time()
+    logger.info("Retrosynthesis starting")
 
-    valid_results = {}
-    ursa_bb_results = {}
+    valid_results: dict[str, dict[str, Any]] = {}
+    buyables_results: dict[str, dict[str, Any]] = {}
+    n1n5_results: dict[str, dict[str, Any]] = {}
     raw_solved_count = 0
-    buyable_solved_count = 0
-    emol_solved_count = 0
-    retrocast_bb_solved_count = 0
+    solved_counts = {stock_name: 0 for stock_name in stocks}
+    runtime = ExecutionStats()
 
-    device = ModelFactory.determine_device(desired_device)
-    rds = RoutesProcessing(metadata_path=dms_dir / "dms_dictionary.yaml")
-    model = load_published_model(args.model_name, dms_dir / "checkpoints", args.use_fp16, force_device=desired_device)
+    device = ModelFactory.determine_device(args.device)
+    rds = RoutesProcessing(metadata_path=DMS_DIR / "dms_dictionary.yaml")
+    model = load_published_model(args.model_name, DMS_DIR / "checkpoints", args.use_fp16, force_device=args.device)
 
     beam_obj = create_beam_search(model, 50, rds)
 
-    pbar = tqdm(targets.items(), desc="Finding retrosynthetic paths")
+    for target in tqdm(benchmark.targets.values(), desc="Finding retrosynthetic paths"):
+        t_start_wall = time.perf_counter()
+        t_start_cpu = time.process_time()
 
-    for target_key, target_smiles in pbar:
-        target = canonicalize_smiles(target_smiles)
+        try:
+            target_smiles = canonicalize_smiles(target.smiles)
 
-        # this holds all beam search outputs for a SINGLE target, across multiple step calls
-        all_beam_results_for_target_NS2: list[list[tuple[str, float]]] = []
+            # this holds all beam search outputs for a SINGLE target, across multiple step calls
+            all_beam_results_for_target_NS2: list[list[tuple[str, float]]] = []
 
-        if args.model_name == "explorer XL" or args.model_name == "explorer":
-            encoder_inp, steps_tens, path_tens = prepare_input_tensors(
-                target, None, None, rds, rds.product_max_length, rds.sm_max_length, args.use_fp16
-            )
-            beam_result_bs2 = beam_obj.decode(
-                src_BC=encoder_inp.to(device),
-                steps_B1=steps_tens.to(device) if steps_tens is not None else None,
-                path_start_BL=path_tens.to(device),
-                progress_bar=False,
-            )  # list[list[tuple[str, float]]]
-            all_beam_results_for_target_NS2.extend(beam_result_bs2)
-        else:
-            for step in range(1, 15):
+            if args.model_name == "explorer XL" or args.model_name == "explorer":
                 encoder_inp, steps_tens, path_tens = prepare_input_tensors(
-                    target, step, None, rds, rds.product_max_length, rds.sm_max_length, args.use_fp16
+                    target_smiles, None, None, rds, rds.product_max_length, rds.sm_max_length, args.use_fp16
                 )
                 beam_result_bs2 = beam_obj.decode(
                     src_BC=encoder_inp.to(device),
                     steps_B1=steps_tens.to(device) if steps_tens is not None else None,
                     path_start_BL=path_tens.to(device),
-                    progress_bar=True,
-                )  #  list[list[tuple[str, float]]]
-
+                    progress_bar=False,
+                )  # list[list[tuple[str, float]]]
                 all_beam_results_for_target_NS2.extend(beam_result_bs2)
+            else:
+                for step in range(1, 11):
+                    encoder_inp, steps_tens, path_tens = prepare_input_tensors(
+                        target_smiles, step, None, rds, rds.product_max_length, rds.sm_max_length, args.use_fp16
+                    )
+                    beam_result_bs2 = beam_obj.decode(
+                        src_BC=encoder_inp.to(device),
+                        steps_B1=steps_tens.to(device) if steps_tens is not None else None,
+                        path_start_BL=path_tens.to(device),
+                        progress_bar=False,
+                    )  #  list[list[tuple[str, float]]]
 
-        valid_paths_per_batch = find_valid_paths(all_beam_results_for_target_NS2)
+                    all_beam_results_for_target_NS2.extend(beam_result_bs2)
 
-        # flatten the list of path-lists into one big list of paths for this target (this is really necessary because we run the model several times with step range(2,9))
-        all_valid_paths_for_target = [path for batch in valid_paths_per_batch for path in batch]
+            valid_paths_per_batch = find_valid_paths(all_beam_results_for_target_NS2)
 
-        # the processing function expects a list of batches. wrap our flat list to look like a single batch.
-        canon_paths_NS2n = canonicalize_paths([all_valid_paths_for_target])
-        unique_paths_NS2n = remove_repetitions_within_beam_result(canon_paths_NS2n)
+            # flatten the list of path-lists into one big list of paths for this target
+            all_valid_paths_for_target = [path for batch in valid_paths_per_batch for path in batch]
 
-        # unwrap the single batch from the result
-        raw_paths = [beam_result[0] for beam_result in unique_paths_NS2n[0]]
+            # the processing function expects a list of batches. wrap our flat list to look like a single batch.
+            canon_paths_NS2n = canonicalize_paths([all_valid_paths_for_target])
+            unique_paths_NS2n = remove_repetitions_within_beam_result(canon_paths_NS2n)
 
-        ursa_bb_paths = find_path_strings_with_commercial_sm(raw_paths, commercial_stock=ursa_bb_stock_set)
+            # unwrap the single batch from the result
+            raw_paths = [beam_result[0] for beam_result in unique_paths_NS2n[0]]
 
-        raw_solved_count += bool(raw_paths)
-        retrocast_bb_solved_count += bool(ursa_bb_paths)
+            raw_solved_count += bool(raw_paths)
 
-        valid_results[target_key] = [eval(p) for p in raw_paths]
-        ursa_bb_results[target_key] = [eval(p) for p in ursa_bb_paths]
+            valid_results[target.id] = [eval(p) for p in raw_paths]
+            buyables_paths = find_path_strings_with_commercial_sm(raw_paths, commercial_stock=stocks["buyables"])
+            buyables_results[target.id] = [eval(p) for p in buyables_paths]
+            solved_counts["buyables"] += bool(buyables_paths)
+            n1n5_paths = find_path_strings_with_commercial_sm(raw_paths, commercial_stock=stocks["n1-n5"])
+            n1n5_results[target.id] = [eval(p) for p in n1n5_paths]
+            solved_counts["n1-n5"] += bool(n1n5_paths)
 
-        # Update progress bar with current path counts
-        pbar.set_postfix(
-            {
-                "Raw:": raw_solved_count,
-                "RetroCast BB:": retrocast_bb_solved_count,
-            }
-        )
+        except Exception as e:
+            logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
+            valid_results[target.id] = []
+            buyables_results[target.id] = []
+            n1n5_results[target.id] = []
+        finally:
+            t_end_wall = time.perf_counter()
+            t_end_cpu = time.process_time()
+            runtime.wall_time[target.id] = t_end_wall - t_start_wall
+            runtime.cpu_time[target.id] = t_end_cpu - t_start_cpu
 
-    end = time.time()
-
-    results = {
+    summary = {
         "raw_solved_count": raw_solved_count,
-        "retrocast_bb_solved_count": retrocast_bb_solved_count,
-        "time_elapsed": end - start,
+        "total_targets": len(benchmark.targets),
     }
-    logger.info(f"Results: {results}")
-    with open(save_dir / "summary.json", "w") as f:
-        json.dump(results, f)
-    save_json_gz(valid_results, save_dir / "valid_results.json.gz")
-    save_json_gz(ursa_bb_results, save_dir / "ursa_bb_results.json.gz")
+    summary.update({f"{stock_name}_solved_count": count for stock_name, count in solved_counts.items()})
 
-    usage = """
-    python scripts/dms/run-dms-predictions.py --model-name "wide" --use_fp16 --target-name "uspto-190" --device "cuda:0"
-    """
-    logger.info(usage)
+    save_json_gz(valid_results, save_dir / "valid_results.json.gz")
+    save_json_gz(buyables_results, save_dir / "buyables_results.json.gz")
+    save_json_gz(n1n5_results, save_dir / "n1n5_results.json.gz")
+    save_execution_stats(runtime, save_dir / "execution_stats.json.gz")
+    manifest = create_manifest(
+        action="scripts/directmultistep/2-run-dms.py",
+        sources=[bench_path],
+        outputs=[
+            (save_dir / "valid_results.json.gz", valid_results),
+            (save_dir / "buyables_results.json.gz", buyables_results),
+            (save_dir / "n1n5_results.json.gz", n1n5_results),
+        ],
+        statistics=summary,
+    )
+
+    with open(save_dir / "manifest.json", "w") as f:
+        f.write(manifest.model_dump_json(indent=2))
+
+    logger.info(f"Completed processing {len(benchmark.targets)} targets")
+    logger.info(f"Raw solved: {raw_solved_count}")
+    for stock_name, count in solved_counts.items():
+        logger.info(f"{stock_name.capitalize()} solved: {count}")
