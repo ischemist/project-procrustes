@@ -77,3 +77,8 @@ data/4-scored
 data/5-results
 data/6-comparisons
 data/7-meta-analysis
+
+docs/testing-framework.md
+.ignore
+
+.hypothesis

@@ -6,66 +6,196 @@ from typing import Any
 import pytest
 
 from retrocast.chem import canonicalize_smiles
-from retrocast.models.chem import TargetIdentity, TargetInput
+from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity, TargetInput
+from retrocast.typing import InchiKeyStr, SmilesStr
+from tests.helpers import _make_leaf_molecule, _synthetic_inchikey
 
 TEST_DATA_DIR = Path("tests/testing_data")
 MODEL_PRED_DIR = TEST_DATA_DIR / "model-predictions"
 
 
-@pytest.fixture(scope="session")
-def raw_aizynth_mcts_data() -> dict[str, Any]:
-    """loads the raw aizynthfinder mcts prediction data from the test file."""
-    path = Path(MODEL_PRED_DIR / "aizynthfinder-mcts/results.json.gz")
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        return json.load(f)
+# =============================================================================
+# Synthetic Route Factory for Topology Testing
+# =============================================================================
 
 
-@pytest.fixture(scope="session")
-def raw_aizynth_retro_star_data() -> dict[str, Any]:
-    """loads the raw aizynthfinder retro-star prediction data from the test file."""
-    path = Path(MODEL_PRED_DIR / "aizynthfinder-retro-star/results.json.gz")
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        return json.load(f)
+def _carbon_chain_smiles(n: int) -> str:
+    """Generate SMILES for a carbon chain of length n. C, CC, CCC, etc."""
+    if n <= 0:
+        raise ValueError("Carbon chain length must be positive")
+    return "C" * n
 
 
-@pytest.fixture(scope="session")
-def raw_askcos_data() -> dict[str, Any]:
-    """loads the raw askcos prediction data from the test file."""
-    path = Path(MODEL_PRED_DIR / "askcos/results.json.gz")
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        return json.load(f)
+def _make_linear_route(depth: int) -> Route:
+    """
+    Create a linear route with the given depth.
+
+    Depth 1: CC <- C (one reaction)
+    Depth 2: CCC <- CC <- C (two reactions)
+    Depth 3: CCCC <- CCC <- CC <- C (three reactions)
+    """
+    if depth < 1:
+        raise ValueError("Depth must be at least 1")
+
+    # Start with the leaf (single carbon)
+    current = _make_leaf_molecule(_carbon_chain_smiles(1))
+
+    # Build up the chain
+    for i in range(2, depth + 2):
+        product_smiles = _carbon_chain_smiles(i)
+        current = Molecule(
+            smiles=SmilesStr(product_smiles),
+            inchikey=InchiKeyStr(_synthetic_inchikey(product_smiles)),
+            synthesis_step=ReactionStep(reactants=[current]),
+        )
+
+    return Route(target=current, rank=1)
 
 
-@pytest.fixture(scope="session")
-def raw_retrostar_data() -> dict[str, Any]:
-    """loads the raw retro-star prediction data from the test file."""
-    path = Path(MODEL_PRED_DIR / "retro-star/results.json.gz")
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        return json.load(f)
+def _make_convergent_route(depth: int) -> Route:
+    """
+    Create a convergent route where two branches merge at the top.
+    
+    Depth 2:
+        CCCC
+        /  \
+       CC   CC
+       |    |
+       C    C
+    
+    Each branch is linear with depth-1 steps, then they merge.
+    """
+    if depth < 2:
+        raise ValueError("Convergent routes require depth >= 2")
+
+    # Build two independent branches
+    branch_depth = depth - 1
+
+    # Branch 1: C -> CC -> ...
+    branch1 = _make_leaf_molecule(_carbon_chain_smiles(1))
+    for i in range(2, branch_depth + 2):
+        branch1_smiles = _carbon_chain_smiles(i)
+        branch1 = Molecule(
+            smiles=SmilesStr(branch1_smiles),
+            inchikey=InchiKeyStr(_synthetic_inchikey(f"branch1_{branch1_smiles}")),
+            synthesis_step=ReactionStep(reactants=[branch1]),
+        )
+
+    # Branch 2: C -> CC -> ... (different inchikeys via prefix)
+    branch2 = _make_leaf_molecule("O")  # Use oxygen as second leaf for variety
+    for i in range(2, branch_depth + 2):
+        branch2_smiles = _carbon_chain_smiles(i)
+        branch2 = Molecule(
+            smiles=SmilesStr(branch2_smiles),
+            inchikey=InchiKeyStr(_synthetic_inchikey(f"branch2_{branch2_smiles}")),
+            synthesis_step=ReactionStep(reactants=[branch2]),
+        )
+
+    # Merge the two branches
+    final_smiles = _carbon_chain_smiles(depth + 2)
+    final = Molecule(
+        smiles=SmilesStr(final_smiles),
+        inchikey=InchiKeyStr(_synthetic_inchikey(final_smiles)),
+        synthesis_step=ReactionStep(reactants=[branch1, branch2]),
+    )
+
+    return Route(target=final, rank=1)
 
 
-@pytest.fixture(scope="session")
-def raw_dms_data() -> dict[str, Any]:
-    """loads the raw dms prediction data from the test file."""
-    path = Path(MODEL_PRED_DIR / "dms-flash-fp16/ursa_bb_results.json.gz")
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        return json.load(f)
+def _make_binary_tree_route(depth: int) -> Route:
+    """
+    Create a fully convergent binary tree route.
+
+    Depth 1: CC <- (C + C)
+    Depth 2: CCCC <- (CC <- (C + C)) + (CC <- (C + C))
+
+    At each level, two subtrees merge.
+    """
+    if depth < 1:
+        raise ValueError("Depth must be at least 1")
+
+    leaf_counter = [0]  # Mutable counter for unique leaves
+
+    def _build_tree(current_depth: int) -> Molecule:
+        if current_depth == 0:
+            # Create unique leaf (all have same SMILES but unique InchiKeys)
+            leaf_counter[0] += 1
+            return Molecule(
+                smiles=SmilesStr("C"),
+                inchikey=InchiKeyStr(_synthetic_inchikey(f"leaf_{leaf_counter[0]}")),
+                synthesis_step=None,
+            )
+
+        # Build two subtrees and merge
+        left = _build_tree(current_depth - 1)
+        right = _build_tree(current_depth - 1)
+
+        product_smiles = _carbon_chain_smiles(2**current_depth)
+        return Molecule(
+            smiles=SmilesStr(product_smiles),
+            inchikey=InchiKeyStr(_synthetic_inchikey(f"node_{current_depth}_{leaf_counter[0]}")),
+            synthesis_step=ReactionStep(reactants=[left, right]),
+        )
+
+    return Route(target=_build_tree(depth), rank=1)
 
 
-@pytest.fixture(scope="session")
-def raw_retrochimera_data() -> dict[str, Any]:
-    """loads the raw retrochimera prediction data from the test file."""
-    path = Path(MODEL_PRED_DIR / "retrochimera/results.json.gz")
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        return json.load(f)
+@pytest.fixture
+def synthetic_route_factory():
+    """
+    Factory fixture for creating synthetic routes using carbon chains.
+
+    This enables testing route topology (depth, convergence, hashing) without
+    chemical complexity. Uses deterministic fake InchiKeys for reproducibility.
+
+    Args:
+        structure: "linear", "convergent", or "binary_tree"
+        depth: Number of reaction steps (minimum 1, convergent requires >= 2)
+
+    Returns:
+        A Route object with the specified topology.
+
+    Examples:
+        # Linear route with 3 steps: CCCC <- CCC <- CC <- C
+        route = synthetic_route_factory("linear", depth=3)
+
+        # Convergent route: two branches merge at top
+        route = synthetic_route_factory("convergent", depth=3)
+
+        # Binary tree: fully convergent at every level
+        route = synthetic_route_factory("binary_tree", depth=2)
+    """
+
+    def _make(structure: str = "linear", depth: int = 3) -> Route:
+        if structure == "linear":
+            return _make_linear_route(depth)
+        elif structure == "convergent":
+            return _make_convergent_route(depth)
+        elif structure == "binary_tree":
+            return _make_binary_tree_route(depth)
+        else:
+            raise ValueError(f"Unknown structure: {structure}. Use 'linear', 'convergent', or 'binary_tree'")
+
+    return _make
 
 
-@pytest.fixture(scope="session")
-def raw_dreamretro_data() -> dict[str, Any]:
-    """loads the raw dreamretro prediction data from the test file."""
-    path = Path(MODEL_PRED_DIR / "dreamretro/results.json.gz")
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        return json.load(f)
+@pytest.fixture
+def leaf_molecule_factory():
+    """Factory for creating leaf molecules with synthetic InchiKeys."""
+
+    def _make(smiles: str = "C") -> Molecule:
+        return _make_leaf_molecule(smiles)
+
+    return _make
+
+
+@pytest.fixture
+def synthetic_stock() -> set[str]:
+    """A minimal stock containing common synthetic leaves."""
+    return {
+        _synthetic_inchikey("C"),
+        _synthetic_inchikey("O"),
+    }
 
 
 @pytest.fixture(scope="session")
@@ -78,38 +208,6 @@ def multistepttl_ibuprofen_dir() -> Path:
 def multistepttl_paracetamol_dir() -> Path:
     """provides the path to the directory containing paracetamol pickles for multistepttl."""
     return Path(MODEL_PRED_DIR / "multistepttl/paracetamol_multistepttl")
-
-
-@pytest.fixture(scope="session")
-def raw_synplanner_data() -> dict[str, Any]:
-    """loads the raw synplanner prediction data from the test file."""
-    path = Path(MODEL_PRED_DIR / "synplanner-mcts/results.json.gz")
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        return json.load(f)
-
-
-@pytest.fixture(scope="session")
-def raw_syntheseus_data() -> dict[str, Any]:
-    """loads the raw syntheseus prediction data from the test file."""
-    path = Path(MODEL_PRED_DIR / "syntheseus-retro0-local-retro/results.json.gz")
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        return json.load(f)
-
-
-@pytest.fixture(scope="session")
-def raw_synllama_data() -> dict[str, Any]:
-    """loads the raw syntheseus prediction data from the test file."""
-    path = Path(MODEL_PRED_DIR / "synllama/results.json.gz")
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        return json.load(f)
-
-
-@pytest.fixture(scope="session")
-def raw_paroutes_data() -> dict[str, Any]:
-    """loads the raw syntheseus prediction data from the test file."""
-    path = Path(TEST_DATA_DIR / "paroutes.json.gz")
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        return json.load(f)
 
 
 @pytest.fixture(scope="session")

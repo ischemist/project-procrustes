@@ -2,8 +2,12 @@
 
 from typing import Any
 
+import pytest
+
 from retrocast.models.chem import Molecule, ReactionSignature, ReactionStep, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
+
+pytestmark = pytest.mark.unit
 
 # ==============================================================================
 # Route.get_reaction_signatures Tests
@@ -238,7 +242,7 @@ class TestRouteGetReactionSignatures:
 
     def test_deep_route_with_pharma_data(self, pharma_routes_data: dict[str, Any]):
         """Test get_reaction_signatures with real pharma route data."""
-        from tests.representation.test_pharma_routes import TestPharmaRoutesContract
+        from tests.models.test_pharma_routes import TestPharmaRoutesContract
 
         helper = TestPharmaRoutesContract()
         vonoprazan_data = pharma_routes_data["vonoprazan-1"]

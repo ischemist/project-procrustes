@@ -30,27 +30,25 @@ class TtlRouteList(RootModel[list[TtlRoute]]):
 class TtlRetroAdapter(BaseAdapter):
     """adapter for converting pre-processed ttlretro outputs to the route schema."""
 
-    def cast(self, raw_target_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         """
         validates the pre-processed json data for ttlretro, transforms it, and yields route objects.
         """
         try:
             validated_data = TtlRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(
-                f"  - pre-processed data for target '{target_input.id}' failed schema validation. error: {e}"
-            )
+            logger.warning(f"  - pre-processed data for target '{target.id}' failed schema validation. error: {e}")
             return
 
         for rank, route in enumerate(validated_data.root, start=1):
             try:
-                adapted_route = self._transform(route, target_input, rank)
+                adapted_route = self._transform(route, target, rank)
                 yield adapted_route
             except RetroCastException as e:
-                logger.warning(f"  - route for '{target_input.id}' failed transformation: {e}")
+                logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, route: TtlRoute, target_input: TargetIdentity, rank: int) -> Route:
+    def _transform(self, route: TtlRoute, target: TargetIdentity, rank: int) -> Route:
         """
         orchestrates the transformation of a single ttlretro route.
         raises RetroCastException on failure.
@@ -58,17 +56,17 @@ class TtlRetroAdapter(BaseAdapter):
         if not route.reactions:
             # no reactions means the target is already a starting material
             target_molecule = Molecule(
-                smiles=SmilesStr(target_input.smiles),
-                inchikey=get_inchi_key(target_input.smiles),
+                smiles=SmilesStr(target.smiles),
+                inchikey=get_inchi_key(target.smiles),
                 synthesis_step=None,
                 metadata={},
             )
             return Route(target=target_molecule, rank=rank, metadata={})
 
         root_smiles = canonicalize_smiles(route.reactions[0].product)
-        if root_smiles != target_input.smiles:
+        if root_smiles != target.smiles:
             raise AdapterLogicError(
-                f"route's final product '{root_smiles}' does not match expected target '{target_input.smiles}'."
+                f"route's final product '{root_smiles}' does not match expected target '{target.smiles}'."
             )
 
         # build precursor map for recursive traversal

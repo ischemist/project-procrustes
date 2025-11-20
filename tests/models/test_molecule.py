@@ -9,6 +9,8 @@ from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import Molecule, ReactionStep, TargetInput
 from retrocast.typing import InchiKeyStr, SmilesStr
 
+pytestmark = pytest.mark.unit
+
 # ==============================================================================
 # TargetInput Tests
 # ==============================================================================
