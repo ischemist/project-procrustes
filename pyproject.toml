@@ -89,17 +89,6 @@ exclude_lines = [
   "logger\\."
 ]
 
-[tool.mypy]
-strict = true
-ignore_missing_imports = true
-exclude = ["tests"]
-disable_error_code = ["unused-ignore"]
-
-[[tool.mypy.overrides]]
-# RDKit is not typed, so we ignore all errors in it
-module = ["rdkit-stubs.*", "rdkit.*"]
-ignore_errors = true
-
 [tool.pytest.ini_options]
 markers = [
   "unit: runs in <10ms, tests single functions/classes, no IO",

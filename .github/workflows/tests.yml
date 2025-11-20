@@ -50,21 +50,24 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: run tests and generate coverage report
+      - name: Run tests
+        run: uv run pytest -v
+
+      - name: generate coverage report
         id: coverage
         run: |
           set +e  # disable exit on error temporarily
           report=$(pytest --cov=retrocast --cov-report=term-missing)
           exit_code=$?
           set -e  # re-enable exit on error
-          
+
           coverage json -o coverage.json # create the json artifact
 
           # this is some bash magic to make the multiline report available to next steps
           echo "report<<EOF" >> $GITHUB_OUTPUT
           echo "$report" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          
+
           exit $exit_code  # fail the step if tests failed
 
       - name: find changed files in src
