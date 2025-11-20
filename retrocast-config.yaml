@@ -21,12 +21,6 @@ models:
   retro-star:
     adapter: retrostar
     raw_results_filename: results.json.gz
-  retro-star-n1-n5-stock:
-    adapter: retrostar
-    raw_results_filename: results.json.gz
-  retro-star-buyables-stock:
-    adapter: retrostar
-    raw_results_filename: results.json.gz
   multistep-ttl:
     adapter: multistepttl
     raw_results_filename: results.json.gz

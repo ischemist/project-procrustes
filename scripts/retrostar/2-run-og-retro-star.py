@@ -5,8 +5,8 @@ This script processes targets from a benchmark using Retro* algorithm
 and saves results in a structured format matching other prediction scripts.
 
 Example usage:
-    uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark random-n5-2-seed=20251030 --stock n1-n5-stock
-    uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark random-n5-2-seed=20251030 --stock n1-n5-stock --effort high
+    uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark random-n5-2-seed=20251030
+    uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
 Results are saved to: data/2-raw/retro-star-{stock}[-{effort}]/{benchmark_name}/
@@ -52,7 +52,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--benchmark", type=str, required=True, help="Name of the benchmark set (e.g. stratified-linear-600)"
     )
-    parser.add_argument("--stock", type=str, required=True, help="Name of the stock set (e.g. n1-n5-bb)")
     parser.add_argument(
         "--effort",
         type=str,
@@ -68,17 +67,18 @@ if __name__ == "__main__":
     # 1. Load Benchmark
     bench_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
     benchmark = load_benchmark(bench_path)
+    assert benchmark.stock_name is not None, f"Stock name not found in benchmark {args.benchmark}"
 
     # 2. Load Stock
-    stock_path = STOCKS_DIR / f"{args.stock}.txt"
+    stock_path = STOCKS_DIR / f"{benchmark.stock_name}.txt"
     stock_set = load_stock_file(stock_path)
 
     # 3. Setup Output
-    folder_name = f"retro-star-{args.stock}" if args.effort == "normal" else f"retro-star-{args.stock}-{args.effort}"
+    folder_name = "retro-star" if args.effort == "normal" else f"retro-star-{args.effort}"
     save_dir = BASE_DIR / "data" / "2-raw" / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f"stock: {args.stock}")
+    logger.info(f"stock: {benchmark.stock_name}")
 
     logger.info(f"effort: {args.effort} (iterations={iterations})")
 

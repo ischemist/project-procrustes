@@ -8,5 +8,5 @@ expansion:
 filter:
   uspto: data/0-assets/model-configs/aizynthfinder/uspto_filter_model.onnx
 stock:
-  buyables-bb: data/1-benchmarks/stocks/buyables-stock.hdf5
-  n1-n5-bb: data/1-benchmarks/stocks/n1-n5-stock.hdf5
+  buyables-stock: data/1-benchmarks/stocks/buyables-stock.hdf5
+  n1-n5-stock: data/1-benchmarks/stocks/n1-n5-stock.hdf5

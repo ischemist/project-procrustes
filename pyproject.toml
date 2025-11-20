@@ -27,7 +27,7 @@ aizyn = [
 ]
 dms = ["directmultistep"]
 retro-star = ["retro-star>=0.1.0", "numpy", "pandas"]
-# synplanner = ["synplanner==1.2.0"]
+synplanner = ["synplanner==1.2.0"]
 # syntheseus = [
 #     "syntheseus[retro-knn]>=0.5.0",
 #     "numpy<2",
@@ -143,6 +143,7 @@ conflicts = [
     { extra = "dms" },
     { extra = "aizyn" },
     { extra = "retro-star" },
+    { extra = "synplanner" },
   ]
 ]
 # conflicts = [
@@ -157,8 +158,8 @@ conflicts = [
 #         { extra = "dms" },
 #         { extra = "retro-star" },
 #         { extra = "aizyn" },
-#         { extra = "synplanner" },
-#     ]
+
+# ]
 # ]
 
 [tool.uv.sources]
