@@ -1,8 +1,4 @@
-Here is a draft for **`USER_GUIDE.md`**. It covers the three main ways a user interacts with the system: the full benchmark pipeline (CLI), the ad-hoc file scoring (CLI), and the Python library (API).
-
----
-
-# RetroCast User Guide
+# RetroCast CLI User Guide
 
 RetroCast is a toolkit for standardizing, scoring, and analyzing retrosynthesis predictions. It allows you to compare models fairly by casting disparate output formats into a canonical schema and running rigorous statistical evaluations.
 
@@ -174,51 +170,4 @@ stats = compute_metric_with_ci(
 
 print(f"Solvability: {stats.overall.value:.1%}")
 print(f"95% CI: [{stats.overall.ci_lower:.1%}, {stats.overall.ci_upper:.1%}]")
-```
-
----
-
-## Data Formats
-
-### Benchmark Definition (`.json.gz`)
-A JSON file defining the targets.
-```json
-{
-  "name": "paroutes-n1",
-  "targets": {
-    "n1-001": {
-      "id": "n1-001",
-      "smiles": "CCOc1ccc(cc1)C(=O)O",
-      "route_length": 3,
-      "is_convergent": false
-    }
-  }
-}
-```
-
-### Predictions (`.json.gz`)
-A dictionary mapping target IDs to lists of routes.
-```json
-{
-  "n1-001": [
-    {
-      "target": { "smiles": "...", "inchikey": "..." },
-      "rank": 1,
-      "target": { 
-          "smiles": "...", 
-          "synthesis_step": {
-              "reactants": [ ... ] 
-          }
-      }
-    }
-  ]
-}
-```
-
-### Stock File (`.txt`)
-Plain text, one canonical SMILES per line.
-```text
-CC(=O)O
-CCO
-c1ccccc1
 ```
