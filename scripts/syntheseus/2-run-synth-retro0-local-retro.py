@@ -50,6 +50,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    iterations = 500 if args.effort == "high" else 100
+
     # 1. Load Benchmark
     bench_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
     benchmark = load_benchmark(bench_path)
@@ -99,7 +101,7 @@ if __name__ == "__main__":
                 or_node_cost_fn=or_node_cost_fn,
                 and_node_cost_fn=and_node_cost_fn,
                 value_function=retro_star_value_function,
-                limit_reaction_model_calls=100,  # max number of model calls
+                limit_reaction_model_calls=iterations,  # max number of model calls
                 time_limit_s=300.0,  # max runtime in seconds (increased for RetroStar)
             )
 

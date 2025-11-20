@@ -49,6 +49,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    iterations = 500 if args.effort == "high" else 100
+
     # 1. Load Benchmark
     bench_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
     benchmark = load_benchmark(bench_path)
@@ -90,7 +92,7 @@ if __name__ == "__main__":
             search_algorithm = AndOr_BreadthFirstSearch(
                 reaction_model=model,
                 mol_inventory=inventory,
-                limit_iterations=100,  # max number of algorithm iterations
+                limit_iterations=iterations,  # max number of algorithm iterations
                 limit_reaction_model_calls=100,  # max number of model calls
                 time_limit_s=60.0,  # max runtime in seconds
             )
