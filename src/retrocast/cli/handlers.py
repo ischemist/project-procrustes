@@ -5,7 +5,7 @@ from typing import Any
 from retrocast.adapters.factory import get_adapter
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
 from retrocast.io.files import load_json_gz, save_json_gz
-from retrocast.io.loaders import load_benchmark
+from retrocast.io.loaders import load_benchmark, load_stock_file
 from retrocast.io.manifests import create_manifest
 from retrocast.io.routes import load_routes
 from retrocast.metrics.bootstrap import compute_metric_with_ci, get_is_solvable, make_get_top_k
@@ -168,10 +168,11 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
             logger.error(f"Stock file missing: {stock_path}")
             return
 
+        stock_set = load_stock_file(stock_path)
         predictions = load_routes(routes_path)
 
         eval_results = score.score_model(
-            benchmark=benchmark, predictions=predictions, stock_path=stock_path, model_name=model_name
+            benchmark=benchmark, predictions=predictions, stock=stock_set, stock_name=stock_name, model_name=model_name
         )
 
         # Save Output: data/4-scored/{benchmark}/{model}/{stock}/evaluation.json.gz

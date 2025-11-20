@@ -1,0 +1,58 @@
+"""
+retrocast.api
+
+The public interface for using retrocast as a library.
+Use these functions to run scoring and analysis programmatically
+without relying on the specific directory structure of the CLI.
+"""
+
+from pathlib import Path
+
+from retrocast.io.loaders import load_benchmark, load_stock_file
+from retrocast.io.routes import load_routes
+from retrocast.models.benchmark import BenchmarkSet
+from retrocast.models.evaluation import EvaluationResults
+from retrocast.typing import SmilesStr
+from retrocast.workflow import score as score_workflow
+
+__all__ = [
+    "load_benchmark",
+    "load_routes",
+    "load_stock_file",
+    "score_predictions",
+]
+
+
+def score_predictions(
+    benchmark: BenchmarkSet,
+    predictions: dict,
+    stock: set[SmilesStr] | Path | str,
+    model_name: str = "custom-model",
+    stock_name: str | None = None,
+) -> EvaluationResults:
+    """
+    Score a set of predictions against a benchmark and stock.
+
+    Args:
+        benchmark: The BenchmarkSet object.
+        predictions: Dictionary mapping target_id -> list[Route].
+        stock: Either a set of SMILES strings, or a Path to a stock file.
+        model_name: Name to assign to these results.
+        stock_name: Label for the stock. If None, inferred from Path or set to 'custom'.
+    """
+    # Normalize stock input
+    if isinstance(stock, (str, Path)):
+        path = Path(stock)
+        stock_set = load_stock_file(path)
+        name = stock_name or path.stem
+    else:
+        stock_set = stock
+        name = stock_name or "custom-stock"
+
+    return score_workflow.score_model(
+        benchmark=benchmark,
+        predictions=predictions,
+        stock=stock_set,
+        stock_name=name,
+        model_name=model_name,
+    )

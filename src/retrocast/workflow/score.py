@@ -1,24 +1,18 @@
-from pathlib import Path
-
-from retrocast.io.loaders import load_stock_file
 from retrocast.io.routes import RoutesDict
 from retrocast.metrics.similarity import is_exact_match
 from retrocast.metrics.solvability import is_route_solved
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.evaluation import EvaluationResults, ScoredRoute, TargetEvaluation
+from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
 
 def score_model(
-    benchmark: BenchmarkSet, predictions: RoutesDict, stock_path: Path, model_name: str
+    benchmark: BenchmarkSet, predictions: RoutesDict, stock: set[SmilesStr], stock_name: str, model_name: str
 ) -> EvaluationResults:
     logger.info(f"Scoring {model_name} on {benchmark.name}...")
 
-    # Load stock set
-    # Assuming load_stock_file returns set[str]
-    stock = load_stock_file(stock_path)
-
-    eval_results = EvaluationResults(model_name=model_name, benchmark_name=benchmark.name, stock_name=stock_path.stem)
+    eval_results = EvaluationResults(model_name=model_name, benchmark_name=benchmark.name, stock_name=stock_name)
 
     # Iterate Targets (The Denominator)
     for target_id, target in benchmark.targets.items():
