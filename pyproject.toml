@@ -28,36 +28,27 @@ aizyn = [
 dms = ["directmultistep"]
 retro-star = ["retro-star>=0.1.0", "numpy", "pandas"]
 synplanner = ["synplanner==1.2.0"]
-# syntheseus = [
-#     "syntheseus[retro-knn]>=0.5.0",
-#     "numpy<2",
-#     "dgl",
-#     "torch<=2.1",
-#     "torchdata<=0.7.0",
-#     "faiss-cpu",
-#     "torch-scatter"
-# ]
-# syntheseus-linux = [
-#     "syntheseus[retro-knn]>=0.5.0",
-#     "numpy<2",
-#     "dgl",
-#     "torch<=2.1",
-#     "torchdata<=0.7.0",
-#     "faiss-cpu",
-#     "torch-scatter"
-# ]
+syntheseus = [
+  "syntheseus[local-retro]>=0.5.0",
+  "numpy<2",
+  "pandas<2.2",
+  "dgl",
+  "torch<=2.1",
+  "torchdata<=0.7.0",
+  "faiss-cpu",
+  "torch-scatter"
+]
 viz = [
   "ischemist>=0.2.0",
   "kaleido>=1.1.0",
   "plotly>=6.3.0",
 ]
-# analysis = []
 
 [dependency-groups]
 dev = [
   "ipykernel>=6.29.5",
   "mypy",
-  "pandas>=2.3.3",
+  "pandas<2.2",
   "pytest",
   "pytest-cov",
   "pytest-mock>=3.14.1",
@@ -144,32 +135,14 @@ conflicts = [
     { extra = "aizyn" },
     { extra = "retro-star" },
     { extra = "synplanner" },
+    { extra = "syntheseus" },
   ]
 ]
-# conflicts = [
-#     [
-#         { extra = "torch-gpu" },
-#         { extra = "torch-cpu" },
-#     ],
-#     [
-#         { extra = "syntheseus" },
-#         { extra = "syntheseus-linux" },
-#         { extra = "synp" },
-#         { extra = "dms" },
-#         { extra = "retro-star" },
-#         { extra = "aizyn" },
-
-# ]
-# ]
 
 [tool.uv.sources]
 dgl = [
   { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin'" },
 ]
-# torch = [
-#     { index = "pytorch-cpu", extra = "torch-cpu" },
-#     { index = "pytorch-cu126", extra = "torch-gpu" },
-# ]
 retro_star = { git = "https://github.com/anmorgunov/retro_star", branch = "master" }
 
 [[tool.uv.index]]

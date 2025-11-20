@@ -1,20 +1,21 @@
 """
 Run Syntheseus LocalRetroModel retrosynthesis predictions on a batch of targets.
 
-This script processes targets from a CSV file using Syntheseus's LocalRetroModel
-and saves results in a structured format similar to the DMS and AiZynthFinder scripts.
+This script processes targets from a benchmark using Syntheseus's LocalRetroModel
+and saves results in a structured format matching other prediction scripts.
 
 Example usage:
-    uv run --extra syntheseus scripts/syntheseus/1-run-synth-bfs-local-retro.py --target-name "uspto-190"
+    uv run --extra syntheseus scripts/syntheseus/1-run-synth-bfs-local-retro.py --benchmark random-n5-2-seed=20251030
+    uv run --extra syntheseus scripts/syntheseus/1-run-synth-bfs-local-retro.py --benchmark random-n5-2-seed=20251030 --effort high
 
-The target CSV file should be located at: data/targets/{target_name}.csv
-Results are saved to: data/evaluations/syntheseus-bfs-local-retro/{target_name}/
+The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
+Results are saved to: data/2-raw/syntheseus-bfs-local-retro[-{effort}]/{benchmark_name}/
 """
 
 import argparse
-import json
 import time
 from pathlib import Path
+from typing import Any
 
 from syntheseus import Molecule
 from syntheseus.reaction_prediction.inference import LocalRetroModel
@@ -23,50 +24,79 @@ from syntheseus.search.analysis.route_extraction import iter_routes_time_order
 from syntheseus.search.mol_inventory import SmilesListInventory
 from tqdm import tqdm
 
-from retrocast.io import load_targets_csv, save_json_gz
+from retrocast.io.files import save_json_gz
+from retrocast.io.loaders import load_benchmark, load_stock_file, save_execution_stats
+from retrocast.io.manifests import create_manifest
+from retrocast.models.benchmark import ExecutionStats
+from retrocast.utils.logging import logger
 from retrocast.utils.serializers import serialize_route
 
-base_dir = Path(__file__).resolve().parents[2]
+BASE_DIR = Path(__file__).resolve().parents[2]
+
+STOCKS_DIR = BASE_DIR / "data" / "1-benchmarks" / "stocks"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--target-name", type=str, required=True, help="Name of the target")
+    parser.add_argument(
+        "--benchmark", type=str, required=True, help="Name of the benchmark set (e.g. stratified-linear-600)"
+    )
+    parser.add_argument(
+        "--effort",
+        type=str,
+        default="normal",
+        choices=["normal", "high"],
+        help="Search effort level: normal or high",
+    )
     args = parser.parse_args()
 
-    # Load targets
-    targets = load_targets_csv(base_dir / "data" / "targets" / f"{args.target_name}.csv")
+    # 1. Load Benchmark
+    bench_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
+    benchmark = load_benchmark(bench_path)
+    assert benchmark.stock_name is not None, f"Stock name not found in benchmark {args.benchmark}"
 
-    # Load building blocks
-    with open(base_dir / "data" / "models" / "assets" / "retrocast-bb-stock-v3-canon.csv") as f:
-        building_blocks = [line.strip() for line in f if line.strip()]
+    # 2. Load Stock
+    stock_path = STOCKS_DIR / f"{benchmark.stock_name}.txt"
+    building_blocks = load_stock_file(stock_path)
 
-    # Set up inventory with the building blocks
-    inventory = SmilesListInventory(smiles_list=building_blocks)
-
-    # Set up the reaction model
-    model = LocalRetroModel(use_cache=True, default_num_results=10)
-
-    # Create save directory
-    save_dir = base_dir / "data" / "evaluations" / "syntheseus-bfs-local-retro" / args.target_name
+    # 3. Setup Output
+    folder_name = (
+        "syntheseus-bfs-local-retro" if args.effort == "normal" else f"syntheseus-bfs-local-retro-{args.effort}"
+    )
+    save_dir = BASE_DIR / "data" / "2-raw" / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    results = {}
-    solved_count = 0
-    start = time.time()
+    logger.info(f"stock: {benchmark.stock_name}")
+    logger.info(f"effort: {args.effort}")
 
-    for target_key, target_smiles in tqdm(targets.items()):
-        # Set up search algorithm for each target
-        search_algorithm = AndOr_BreadthFirstSearch(
-            reaction_model=model,
-            mol_inventory=inventory,
-            limit_iterations=100,  # max number of algorithm iterations
-            limit_reaction_model_calls=100,  # max number of model calls
-            time_limit_s=60.0,  # max runtime in seconds
-        )
+    # 4. Set up inventory with the building blocks
+    inventory = SmilesListInventory(smiles_list=building_blocks)
+
+    # 5. Set up the reaction model
+    model = LocalRetroModel(use_cache=True, default_num_results=10)
+
+    # 6. Run Predictions
+    logger.info("Retrosynthesis starting")
+
+    results: dict[str, list[dict[str, Any]]] = {}
+    solved_count = 0
+    runtime = ExecutionStats()
+
+    for target in tqdm(benchmark.targets.values(), desc="Finding retrosynthetic paths"):
+        t_start_wall = time.perf_counter()
+        t_start_cpu = time.process_time()
 
         try:
+            # Set up search algorithm for each target
+            search_algorithm = AndOr_BreadthFirstSearch(
+                reaction_model=model,
+                mol_inventory=inventory,
+                limit_iterations=100,  # max number of algorithm iterations
+                limit_reaction_model_calls=100,  # max number of model calls
+                time_limit_s=60.0,  # max runtime in seconds
+            )
+
             # Run search
-            test_mol = Molecule(target_smiles)
+            test_mol = Molecule(target.smiles)
             output_graph, _ = search_algorithm.run_from_mol(test_mol)
 
             # Extract routes
@@ -77,36 +107,44 @@ if __name__ == "__main__":
                 serialized_routes = []
                 for route in routes:
                     try:
-                        serialized_route = serialize_route(route, target_smiles)
+                        serialized_route = serialize_route(route, target.smiles)
                         serialized_routes.append(serialized_route)
                     except Exception as e:
-                        print(f"Warning: Could not serialize route for target {target_key}: {e}")
+                        logger.warning(f"Could not serialize route for target {target.id}: {e}")
 
                 if serialized_routes:
-                    results[target_key] = serialized_routes
+                    results[target.id] = serialized_routes
                     solved_count += 1
                 else:
-                    results[target_key] = []
+                    results[target.id] = []
             else:
-                results[target_key] = []
+                results[target.id] = []
 
         except Exception as e:
-            print(f"Error processing target {target_key}: {e}")
-            results[target_key] = []
+            logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
+            results[target.id] = []
+        finally:
+            t_end_wall = time.perf_counter()
+            t_end_cpu = time.process_time()
+            runtime.wall_time[target.id] = t_end_wall - t_start_wall
+            runtime.cpu_time[target.id] = t_end_cpu - t_start_cpu
 
-    end = time.time()
-
-    # Save summary
     summary = {
         "solved_count": solved_count,
-        "total_targets": len(targets),
-        "time_elapsed": end - start,
+        "total_targets": len(benchmark.targets),
     }
 
-    with open(save_dir / "summary.json", "w") as f:
-        json.dump(summary, f)
     save_json_gz(results, save_dir / "results.json.gz")
+    save_execution_stats(runtime, save_dir / "execution_stats.json.gz")
+    manifest = create_manifest(
+        action="scripts/syntheseus/1-run-synth-bfs-local-retro.py",
+        sources=[bench_path, stock_path],
+        outputs=[(save_dir / "results.json.gz", results)],
+        statistics=summary,
+    )
 
-    print(f"Completed processing {len(targets)} targets")
-    print(f"Solved: {solved_count}")
-    print(f"Time elapsed: {end - start:.2f} seconds")
+    with open(save_dir / "manifest.json", "w") as f:
+        f.write(manifest.model_dump_json(indent=2))
+
+    logger.info(f"Completed processing {len(benchmark.targets)} targets")
+    logger.info(f"Solved: {solved_count}")
