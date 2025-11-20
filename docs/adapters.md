@@ -50,7 +50,7 @@ class BipartiteRouteList(RootModel[list[BipartiteMoleculeInput]]):
     pass
 
 class BipartiteModelAdapter(BaseAdapter):
-    def cast(self, raw_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(self, raw_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         validated_routes = BipartiteRouteList.model_validate(raw_data)
         for i, root_node in enumerate(validated_routes.root, start=1):
             try:
@@ -58,16 +58,16 @@ class BipartiteModelAdapter(BaseAdapter):
                 target_molecule = build_molecule_from_bipartite_node(root_node)
 
                 # Verify the target SMILES matches
-                if target_molecule.smiles != target_input.smiles:
+                if target_molecule.smiles != target.smiles:
                     logger.warning(
-                        f"Mismatched SMILES for target '{target_input.id}'. "
-                        f"Expected {target_input.smiles}, got {target_molecule.smiles}."
+                        f"Mismatched SMILES for target '{target.id}'. "
+                        f"Expected {target.smiles}, got {target_molecule.smiles}."
                     )
                     continue
 
                 yield Route(target=target_molecule, rank=i, metadata={})
             except (RetroCastException, ValidationError) as e:
-                logger.warning(f"Route for '{target_input.id}' failed validation or processing: {e}")
+                logger.warning(f"Route for '{target.id}' failed validation or processing: {e}")
 
 **Key points**:
 1. Define Pydantic schemas for the raw input structure matching the BipartiteMolNode/BipartiteRxnNode protocols
@@ -97,14 +97,14 @@ class PrecursorModelAdapter(BaseAdapter):
         # ... your parsing logic here ...
         return precursor_map
 
-    def cast(self, raw_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(self, raw_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         try:
             precursor_map = self._parse_route_string(raw_data["routes"])
             # Use the helper to build the tree from the target SMILES
-            target_molecule = build_molecule_from_precursor_map(target_input.smiles, precursor_map)
+            target_molecule = build_molecule_from_precursor_map(target.smiles, precursor_map)
             yield Route(target=target_molecule, rank=1, metadata={})
         except (RetroCastException, KeyError) as e:
-            logger.warning(f"Route for '{target_input.id}' failed: {e}")
+            logger.warning(f"Route for '{target.id}' failed: {e}")
 
 **Key points**:
 1. Write a model-specific parser to extract the precursor map (`dict[SmilesStr, list[SmilesStr]]`)
@@ -159,7 +159,7 @@ class CustomModelAdapter(BaseAdapter):
             metadata={}
         )
 
-    def cast(self, raw_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(self, raw_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         validated_routes = CustomRouteList.model_validate(raw_data)
         for i, root_node in enumerate(validated_routes.root, start=1):
             target_molecule = self._build_molecule(root_node)

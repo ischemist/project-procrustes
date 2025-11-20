@@ -89,7 +89,7 @@ class AskcosAdapter(BaseAdapter):
         """
         self.use_full_graph = use_full_graph
 
-    def cast(self, raw_target_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         """validates raw askcos data, transforms its pathways, and yields route objects."""
         if self.use_full_graph:
             raise NotImplementedError("extracting routes from the full askcos search graph is not yet implemented.")
@@ -97,7 +97,7 @@ class AskcosAdapter(BaseAdapter):
         try:
             validated_output = AskcosOutput.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - raw data for target '{target_input.id}' failed askcos schema validation. error: {e}")
+            logger.warning(f"  - raw data for target '{target.id}' failed askcos schema validation. error: {e}")
             return
 
         uds = validated_output.results.uds
@@ -118,13 +118,13 @@ class AskcosAdapter(BaseAdapter):
                     pathway_edges=pathway_edges,
                     uuid2smiles=uds.uuid2smiles,
                     node_dict=uds.node_dict,
-                    target_input=target_input,
+                    target_input=target,
                     rank=i + 1,
                     metadata=metadata,
                 )
                 yield route
             except RetroCastException as e:
-                logger.warning(f"  - pathway {i} for target '{target_input.id}' failed transformation: {e}")
+                logger.warning(f"  - pathway {i} for target '{target.id}' failed transformation: {e}")
                 continue
 
     def _transform_pathway(

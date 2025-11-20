@@ -117,7 +117,7 @@ class PaRoutesAdapter(BaseAdapter):
         self.unparsed_categories["unknown_format"] += 1
         return None
 
-    def cast(self, raw_target_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         """
         validates a single paroutes route, checks for patent consistency, and transforms it.
         """
@@ -125,14 +125,14 @@ class PaRoutesAdapter(BaseAdapter):
             # unlike other adapters, the raw data for one target is a single route object, not a list.
             validated_route_root = PaRoutesMoleculeInput.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - raw data for target '{target_input.id}' failed paroutes schema validation. error: {e}")
+            logger.warning(f"  - raw data for target '{target.id}' failed paroutes schema validation. error: {e}")
             return
 
         # --- custom validation: ensure all reactions are from the same patent ---
         patent_ids = self._get_patent_ids(validated_route_root)
         if len(patent_ids) > 1:
             logger.warning(
-                f"  - skipping route for '{target_input.id}': contains reactions from multiple patents: {patent_ids}"
+                f"  - skipping route for '{target.id}': contains reactions from multiple patents: {patent_ids}"
             )
             return
         elif len(patent_ids) == 1:
@@ -145,23 +145,23 @@ class PaRoutesAdapter(BaseAdapter):
             return
 
         try:
-            route = self._transform(validated_route_root, target_input, patent_id=list(patent_ids)[0])
+            route = self._transform(validated_route_root, target, patent_id=list(patent_ids)[0])
             yield route
         except RetroCastException as e:
-            logger.warning(f"  - route for '{target_input.id}' failed transformation: {e}")
+            logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
             return
 
-    def _transform(self, paroutes_root: PaRoutesMoleculeInput, target_input: TargetIdentity, patent_id: str) -> Route:
+    def _transform(self, paroutes_root: PaRoutesMoleculeInput, target: TargetIdentity, patent_id: str) -> Route:
         """
         orchestrates the transformation of a single validated paroutes tree.
         """
         # build the molecule tree recursively with cycle detection
         target_molecule = self._build_molecule(paroutes_root, visited=set())
 
-        if target_molecule.smiles != target_input.smiles:
+        if target_molecule.smiles != target.smiles:
             msg = (
-                f"mismatched smiles for target {target_input.id}. "
-                f"expected canonical: {target_input.smiles}, but adapter produced: {target_molecule.smiles}"
+                f"mismatched smiles for target {target.id}. "
+                f"expected canonical: {target.smiles}, but adapter produced: {target_molecule.smiles}"
             )
             logger.error(msg)
             raise AdapterLogicError(msg)

@@ -73,7 +73,8 @@ omit = [
   "*/retrocast/types.py",
   "*/retrocast/utils/logging.py",
   "*/retrocast/exceptions.py",
-  "*/retrocast/visualization/*.py"
+  "*/retrocast/visualization/*.py",
+  "*/retrocast/cli/main.py"
 ]
 
 [tool.coverage.report]

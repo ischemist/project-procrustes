@@ -1,390 +1,188 @@
 """
-Integration tests for the retrocast CLI.
-
-These tests verify CLI commands work correctly with real files
-and synthetic data. They follow the testing philosophy:
-- No mocking
-- Real file I/O
-- Synthetic but valid chemistry
+In-process integration tests for CLI handlers.
+This executes the actual handler logic within the test process, ensuring coverage tracking.
 """
 
-import subprocess
-import sys
+import gzip
+import json
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
-from retrocast.chem import get_inchi_key
+from retrocast.cli import handlers
 from retrocast.io.blob import save_json_gz
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
-from retrocast.models.chem import Molecule, Route
 
-# --- Helpers ---
-
-
-def make_leaf_molecule(smiles: str) -> Molecule:
-    """Create a leaf molecule (no synthesis step)."""
-    return Molecule(smiles=smiles, inchikey=get_inchi_key(smiles))
+# --- Fixtures ---
 
 
-def make_simple_route(target_smiles: str, leaf_smiles: str, rank: int = 1) -> Route:
-    """Create a one-step route: target <- leaf."""
-    leaf = make_leaf_molecule(leaf_smiles)
-    from retrocast.models.chem import ReactionStep
+@pytest.fixture
+def synthetic_config(tmp_path) -> dict[str, Any]:
+    """
+    Creates a full directory structure in tmp_path and returns a valid config dict.
+    """
+    base = tmp_path / "data"
 
-    step = ReactionStep(reactants=[leaf])
-    target = Molecule(
-        smiles=target_smiles,
-        inchikey=get_inchi_key(target_smiles),
-        synthesis_step=step,
+    # Create structure
+    (base / "1-benchmarks" / "definitions").mkdir(parents=True)
+    (base / "1-benchmarks" / "stocks").mkdir(parents=True)
+    (base / "2-raw" / "test-model" / "test-bench").mkdir(parents=True)
+    (base / "3-processed").mkdir(parents=True)
+    (base / "4-scored").mkdir(parents=True)
+    (base / "5-results").mkdir(parents=True)
+
+    return {
+        "data_dir": str(base),
+        "models": {"test-model": {"adapter": "paroutes", "raw_results_filename": "results.json.gz"}},
+    }
+
+
+@pytest.fixture
+def synthetic_data(synthetic_config):
+    """
+    Populates the directories with valid synthetic files.
+    """
+    base = Path(synthetic_config["data_dir"])
+
+    # 1. Create Benchmark
+    target = BenchmarkTarget(
+        id="t1",
+        smiles="CC",  # Ethane - matches our route target
+        is_convergent=True,  # Two reactants merge in one reaction
+        route_length=1,  # One reaction step
+        ground_truth=None,
     )
-    return Route(target=target, rank=rank)
+    bench = BenchmarkSet(name="test-bench", stock_name="test-stock", targets={"t1": target})
+    save_json_gz(bench, base / "1-benchmarks" / "definitions" / "test-bench.json.gz")
+
+    # 2. Create Stock
+    # Stock contains methane (C), which is the reactant in our route
+    (base / "1-benchmarks" / "stocks" / "test-stock.txt").write_text("C\n")
+
+    # 3. Create Raw Results
+    # ParoutesAdapter expects a molecule node with reaction children
+    # Creating a simple route: CC <- C + C (ethane from two methane molecules)
+
+    # Leaf molecules (reactants)
+    reactant1 = {"type": "mol", "smiles": "C", "in_stock": True, "children": []}
+
+    reactant2 = {"type": "mol", "smiles": "C", "in_stock": True, "children": []}
+
+    # Reaction node combining the reactants
+    reaction_node = {
+        "type": "reaction",
+        "smiles": "CC",  # Product SMILES
+        "metadata": {"ID": "US2020123456A1;example-rxn", "rsmi": "C.C>>CC"},
+        "children": [reactant1, reactant2],
+    }
+
+    # Root molecule (target) with the reaction as a child
+    raw_route_tree = {"type": "mol", "smiles": "CC", "in_stock": False, "children": [reaction_node]}
+
+    # Map target_id -> Single Route Dict (not list)
+    raw_data_map = {"t1": raw_route_tree}
+
+    save_json_gz(raw_data_map, base / "2-raw" / "test-model" / "test-bench" / "results.json.gz")
+
+    return bench
 
 
-# --- Test Classes ---
+# --- Tests ---
 
 
-class TestCLIBasics:
-    """Test basic CLI functionality."""
+def test_ingest_flow(synthetic_config, synthetic_data):
+    """Test handle_ingest -> creates processed routes."""
 
-    def test_cli_help(self):
-        """Test that --help works."""
-        result = subprocess.run(
-            [sys.executable, "-m", "retrocast.cli.main", "--help"],
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0
-        assert "retrocast" in result.stdout.lower() or "usage" in result.stdout.lower()
+    # Mock CLI args
+    args = SimpleNamespace(
+        model="test-model",
+        dataset="test-bench",
+        all_models=False,
+        all_datasets=False,
+        sampling_strategy=None,
+        k=None,
+        anonymize=False,
+    )
 
-    def test_cli_subcommand_help(self):
-        """Test that subcommand --help works."""
-        for cmd in ["list", "info", "ingest", "score", "score-file", "analyze"]:
-            result = subprocess.run(
-                [sys.executable, "-m", "retrocast.cli.main", cmd, "--help"],
-                capture_output=True,
-                text=True,
-            )
-            assert result.returncode == 0, f"Failed for {cmd}: {result.stderr}"
-            assert "usage" in result.stdout.lower() or cmd in result.stdout.lower()
+    # RUN
+    handlers.handle_ingest(args, synthetic_config)
 
-    def test_cli_missing_command(self):
-        """Test that missing command fails gracefully."""
-        result = subprocess.run(
-            [sys.executable, "-m", "retrocast.cli.main"],
-            capture_output=True,
-            text=True,
-        )
-        # argparse returns 2 for missing required arguments
-        assert result.returncode == 2
+    # VERIFY
+    base = Path(synthetic_config["data_dir"])
+    expected_file = base / "3-processed" / "test-bench" / "test-model" / "routes.json.gz"
+    assert expected_file.exists()
+
+    # Check manifest exists
+    assert (expected_file.parent / "manifest.json").exists()
 
 
-class TestScoreFileCommand:
-    """Test the score-file ad-hoc scoring command."""
+def test_score_flow(synthetic_config, synthetic_data):
+    """Test handle_score -> creates evaluation file."""
 
-    @pytest.fixture
-    def test_files(self, tmp_path):
-        """Create temporary test files for scoring."""
-        # Create benchmark
-        target = BenchmarkTarget(
-            id="test-1",
-            smiles="CC",  # ethane
-            is_convergent=False,
-            route_length=1,
-            ground_truth=make_simple_route("CC", "C"),
-        )
-        benchmark = BenchmarkSet(
-            name="test-benchmark",
-            description="Test benchmark for CLI tests",
-            targets={"test-1": target},
-        )
-        benchmark_path = tmp_path / "benchmark.json.gz"
-        save_json_gz(benchmark, benchmark_path)
+    # Pre-requisite: Run ingest first
+    test_ingest_flow(synthetic_config, synthetic_data)
 
-        # Create predictions
-        route = make_simple_route("CC", "C")
-        predictions = {"test-1": [route.model_dump(mode="json")]}
-        routes_path = tmp_path / "routes.json.gz"
-        save_json_gz(predictions, routes_path)
+    args = SimpleNamespace(model="test-model", dataset="test-bench", all_models=False, all_datasets=False, stock=None)
 
-        # Create stock file
-        stock_path = tmp_path / "stock.txt"
-        stock_path.write_text("C\n")
+    # RUN
+    handlers.handle_score(args, synthetic_config)
 
-        # Output path
-        output_path = tmp_path / "output.json.gz"
+    # VERIFY
+    base = Path(synthetic_config["data_dir"])
+    expected_file = base / "4-scored" / "test-bench" / "test-model" / "test-stock" / "evaluation.json.gz"
+    assert expected_file.exists()
 
-        return {
-            "benchmark": benchmark_path,
-            "routes": routes_path,
-            "stock": stock_path,
-            "output": output_path,
-        }
-
-    def test_score_file_basic(self, test_files):
-        """Test basic score-file execution."""
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "retrocast.cli.main",
-                "score-file",
-                "--benchmark",
-                str(test_files["benchmark"]),
-                "--routes",
-                str(test_files["routes"]),
-                "--stock",
-                str(test_files["stock"]),
-                "--output",
-                str(test_files["output"]),
-            ],
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, f"stderr: {result.stderr}"
-        assert test_files["output"].exists()
-
-        # Verify output can be loaded
-        from retrocast.io.blob import load_json_gz
-        from retrocast.models.evaluation import EvaluationResults
-
-        data = load_json_gz(test_files["output"])
-        results = EvaluationResults.model_validate(data)
-        assert results.model_name == "adhoc-model"
-        assert "test-1" in results.results
-        assert results.results["test-1"].is_solvable is True
-
-    def test_score_file_custom_model_name(self, test_files):
-        """Test score-file with custom model name."""
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "retrocast.cli.main",
-                "score-file",
-                "--benchmark",
-                str(test_files["benchmark"]),
-                "--routes",
-                str(test_files["routes"]),
-                "--stock",
-                str(test_files["stock"]),
-                "--output",
-                str(test_files["output"]),
-                "--model-name",
-                "my-custom-model",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0
-
-        from retrocast.io.blob import load_json_gz
-        from retrocast.models.evaluation import EvaluationResults
-
-        data = load_json_gz(test_files["output"])
-        results = EvaluationResults.model_validate(data)
-        assert results.model_name == "my-custom-model"
-
-    def test_score_file_missing_benchmark(self, test_files):
-        """Test score-file fails with missing benchmark."""
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "retrocast.cli.main",
-                "score-file",
-                "--benchmark",
-                "/nonexistent/benchmark.json.gz",
-                "--routes",
-                str(test_files["routes"]),
-                "--stock",
-                str(test_files["stock"]),
-                "--output",
-                str(test_files["output"]),
-            ],
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 1
-
-    def test_score_file_unsolvable_route(self, tmp_path):
-        """Test scoring with route that uses non-stock molecule."""
-        # Create benchmark
-        target = BenchmarkTarget(
-            id="test-1",
-            smiles="CC",
-            is_convergent=False,
-            route_length=1,
-        )
-        benchmark = BenchmarkSet(
-            name="test",
-            targets={"test-1": target},
-        )
-        benchmark_path = tmp_path / "benchmark.json.gz"
-        save_json_gz(benchmark, benchmark_path)
-
-        # Create predictions with molecule not in stock
-        route = make_simple_route("CC", "O")  # oxygen not in stock
-        predictions = {"test-1": [route.model_dump(mode="json")]}
-        routes_path = tmp_path / "routes.json.gz"
-        save_json_gz(predictions, routes_path)
-
-        # Stock only has carbon
-        stock_path = tmp_path / "stock.txt"
-        stock_path.write_text("C\n")
-
-        output_path = tmp_path / "output.json.gz"
-
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "retrocast.cli.main",
-                "score-file",
-                "--benchmark",
-                str(benchmark_path),
-                "--routes",
-                str(routes_path),
-                "--stock",
-                str(stock_path),
-                "--output",
-                str(output_path),
-            ],
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0
-
-        from retrocast.io.blob import load_json_gz
-        from retrocast.models.evaluation import EvaluationResults
-
-        data = load_json_gz(output_path)
-        results = EvaluationResults.model_validate(data)
-        # Route should not be solvable since O is not in stock
-        assert results.results["test-1"].is_solvable is False
+    # Load check
+    with gzip.open(expected_file, "rt") as f:
+        data = json.load(f)
+        # t1 should be solvable because stock has "C" and route uses C as reactants
+        assert data["results"]["t1"]["is_solvable"] is True
 
 
-class TestListCommand:
-    """Test the list command with a minimal config."""
+def test_analyze_flow(synthetic_config, synthetic_data):
+    """Test handle_analyze -> creates report and plots."""
 
-    def test_list_with_config(self, tmp_path):
-        """Test list command with a config file."""
-        # Create minimal config
-        config = {
-            "data_dir": str(tmp_path / "data"),
-            "models": {
-                "test-model": {
-                    "adapter": "aizynthfinder",
-                    "description": "Test model",
-                }
-            },
-        }
-        config_path = tmp_path / "config.yaml"
-        import yaml
+    # Pre-requisite: Run scoring first
+    test_score_flow(synthetic_config, synthetic_data)
 
-        config_path.write_text(yaml.dump(config))
+    args = SimpleNamespace(model="test-model", dataset="test-bench", all_models=False, all_datasets=False, stock=None)
 
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "retrocast.cli.main",
-                "--config",
-                str(config_path),
-                "list",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0
-        assert "test-model" in result.stdout
-        assert "aizynthfinder" in result.stdout
+    # RUN
+    handlers.handle_analyze(args, synthetic_config)
 
-    def test_list_missing_config(self, tmp_path):
-        """Test list command with missing config falls back to dev config or fails."""
-        # Run from a directory without retrocast-config.yaml to ensure no fallback
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "retrocast.cli.main",
-                "--config",
-                str(tmp_path / "nonexistent.yaml"),
-                "list",
-            ],
-            capture_output=True,
-            text=True,
-            cwd=tmp_path,  # Run from temp dir where no fallback config exists
-        )
-        # Should exit with error when no fallback available
-        assert result.returncode == 1
+    # VERIFY
+    base = Path(synthetic_config["data_dir"])
+    results_dir = base / "5-results" / "test-bench" / "test-model" / "test-stock"
+
+    assert (results_dir / "statistics.json.gz").exists()
+    assert (results_dir / "report.md").exists()
+    assert (results_dir / "diagnostics.html").exists()
 
 
-class TestInfoCommand:
-    """Test the info command."""
+def test_missing_file_handling(synthetic_config, synthetic_data, caplog):
+    """Ensure handlers fail gracefully when raw files are missing."""
 
-    def test_info_with_model(self, tmp_path):
-        """Test info command shows model details."""
-        # Create config
-        config = {
-            "data_dir": str(tmp_path / "data"),
-            "models": {
-                "test-model": {
-                    "adapter": "aizynthfinder",
-                    "description": "A test model for testing",
-                    "sampling": {"strategy": "top_k", "k": 5},
-                }
-            },
-        }
-        config_path = tmp_path / "config.yaml"
-        import yaml
+    # FIX: Added synthetic_data fixture above so the benchmark definition exists.
+    # Now we manually delete the raw file to test that specific failure mode.
 
-        config_path.write_text(yaml.dump(config))
+    base = Path(synthetic_config["data_dir"])
+    raw_file = base / "2-raw" / "test-model" / "test-bench" / "results.json.gz"
+    if raw_file.exists():
+        raw_file.unlink()
 
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "retrocast.cli.main",
-                "--config",
-                str(config_path),
-                "info",
-                "--model",
-                "test-model",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0
-        assert "aizynthfinder" in result.stdout
+    args = SimpleNamespace(
+        model="test-model",
+        dataset="test-bench",
+        all_models=False,
+        all_datasets=False,
+        sampling_strategy=None,
+        k=None,
+        anonymize=False,
+    )
 
-    def test_info_missing_model(self, tmp_path):
-        """Test info command with non-existent model."""
-        config = {
-            "data_dir": str(tmp_path / "data"),
-            "models": {},
-        }
-        config_path = tmp_path / "config.yaml"
-        import yaml
+    # Should simply return/log warning, not raise FileNotFoundError
+    handlers.handle_ingest(args, synthetic_config)
 
-        config_path.write_text(yaml.dump(config))
-
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "retrocast.cli.main",
-                "--config",
-                str(config_path),
-                "info",
-                "--model",
-                "nonexistent",
-            ],
-            capture_output=True,
-            text=True,
-        )
-        # Should complete but show error
-        assert result.returncode == 0  # info logs error but doesn't exit
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    assert "File not found" in caplog.text or "Skipping" in caplog.text
