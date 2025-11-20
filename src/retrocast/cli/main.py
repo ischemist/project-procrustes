@@ -97,6 +97,11 @@ def main() -> None:
     d_group_a.add_argument("--all-datasets", action="store_true", help="Process all benchmarks")
 
     analyze_parser.add_argument("--stock", help="Specific stock to analyze (optional, auto-detects if omitted)")
+    analyze_parser.add_argument(
+        "--make-plots",
+        action="store_true",
+        help="Generate plots (requires 'viz' dependency group, e.g. uv run --extra viz, uv sync --extra viz, or uv pip install retrocast[viz]",
+    )
     args = parser.parse_args()
 
     if args.command != "score-file":

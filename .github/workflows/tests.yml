@@ -47,7 +47,7 @@ jobs:
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
-        run: uv sync --extra viz
+        run: uv sync
 
       - name: Run tests
         run: uv run pytest -v

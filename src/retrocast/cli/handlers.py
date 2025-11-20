@@ -11,7 +11,6 @@ from retrocast.metrics.bootstrap import compute_metric_with_ci, get_is_solvable,
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.stats import ModelStatistics
 from retrocast.utils.logging import logger
-from retrocast.visualization.model_performance import plot_single_model_diagnostics
 from retrocast.visualization.report import generate_markdown_report
 from retrocast.workflow import ingest, score
 
@@ -278,8 +277,12 @@ def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any
             with open(output_dir / "report.md", "w") as f:
                 f.write(report)
 
-            fig = plot_single_model_diagnostics(final_stats)
-            fig.write_html(output_dir / "diagnostics.html", include_plotlyjs="cdn", auto_open=False)
+            # Plots
+            if args.make_plots:
+                from retrocast.visualization.model_performance import plot_single_model_diagnostics
+
+                fig = plot_single_model_diagnostics(final_stats)
+                fig.write_html(output_dir / "diagnostics.html", include_plotlyjs="cdn", auto_open=False)
 
             logger.info(f"Analysis generated: {output_dir}")
 
