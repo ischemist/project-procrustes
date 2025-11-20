@@ -62,12 +62,32 @@ def main() -> None:
 
     # --- SCORE ---
     score_parser = subparsers.add_parser("score", help="Run evaluation")
-    score_parser.add_argument("--model", required=True)
-    score_parser.add_argument("--dataset", required=True)
+    # Model selection
+    m_group_s = score_parser.add_mutually_exclusive_group(required=True)
+    m_group_s.add_argument("--model", help="Single model name")
+    m_group_s.add_argument("--all-models", action="store_true", help="Process all models")
+
+    # Dataset selection
+    d_group_s = score_parser.add_mutually_exclusive_group(required=True)
+    d_group_s.add_argument("--dataset", help="Single benchmark name")
+    d_group_s.add_argument("--all-datasets", action="store_true", help="Process all benchmarks")
+
+    score_parser.add_argument("--stock", help="Override stock file name")
 
     # --- ANALYZE ---
-    # analyze_parser = subparsers.add_parser("analyze", help="Generate reports")
+    analyze_parser = subparsers.add_parser("analyze", help="Generate reports")
 
+    # Model selection
+    m_group_a = analyze_parser.add_mutually_exclusive_group(required=True)
+    m_group_a.add_argument("--model", help="Single model name")
+    m_group_a.add_argument("--all-models", action="store_true", help="Process all models")
+
+    # Dataset selection
+    d_group_a = analyze_parser.add_mutually_exclusive_group(required=True)
+    d_group_a.add_argument("--dataset", help="Single benchmark name")
+    d_group_a.add_argument("--all-datasets", action="store_true", help="Process all benchmarks")
+
+    analyze_parser.add_argument("--stock", help="Specific stock to analyze (optional, auto-detects if omitted)")
     args = parser.parse_args()
     config = load_config(args.config)
 
