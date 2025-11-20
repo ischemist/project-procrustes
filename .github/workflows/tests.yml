@@ -14,7 +14,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
       pull-requests: write
 
     steps:
@@ -61,8 +60,6 @@ jobs:
           exit_code=$?
           set -e  # re-enable exit on error
 
-          coverage json -o coverage.json # create the json artifact
-
           # this is some bash magic to make the multiline report available to next steps
           echo "report<<EOF" >> $GITHUB_OUTPUT
           echo "$report" >> $GITHUB_OUTPUT
@@ -76,15 +73,6 @@ jobs:
         uses: tj-actions/changed-files@v46 # check for the latest version, they update a lot
         with:
           files: src/** # or whatever your source directory is
-
-      - name: commit coverage.json
-        if: github.ref == 'refs/heads/master' # only update badge on master branch pushes
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore: update coverage.json"
-          file_pattern: coverage.json
-          commit_user_name: "github-actions[bot]"
-          commit_user_email: "github-actions[bot]@users.noreply.github.com"
 
       - name: print coverage report to logs
         run: |
