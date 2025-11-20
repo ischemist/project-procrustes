@@ -1,4 +1,4 @@
-from retrocast.io.routes import RoutesDict
+from retrocast.io.data import RoutesDict
 from retrocast.metrics.similarity import is_exact_match
 from retrocast.metrics.solvability import is_route_solved
 from retrocast.models.benchmark import BenchmarkSet

@@ -13,9 +13,7 @@ from pathlib import Path
 
 from retrocast import adapt_routes
 from retrocast.chem import canonicalize_smiles
-from retrocast.io.loaders import load_benchmark
-from retrocast.io.manifests import create_manifest
-from retrocast.io.routes import save_routes
+from retrocast.io import create_manifest, load_benchmark, save_routes
 from retrocast.models.chem import Route
 from retrocast.utils.logging import logger
 

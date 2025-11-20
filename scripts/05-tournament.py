@@ -9,7 +9,7 @@ Usage:
 import argparse
 from pathlib import Path
 
-from retrocast.io.files import load_json_gz
+from retrocast.io import load_json_gz
 from retrocast.metrics.bootstrap import get_is_solvable, make_get_top_k
 from retrocast.metrics.ranking import compute_pairwise_tournament
 from retrocast.models.evaluation import EvaluationResults

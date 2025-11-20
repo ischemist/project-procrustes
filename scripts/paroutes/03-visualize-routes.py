@@ -12,7 +12,7 @@ Usage:
 
 from pathlib import Path
 
-from retrocast.io.loaders import load_benchmark
+from retrocast.io import load_benchmark
 from retrocast.utils.logging import logger
 from retrocast.visualization.routes import create_route_comparison_figure, extract_route_stats
 

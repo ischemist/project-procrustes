@@ -8,8 +8,7 @@ without relying on the specific directory structure of the CLI.
 
 from pathlib import Path
 
-from retrocast.io.loaders import load_benchmark, load_stock_file
-from retrocast.io.routes import load_routes
+from retrocast.io import load_benchmark, load_routes, load_stock_file
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.typing import SmilesStr

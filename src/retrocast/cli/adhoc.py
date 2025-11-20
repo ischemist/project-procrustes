@@ -3,9 +3,8 @@ from pathlib import Path
 from typing import Any
 
 from retrocast.api import score_predictions
-from retrocast.io.files import save_json_gz
-from retrocast.io.loaders import load_benchmark
-from retrocast.io.routes import load_routes
+from retrocast.io.blob import save_json_gz
+from retrocast.io.data import load_benchmark, load_routes
 from retrocast.utils.logging import logger
 
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from retrocast.io.loaders import load_stock_file
+from retrocast.io import load_stock_file
 from retrocast.utils.logging import logger
 
 base_dir = Path(__file__).resolve().parents[2]
