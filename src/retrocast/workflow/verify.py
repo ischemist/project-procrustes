@@ -14,6 +14,8 @@ def _build_provenance_graph(start_path: Path, root_dir: Path, report: Verificati
     queue = [start_path]
     visited: set[Path] = set()
 
+    report.add("INFO", start_path, "Graph Discovery")
+
     while queue:
         manifest_path = queue.pop(0)
         if manifest_path in visited:
@@ -22,20 +24,24 @@ def _build_provenance_graph(start_path: Path, root_dir: Path, report: Verificati
 
         relative_path = manifest_path.relative_to(root_dir)
         if not manifest_path.exists():
-            report.add("FAIL", relative_path, "Manifest file required for graph is missing.")
+            report.add("FAIL", relative_path, "Manifest file in dependency chain is MISSING.")
             continue
 
         try:
             with open(manifest_path, encoding="utf-8") as f:
                 manifest = Manifest.model_validate_json(f.read())
             graph[relative_path] = manifest
+            report.add("PASS", relative_path, f"Loaded manifest for action '{manifest.action}'.")
 
             for source_file in manifest.source_files:
-                parts = Path(source_file.path).parts
-                is_primary = "1-benchmarks" in parts or "2-raw" in parts
+                source_path = Path(source_file.path)
+                is_primary = "1-benchmarks" in source_path.parts or "2-raw" in source_path.parts
                 if not is_primary:
-                    parent_manifest_path = root_dir / Path(source_file.path).parent / "manifest.json"
+                    parent_manifest_path = root_dir / source_path.parent / "manifest.json"
                     if parent_manifest_path not in visited:
+                        report.add(
+                            "INFO", source_path, "Source is a generated artifact, adding its manifest to the queue."
+                        )
                         queue.append(parent_manifest_path)
         except Exception as e:
             report.add("FAIL", relative_path, f"Failed to load or parse manifest: {e}")
@@ -45,29 +51,26 @@ def _build_provenance_graph(start_path: Path, root_dir: Path, report: Verificati
 
 def _verify_logical_chain(graph: dict[Path, Manifest], report: VerificationReport) -> None:
     """Phase 1: Check for hash consistency between parent and child manifests."""
-    report.add("INFO", report.manifest_path, "[Phase 1] Verifying logical consistency of the manifest chain...")
+    report.add("INFO", report.manifest_path, "Phase 1 - Verifying manifest chain consistency")
 
     for child_path, child_manifest in graph.items():
-        report.add("INFO", child_path, f"Inspecting manifest for action '{child_manifest.action}'...")
+        report.add("INFO", child_path, f"Inspecting links for manifest '{child_manifest.action}'...")
         if not child_manifest.source_files:
-            report.add("INFO", child_path, "-> No sources to verify, skipping.")
             continue
 
         for source_file in child_manifest.source_files:
             source_path = Path(source_file.path)
-            parts = source_path.parts
-            is_primary = "1-benchmarks" in parts or "2-raw" in parts
+            is_primary = "1-benchmarks" in source_path.parts or "2-raw" in source_path.parts
 
             if is_primary:
-                report.add("PASS", source_path, "-> Source is a primary artifact, logical chain ends here.")
+                # This is just a statement of fact, no promise.
+                report.add("PASS", source_path, "Source is a primary artifact.")
                 continue
 
             parent_manifest_path = source_path.parent / "manifest.json"
             if parent_manifest_path not in graph:
                 report.add(
-                    "WARN",
-                    source_path,
-                    f"-> WARN: Parent manifest '{parent_manifest_path}' not found; cannot verify link.",
+                    "WARN", source_path, f"Parent manifest '{parent_manifest_path}' not found; cannot verify link."
                 )
                 continue
 
@@ -80,76 +83,43 @@ def _verify_logical_chain(graph: dict[Path, Manifest], report: VerificationRepor
                 report.add(
                     "FAIL",
                     source_path,
-                    f"-> FAIL: Provenance broken. Not declared as output in parent manifest ('{parent_manifest.action}').",
+                    f"Provenance broken. Not declared as output in parent manifest ('{parent_manifest.action}').",
                 )
             elif parent_output_info.file_hash != source_file.file_hash:
-                report.add(
-                    "FAIL",
-                    source_path,
-                    f"-> FAIL: Provenance broken. Hash mismatch between manifests (Parent: {parent_output_info.file_hash[:8]}... vs. This: {source_file.file_hash[:8]}...).",
-                )
+                report.add("FAIL", source_path, "Provenance broken. Hash mismatch between parent and child manifests.")
             else:
-                report.add(
-                    "PASS", source_path, f"-> PASS: Link to parent manifest ('{parent_manifest.action}') is consistent."
-                )
+                report.add("PASS", source_path, f"Link to parent manifest ('{parent_manifest.action}') is consistent.")
 
 
 def _verify_physical_integrity(graph: dict[Path, Manifest], root_dir: Path, report: VerificationReport) -> None:
-    """Phase 2: Check every file on disk against its defining manifest."""
-    report.add("INFO", report.manifest_path, "[Phase 2] Verifying physical integrity of all files in the graph...")
+    """Phase 2: Verify ALL files mentioned in the graph against the disk."""
+    report.add("INFO", report.manifest_path, "Phase 2 - Verifying on-disk file integrity")
 
-    # Create a unique set of all relative file paths mentioned in the graph.
-    all_files_to_check: set[Path] = set()
+    # 1. Build a canonical map of every file to its expected hash.
+    # Outputs are the source of truth; sources are secondary.
+    expected_hashes: dict[Path, str] = {}
     for manifest in graph.values():
         for f in manifest.output_files:
-            all_files_to_check.add(Path(f.path))
+            expected_hashes[Path(f.path)] = f.file_hash
+    for manifest in graph.values():
         for f in manifest.source_files:
-            all_files_to_check.add(Path(f.path))
+            path = Path(f.path)
+            if path not in expected_hashes:  # Only add if it's not a generated output
+                expected_hashes[path] = f.file_hash
 
-    for relative_path_str in sorted(list(all_files_to_check)):
-        relative_path = Path(relative_path_str)
-        # Find the manifest that DEFINES this file (i.e., where it's an output)
-        defining_manifest_info = next(
-            (m for m in graph.values() if any(out.path == relative_path for out in m.output_files)), None
-        )
-
-        # Or, if it's a primary source, it has no defining manifest in our graph
-        is_primary = "1-benchmarks" in relative_path.parts or "2-raw" in relative_path.parts
-
-        if defining_manifest_info:
-            expected_hash = next(f.file_hash for f in defining_manifest_info.output_files if f.path == relative_path)
-            context = f"defined by '{defining_manifest_info.action}'"
-        elif is_primary:
-            # For primary sources, we just check they exist. Hash is verified by downstream consumers.
-            context = "primary source"
-            expected_hash = None  # No single source of truth for its hash, only what consumers expect
-        else:
-            report.add(
-                "WARN",
-                relative_path,
-                "-> WARN: File is a source but not a primary artifact and has no defining manifest in graph.",
-            )
-            continue
-
+    # 2. Iterate and check every file against the disk.
+    for relative_path, expected_hash in sorted(expected_hashes.items()):
         absolute_path = root_dir / relative_path
-        report.add("INFO", relative_path, f"Checking on-disk file ({context})...")
 
         if not absolute_path.exists():
-            report.add("FAIL", relative_path, "-> FAIL: File is missing from disk.")
+            report.add("FAIL", relative_path, "File is MISSING from disk.")
             continue
 
-        if expected_hash:  # We only check hash if it's a generated artifact
-            actual_hash = calculate_file_hash(absolute_path)
-            if actual_hash != expected_hash:
-                report.add(
-                    "FAIL",
-                    relative_path,
-                    f"-> FAIL: Hash mismatch (Disk: {actual_hash[:8]}... vs. Manifest: {expected_hash[:8]}...).",
-                )
-            else:
-                report.add("PASS", relative_path, "-> PASS: On-disk file hash matches its manifest definition.")
-        else:  # For primary sources, just confirming existence is enough for this phase
-            report.add("PASS", relative_path, "-> PASS: Primary source file exists on disk.")
+        actual_hash = calculate_file_hash(absolute_path)
+        if actual_hash != expected_hash:
+            report.add("FAIL", relative_path, "HASH MISMATCH (Disk vs. Manifest).")
+        else:
+            report.add("PASS", relative_path, "On-disk file hash matches manifest record.")
 
 
 def verify_manifest(manifest_path: Path, root_dir: Path, deep: bool = False) -> VerificationReport:
