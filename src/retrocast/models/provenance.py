@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -37,3 +38,28 @@ class Manifest(BaseModel):
 
     # Optional stats (e.g., "n_targets_saved": 600)
     statistics: dict[str, Any] = Field(default_factory=dict)
+
+
+VerificationLevel = Literal["PASS", "FAIL", "WARN", "INFO"]
+
+
+class VerificationIssue(BaseModel):
+    """A single issue found during verification."""
+
+    level: VerificationLevel = Field(..., description="Severity of the issue.")
+    path: Path = Field(..., description="The file or directory related to the issue.")
+    message: str = Field(..., description="A human-readable description of the issue.")
+
+
+class VerificationReport(BaseModel):
+    """The result of verifying a single manifest."""
+
+    manifest_path: Path
+    is_valid: bool = True
+    issues: list[VerificationIssue] = Field(default_factory=list)
+
+    def add(self, level: VerificationLevel, path: Path, message: str) -> None:
+        """Helper to add an issue and update validity."""
+        self.issues.append(VerificationIssue(level=level, path=path, message=message))
+        if level == "FAIL":
+            self.is_valid = False

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -8,7 +9,8 @@ from retrocast import __version__
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.chem import Route
 from retrocast.models.provenance import FileInfo, Manifest
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_file_hash(path: Path) -> str:
