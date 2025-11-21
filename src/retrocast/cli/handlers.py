@@ -123,7 +123,7 @@ def _ingest_single(model_name: str, benchmark_name: str, config: dict, paths: di
             outputs=[(out_path, processed_routes)],
             root_dir=paths["raw"].parent,  # The 'data/' directory
             parameters={"model": model_name, "benchmark": benchmark_name, "sampling": strategy, "k": k},
-            statistics=stats,
+            statistics=stats.to_manifest_dict(),
         )
 
         manifest_path = out_path.with_name("manifest.json")

@@ -10,7 +10,7 @@ from retrocast.curation.sampling import sample_k_by_length, sample_random_k, sam
 from retrocast.io.data import save_routes
 from retrocast.io.provenance import generate_model_hash
 from retrocast.models.benchmark import BenchmarkSet
-from retrocast.models.chem import Route
+from retrocast.models.chem import Route, RunStatistics
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ def ingest_model_predictions(
     anonymize: bool = False,
     sampling_strategy: str | None = None,
     sample_k: int | None = None,
-) -> tuple[dict[str, list[Route]], Path, dict[str, int]]:
+) -> tuple[dict[str, list[Route]], Path, RunStatistics]:
     """
     Converts raw model outputs into standard format.
     Handles raw data keyed by Target ID (preferred) or SMILES (fallback).
@@ -47,14 +47,8 @@ def ingest_model_predictions(
 
     processed_routes: dict[str, list[Route]] = {}
 
-    # Expanded stats tracking
-    stats = {
-        "n_benchmark_targets": len(benchmark.targets),
-        "n_found_in_raw": 0,
-        "n_targets_with_routes": 0,
-        "n_total_routes_generated": 0,
-        "n_total_routes_saved": 0,
-    }
+    # Initialize statistics tracking
+    stats = RunStatistics()
 
     # 3. Iterate Benchmark Targets (The Source of Truth)
     for target_id, target in tqdm(benchmark.targets.items(), desc="Ingesting"):
@@ -76,7 +70,7 @@ def ingest_model_predictions(
             processed_routes[target_id] = []
             continue
 
-        stats["n_found_in_raw"] += 1
+        stats.total_routes_in_raw_files += 1
 
         # --- Adaptation ---
         try:
@@ -85,6 +79,9 @@ def ingest_model_predictions(
         except Exception as e:
             logger.warning(f"Adapter failed for {target_id}: {e}")
             routes = []
+            stats.routes_failed_transformation += 1
+            processed_routes[target_id] = []
+            continue
 
         if not routes:
             processed_routes[target_id] = []
@@ -100,10 +97,11 @@ def ingest_model_predictions(
         processed_routes[target_id] = unique_routes
 
         # --- Stats Update ---
-        stats["n_total_routes_generated"] += len(routes)
-        stats["n_total_routes_saved"] += len(unique_routes)
+        stats.successful_routes_before_dedup += len(routes)
+        stats.final_unique_routes_saved += len(unique_routes)
         if len(unique_routes) > 0:
-            stats["n_targets_with_routes"] += 1
+            stats.targets_with_at_least_one_route.add(target_id)
+            stats.routes_per_target[target_id] = len(unique_routes)
 
     # 6. Save
     model_hash = generate_model_hash(model_name)
@@ -116,8 +114,9 @@ def ingest_model_predictions(
     save_routes(processed_routes, save_file)
 
     logger.info(
-        f"Ingestion complete. Found data for {stats['n_found_in_raw']}/{stats['n_benchmark_targets']} targets. "
-        f"Saved {stats['n_total_routes_saved']} valid routes."
+        f"Ingestion complete. Found data for {stats.total_routes_in_raw_files}/{len(benchmark.targets)} targets. "
+        f"Saved {stats.final_unique_routes_saved} valid routes. "
+        f"Duplication factor: {stats.duplication_factor}x"
     )
 
     return processed_routes, save_file, stats

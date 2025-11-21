@@ -167,10 +167,9 @@ class TestIngestModelPredictions:
         )
 
         # Check stats
-        assert stats["n_benchmark_targets"] == 3
-        assert stats["n_found_in_raw"] == 3
-        assert stats["n_targets_with_routes"] == 3
-        assert stats["n_total_routes_saved"] == 4  # 2 + 1 + 1
+        assert stats.total_routes_in_raw_files == 3
+        assert stats.num_targets_with_routes == 3
+        assert stats.final_unique_routes_saved == 4  # 2 + 1 + 1
 
         # Check file was created
         assert save_path.exists()
@@ -201,9 +200,8 @@ class TestIngestModelPredictions:
             output_dir=tmp_path,
         )
 
-        assert stats["n_benchmark_targets"] == 3
-        assert stats["n_found_in_raw"] == 1
-        assert stats["n_targets_with_routes"] == 1
+        assert stats.total_routes_in_raw_files == 1
+        assert stats.num_targets_with_routes == 1
 
         # Missing targets should have empty lists
         assert processed["target_2"] == []
@@ -228,7 +226,7 @@ class TestIngestModelPredictions:
             output_dir=tmp_path,
         )
 
-        assert stats["n_found_in_raw"] == 2
+        assert stats.total_routes_in_raw_files == 2
         assert len(processed["target_1"]) == 1
         assert len(processed["target_2"]) == 1
         assert processed["target_3"] == []
@@ -281,7 +279,7 @@ class TestIngestModelPredictions:
 
         # Should only keep top 3
         assert len(processed["target_1"]) == 3
-        assert stats["n_total_routes_saved"] == 3
+        assert stats.final_unique_routes_saved == 3
 
     @pytest.mark.integration
     def test_ingest_invalid_sampling_strategy_raises(self, tmp_path, synthetic_benchmark):
@@ -520,7 +518,7 @@ class TestFullPipeline:
         )
 
         # Verify pipeline produces expected results
-        assert ingest_stats["n_total_routes_saved"] == 4
+        assert ingest_stats.final_unique_routes_saved == 4
         assert len(eval_results.results) == 3
 
         # Check specific results
@@ -552,8 +550,8 @@ class TestFullPipeline:
         )
 
         # Should deduplicate to 1 route
-        assert stats["n_total_routes_generated"] == 3
-        assert stats["n_total_routes_saved"] == 1
+        assert stats.successful_routes_before_dedup == 3
+        assert stats.final_unique_routes_saved == 1
         assert len(processed["target_1"]) == 1
 
     @pytest.mark.integration
