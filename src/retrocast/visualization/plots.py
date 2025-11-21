@@ -194,43 +194,136 @@ def plot_ranking(ranking: list[RankResult], metric_name: str) -> go.Figure:
 
 
 def plot_pairwise_matrix(comparisons: list[ModelComparison], metric_name: str) -> go.Figure:
-    """Plots a Win/Loss matrix (Model A vs Model B)."""
-    models = sorted(list(set(c.model_a for c in comparisons) | set(c.model_b for c in comparisons)))
+    """
+    Plots a Win/Loss matrix (Model A vs Model B).
+    Row (Y) - Col (X).
+    """
+    # 1. Extract and Sort Unique Models
+    # We sort them to ensure the matrix indices match the labels perfectly
+    models = sorted(list(set([c.model_a for c in comparisons])))
     model_map = {m: i for i, m in enumerate(models)}
     n = len(models)
-    z_values, text_values = [[None] * n for _ in range(n)], [[""] * n for _ in range(n)]
+
+    # 2. Initialize Matrix Data Containers
+    z_values = [[None] * n for _ in range(n)]
+    text_values = [[""] * n for _ in range(n)]
+    custom_data = [[None] * n for _ in range(n)]  # For rich hover info
+
     max_diff = 0.0
 
     for c in comparisons:
-        row, col = model_map[c.model_a], model_map[c.model_b]
-        diff = c.diff_mean * 100  # Convert to percentage points
-        z_values[row][col], z_values[col][row] = diff, -diff
-        max_diff = max(max_diff, abs(diff))
-        sig_a = "★" if c.is_significant else ""
-        sig_b = "★" if c.is_significant else ""
-        text_values[row][col] = f"{diff:+.1f}%{sig_a}"
-        text_values[col][row] = f"{-diff:+.1f}%{sig_b}"
+        row = model_map[c.model_a]
+        col = model_map[c.model_b]
 
+        # Value: Difference (Row - Col)
+        diff = c.diff_mean
+        z_values[row][col] = diff
+        max_diff = max(max_diff, abs(diff))
+
+        # Cell Text: "+5.2% ★"
+        sig_mark = "★" if c.is_significant else ""
+        text_values[row][col] = f"{diff:+.1%}{sig_mark}"
+
+        # Rich Hover Data construction
+        # [Row Model, Col Model, Significance Label, Winner/Description]
+        sig_str = "Significant ✅" if c.is_significant else "Insignificant ⚠️"
+
+        if diff > 0:
+            desc = f"<b>{c.model_a}</b> beats {c.model_b}"
+        else:
+            desc = f"<b>{c.model_b}</b> beats {c.model_a}"
+
+        custom_data[row][col] = [
+            c.model_a,  # 0: Row Name
+            c.model_b,  # 1: Col Name
+            sig_str,  # 2: Sig Status
+            desc,  # 3: Description
+        ]
+
+    # 3. Render Heatmap
     fig = go.Figure(
         data=go.Heatmap(
             z=z_values,
             x=models,
-            y=models,
+            y=models,  # Pass in normal order, we flip axis in layout
             text=text_values,
             texttemplate="%{text}",
-            colorscale="RdBu",
+            customdata=custom_data,
+            colorscale="RdBu",  # Red (loss) to Blue (win)
             zmid=0,
             zmin=-max_diff,
             zmax=max_diff,
             xgap=2,
             ygap=2,
-            hovertemplate="<b>%{y} vs %{x}</b><br>Diff (Row-Col): %{z:+.1f}%<extra></extra>",
+            hovertemplate=(
+                "<b>Matchup:</b> %{customdata[0]} vs %{customdata[1]}<br>"
+                "<b>Difference:</b> %{z:+.2%}<br>"
+                "<b>Result:</b> %{customdata[3]}<br>"
+                "<b>Status:</b> %{customdata[2]}"
+                "<extra></extra>"
+            ),
         )
     )
-    height = 500 + (n * 25)
+
+    # Auto-scale height based on number of models
+    height = 600 + (n * 30)
+    width = 700 + (n * 30)
+
     theme.apply_layout(
-        fig, title=f"Pairwise Comparison Matrix (Row - Col): {metric_name}", height=height, legend_top=False
+        fig,
+        title=f"Pairwise Comparison Matrix: {metric_name}",
+        x_title="Opponent (Column)",
+        y_title="Model (Row)",
+        height=height,
+        width=width,
+        legend_top=False,
     )
+
+    # This makes the matrix read like a table (Top-to-Bottom).
+    fig.update_yaxes(autorange="reversed")
+
+    return fig
+
+
+def plot_stability_analysis(data_list: list[adapters.StabilityData], model_name: str) -> go.Figure:
+    """
+    Plots a Forest Plot showing variance across random seeds.
+    """
+    fig = go.Figure()
+
+    for data in data_list:
+        # 1. The Scatter Points with Error Bars
+        fig.add_trace(
+            go.Scatter(
+                x=data.values,
+                y=[f"Seed {s}" for s in data.seeds],
+                name=data.metric_name,
+                mode="markers",
+                marker=dict(color=data.color, size=8),
+                error_x=dict(type="data", array=data.errors_plus, arrayminus=data.errors_minus, visible=True),
+                hovertemplate=(f"<b>{data.metric_name}</b><br>Seed: %{{y}}<br>Value: %{{x:.2f}}%<br><extra></extra>"),
+            )
+        )
+
+        # 2. The Grand Mean Line (Vertical)
+        fig.add_vline(
+            x=data.grand_mean,
+            line_width=2,
+            line_dash="dot",
+            line_color=data.color,
+            annotation_text=f"μ={data.grand_mean:.1f}% (σ={data.std_dev:.2f})",
+            annotation_position="top right",
+        )
+
+    theme.apply_layout(
+        fig,
+        title=f"Benchmark Stability Analysis: {model_name}",
+        x_title="Performance (%)",
+        y_title="Seed Variant",
+        height=max(600, len(data_list[0].seeds) * 25),  # Dynamic height
+        legend_top=True,
+    )
+
     return fig
 
 

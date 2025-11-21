@@ -100,9 +100,12 @@ def apply_layout(
     """
     layout_args: dict[str, Any] = dict(
         height=height,
-        title=title,
         margin=dict(t=30),
     )
+
+    if title:
+        layout_args["title"] = title
+        layout_args["margin"]["t"] = 50
 
     if x_title:
         layout_args.setdefault("xaxis", {})["title"] = x_title

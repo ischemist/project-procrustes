@@ -7,6 +7,7 @@ It strictly enforces a separation between logic and rendering.
 """
 
 from dataclasses import dataclass
+from typing import Any
 
 from retrocast.models.stats import ModelStatistics, StratifiedMetric
 from retrocast.visualization.theme import get_metric_color, get_model_color
@@ -49,6 +50,20 @@ class SplitHeatmapData:
 
     solvability: HeatmapData
     top_k: HeatmapData
+
+
+@dataclass
+class StabilityData:
+    """Container for seed stability analysis."""
+
+    metric_name: str
+    seeds: list[str]
+    values: list[float]  # Percentages
+    errors_plus: list[float]  # CI Upper - Value
+    errors_minus: list[float]  # Value - CI Lower
+    grand_mean: float
+    std_dev: float
+    color: str
 
 
 # --- Transformers ---
@@ -208,6 +223,40 @@ def stats_to_heatmap_matrix(models_stats: list[ModelStatistics]) -> SplitHeatmap
         top_k=HeatmapData(
             z=top_k_z, x_labels=top_k_metrics, y_labels=model_names, text=top_k_text, title="Top-K Accuracy"
         ),
+    )
+
+
+def stats_to_stability_data(results_map: dict[str, dict[str, Any]], metric_key: str, color: str) -> StabilityData:
+    """
+    Converts a map of {seed: {metric: Result}} into plotting data.
+    """
+    import numpy as np
+
+    # Sort seeds numerically if possible
+    seeds = sorted(results_map.keys(), key=lambda x: int(x) if x.isdigit() else x)
+
+    vals = []
+    e_plus = []
+    e_minus = []
+
+    for seed in seeds:
+        res = results_map[seed][metric_key]
+        v = res.value * 100
+        vals.append(v)
+        e_plus.append((res.ci_upper * 100) - v)
+        e_minus.append(v - (res.ci_lower * 100))
+
+    raw = np.array(vals)
+
+    return StabilityData(
+        metric_name=metric_key,
+        seeds=seeds,
+        values=vals,
+        errors_plus=e_plus,
+        errors_minus=e_minus,
+        grand_mean=float(np.mean(raw)),
+        std_dev=float(np.std(raw)),
+        color=color,
     )
 
 
