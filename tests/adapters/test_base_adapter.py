@@ -1,9 +1,14 @@
+import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
 import pytest
 
 from retrocast.models.chem import Route
+
+logger = logging.getLogger(__name__)
+
+logger.setLevel(logging.DEBUG)
 
 
 class BaseAdapterTest(ABC):

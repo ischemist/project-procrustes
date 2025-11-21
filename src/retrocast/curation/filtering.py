@@ -1,8 +1,10 @@
+import logging
 from typing import Literal
 
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Molecule, ReactionSignature, ReactionStep, Route
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 RouteType = Literal["linear", "convergent"]
 

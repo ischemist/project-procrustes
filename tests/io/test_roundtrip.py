@@ -314,6 +314,7 @@ class TestCreateManifest:
             action="test",
             sources=[source],
             outputs=[(output, {"key": "value"})],
+            root_dir=tmp_path,
         )
 
         assert len(manifest.source_files) == 1
@@ -339,6 +340,7 @@ class TestCreateManifest:
             action="test",
             sources=[],
             outputs=[(output_path, benchmark)],
+            root_dir=tmp_path,
         )
 
         assert len(manifest.output_files) == 1
@@ -357,6 +359,7 @@ class TestCreateManifest:
             action="test",
             sources=[],
             outputs=[(output_path, routes)],
+            root_dir=tmp_path,
         )
 
         assert len(manifest.output_files) == 1
@@ -371,6 +374,7 @@ class TestCreateManifest:
             action="test",
             sources=[],
             outputs=[(output, {})],
+            root_dir=tmp_path,
             parameters={"key": "value", "number": 42},
         )
 
@@ -385,6 +389,7 @@ class TestCreateManifest:
             action="test",
             sources=[],
             outputs=[(output, {})],
+            root_dir=tmp_path,
             statistics={"count": 100, "rate": 0.95},
         )
 

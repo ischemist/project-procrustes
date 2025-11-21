@@ -5,8 +5,9 @@ import pytest
 from retrocast.adapters.dms_adapter import DMSAdapter, DMSTree
 from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import TargetInput
-from retrocast.utils.logging import logger
 from tests.adapters.test_base_adapter import BaseAdapterTest
+
+logger = logging.getLogger(__name__)
 
 logger.setLevel(logging.DEBUG)
 

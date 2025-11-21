@@ -66,11 +66,10 @@ collectors/
 tests/testing_data/**/results.json
 docs/coding-style.md
 
-*manifest.json
-
 data/statistics
 
-data/1-benchmarks
+data/1-benchmarks/**/*.json.gz
+data/1-benchmarks/**/*.hdf5
 data/2-raw
 data/3-processed
 data/4-scored

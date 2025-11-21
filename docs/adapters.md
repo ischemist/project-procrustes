@@ -29,7 +29,8 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_molecule_from_bipartite_node
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.exceptions import RetroCastException
-from retrocast.utils.logging import logger
+import logging
+logger = logging.getLogger(__name__)
 
 # --- pydantic schemas for raw input validation ---
 class BipartiteBaseNode(BaseModel):
@@ -88,7 +89,8 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.exceptions import RetroCastException
-from retrocast.utils.logging import logger
+import logging
+logger = logging.getLogger(__name__)
 
 class PrecursorModelAdapter(BaseAdapter):
     def _parse_route_string(self, route_str: str) -> PrecursorMap:

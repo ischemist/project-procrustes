@@ -1,11 +1,12 @@
 import gzip
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
 
-from retrocast.utils.logging import logger
+logger = logging.getLogger(__name__)
 
 
 def save_json_gz(data: Any, path: Path) -> None:

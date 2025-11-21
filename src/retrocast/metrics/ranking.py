@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 
 import numpy as np
@@ -5,7 +6,8 @@ import numpy as np
 from retrocast.metrics.bootstrap import compute_paired_difference, get_bootstrap_distribution
 from retrocast.models.evaluation import EvaluationResults, TargetEvaluation
 from retrocast.models.stats import ModelComparison, RankResult
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 
 def compute_probabilistic_ranking(

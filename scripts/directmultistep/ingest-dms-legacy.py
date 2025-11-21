@@ -15,7 +15,7 @@ from retrocast import adapt_routes
 from retrocast.chem import canonicalize_smiles
 from retrocast.io import create_manifest, load_benchmark, save_routes
 from retrocast.models.chem import Route
-from retrocast.utils.logging import logger
+from retrocast.utils.logging import configure_script_logging, logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
@@ -28,6 +28,7 @@ def load_legacy_pickle(path: Path) -> list[list[tuple[str, float]]]:
 
 
 def main():
+    configure_script_logging()
     parser = argparse.ArgumentParser("Ingest DMS Legacy Data")
     parser.add_argument("--benchmark", type=str, default="benchmark_name", help="Name of the benchmark")
     parser.add_argument("--model", type=str, default="model_name", help="Name of the model")
@@ -88,8 +89,9 @@ def main():
     # 5. Manifest
     manifest = create_manifest(
         action="scripts/directmultistep/ingest-dms-legacy",
-        sources=[n1_pickle, n5_pickle],
+        sources=[bench_def_path, n1_pickle, n5_pickle],
         outputs=[(out_path, processed_predictions)],
+        root_dir=BASE_DIR / "data",
         parameters={"benchmark": args.benchmark, "model": model_name},
         statistics={"n_targets_found": hits},
     )

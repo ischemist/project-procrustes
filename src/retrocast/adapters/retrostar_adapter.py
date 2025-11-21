@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Generator
 from typing import Any
 
@@ -9,7 +10,8 @@ from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import SmilesStr
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 
 class RetroStarAdapter(BaseAdapter):

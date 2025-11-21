@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.3.0.dev16",
+  "created_at": "2025-11-21T16:55:40.993341Z",
+  "action": "[cli]create-benchmark",
+  "parameters": {
+    "name": "USPTO 190",
+    "stock_name": null
+  },
+  "source_files": [
+    {
+      "path": "uspto-190.csv",
+      "file_hash": "5f4ec7253181417c5f75d503c817286a500ebfc4740d42b0f25548e7ce3e59c9",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/uspto-190.json.gz",
+      "file_hash": "494d320f25c2bddc6b16034e268333d0764bcf1a1fa89ccab9033a834302d6fa",
+      "content_hash": "11572cf0e73a44abc1d6f989366f9959888bd439269da16212d385d66bc850a8"
+    }
+  ],
+  "statistics": {
+    "n_targets": 190
+  }
+}

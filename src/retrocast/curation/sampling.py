@@ -1,10 +1,12 @@
+import logging
 import random
 from collections import defaultdict
 from collections.abc import Callable
 from typing import TypeVar
 
 from retrocast.models.chem import Route
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 

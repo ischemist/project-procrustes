@@ -1,10 +1,13 @@
+import logging
+
 from retrocast.io.data import RoutesDict
 from retrocast.metrics.similarity import is_exact_match
 from retrocast.metrics.solvability import is_route_solved
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.evaluation import EvaluationResults, ScoredRoute, TargetEvaluation
 from retrocast.typing import SmilesStr
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 
 def score_model(

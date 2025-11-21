@@ -110,6 +110,21 @@ def main() -> None:
         default=[1, 3, 5, 10, 20, 50, 100],
         help="List of Top-K values to include in the markdown report (default: 1 3 5 10 20 50 100)",
     )
+
+    # --- CREATE BENCHMARK ---
+    create_bm_parser = subparsers.add_parser("create-benchmark", help="Create benchmark from SMILES list")
+    create_bm_parser.add_argument("--input", required=True, help="Path to .txt or .csv")
+    create_bm_parser.add_argument("--name", required=True, help="Name of the benchmark")
+    create_bm_parser.add_argument("--output", required=True, help="Output path (.json.gz)")
+    create_bm_parser.add_argument("--stock-name", help="Associated stock name (optional)")
+
+    # --- VERIFY ---
+    verify_parser = subparsers.add_parser("verify", help="Verify data integrity and lineage")
+    v_group = verify_parser.add_mutually_exclusive_group(required=True)
+    v_group.add_argument("--target", help="Path to a specific manifest or directory")
+    v_group.add_argument("--all", action="store_true", help="Verify all manifests in the data directory")
+    verify_parser.add_argument("--deep", action="store_true", help="Perform deep verification of source files")
+
     args = parser.parse_args()
 
     if args.command != "score-file":
@@ -130,6 +145,10 @@ def main() -> None:
             handlers.handle_analyze(args, config)
         elif args.command == "score-file":
             adhoc.handle_score_file(args)
+        elif args.command == "create-benchmark":
+            adhoc.handle_create_benchmark(args)
+        elif args.command == "verify":
+            handlers.handle_verify(args, config)
 
     except Exception as e:
         logger.critical(f"Command failed: {e}", exc_info=True)

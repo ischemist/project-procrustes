@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from collections import defaultdict
 from collections.abc import Generator
@@ -12,7 +13,8 @@ from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 # --- pydantic models for input validation ---
 # this format is effectively identical to aizynthfinder's output,
