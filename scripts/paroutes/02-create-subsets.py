@@ -16,7 +16,7 @@ from retrocast.curation.filtering import clean_and_prioritize_pools, filter_by_r
 from retrocast.curation.sampling import sample_random, sample_stratified_priority
 from retrocast.io import create_manifest, load_benchmark, save_json_gz
 from retrocast.models.benchmark import BenchmarkSet
-from retrocast.utils.logging import logger
+from retrocast.utils.logging import configure_script_logging, logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
@@ -36,6 +36,7 @@ def create_subset(
         action="create_subset",
         sources=source_paths,
         outputs=[(out_path, subset)],
+        root_dir=BASE_DIR / "data",
         parameters={"seed": seed, "name": name},
         statistics={"n_targets": len(subset.targets)},
     )
@@ -47,6 +48,7 @@ def create_subset(
 
 
 def main():
+    configure_script_logging()
     seeds = [
         # 299792458,
         # 19910806,
@@ -132,7 +134,7 @@ def main():
 
         # 5. Create Random Legacy Set (from n5 only, to match PaRoutes spirit)
         n5_pool = list(n5.targets.values())
-        for n in [10, 100, 250, 500, 1000]:
+        for n in [10, 100, 250, 500, 1000][:1]:
             targets_random = sample_random(n5_pool, n, seed=CANONICAL_SEED)
 
             create_subset(

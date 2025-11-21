@@ -311,12 +311,13 @@ def _render_report(report: VerificationReport) -> None:
             icon = "[red]✗[/]"
         elif issue.level == "WARN":
             icon = "[yellow]![/]"
-        else:
+        else:  # INFO
             icon = "[cyan]i[/]"
-        lines.append(f"{icon} [bold]{issue.path.name}[/]: {issue.message}")
+        # THE FIX: Append a formatted string for ALL issue levels.
+        lines.append(f"{icon} [dim]{issue.path}[/]: {issue.message}")
 
-    content = "\n".join(lines)
-    panel = Panel(content, title=title, border_style=color)
+    content = "\n".join(lines) if lines else "[dim]No issues to report.[/dim]"
+    panel = Panel(content, title=title, border_style=color, expand=False)
     console.print(panel)
 
 
