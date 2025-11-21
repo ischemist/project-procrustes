@@ -1,4 +1,5 @@
 import gzip
+import logging
 from pathlib import Path
 
 from pydantic import TypeAdapter
@@ -10,7 +11,8 @@ from retrocast.models.chem import Route
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.stats import ModelStatistics
 from retrocast.typing import SmilesStr
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 # Pre-define the adapter for performance and reuse
 RoutesDict = dict[str, list[Route]]

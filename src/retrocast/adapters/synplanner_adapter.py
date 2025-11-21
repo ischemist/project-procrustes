@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Generator
 from typing import Annotated, Any, Literal
 
@@ -10,7 +11,8 @@ from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 # --- pydantic models for input validation ---
 # these models validate the raw synplanner output format before any transformation.

@@ -1,7 +1,10 @@
+import logging
+
 from retrocast.metrics.bootstrap import compute_metric_with_ci, get_is_solvable, make_get_top_k
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.stats import ModelStatistics
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 
 def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 10000, seed: int = 42) -> ModelStatistics:

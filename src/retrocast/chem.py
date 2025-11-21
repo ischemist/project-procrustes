@@ -1,9 +1,12 @@
+import logging
+
 from rdkit import Chem, rdBase
 from rdkit.Chem import rdMolDescriptors
 
 from retrocast.exceptions import InvalidSmilesError, RetroCastException
 from retrocast.typing import InchiKeyStr, SmilesStr
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 rdBase.DisableLog("rdApp.error")
 

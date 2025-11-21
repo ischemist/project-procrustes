@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +11,8 @@ from retrocast.io.data import save_routes
 from retrocast.io.provenance import generate_model_hash
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.chem import Route
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 SAMPLING_STRATEGIES = {
     "top-k": sample_top_k,

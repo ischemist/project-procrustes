@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Generator
 from typing import Annotated, Any, Literal
 
@@ -9,7 +10,8 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_molecule_from_bipartite_node
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Route, TargetIdentity
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 # --- pydantic models for input validation ---
 # these models validate the raw aizynthfinder output format before any transformation.
