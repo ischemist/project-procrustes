@@ -311,45 +311,35 @@ def _render_report(report: VerificationReport) -> None:
     lines = []
 
     # --- Pre-scan to determine context ---
-    phases_present = set()
+    categories_present = set()
     for issue in report.issues:
-        if "Phase 1" in issue.message:
-            phases_present.add("Phase 1")
-        if "Phase 2" in issue.message:
-            phases_present.add("Phase 2")
-        if "Graph Discovery" in issue.message:
-            phases_present.add("Graph Discovery")
+        if issue.category:
+            categories_present.add(issue.category)
 
-    if len(phases_present) > 1 or "Phase 1" in phases_present:
+    # Show overview if multiple phases or phase1 is present
+    if len(categories_present) > 1 or "phase1" in categories_present:
         lines.append("[bold]Verification Process Overview:[/bold]\n")
-        if "Graph Discovery" in phases_present:
+        if "graph" in categories_present:
             lines.append(EXPLANATORY_SECTIONS["Graph Discovery"])
         lines.append(EXPLANATORY_SECTIONS["Primary Artifact"])
-        if "Phase 1" in phases_present:
+        if "phase1" in categories_present:
             lines.append(EXPLANATORY_SECTIONS["Phase 1"])
-        if "Phase 2" in phases_present:
+        if "phase2" in categories_present:
             lines.append(EXPLANATORY_SECTIONS["Phase 2"])
 
     # --- Render the report ---
     icons = {"PASS": "[green]✓[/]", "FAIL": "[red]✗[/]", "WARN": "[yellow]![/]", "INFO": "[cyan]i[/]"}
 
-    # A set of the exact, unique messages that should be treated as headers
-    header_messages = {
-        "Graph Discovery",
-        "Phase 1 - Verifying manifest chain consistency",
-        "Phase 2 - Verifying on-disk file integrity",
-    }
-
     for issue in report.issues:
         # 1. Check if it's a main header
-        if issue.message in header_messages:
+        if issue.category == "header":
             if lines and lines[-1] != "":  # Add a blank line for spacing if needed
                 lines.append("")
             lines.append(f"[bold cyan][{issue.message}][/]")
             continue  # CRITICAL: Do not process this line further
 
         # 2. Check if it's a sub-header (context for a group of checks)
-        if "Inspecting links for manifest" in issue.message:
+        if issue.category == "context":
             lines.append(f"[dim]{issue.message}[/dim]")
             continue  # CRITICAL: Do not process this line further
 

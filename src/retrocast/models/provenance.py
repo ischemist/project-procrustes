@@ -41,6 +41,7 @@ class Manifest(BaseModel):
 
 
 VerificationLevel = Literal["PASS", "FAIL", "WARN", "INFO"]
+VerificationCategory = Literal["graph", "phase1", "phase2", "header", "context"]
 
 
 class VerificationIssue(BaseModel):
@@ -49,6 +50,7 @@ class VerificationIssue(BaseModel):
     level: VerificationLevel = Field(..., description="Severity of the issue.")
     path: Path = Field(..., description="The file or directory related to the issue.")
     message: str = Field(..., description="A human-readable description of the issue.")
+    category: VerificationCategory | None = Field(default=None, description="Category of the verification issue.")
 
 
 class VerificationReport(BaseModel):
@@ -58,8 +60,10 @@ class VerificationReport(BaseModel):
     is_valid: bool = True
     issues: list[VerificationIssue] = Field(default_factory=list)
 
-    def add(self, level: VerificationLevel, path: Path, message: str) -> None:
+    def add(
+        self, level: VerificationLevel, path: Path, message: str, category: VerificationCategory | None = None
+    ) -> None:
         """Helper to add an issue and update validity."""
-        self.issues.append(VerificationIssue(level=level, path=path, message=message))
+        self.issues.append(VerificationIssue(level=level, path=path, message=message, category=category))
         if level == "FAIL":
             self.is_valid = False
