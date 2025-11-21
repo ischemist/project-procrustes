@@ -5310,6 +5310,9 @@ aizyn = [
     { name = "aizynthfinder" },
     { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" } },
 ]
+cli = [
+    { name = "rich" },
+]
 dms = [
     { name = "directmultistep" },
 ]
@@ -5375,6 +5378,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "rdkit" },
     { name = "retro-star", marker = "extra == 'retro-star'", git = "https://github.com/anmorgunov/retro_star?branch=master" },
+    { name = "rich", marker = "extra == 'cli'", specifier = ">=14.2.0" },
     { name = "synplanner", marker = "extra == 'synplanner'", specifier = "==1.2.0" },
     { name = "syntheseus", extras = ["local-retro"], marker = "extra == 'syntheseus'", specifier = ">=0.5.0" },
     { name = "torch", marker = "extra == 'syntheseus'", specifier = "<=2.1" },
@@ -5382,7 +5386,7 @@ requires-dist = [
     { name = "torchdata", marker = "extra == 'syntheseus'", specifier = "<=0.7.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
 ]
-provides-extras = ["aizyn", "dms", "retro-star", "synplanner", "syntheseus", "viz"]
+provides-extras = ["aizyn", "dms", "retro-star", "synplanner", "syntheseus", "viz", "cli"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -7,7 +7,7 @@ import yaml
 
 from retrocast import __version__
 from retrocast.cli import adhoc, handlers
-from retrocast.utils.logging import logger
+from retrocast.utils.logging import configure_script_logging, logger
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
@@ -25,6 +25,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
 
 
 def main() -> None:
+    configure_script_logging(use_rich=True)
     parser = argparse.ArgumentParser(
         description=f"Retrocast v{__version__}",
         formatter_class=argparse.RawTextHelpFormatter,

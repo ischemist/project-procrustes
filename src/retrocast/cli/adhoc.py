@@ -1,3 +1,4 @@
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -5,7 +6,8 @@ from typing import Any
 from retrocast.api import score_predictions
 from retrocast.io.blob import save_json_gz
 from retrocast.io.data import load_benchmark, load_routes
-from retrocast.utils.logging import logger
+
+logger = logging.getLogger(__name__)
 
 
 def handle_score_file(args: Any) -> None:

@@ -1,3 +1,4 @@
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -10,9 +11,10 @@ from retrocast.io.provenance import create_manifest
 from retrocast.metrics.bootstrap import compute_metric_with_ci, get_is_solvable, make_get_top_k
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.stats import ModelStatistics
-from retrocast.utils.logging import logger
 from retrocast.visualization.report import generate_markdown_report
 from retrocast.workflow import ingest, score
+
+logger = logging.getLogger(__name__)
 
 
 def _get_paths(config: dict) -> dict[str, Path]:
@@ -279,9 +281,10 @@ def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any
 
             # Plots
             if args.make_plots:
-                from retrocast.visualization.model_performance import plot_single_model_diagnostics
+                from retrocast.visualization.plots import plot_diagnostics
 
-                fig = plot_single_model_diagnostics(final_stats)
+                # fig = plot_single_model_diagnostics(final_stats)
+                fig = plot_diagnostics(final_stats)
                 fig.write_html(output_dir / "diagnostics.html", include_plotlyjs="cdn", auto_open=False)
 
             logger.info(f"Analysis generated: {output_dir}")
