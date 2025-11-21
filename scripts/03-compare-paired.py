@@ -11,7 +11,6 @@ from pathlib import Path
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.table import Table
 
 from retrocast.io.data import BenchmarkResultsLoader
 from retrocast.metrics.bootstrap import (
@@ -28,21 +27,6 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
 
 console = Console()
-
-
-def create_results_table(baseline_name: str, benchmark: str) -> Table:
-    """Creates the Rich table structure."""
-    table = Table(
-        title=f"Paired Comparison vs Baseline: [bold]{baseline_name}[/]\nBenchmark: {benchmark}",
-        header_style="bold cyan",
-        expand=True,
-    )
-    table.add_column("Challenger", style="bold")
-    table.add_column("Metric")
-    table.add_column("Diff (Chal - Base)", justify="right")
-    table.add_column("95% CI", justify="center")
-    table.add_column("Sig?", justify="center")
-    return table
 
 
 def main() -> None:

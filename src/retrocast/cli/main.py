@@ -103,6 +103,13 @@ def main() -> None:
         action="store_true",
         help="Generate plots (requires 'viz' dependency group, e.g. uv run --extra viz, uv sync --extra viz, or uv pip install retrocast[viz]",
     )
+    analyze_parser.add_argument(
+        "--top-k",
+        nargs="+",
+        type=int,
+        default=[1, 3, 5, 10, 20, 50, 100],
+        help="List of Top-K values to include in the markdown report (default: 1 3 5 10 20 50 100)",
+    )
     args = parser.parse_args()
 
     if args.command != "score-file":

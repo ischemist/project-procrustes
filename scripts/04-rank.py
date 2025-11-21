@@ -14,40 +14,19 @@ from pathlib import Path
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.table import Table
 
 from retrocast.io.data import BenchmarkResultsLoader
 from retrocast.metrics.bootstrap import get_is_solvable, make_get_top_k
 from retrocast.metrics.ranking import compute_probabilistic_ranking
 from retrocast.utils.logging import configure_script_logging, logger
 from retrocast.visualization import plots
+from retrocast.visualization.report import create_ranking_table
 
 # --- Configuration ---
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
 
 console = Console()
-
-
-def create_ranking_table(ranking_results: list, metric_label: str) -> Table:
-    """Creates a pretty table for ranking results."""
-    table = Table(title=f"Probabilistic Ranking based on {metric_label}", header_style="bold magenta", expand=True)
-    table.add_column("Model", style="bold")
-    table.add_column("Expected Rank", justify="right")
-    table.add_column("Prob. of being #1", justify="right")
-    table.add_column("Prob. of being Top-3", justify="right")
-
-    for r in ranking_results:
-        prob_first = r.rank_probs.get(1, 0.0)
-
-        # Calculate prob of being in top 3
-        prob_top3 = sum(r.rank_probs.get(i, 0.0) for i in [1, 2, 3])
-
-        # Highlight the winner
-        style = "green" if prob_first > 0.5 else ""
-
-        table.add_row(r.model_name, f"{r.expected_rank:.2f}", f"{prob_first:.1%}", f"{prob_top3:.1%}", style=style)
-    return table
 
 
 def main() -> None:

@@ -3,17 +3,18 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from rich.console import Console
+
 from retrocast.adapters.factory import get_adapter
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.io.data import load_benchmark, load_routes, load_stock_file
 from retrocast.io.provenance import create_manifest
-from retrocast.metrics.bootstrap import compute_metric_with_ci, get_is_solvable, make_get_top_k
 from retrocast.models.evaluation import EvaluationResults
-from retrocast.models.stats import ModelStatistics
-from retrocast.visualization.report import generate_markdown_report
-from retrocast.workflow import ingest, score
+from retrocast.visualization.report import create_single_model_summary_table, generate_markdown_report
+from retrocast.workflow import analyze, ingest, score
 
+console = Console()
 logger = logging.getLogger(__name__)
 
 
@@ -245,49 +246,35 @@ def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any
 
         try:
             logger.info(f"Analyzing {model_name} | {benchmark_name} | {stock_name}...")
+
+            # Load
             raw_data = load_json_gz(score_path)
             eval_results = EvaluationResults.model_validate(raw_data)
-            targets = list(eval_results.results.values())
 
-            # Bootstrapping
-            # Helper grouping key
-            def get_length(t):
-                return t.route_length
+            # Compute (delegated to workflow)
+            final_stats = analyze.compute_model_statistics(eval_results)
 
-            stat_solvability = compute_metric_with_ci(targets, get_is_solvable, "Solvability", group_by=get_length)
-
-            stat_topk = {}
-            for k in [1, 2, 3, 4, 5, 10, 20, 50]:
-                stat_topk[k] = compute_metric_with_ci(targets, make_get_top_k(k), f"Top-{k}", group_by=get_length)
-
-            final_stats = ModelStatistics(
-                model_name=model_name,
-                benchmark=benchmark_name,
-                stock=stock_name,
-                solvability=stat_solvability,
-                top_k_accuracy=stat_topk,
-            )
-
-            # Save Output: data/5-results/{benchmark}/{model}/{stock}/
+            # Save
             output_dir = paths["results"] / benchmark_name / model_name / stock_name
             output_dir.mkdir(parents=True, exist_ok=True)
-
             save_json_gz(final_stats, output_dir / "statistics.json.gz")
 
-            # Reports
-            report = generate_markdown_report(final_stats)
+            # Report (Markdown)
+            report = generate_markdown_report(final_stats, visible_k=args.top_k)
             with open(output_dir / "report.md", "w") as f:
                 f.write(report)
 
-            # Plots
+            # Visualization (HTML)
             if args.make_plots:
                 from retrocast.visualization.plots import plot_diagnostics
 
-                # fig = plot_single_model_diagnostics(final_stats)
                 fig = plot_diagnostics(final_stats)
                 fig.write_html(output_dir / "diagnostics.html", include_plotlyjs="cdn", auto_open=False)
 
-            logger.info(f"Analysis generated: {output_dir}")
+            # CLI Feedback (Rich Table)
+            console.print()
+            console.print(create_single_model_summary_table(final_stats))
+            console.print(f"\n[dim]Full report saved to: {output_dir}[/]\n")
 
         except Exception as e:
             logger.error(f"Failed analysis for {model_name} ({stock_name}): {e}", exc_info=True)

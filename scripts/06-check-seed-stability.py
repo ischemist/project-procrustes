@@ -13,44 +13,18 @@ from pathlib import Path
 
 from rich.console import Console
 from rich.progress import track
-from rich.table import Table
 
 from retrocast.io.data import BenchmarkResultsLoader
 from retrocast.metrics.bootstrap import compute_metric_with_ci, get_is_solvable, make_get_top_k
 from retrocast.utils.logging import configure_script_logging, logger
 from retrocast.visualization import adapters, plots, theme
+from retrocast.visualization.report import create_stability_table
 
 # --- Configuration ---
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
 
 console = Console()
-
-
-def display_stability_summary(metrics_summary: dict, seed_deviations: list) -> None:
-    """Prints detailed stats tables."""
-
-    # 1. Metric Stats Table
-    table_stats = Table(title="Stability Statistics", header_style="bold cyan")
-    table_stats.add_column("Metric")
-    table_stats.add_column("Mean (%)", justify="right")
-    table_stats.add_column("Std Dev", justify="right")
-
-    for m, stats in metrics_summary.items():
-        table_stats.add_row(m, f"{stats['mean']:.2f}", f"{stats['std']:.3f}")
-    console.print(table_stats)
-    console.print()
-
-    # 2. Seed Ranking Table (Lowest Deviation = Most Representative)
-    table_seeds = Table(title="Seed Representativeness (Lowest Deviation is Best)", header_style="bold magenta")
-    table_seeds.add_column("Rank", justify="right")
-    table_seeds.add_column("Seed", justify="center")
-    table_seeds.add_column("Deviation Score", justify="right")
-    table_seeds.add_column("Z-Scores (Top1, Solv, Top10)", justify="right")
-
-    for i, (seed, dev, z1, zs, z10) in enumerate(seed_deviations[:5], 1):
-        table_seeds.add_row(str(i), str(seed), f"{dev:.4f}", f"({z1:+.1f}, {zs:+.1f}, {z10:+.1f})")
-    console.print(table_seeds)
 
 
 def main():
@@ -134,7 +108,9 @@ def main():
     seed_deviations.sort(key=lambda x: x[1])
 
     # 4. Render Output
-    display_stability_summary(metrics_summary, seed_deviations)
+    t1, t2 = create_stability_table(metrics_summary, seed_deviations)
+    console.print(t1)
+    console.print(t2)
 
     out_dir = DATA_DIR / "7-meta-analysis" / args.base_benchmark
     out_dir.mkdir(parents=True, exist_ok=True)
