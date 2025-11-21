@@ -8,9 +8,6 @@ from retrocast.adapters import ADAPTER_MAP, adapt_routes, adapt_single_route, ge
 from retrocast.curation.filtering import deduplicate_routes
 from retrocast.curation.sampling import sample_k_by_length, sample_random_k, sample_top_k
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetInput
-from retrocast.utils.logging import setup_logging
-
-setup_logging()
 
 try:
     __version__ = version("retrocast")

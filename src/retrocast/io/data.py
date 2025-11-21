@@ -7,6 +7,8 @@ from retrocast.exceptions import RetroCastIOError
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
 from retrocast.models.chem import Route
+from retrocast.models.evaluation import EvaluationResults
+from retrocast.models.stats import ModelStatistics
 from retrocast.typing import SmilesStr
 from retrocast.utils.logging import logger
 
@@ -122,3 +124,58 @@ def save_execution_stats(stats: ExecutionStats, path: Path) -> None:
     logger.info(
         f"Saved execution stats with {len(stats.wall_time)} wall_time and {len(stats.cpu_time)} cpu_time entries."
     )
+
+
+class BenchmarkResultsLoader:
+    """
+    Access point for loaded benchmark data.
+
+    Directory Structure Assumption:
+      data/
+        4-scored/  {benchmark}/{model}/{stock}/evaluation.json.gz
+        5-results/ {benchmark}/{model}/{stock}/statistics.json.gz
+    """
+
+    def __init__(self, root_dir: Path):
+        self.root = Path(root_dir)
+        self.results_dir = self.root / "5-results"
+        self.scored_dir = self.root / "4-scored"
+
+    def load_statistics(self, benchmark: str, models: list[str], stock: str = "n5-stock") -> list[ModelStatistics]:
+        """
+        Loads pre-computed statistics for a list of models.
+        Returns only successfully loaded objects.
+        """
+        loaded = []
+        for model in models:
+            path = self.results_dir / benchmark / model / stock / "statistics.json.gz"
+
+            if not path.exists():
+                logger.warning(f"[yellow]Missing statistics[/]: {model} ({path.name})")
+                continue
+
+            try:
+                raw = load_json_gz(path)
+                stats = ModelStatistics.model_validate(raw)
+                loaded.append(stats)
+            except Exception as e:
+                logger.error(f"[red]Failed to load {model}[/]: {e}")
+
+        return loaded
+
+    def load_evaluation(self, benchmark: str, model: str, stock: str = "n5-stock") -> EvaluationResults | None:
+        """
+        Loads raw scored evaluation results for a single model.
+        """
+        path = self.scored_dir / benchmark / model / stock / "evaluation.json.gz"
+
+        if not path.exists():
+            logger.warning(f"[yellow]Missing evaluation[/]: {model}")
+            return None
+
+        try:
+            raw = load_json_gz(path)
+            return EvaluationResults.model_validate(raw)
+        except Exception as e:
+            logger.error(f"[red]Failed to load {model}[/]: {e}")
+            return None

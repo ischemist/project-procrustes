@@ -43,6 +43,9 @@ viz = [
   "kaleido>=1.1.0",
   "plotly>=6.3.0",
 ]
+cli = [
+    "rich>=14.2.0",
+]
 
 [dependency-groups]
 dev = [

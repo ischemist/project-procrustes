@@ -147,7 +147,15 @@ def test_analyze_flow(synthetic_config, synthetic_data):
     # Pre-requisite: Run scoring first
     test_score_flow(synthetic_config, synthetic_data)
 
-    args = SimpleNamespace(model="test-model", dataset="test-bench", all_models=False, all_datasets=False, stock=None)
+    args = SimpleNamespace(
+        model="test-model",
+        dataset="test-bench",
+        all_models=False,
+        all_datasets=False,
+        stock=None,
+        make_plots=False,
+        top_k=[1, 5, 10],
+    )
 
     # RUN
     handlers.handle_analyze(args, synthetic_config)
@@ -158,7 +166,6 @@ def test_analyze_flow(synthetic_config, synthetic_data):
 
     assert (results_dir / "statistics.json.gz").exists()
     assert (results_dir / "report.md").exists()
-    assert (results_dir / "diagnostics.html").exists()
 
 
 def test_missing_file_handling(synthetic_config, synthetic_data, caplog):

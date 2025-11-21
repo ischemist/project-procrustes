@@ -24,13 +24,13 @@ models:
   multistep-ttl:
     adapter: multistepttl
     raw_results_filename: results.json.gz
-  dms-flash-fp16:
+  dms-flash:
     adapter: dms
     raw_results_filename: valid_results.json.gz
-  dms-wide-fp16:
+  dms-wide:
     adapter: dms
     raw_results_filename: valid_results.json.gz
-  dms-explorer-XL-fp16:
+  dms-explorer-xl:
     adapter: dms
     raw_results_filename: valid_results.json.gz
   synplanner-mcts:

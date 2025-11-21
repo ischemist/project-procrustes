@@ -7,7 +7,7 @@ import yaml
 
 from retrocast import __version__
 from retrocast.cli import adhoc, handlers
-from retrocast.utils.logging import logger
+from retrocast.utils.logging import configure_script_logging, logger
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
@@ -25,6 +25,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
 
 
 def main() -> None:
+    configure_script_logging(use_rich=True)
     parser = argparse.ArgumentParser(
         description=f"Retrocast v{__version__}",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -97,6 +98,18 @@ def main() -> None:
     d_group_a.add_argument("--all-datasets", action="store_true", help="Process all benchmarks")
 
     analyze_parser.add_argument("--stock", help="Specific stock to analyze (optional, auto-detects if omitted)")
+    analyze_parser.add_argument(
+        "--make-plots",
+        action="store_true",
+        help="Generate plots (requires 'viz' dependency group, e.g. uv run --extra viz, uv sync --extra viz, or uv pip install retrocast[viz]",
+    )
+    analyze_parser.add_argument(
+        "--top-k",
+        nargs="+",
+        type=int,
+        default=[1, 3, 5, 10, 20, 50, 100],
+        help="List of Top-K values to include in the markdown report (default: 1 3 5 10 20 50 100)",
+    )
     args = parser.parse_args()
 
     if args.command != "score-file":
