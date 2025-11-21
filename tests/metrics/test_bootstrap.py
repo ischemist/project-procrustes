@@ -171,6 +171,7 @@ class TestBootstrap1D:
 # =============================================================================
 
 
+@pytest.mark.unit
 @given(
     values=st.lists(
         st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
@@ -186,6 +187,7 @@ def test_ci_lower_bound_non_negative_for_unit_interval(values):
     assert result.ci_lower >= 0.0
 
 
+@pytest.mark.unit
 @given(
     values=st.lists(
         st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
@@ -201,6 +203,7 @@ def test_ci_upper_bound_at_most_one_for_unit_interval(values):
     assert result.ci_upper <= 1.0
 
 
+@pytest.mark.unit
 @given(
     values=st.lists(
         st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
@@ -216,6 +219,7 @@ def test_ci_contains_point_estimate(values):
     assert result.ci_lower <= result.value <= result.ci_upper
 
 
+@pytest.mark.unit
 @given(
     values=st.lists(
         st.floats(min_value=-100.0, max_value=100.0, allow_nan=False, allow_infinity=False),
@@ -519,6 +523,7 @@ def _make_evaluation_results(model_name: str, n_targets: int, solvability_rate: 
     )
 
 
+@pytest.mark.unit
 @given(
     solvability_rates=st.lists(
         st.floats(min_value=0.1, max_value=0.9, allow_nan=False),
@@ -543,6 +548,7 @@ def test_rank_probs_always_sum_to_one(solvability_rates):
         assert abs(prob_sum - 1.0) < 1e-6
 
 
+@pytest.mark.unit
 @given(
     solvability_rates=st.lists(
         st.floats(min_value=0.1, max_value=0.9, allow_nan=False),
