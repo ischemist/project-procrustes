@@ -110,6 +110,14 @@ def main() -> None:
         default=[1, 3, 5, 10, 20, 50, 100],
         help="List of Top-K values to include in the markdown report (default: 1 3 5 10 20 50 100)",
     )
+
+    # --- CREATE BENCHMARK ---
+    create_bm_parser = subparsers.add_parser("create-benchmark", help="Create benchmark from SMILES list")
+    create_bm_parser.add_argument("--input", required=True, help="Path to .txt or .csv")
+    create_bm_parser.add_argument("--name", required=True, help="Name of the benchmark")
+    create_bm_parser.add_argument("--output", required=True, help="Output path (.json.gz)")
+    create_bm_parser.add_argument("--stock-name", help="Associated stock name (optional)")
+
     args = parser.parse_args()
 
     if args.command != "score-file":
@@ -130,6 +138,8 @@ def main() -> None:
             handlers.handle_analyze(args, config)
         elif args.command == "score-file":
             adhoc.handle_score_file(args)
+        elif args.command == "create-benchmark":
+            adhoc.handle_create_benchmark(args)
 
     except Exception as e:
         logger.critical(f"Command failed: {e}", exc_info=True)
