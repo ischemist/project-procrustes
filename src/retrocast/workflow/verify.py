@@ -2,9 +2,9 @@
 Core logic for manifest and data integrity verification.
 """
 
+import json
 from pathlib import Path
 
-from retrocast.io.blob import load_json_gz
 from retrocast.io.provenance import calculate_file_hash
 from retrocast.models.provenance import Manifest, VerificationReport
 
@@ -28,7 +28,8 @@ def verify_manifest(manifest_path: Path, root_dir: Path, deep: bool = False) -> 
         return report
 
     try:
-        data = load_json_gz(manifest_path)
+        with open(manifest_path, encoding="utf-8") as f:
+            data = json.load(f)
         manifest = Manifest.model_validate(data)
     except Exception as e:
         report.add("FAIL", manifest_path, f"Failed to load or parse manifest: {e}")

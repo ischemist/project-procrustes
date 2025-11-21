@@ -107,6 +107,7 @@ def create_manifest(
     action: str,
     sources: list[Path],
     outputs: list[tuple[Path, Any]],  # Tuple of (path, python_object)
+    root_dir: Path,
     parameters: dict[str, Any] | None = None,
     statistics: dict[str, Any] | None = None,
 ) -> Manifest:
@@ -115,13 +116,18 @@ def create_manifest(
     """
     logger.info("Generating manifest...")
 
+    def _get_relative_path(p: Path) -> str:
+        try:
+            return str(p.relative_to(root_dir))
+        except ValueError:
+            logger.warning(f"Path {p} is not inside root {root_dir}. Storing absolute path.")
+            return str(p.resolve())
+
     source_infos = []
     for p in sources:
         if p.exists():
-            source_infos.append(FileInfo(path=p.name, file_hash=calculate_file_hash(p)))
+            source_infos.append(FileInfo(path=_get_relative_path(p), file_hash=calculate_file_hash(p)))
         else:
-            # Sometimes we pass a logical source that isn't a file (like a pickle stream)
-            # In that case, just log it.
             logger.debug(f"Manifest source path not found on disk: {p}")
 
     output_infos = []
@@ -145,7 +151,7 @@ def create_manifest(
                 c_hash = _calculate_predictions_content_hash(obj)
             # Otherwise, fall through and only use file hash
 
-        output_infos.append(FileInfo(path=path.name, file_hash=f_hash, content_hash=c_hash))
+        output_infos.append(FileInfo(path=_get_relative_path(path), file_hash=f_hash, content_hash=c_hash))
 
     return Manifest(
         retrocast_version=__version__,

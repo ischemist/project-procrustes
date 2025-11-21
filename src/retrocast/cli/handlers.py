@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from rich.console import Console
+from rich.panel import Panel
 
 from retrocast.adapters.factory import get_adapter
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
@@ -11,8 +12,9 @@ from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.io.data import load_benchmark, load_routes, load_stock_file
 from retrocast.io.provenance import create_manifest
 from retrocast.models.evaluation import EvaluationResults
+from retrocast.models.provenance import VerificationReport
 from retrocast.visualization.report import create_single_model_summary_table, generate_markdown_report
-from retrocast.workflow import analyze, ingest, score
+from retrocast.workflow import analyze, ingest, score, verify
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -119,6 +121,7 @@ def _ingest_single(model_name: str, benchmark_name: str, config: dict, paths: di
             action="ingest",
             sources=[raw_path, paths["benchmarks"] / f"{benchmark_name}.json.gz"],
             outputs=[(out_path, processed_routes)],
+            root_dir=paths["raw"].parent,  # The 'data/' directory
             parameters={"model": model_name, "benchmark": benchmark_name, "sampling": strategy, "k": k},
             statistics=stats,
         )
@@ -188,6 +191,7 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
             action="score_model",
             sources=[bench_path, routes_path, stock_path],
             outputs=[(out_path, eval_results)],
+            root_dir=paths["raw"].parent,  # The 'data/' directory
             parameters={"model": model_name, "benchmark": benchmark_name, "stock": stock_name},
             statistics={
                 "n_targets": len(eval_results.results),
@@ -289,6 +293,62 @@ def handle_analyze(args: Any, config: dict[str, Any]) -> None:
     for model in models:
         for bench in benchmarks:
             _analyze_single(model, bench, paths, args)
+
+
+# --- VERIFICATION ---
+
+
+def _render_report(report: VerificationReport) -> None:
+    """Pretty prints a verification report."""
+    color = "green" if report.is_valid else "red"
+    title = f"Verification Report for [bold]{report.manifest_path}[/]"
+
+    lines = []
+    for issue in report.issues:
+        if issue.level == "PASS":
+            icon = "[green]✓[/]"
+        elif issue.level == "FAIL":
+            icon = "[red]✗[/]"
+        elif issue.level == "WARN":
+            icon = "[yellow]![/]"
+        else:
+            icon = "[cyan]i[/]"
+        lines.append(f"{icon} [bold]{issue.path.name}[/]: {issue.message}")
+
+    content = "\n".join(lines)
+    panel = Panel(content, title=title, border_style=color)
+    console.print(panel)
+
+
+def handle_verify(args: Any, config: dict[str, Any]) -> None:
+    """Handler for the 'verify' command."""
+    paths = _get_paths(config)
+    root_dir = paths["raw"].parent
+
+    manifests_to_check = []
+    if args.all:
+        logger.info(f"Scanning for all manifests under {root_dir}...")
+        manifests_to_check = sorted(list(root_dir.glob("**/manifest.json")))
+    elif args.target:
+        manifests_to_check = [Path(args.target)]
+
+    if not manifests_to_check:
+        logger.warning("No manifests found to verify.")
+        return
+
+    logger.info(f"Verifying {len(manifests_to_check)} manifest(s)...")
+    overall_valid = True
+    for m_path in manifests_to_check:
+        report = verify.verify_manifest(m_path, root_dir=root_dir, deep=args.deep)
+        _render_report(report)
+        if not report.is_valid:
+            overall_valid = False
+
+    if overall_valid:
+        console.print("\n[bold green]✅ Overall verification successful![/]")
+    else:
+        console.print("\n[bold red]❌ Verification failed for one or more manifests.[/]")
+        sys.exit(1)
 
 
 # --- UTILS ---

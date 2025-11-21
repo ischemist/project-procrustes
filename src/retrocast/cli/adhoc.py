@@ -146,11 +146,12 @@ def handle_create_benchmark(args: Any) -> None:
         logger.info(f"Created benchmark '{args.name}' with {len(targets)} targets at {output_path}")
 
         # Create manifest
-        manifest_path = output_path.parent / f"{output_path.stem}.manifest.json"
+        manifest_path = args.output + ".manifest.json"
         manifest = create_manifest(
             action="[cli]create-benchmark",
             sources=[input_path],
             outputs=[(output_path, bm)],
+            root_dir=output_path.parents[2],
             parameters={"name": args.name, "stock_name": args.stock_name},
             statistics={"n_targets": len(targets)},
         )
