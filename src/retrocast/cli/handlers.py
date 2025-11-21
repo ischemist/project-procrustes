@@ -271,9 +271,8 @@ def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any
                 fig = plot_diagnostics(final_stats)
                 fig.write_html(output_dir / "diagnostics.html", include_plotlyjs="cdn", auto_open=False)
 
-            # CLI Feedback (Rich Table)
             console.print()
-            console.print(create_single_model_summary_table(final_stats))
+            console.print(create_single_model_summary_table(final_stats, visible_k=args.top_k))
             console.print(f"\n[dim]Full report saved to: {output_dir}[/]\n")
 
         except Exception as e:

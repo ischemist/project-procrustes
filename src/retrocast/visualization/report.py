@@ -139,10 +139,15 @@ def create_stability_table(metrics_summary: dict, seed_deviations: list) -> tupl
     return t1, t2
 
 
-def create_single_model_summary_table(stats: ModelStatistics) -> Table:
+def create_single_model_summary_table(stats: ModelStatistics, visible_k: list[int] | None = None) -> Table:
     """
     Creates a high-level summary table for a single model analysis.
     Used in the CLI analysis workflow.
+
+    Args:
+        stats: The model statistics object.
+        visible_k: Optional list of K values to include.
+                   If None, defaults to [1, 5, 10, 50].
     """
     table = Table(
         title=f"Analysis Results: [bold cyan]{stats.model_name}[/]", header_style="bold magenta", show_lines=False
@@ -166,11 +171,14 @@ def create_single_model_summary_table(stats: ModelStatistics) -> Table:
             rel_icon,
         )
 
+    if visible_k is None:
+        visible_k = [1, 5, 10, 50]
+
     _add("Solvability", stats.solvability.overall)
 
     # Add Top-K
     for k in sorted(stats.top_k_accuracy.keys()):
-        if k in [1, 5, 10, 50]:  # limit verbosity
+        if k in visible_k:
             _add(f"Top-{k}", stats.top_k_accuracy[k].overall)
 
     return table

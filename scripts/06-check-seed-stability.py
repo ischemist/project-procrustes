@@ -82,6 +82,11 @@ def main():
     seed_deviations = []
     seeds_sorted = sorted(results_map.keys(), key=lambda x: int(x) if x.isdigit() else x)
 
+    def z(val: float, key: str) -> float:
+        return (
+            (val - metrics_summary[key]["mean"]) / metrics_summary[key]["std"] if metrics_summary[key]["std"] > 0 else 0
+        )
+
     for seed in seeds_sorted:
         # Extract percent values
         v_top1 = results_map[seed]["Top-1"].value * 100
@@ -89,12 +94,6 @@ def main():
         v_top10 = results_map[seed]["Top-10"].value * 100
 
         # Z-Scores: (Val - Mean) / Std
-        def z(val, key):
-            return (
-                (val - metrics_summary[key]["mean"]) / metrics_summary[key]["std"]
-                if metrics_summary[key]["std"] > 0
-                else 0
-            )
 
         z1 = z(v_top1, "Top-1")
         zs = z(v_solv, "Solvability")

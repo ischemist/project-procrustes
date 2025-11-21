@@ -148,7 +148,13 @@ def test_analyze_flow(synthetic_config, synthetic_data):
     test_score_flow(synthetic_config, synthetic_data)
 
     args = SimpleNamespace(
-        model="test-model", dataset="test-bench", all_models=False, all_datasets=False, stock=None, make_plots=False
+        model="test-model",
+        dataset="test-bench",
+        all_models=False,
+        all_datasets=False,
+        stock=None,
+        make_plots=False,
+        top_k=[1, 5, 10],
     )
 
     # RUN
