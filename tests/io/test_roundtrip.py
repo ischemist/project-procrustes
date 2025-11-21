@@ -16,6 +16,7 @@ from hypothesis import strategies as st
 
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.io.data import (
+    BenchmarkResultsLoader,
     load_benchmark,
     load_routes,
     load_stock_file,
@@ -29,6 +30,8 @@ from retrocast.io.provenance import (
     generate_model_hash,
 )
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
+from retrocast.models.evaluation import EvaluationResults, ScoredRoute, TargetEvaluation
+from retrocast.models.stats import MetricResult, ModelStatistics, ReliabilityFlag, StratifiedMetric
 
 pytestmark = [pytest.mark.unit, pytest.mark.integration]
 
@@ -559,3 +562,249 @@ def test_json_gz_roundtrip_arbitrary_dict(data):
         save_json_gz(data, path)
         loaded = load_json_gz(path)
         assert loaded == data
+
+
+# =============================================================================
+# Tests for BenchmarkResultsLoader
+# =============================================================================
+
+
+class TestBenchmarkResultsLoader:
+    """Tests for BenchmarkResultsLoader directory-based loading."""
+
+    def _create_mock_statistics(self, model_name: str, benchmark: str, stock: str) -> ModelStatistics:
+        """Helper to create a minimal ModelStatistics object."""
+        reliability = ReliabilityFlag(code="OK", message="Sufficient samples")
+        metric_result = MetricResult(
+            value=0.75,
+            ci_lower=0.70,
+            ci_upper=0.80,
+            n_samples=100,
+            reliability=reliability,
+        )
+        stratified_metric = StratifiedMetric(
+            metric_name="solvability",
+            overall=metric_result,
+            by_group={},
+        )
+        return ModelStatistics(
+            model_name=model_name,
+            benchmark=benchmark,
+            stock=stock,
+            solvability=stratified_metric,
+            top_k_accuracy={},
+        )
+
+    def _create_mock_evaluation(self, model_name: str, benchmark: str, stock: str) -> EvaluationResults:
+        """Helper to create a minimal EvaluationResults object."""
+        scored_route = ScoredRoute(rank=1, is_solved=True, is_gt_match=True)
+        target_eval = TargetEvaluation(
+            target_id="test-001",
+            routes=[scored_route],
+            is_solvable=True,
+            gt_rank=1,
+            route_length=3,
+            is_convergent=False,
+        )
+        return EvaluationResults(
+            model_name=model_name,
+            benchmark_name=benchmark,
+            stock_name=stock,
+            results={"test-001": target_eval},
+        )
+
+    def test_load_statistics_single_model(self, tmp_path):
+        """Should load statistics for a single model from expected directory."""
+        loader = BenchmarkResultsLoader(tmp_path)
+
+        # Create directory structure: data/5-results/{benchmark}/{model}/{stock}/
+        stats_path = tmp_path / "5-results" / "pharma" / "model-a" / "n5-stock"
+        stats_path.mkdir(parents=True)
+
+        # Save mock statistics
+        stats = self._create_mock_statistics("model-a", "pharma", "n5-stock")
+        save_json_gz(stats, stats_path / "statistics.json.gz")
+
+        # Load and verify
+        loaded = loader.load_statistics("pharma", ["model-a"], "n5-stock")
+
+        assert len(loaded) == 1
+        assert loaded[0].model_name == "model-a"
+        assert loaded[0].benchmark == "pharma"
+        assert loaded[0].solvability.overall.value == 0.75
+
+    def test_load_statistics_multiple_models(self, tmp_path):
+        """Should load statistics for multiple models."""
+        loader = BenchmarkResultsLoader(tmp_path)
+
+        models = ["model-a", "model-b", "model-c"]
+        for model in models:
+            stats_path = tmp_path / "5-results" / "pharma" / model / "n5-stock"
+            stats_path.mkdir(parents=True)
+            stats = self._create_mock_statistics(model, "pharma", "n5-stock")
+            save_json_gz(stats, stats_path / "statistics.json.gz")
+
+        loaded = loader.load_statistics("pharma", models, "n5-stock")
+
+        assert len(loaded) == 3
+        loaded_names = {s.model_name for s in loaded}
+        assert loaded_names == set(models)
+
+    def test_load_statistics_missing_file_logs_warning(self, tmp_path, caplog):
+        """Should log warning and skip missing files."""
+        loader = BenchmarkResultsLoader(tmp_path)
+
+        # Create only one model
+        stats_path = tmp_path / "5-results" / "pharma" / "model-a" / "n5-stock"
+        stats_path.mkdir(parents=True)
+        stats = self._create_mock_statistics("model-a", "pharma", "n5-stock")
+        save_json_gz(stats, stats_path / "statistics.json.gz")
+
+        # Request two models, but only one exists
+        loaded = loader.load_statistics("pharma", ["model-a", "model-missing"], "n5-stock")
+
+        assert len(loaded) == 1
+        assert loaded[0].model_name == "model-a"
+        assert "Missing statistics" in caplog.text
+        assert "model-missing" in caplog.text
+
+    def test_load_statistics_corrupted_json_logs_error(self, tmp_path, caplog):
+        """Should log error and skip corrupted files."""
+        loader = BenchmarkResultsLoader(tmp_path)
+
+        # Create corrupted file
+        stats_path = tmp_path / "5-results" / "pharma" / "model-bad" / "n5-stock"
+        stats_path.mkdir(parents=True)
+        corrupted_file = stats_path / "statistics.json.gz"
+
+        # Write invalid JSON
+        import gzip
+
+        with gzip.open(corrupted_file, "wt") as f:
+            f.write("{ invalid json here }")
+
+        # Create a valid file too
+        valid_path = tmp_path / "5-results" / "pharma" / "model-good" / "n5-stock"
+        valid_path.mkdir(parents=True)
+        stats = self._create_mock_statistics("model-good", "pharma", "n5-stock")
+        save_json_gz(stats, valid_path / "statistics.json.gz")
+
+        loaded = loader.load_statistics("pharma", ["model-bad", "model-good"], "n5-stock")
+
+        # Should only load the valid one
+        assert len(loaded) == 1
+        assert loaded[0].model_name == "model-good"
+        assert "Failed to load" in caplog.text
+        assert "model-bad" in caplog.text
+
+    def test_load_statistics_empty_list(self, tmp_path):
+        """Should return empty list when no models requested."""
+        loader = BenchmarkResultsLoader(tmp_path)
+        loaded = loader.load_statistics("pharma", [], "n5-stock")
+        assert loaded == []
+
+    def test_load_statistics_different_stock(self, tmp_path):
+        """Should load from correct stock subdirectory."""
+        loader = BenchmarkResultsLoader(tmp_path)
+
+        # Create statistics for different stocks
+        for stock in ["n5-stock", "n10-stock"]:
+            stats_path = tmp_path / "5-results" / "pharma" / "model-a" / stock
+            stats_path.mkdir(parents=True)
+            stats = self._create_mock_statistics("model-a", "pharma", stock)
+            save_json_gz(stats, stats_path / "statistics.json.gz")
+
+        # Load n10-stock specifically
+        loaded = loader.load_statistics("pharma", ["model-a"], "n10-stock")
+
+        assert len(loaded) == 1
+        assert loaded[0].stock == "n10-stock"
+
+    def test_load_evaluation_success(self, tmp_path):
+        """Should load evaluation results for a single model."""
+        loader = BenchmarkResultsLoader(tmp_path)
+
+        # Create evaluation file
+        eval_path = tmp_path / "4-scored" / "pharma" / "model-a" / "n5-stock"
+        eval_path.mkdir(parents=True)
+
+        evaluation = self._create_mock_evaluation("model-a", "pharma", "n5-stock")
+        save_json_gz(evaluation, eval_path / "evaluation.json.gz")
+
+        loaded = loader.load_evaluation("pharma", "model-a", "n5-stock")
+
+        assert loaded is not None
+        assert loaded.model_name == "model-a"
+        assert loaded.benchmark_name == "pharma"
+        assert "test-001" in loaded.results
+
+    def test_load_evaluation_missing_file_returns_none(self, tmp_path, caplog):
+        """Should return None and log warning when file doesn't exist."""
+        loader = BenchmarkResultsLoader(tmp_path)
+
+        loaded = loader.load_evaluation("pharma", "missing-model", "n5-stock")
+
+        assert loaded is None
+        assert "Missing evaluation" in caplog.text
+        assert "missing-model" in caplog.text
+
+    def test_load_evaluation_corrupted_json_returns_none(self, tmp_path, caplog):
+        """Should return None and log error when JSON is corrupted."""
+        loader = BenchmarkResultsLoader(tmp_path)
+
+        eval_path = tmp_path / "4-scored" / "pharma" / "model-bad" / "n5-stock"
+        eval_path.mkdir(parents=True)
+
+        # Write invalid JSON
+        import gzip
+
+        with gzip.open(eval_path / "evaluation.json.gz", "wt") as f:
+            f.write("{ not valid json }")
+
+        loaded = loader.load_evaluation("pharma", "model-bad", "n5-stock")
+
+        assert loaded is None
+        assert "Failed to load" in caplog.text
+        assert "model-bad" in caplog.text
+
+    def test_load_evaluation_different_benchmark(self, tmp_path):
+        """Should load from correct benchmark subdirectory."""
+        loader = BenchmarkResultsLoader(tmp_path)
+
+        # Create evaluations for different benchmarks
+        for benchmark in ["pharma", "paroutes"]:
+            eval_path = tmp_path / "4-scored" / benchmark / "model-a" / "n5-stock"
+            eval_path.mkdir(parents=True)
+            evaluation = self._create_mock_evaluation("model-a", benchmark, "n5-stock")
+            save_json_gz(evaluation, eval_path / "evaluation.json.gz")
+
+        # Load paroutes specifically
+        loaded = loader.load_evaluation("paroutes", "model-a", "n5-stock")
+
+        assert loaded is not None
+        assert loaded.benchmark_name == "paroutes"
+
+    def test_loader_initialization(self, tmp_path):
+        """Should correctly initialize directory paths."""
+        loader = BenchmarkResultsLoader(tmp_path)
+
+        assert loader.root == tmp_path
+        assert loader.results_dir == tmp_path / "5-results"
+        assert loader.scored_dir == tmp_path / "4-scored"
+
+    def test_load_statistics_preserves_order(self, tmp_path):
+        """Should return statistics in the same order as requested models."""
+        loader = BenchmarkResultsLoader(tmp_path)
+
+        models = ["model-c", "model-a", "model-b"]
+        for model in models:
+            stats_path = tmp_path / "5-results" / "pharma" / model / "n5-stock"
+            stats_path.mkdir(parents=True)
+            stats = self._create_mock_statistics(model, "pharma", "n5-stock")
+            save_json_gz(stats, stats_path / "statistics.json.gz")
+
+        loaded = loader.load_statistics("pharma", models, "n5-stock")
+        loaded_names = [s.model_name for s in loaded]
+
+        # Order should match request order
+        assert loaded_names == models
