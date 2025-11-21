@@ -5,13 +5,12 @@ import pytest
 from retrocast.models.chem import Molecule, ReactionStep, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
 
-pytestmark = pytest.mark.unit
-
 # ==============================================================================
 # Route Tests
 # ==============================================================================
 
 
+@pytest.mark.unit
 class TestRoute:
     """Tests for the Route class."""
 

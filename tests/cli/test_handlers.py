@@ -39,8 +39,12 @@ def make_simple_route(target_smiles: str, leaf_smiles: str, rank: int = 1) -> Ro
 # --- Test Classes ---
 
 
+@pytest.mark.integration
 class TestHandleScoreFile:
-    """Test the adhoc.handle_score_file handler directly."""
+    """Integration tests for the adhoc.handle_score_file handler.
+
+    Tests file I/O, scoring logic, and error handling with actual files.
+    """
 
     @pytest.fixture
     def test_files(self, tmp_path):
@@ -211,8 +215,9 @@ class TestHandleScoreFile:
         assert exc_info.value.code == 1
 
 
+@pytest.mark.unit
 class TestHandleList:
-    """Test the handlers.handle_list handler."""
+    """Unit tests for the handlers.handle_list handler."""
 
     def test_handle_list_basic(self, capsys):
         """Test list handler with models."""
@@ -242,8 +247,9 @@ class TestHandleList:
         assert "0 models" in captured.out
 
 
+@pytest.mark.unit
 class TestHandleInfo:
-    """Test the handlers.handle_info handler."""
+    """Unit tests for the handlers.handle_info handler."""
 
     def test_handle_info_existing_model(self, capsys):
         """Test info handler with existing model."""
@@ -272,8 +278,9 @@ class TestHandleInfo:
         assert "not found" in caplog.text
 
 
+@pytest.mark.unit
 class TestResolveHelpers:
-    """Test helper functions in handlers."""
+    """Unit tests for helper functions in handlers."""
 
     def test_get_paths(self):
         """Test _get_paths returns expected structure."""

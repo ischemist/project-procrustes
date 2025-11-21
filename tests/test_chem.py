@@ -18,6 +18,7 @@ from retrocast.exceptions import InvalidSmilesError, RetroCastException
 # ============================================================================
 
 
+@pytest.mark.unit
 def test_canonicalize_smiles_valid_non_canonical() -> None:
     """Tests that a valid, non-canonical SMILES is correctly canonicalized."""
     non_canonical_smiles = "C(C)O"  # Ethanol
@@ -26,6 +27,7 @@ def test_canonicalize_smiles_valid_non_canonical() -> None:
     assert result == expected_canonical
 
 
+@pytest.mark.unit
 def test_canonicalize_smiles_with_stereochemistry() -> None:
     """Tests that stereochemical information is preserved."""
     chiral_smiles = "C[C@H](O)C(=O)O"  # (R)-Lactic acid
@@ -34,6 +36,7 @@ def test_canonicalize_smiles_with_stereochemistry() -> None:
     assert result == expected_canonical
 
 
+@pytest.mark.unit
 def test_canonicalize_smiles_remove_mapping() -> None:
     """Tests that atom mapping is removed when remove_mapping=True (covers GetAtoms loop)."""
     mapped_smiles = "[CH3:1][CH2:2][OH:3]"  # Ethanol with atom mapping
@@ -43,6 +46,7 @@ def test_canonicalize_smiles_remove_mapping() -> None:
     assert ":" not in result
 
 
+@pytest.mark.unit
 def test_canonicalize_smiles_invalid_raises_error() -> None:
     """Tests that passing a chemically invalid string raises InvalidSmilesError."""
     invalid_smiles = "this is definitely not a valid smiles string"
@@ -51,6 +55,7 @@ def test_canonicalize_smiles_invalid_raises_error() -> None:
     assert "Invalid SMILES string" in str(exc_info.value)
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("bad_input", ["", None, 123])
 def test_canonicalize_smiles_bad_input_type_raises_error(bad_input) -> None:
     """Tests that non-string or empty inputs raise InvalidSmilesError."""
@@ -59,6 +64,7 @@ def test_canonicalize_smiles_bad_input_type_raises_error(bad_input) -> None:
     assert "SMILES input must be a non-empty string" in str(exc_info.value)
 
 
+@pytest.mark.unit
 @patch("retrocast.chem.Chem.MolToSmiles")
 def test_canonicalize_smiles_raises_retrocast_exception_on_generic_error(mock_moltosmiles) -> None:
     """Tests that a generic, unexpected rdkit error is wrapped in RetroCastException."""
@@ -73,6 +79,7 @@ def test_canonicalize_smiles_raises_retrocast_exception_on_generic_error(mock_mo
 # ============================================================================
 
 
+@pytest.mark.unit
 def test_get_inchi_key_happy_path() -> None:
     """Tests that a simple smiles gives the correct, known inchikey."""
     smiles = "c1ccccc1"  # benzene
@@ -81,6 +88,7 @@ def test_get_inchi_key_happy_path() -> None:
     assert result.lower() == expected_key
 
 
+@pytest.mark.unit
 def test_get_inchi_key_handles_stereochemistry() -> None:
     """Tests that stereoisomers produce different inchikeys."""
     d_alanine = "C[C@@H](C(=O)O)N"
@@ -97,6 +105,7 @@ def test_get_inchi_key_handles_stereochemistry() -> None:
     assert l_key != unspec_key
 
 
+@pytest.mark.unit
 def test_get_inchi_key_invalid_smiles_raises_error() -> None:
     """Tests that a malformed smiles raises InvalidSmilesError."""
     invalid_smiles = "C(C)C)C"  # mismatched parentheses
@@ -105,6 +114,7 @@ def test_get_inchi_key_invalid_smiles_raises_error() -> None:
     assert "invalid smiles string" in str(exc_info.value).lower()
 
 
+@pytest.mark.unit
 @patch("retrocast.chem.Chem.MolToInchiKey")
 def test_get_inchi_key_raises_retrocast_exception_on_empty_result(mock_moltoinchikey) -> None:
     """Tests that our guard for an empty inchikey from rdkit works."""
@@ -119,6 +129,7 @@ def test_get_inchi_key_raises_retrocast_exception_on_empty_result(mock_moltoinch
 # ============================================================================
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "smiles,expected_count",
     [
@@ -134,6 +145,7 @@ def test_get_heavy_atom_count(smiles: str, expected_count: int) -> None:
     assert result == expected_count
 
 
+@pytest.mark.unit
 def test_get_heavy_atom_count_invalid_smiles_raises_error() -> None:
     """Tests that invalid SMILES raises InvalidSmilesError."""
     invalid_smiles = "C(C)C)C"
@@ -141,6 +153,7 @@ def test_get_heavy_atom_count_invalid_smiles_raises_error() -> None:
         get_heavy_atom_count(invalid_smiles)
 
 
+@pytest.mark.unit
 @patch("retrocast.chem.Chem.MolFromSmiles")
 def test_get_heavy_atom_count_raises_exception_on_generic_error(mock_molfromsmiles) -> None:
     """Tests that generic errors are wrapped in RetroCastException."""
@@ -155,6 +168,7 @@ def test_get_heavy_atom_count_raises_exception_on_generic_error(mock_molfromsmil
 # ============================================================================
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "smiles,expected_mw",
     [
@@ -170,6 +184,7 @@ def test_get_molecular_weight(smiles: str, expected_mw: float) -> None:
     assert result == pytest.approx(expected_mw, rel=1e-3)
 
 
+@pytest.mark.unit
 def test_get_molecular_weight_invalid_smiles_raises_error() -> None:
     """Tests that invalid SMILES raises InvalidSmilesError."""
     invalid_smiles = "C(C)C)C"
@@ -177,6 +192,7 @@ def test_get_molecular_weight_invalid_smiles_raises_error() -> None:
         get_molecular_weight(invalid_smiles)
 
 
+@pytest.mark.unit
 @patch("retrocast.chem.rdMolDescriptors.CalcExactMolWt")
 def test_get_molecular_weight_raises_exception_on_generic_error(mock_calc) -> None:
     """Tests that generic errors are wrapped in RetroCastException."""
@@ -191,6 +207,7 @@ def test_get_molecular_weight_raises_exception_on_generic_error(mock_calc) -> No
 # ============================================================================
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "smiles,expected_count",
     [
@@ -206,6 +223,7 @@ def test_get_chiral_center_count(smiles: str, expected_count: int) -> None:
     assert result == expected_count
 
 
+@pytest.mark.unit
 def test_get_chiral_center_count_invalid_smiles_raises_error() -> None:
     """Tests that invalid SMILES raises InvalidSmilesError."""
     invalid_smiles = "C(C)C)C"
@@ -213,6 +231,7 @@ def test_get_chiral_center_count_invalid_smiles_raises_error() -> None:
         get_chiral_center_count(invalid_smiles)
 
 
+@pytest.mark.unit
 @patch("retrocast.chem.Chem.FindMolChiralCenters")
 def test_get_chiral_center_count_raises_exception_on_generic_error(mock_find) -> None:
     """Tests that generic errors are wrapped in RetroCastException."""
@@ -227,6 +246,7 @@ def test_get_chiral_center_count_raises_exception_on_generic_error(mock_find) ->
 # ============================================================================
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "func",
     [

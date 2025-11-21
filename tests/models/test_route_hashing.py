@@ -5,13 +5,12 @@ import pytest
 from retrocast.models.chem import Molecule, ReactionStep, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
 
-pytestmark = pytest.mark.unit
-
 # ==============================================================================
 # Route.get_content_hash Tests
 # ==============================================================================
 
 
+@pytest.mark.unit
 class TestRouteContentHash:
     """Tests for Route.get_content_hash() method."""
 

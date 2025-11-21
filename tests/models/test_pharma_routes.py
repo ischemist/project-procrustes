@@ -7,13 +7,13 @@ import pytest
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.models.chem import Molecule, ReactionStep, Route
 
-pytestmark = [pytest.mark.contract, pytest.mark.regression]
-
 # ==============================================================================
 # Contract/Regression Tests using Pharma Routes
 # ==============================================================================
 
 
+@pytest.mark.contract
+@pytest.mark.regression
 class TestPharmaRoutesContract:
     """Contract tests using real pharmaceutical route data."""
 

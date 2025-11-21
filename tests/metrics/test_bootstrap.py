@@ -22,9 +22,6 @@ from retrocast.metrics.bootstrap import (
 from retrocast.metrics.ranking import compute_probabilistic_ranking
 from retrocast.models.evaluation import EvaluationResults, TargetEvaluation
 
-pytestmark = pytest.mark.unit
-
-
 # =============================================================================
 # Fixtures for creating synthetic evaluation data
 # =============================================================================
@@ -73,6 +70,7 @@ def evaluation_results_factory(target_evaluation_factory):
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestCheckReliability:
     """Tests for reliability flag logic."""
 
@@ -117,6 +115,7 @@ class TestCheckReliability:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestBootstrap1D:
     """Tests for the core bootstrap function."""
 
@@ -237,6 +236,7 @@ def test_ci_width_non_negative(values):
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestComputeMetricWithCI:
     """Tests for the main metric computation function."""
 
@@ -294,6 +294,7 @@ class TestComputeMetricWithCI:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestComputePairedDifference:
     """Tests for paired model comparisons."""
 
@@ -364,6 +365,7 @@ class TestComputePairedDifference:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestGetBootstrapDistribution:
     """Tests for raw bootstrap distribution generation."""
 
@@ -395,6 +397,7 @@ class TestGetBootstrapDistribution:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestProbabilisticRanking:
     """Tests for probabilistic ranking of models."""
 
