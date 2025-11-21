@@ -302,5 +302,147 @@ class TestResolveHelpers:
         assert paths["benchmarks"] == Path("data/1-benchmarks/definitions")
 
 
+@pytest.mark.integration
+class TestHandleVerify:
+    """Integration tests for handle_verify CLI handler.
+
+    Tests orchestration logic only - verification business logic is tested in test_verify.py.
+    """
+
+    @pytest.fixture
+    def setup_valid_manifest(self, tmp_path):
+        """Create a valid manifest with output file."""
+        data_file = tmp_path / "output.txt"
+        data_file.write_text("test data")
+
+        from retrocast.io.provenance import create_manifest
+
+        manifest = create_manifest(
+            action="test-action",
+            sources=[],
+            outputs=[(data_file, {})],
+            root_dir=tmp_path,
+        )
+
+        manifest_path = tmp_path / "manifest.json"
+        with open(manifest_path, "w") as f:
+            f.write(manifest.model_dump_json(indent=2))
+
+        return manifest_path, tmp_path
+
+    @pytest.fixture
+    def setup_invalid_manifest(self, tmp_path):
+        """Create an invalid manifest (file missing on disk)."""
+        data_file = tmp_path / "output.txt"
+        data_file.write_text("test data")
+
+        from retrocast.io.provenance import create_manifest
+
+        manifest = create_manifest(
+            action="test-action",
+            sources=[],
+            outputs=[(data_file, {})],
+            root_dir=tmp_path,
+        )
+
+        manifest_path = tmp_path / "manifest.json"
+        with open(manifest_path, "w") as f:
+            f.write(manifest.model_dump_json(indent=2))
+
+        # Delete the file to make manifest invalid
+        data_file.unlink()
+
+        return manifest_path, tmp_path
+
+    def test_verify_single_manifest_valid(self, setup_valid_manifest):
+        """Test --target with valid manifest completes successfully."""
+        manifest_path, root_dir = setup_valid_manifest
+
+        config = {"data_dir": str(root_dir)}
+        args = Namespace(
+            target=str(manifest_path),
+            all=False,
+            deep=False,
+        )
+
+        # Should not raise SystemExit
+        handlers.handle_verify(args, config)
+
+    def test_verify_single_manifest_invalid_exits_with_1(self, setup_invalid_manifest):
+        """Test --target with invalid manifest exits with code 1."""
+        manifest_path, root_dir = setup_invalid_manifest
+
+        config = {"data_dir": str(root_dir)}
+        args = Namespace(
+            target=str(manifest_path),
+            all=False,
+            deep=False,
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            handlers.handle_verify(args, config)
+
+        assert exc_info.value.code == 1
+
+    def test_verify_all_discovers_multiple_manifests(self, tmp_path):
+        """Test --all scans directory and verifies multiple manifests."""
+        from retrocast.io.provenance import create_manifest
+
+        # Create multiple manifests in different locations
+        for i in range(3):
+            data_dir = tmp_path / f"dir_{i}"
+            data_dir.mkdir(parents=True)
+            data_file = data_dir / "output.txt"
+            data_file.write_text(f"data {i}")
+
+            manifest = create_manifest(
+                action=f"action-{i}",
+                sources=[],
+                outputs=[(data_file, {})],
+                root_dir=tmp_path,
+            )
+
+            manifest_path = data_dir / "manifest.json"
+            with open(manifest_path, "w") as f:
+                f.write(manifest.model_dump_json(indent=2))
+
+        config = {"data_dir": str(tmp_path)}
+        args = Namespace(
+            target=None,
+            all=True,
+            deep=False,
+        )
+
+        # Should process all 3 manifests without error
+        handlers.handle_verify(args, config)
+
+    def test_verify_no_manifests_found(self, tmp_path, caplog):
+        """Test handler warns when no manifests found."""
+        config = {"data_dir": str(tmp_path)}
+        args = Namespace(
+            target=None,
+            all=True,
+            deep=False,
+        )
+
+        handlers.handle_verify(args, config)
+
+        assert "No manifests found" in caplog.text
+
+    def test_verify_with_deep_flag(self, setup_valid_manifest):
+        """Test --deep flag is passed to verify_manifest."""
+        manifest_path, root_dir = setup_valid_manifest
+
+        config = {"data_dir": str(root_dir)}
+        args = Namespace(
+            target=str(manifest_path),
+            all=False,
+            deep=True,
+        )
+
+        # Should complete successfully with deep=True
+        handlers.handle_verify(args, config)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

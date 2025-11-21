@@ -1,5 +1,6 @@
 import gzip
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +8,12 @@ import pytest
 
 TEST_DATA_DIR = Path("tests/testing_data")
 MODEL_PRED_DIR = TEST_DATA_DIR / "model-predictions"
+
+
+@pytest.fixture(autouse=True)
+def configure_adapter_logging(caplog):
+    """Ensure all adapter loggers capture DEBUG logs in tests."""
+    caplog.set_level(logging.DEBUG, logger="retrocast.adapters")
 
 
 @pytest.fixture(scope="session")
