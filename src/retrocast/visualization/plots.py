@@ -332,11 +332,13 @@ def plot_stability_analysis(data_list: list[adapters.StabilityData], model_name:
 
 def _render_series(fig: go.Figure, series: PlotSeries, x_offset: float = 0.0):
     """Unified renderer for a data series."""
-    x_data = (
-        [x + x_offset for x in series.x]
-        if x_offset != 0.0 and series.x and isinstance(series.x[0], (int, float))
-        else series.x
-    )
+    if x_offset != 0.0 and series.x:
+        # Type narrowing: cast to numeric list for type checker
+        numeric_x: list[int | float] = [x for x in series.x if isinstance(x, (int, float))]
+        x_data = [x + x_offset for x in numeric_x]
+    else:
+        # No offset, x values can be any type (int, float, or str)
+        x_data = series.x
 
     hover_tmpl = (
         f"<b>{series.name}</b><br>"
