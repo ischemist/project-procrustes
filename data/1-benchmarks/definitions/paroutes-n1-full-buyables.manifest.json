@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.3.0.dev17",
+  "created_at": "2025-11-21T17:06:27.173668Z",
+  "action": "scripts/paroutes/01-cast-paroutes",
+  "parameters": {
+    "dataset": "n1",
+    "check_buyables": true
+  },
+  "source_files": [
+    {
+      "path": "0-assets/paroutes/n1-routes.json.gz",
+      "file_hash": "49d7e209328b7cf7edc09ca827b0a21938d520a6b1d2dc0a46a65c6f392c2c89",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/paroutes-n1-full-buyables.json.gz",
+      "file_hash": "caff3091ede8072309d2054302f23500a79a1478ff0ce6596c005bd2d5461674",
+      "content_hash": "9303d63a08686be81ba85c32c72bc7512828d8f0b759b614b90476ceb939ce89"
+    }
+  ],
+  "statistics": {
+    "n_targets": 4205,
+    "n_failures": 0,
+    "n_unsolved": 5795
+  }
+}
