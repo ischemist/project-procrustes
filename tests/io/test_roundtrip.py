@@ -33,14 +33,12 @@ from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.evaluation import EvaluationResults, ScoredRoute, TargetEvaluation
 from retrocast.models.stats import MetricResult, ModelStatistics, ReliabilityFlag, StratifiedMetric
 
-pytestmark = [pytest.mark.unit, pytest.mark.integration]
-
-
 # =============================================================================
 # Tests for calculate_file_hash
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestFileHash:
     """Tests for file hash computation."""
 
@@ -100,6 +98,7 @@ class TestFileHash:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestGenerateModelHash:
     """Tests for model name hashing."""
 
@@ -132,6 +131,7 @@ class TestGenerateModelHash:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestBenchmarkContentHash:
     """Tests for BenchmarkSet content hashing."""
 
@@ -247,6 +247,7 @@ class TestBenchmarkContentHash:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestPredictionsContentHash:
     """Tests for route predictions content hashing."""
 
@@ -297,6 +298,7 @@ class TestPredictionsContentHash:
 # =============================================================================
 
 
+@pytest.mark.integration
 class TestCreateManifest:
     """Tests for manifest creation."""
 
@@ -394,6 +396,7 @@ class TestCreateManifest:
 # =============================================================================
 
 
+@pytest.mark.integration
 class TestRouteRoundtrip:
     """Tests for Route dictionary serialization."""
 
@@ -448,6 +451,7 @@ class TestRouteRoundtrip:
 # =============================================================================
 
 
+@pytest.mark.integration
 class TestBenchmarkRoundtrip:
     """Tests for BenchmarkSet serialization."""
 
@@ -490,6 +494,7 @@ class TestBenchmarkRoundtrip:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestStockFile:
     """Tests for stock file operations."""
 
@@ -526,6 +531,7 @@ class TestStockFile:
 # =============================================================================
 
 
+@pytest.mark.unit
 @given(
     model_names=st.lists(
         st.text(min_size=1, max_size=30, alphabet=st.characters(whitelist_categories=("L", "N", "P"))),
@@ -542,6 +548,7 @@ def test_generate_model_hash_collision_resistant(model_names):
     assert len(set(hashes)) == len(model_names)
 
 
+@pytest.mark.unit
 @given(
     data=st.dictionaries(
         keys=st.text(min_size=1, max_size=20, alphabet=st.characters(whitelist_categories=("L", "N"))),
@@ -569,6 +576,7 @@ def test_json_gz_roundtrip_arbitrary_dict(data):
 # =============================================================================
 
 
+@pytest.mark.integration
 class TestBenchmarkResultsLoader:
     """Tests for BenchmarkResultsLoader directory-based loading."""
 

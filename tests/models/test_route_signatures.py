@@ -7,13 +7,12 @@ import pytest
 from retrocast.models.chem import Molecule, ReactionSignature, ReactionStep, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
 
-pytestmark = pytest.mark.unit
-
 # ==============================================================================
 # Route.get_reaction_signatures Tests
 # ==============================================================================
 
 
+@pytest.mark.unit
 class TestRouteGetReactionSignatures:
     """Tests for Route.get_reaction_signatures() method."""
 

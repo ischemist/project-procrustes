@@ -92,104 +92,111 @@ def synthetic_data(synthetic_config):
 # --- Tests ---
 
 
-def test_ingest_flow(synthetic_config, synthetic_data):
-    """Test handle_ingest -> creates processed routes."""
+@pytest.mark.integration
+class TestCLIHandlerIntegration:
+    """Integration tests for the full CLI handler workflow.
 
-    # Mock CLI args
-    args = SimpleNamespace(
-        model="test-model",
-        dataset="test-bench",
-        all_models=False,
-        all_datasets=False,
-        sampling_strategy=None,
-        k=None,
-        anonymize=False,
-    )
+    Tests the complete pipeline: ingest -> score -> analyze
+    using synthetic data with tmp_path.
+    """
 
-    # RUN
-    handlers.handle_ingest(args, synthetic_config)
+    def test_ingest_flow(self, synthetic_config, synthetic_data):
+        """Test handle_ingest -> creates processed routes."""
 
-    # VERIFY
-    base = Path(synthetic_config["data_dir"])
-    expected_file = base / "3-processed" / "test-bench" / "test-model" / "routes.json.gz"
-    assert expected_file.exists()
+        # Mock CLI args
+        args = SimpleNamespace(
+            model="test-model",
+            dataset="test-bench",
+            all_models=False,
+            all_datasets=False,
+            sampling_strategy=None,
+            k=None,
+            anonymize=False,
+        )
 
-    # Check manifest exists
-    assert (expected_file.parent / "manifest.json").exists()
+        # RUN
+        handlers.handle_ingest(args, synthetic_config)
 
+        # VERIFY
+        base = Path(synthetic_config["data_dir"])
+        expected_file = base / "3-processed" / "test-bench" / "test-model" / "routes.json.gz"
+        assert expected_file.exists()
 
-def test_score_flow(synthetic_config, synthetic_data):
-    """Test handle_score -> creates evaluation file."""
+        # Check manifest exists
+        assert (expected_file.parent / "manifest.json").exists()
 
-    # Pre-requisite: Run ingest first
-    test_ingest_flow(synthetic_config, synthetic_data)
+    def test_score_flow(self, synthetic_config, synthetic_data):
+        """Test handle_score -> creates evaluation file."""
 
-    args = SimpleNamespace(model="test-model", dataset="test-bench", all_models=False, all_datasets=False, stock=None)
+        # Pre-requisite: Run ingest first
+        self.test_ingest_flow(synthetic_config, synthetic_data)
 
-    # RUN
-    handlers.handle_score(args, synthetic_config)
+        args = SimpleNamespace(
+            model="test-model", dataset="test-bench", all_models=False, all_datasets=False, stock=None
+        )
 
-    # VERIFY
-    base = Path(synthetic_config["data_dir"])
-    expected_file = base / "4-scored" / "test-bench" / "test-model" / "test-stock" / "evaluation.json.gz"
-    assert expected_file.exists()
+        # RUN
+        handlers.handle_score(args, synthetic_config)
 
-    # Load check
-    with gzip.open(expected_file, "rt") as f:
-        data = json.load(f)
-        # t1 should be solvable because stock has "C" and route uses C as reactants
-        assert data["results"]["t1"]["is_solvable"] is True
+        # VERIFY
+        base = Path(synthetic_config["data_dir"])
+        expected_file = base / "4-scored" / "test-bench" / "test-model" / "test-stock" / "evaluation.json.gz"
+        assert expected_file.exists()
 
+        # Load check
+        with gzip.open(expected_file, "rt") as f:
+            data = json.load(f)
+            # t1 should be solvable because stock has "C" and route uses C as reactants
+            assert data["results"]["t1"]["is_solvable"] is True
 
-def test_analyze_flow(synthetic_config, synthetic_data):
-    """Test handle_analyze -> creates report and plots."""
+    def test_analyze_flow(self, synthetic_config, synthetic_data):
+        """Test handle_analyze -> creates report and plots."""
 
-    # Pre-requisite: Run scoring first
-    test_score_flow(synthetic_config, synthetic_data)
+        # Pre-requisite: Run scoring first
+        self.test_score_flow(synthetic_config, synthetic_data)
 
-    args = SimpleNamespace(
-        model="test-model",
-        dataset="test-bench",
-        all_models=False,
-        all_datasets=False,
-        stock=None,
-        make_plots=False,
-        top_k=[1, 5, 10],
-    )
+        args = SimpleNamespace(
+            model="test-model",
+            dataset="test-bench",
+            all_models=False,
+            all_datasets=False,
+            stock=None,
+            make_plots=False,
+            top_k=[1, 5, 10],
+        )
 
-    # RUN
-    handlers.handle_analyze(args, synthetic_config)
+        # RUN
+        handlers.handle_analyze(args, synthetic_config)
 
-    # VERIFY
-    base = Path(synthetic_config["data_dir"])
-    results_dir = base / "5-results" / "test-bench" / "test-model" / "test-stock"
+        # VERIFY
+        base = Path(synthetic_config["data_dir"])
+        results_dir = base / "5-results" / "test-bench" / "test-model" / "test-stock"
 
-    assert (results_dir / "statistics.json.gz").exists()
-    assert (results_dir / "report.md").exists()
+        assert (results_dir / "statistics.json.gz").exists()
+        assert (results_dir / "report.md").exists()
 
+    def test_missing_file_handling(self, synthetic_config, synthetic_data, caplog):
+        """Ensure handlers fail gracefully when raw files are missing."""
 
-def test_missing_file_handling(synthetic_config, synthetic_data, caplog):
-    """Ensure handlers fail gracefully when raw files are missing."""
+        # FIX: Added synthetic_data fixture above so the benchmark definition exists.
+        # Now we manually delete the raw file to test that specific failure mode.
 
-    # FIX: Added synthetic_data fixture above so the benchmark definition exists.
-    # Now we manually delete the raw file to test that specific failure mode.
+        base = Path(synthetic_config["data_dir"])
+        raw_file = base / "2-raw" / "test-model" / "test-bench" / "results.json.gz"
+        if raw_file.exists():
+            raw_file.unlink()
 
-    base = Path(synthetic_config["data_dir"])
-    raw_file = base / "2-raw" / "test-model" / "test-bench" / "results.json.gz"
-    if raw_file.exists():
-        raw_file.unlink()
+        args = SimpleNamespace(
+            model="test-model",
+            dataset="test-bench",
+            all_models=False,
+            all_datasets=False,
+            sampling_strategy=None,
+            k=None,
+            anonymize=False,
+        )
 
-    args = SimpleNamespace(
-        model="test-model",
-        dataset="test-bench",
-        all_models=False,
-        all_datasets=False,
-        sampling_strategy=None,
-        k=None,
-        anonymize=False,
-    )
+        # Should simply return/log warning, not raise FileNotFoundError
+        handlers.handle_ingest(args, synthetic_config)
 
-    # Should simply return/log warning, not raise FileNotFoundError
-    handlers.handle_ingest(args, synthetic_config)
-
-    assert "File not found" in caplog.text or "Skipping" in caplog.text
+        assert "File not found" in caplog.text or "Skipping" in caplog.text

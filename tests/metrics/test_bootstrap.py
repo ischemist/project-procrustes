@@ -22,9 +22,6 @@ from retrocast.metrics.bootstrap import (
 from retrocast.metrics.ranking import compute_probabilistic_ranking
 from retrocast.models.evaluation import EvaluationResults, TargetEvaluation
 
-pytestmark = pytest.mark.unit
-
-
 # =============================================================================
 # Fixtures for creating synthetic evaluation data
 # =============================================================================
@@ -73,6 +70,7 @@ def evaluation_results_factory(target_evaluation_factory):
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestCheckReliability:
     """Tests for reliability flag logic."""
 
@@ -117,6 +115,7 @@ class TestCheckReliability:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestBootstrap1D:
     """Tests for the core bootstrap function."""
 
@@ -172,6 +171,7 @@ class TestBootstrap1D:
 # =============================================================================
 
 
+@pytest.mark.unit
 @given(
     values=st.lists(
         st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
@@ -187,6 +187,7 @@ def test_ci_lower_bound_non_negative_for_unit_interval(values):
     assert result.ci_lower >= 0.0
 
 
+@pytest.mark.unit
 @given(
     values=st.lists(
         st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
@@ -202,6 +203,7 @@ def test_ci_upper_bound_at_most_one_for_unit_interval(values):
     assert result.ci_upper <= 1.0
 
 
+@pytest.mark.unit
 @given(
     values=st.lists(
         st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
@@ -217,6 +219,7 @@ def test_ci_contains_point_estimate(values):
     assert result.ci_lower <= result.value <= result.ci_upper
 
 
+@pytest.mark.unit
 @given(
     values=st.lists(
         st.floats(min_value=-100.0, max_value=100.0, allow_nan=False, allow_infinity=False),
@@ -237,6 +240,7 @@ def test_ci_width_non_negative(values):
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestComputeMetricWithCI:
     """Tests for the main metric computation function."""
 
@@ -294,6 +298,7 @@ class TestComputeMetricWithCI:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestComputePairedDifference:
     """Tests for paired model comparisons."""
 
@@ -364,6 +369,7 @@ class TestComputePairedDifference:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestGetBootstrapDistribution:
     """Tests for raw bootstrap distribution generation."""
 
@@ -395,6 +401,7 @@ class TestGetBootstrapDistribution:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestProbabilisticRanking:
     """Tests for probabilistic ranking of models."""
 
@@ -516,6 +523,7 @@ def _make_evaluation_results(model_name: str, n_targets: int, solvability_rate: 
     )
 
 
+@pytest.mark.unit
 @given(
     solvability_rates=st.lists(
         st.floats(min_value=0.1, max_value=0.9, allow_nan=False),
@@ -540,6 +548,7 @@ def test_rank_probs_always_sum_to_one(solvability_rates):
         assert abs(prob_sum - 1.0) < 1e-6
 
 
+@pytest.mark.unit
 @given(
     solvability_rates=st.lists(
         st.floats(min_value=0.1, max_value=0.9, allow_nan=False),

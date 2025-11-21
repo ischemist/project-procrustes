@@ -63,6 +63,7 @@ def purchasable_target_route() -> list:
     return [mock_or_node("CCO", is_purchasable=True)]
 
 
+@pytest.mark.unit
 class TestSyntheseusSerializer:
     def test_serialize_route_simple(self, simple_route, target_smiles):
         """Tests that a valid, multi-step route is serialized correctly."""
@@ -155,6 +156,7 @@ class TestSyntheseusSerializer:
         assert data[broken_target_smiles] == []  # The list for the failed target is empty
 
 
+@pytest.mark.unit
 @pytest.mark.filterwarnings("ignore:numpy.core.numeric is deprecated:DeprecationWarning")
 class TestTtlRetroSerializer:
     def test_serialize_ibuprofen_directory(self, multistepttl_ibuprofen_dir: Path):

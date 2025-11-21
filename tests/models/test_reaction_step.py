@@ -5,13 +5,12 @@ import pytest
 from retrocast.models.chem import Molecule, ReactionStep
 from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
 
-pytestmark = pytest.mark.unit
-
 # ==============================================================================
 # ReactionStep Tests
 # ==============================================================================
 
 
+@pytest.mark.unit
 class TestReactionStep:
     """Tests for the ReactionStep class."""
 
