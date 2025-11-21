@@ -8,7 +8,7 @@ It strictly enforces a separation between logic and rendering.
 
 from dataclasses import dataclass
 
-from retrocast.models.stats import ModelStatistics
+from retrocast.models.stats import ModelStatistics, StratifiedMetric
 from retrocast.visualization.theme import get_metric_color, get_model_color
 
 
@@ -34,15 +34,21 @@ class PlotSeries:
 
 @dataclass
 class HeatmapData:
-    """
-    Container for 2D Matrix data.
-    """
+    """Container for 2D Matrix data."""
 
-    z: list[list[float | None]]  # The matrix
+    z: list[list[float | None]]
     x_labels: list[str]
     y_labels: list[str]
-    text: list[list[str]]  # Text to display in cells
+    text: list[list[str]]
     title: str
+
+
+@dataclass
+class SplitHeatmapData:
+    """Container for splitting a heatmap into multiple panels."""
+
+    solvability: HeatmapData
+    top_k: HeatmapData
 
 
 # --- Transformers ---
@@ -51,23 +57,21 @@ class HeatmapData:
 def stats_to_diagnostic_series(stats: ModelStatistics) -> list[PlotSeries]:
     """
     Converts a single model's stats into series for a diagnostic plot.
-    X-axis: Route Length (Depth)
+    X-axis: Route Length
     Series: Solvability, Top-1, Top-5, Top-10
     """
     series_list = []
 
     # 1. Solvability
     series_list.append(
-        _create_depth_series(stats.solvability, name="Solvability", color=get_metric_color("solvability"), mode="bar")
+        _create_length_series(stats.solvability, name="Solvability", color=get_metric_color("solvability"), mode="bar")
     )
 
     # 2. Top-K Accuracies
-    # Sort keys to ensure logical legend order
     for k in sorted(stats.top_k_accuracy.keys()):
-        # We typically only plot k=1, 5, 10 to avoid clutter
-        if k in [1, 5, 10]:
+        if k in [1, 2, 3, 4, 5, 10, 20, 50]:
             series_list.append(
-                _create_depth_series(
+                _create_length_series(
                     stats.top_k_accuracy[k], name=f"Top-{k}", color=get_metric_color("top", k), mode="bar"
                 )
             )
@@ -78,74 +82,63 @@ def stats_to_diagnostic_series(stats: ModelStatistics) -> list[PlotSeries]:
 def stats_to_comparison_series(models_stats: list[ModelStatistics], metric_type: str, k: int = 1) -> list[PlotSeries]:
     """
     Converts multiple models into series for a direct comparison on a specific metric.
-    X-axis: Route Length (Depth)
+    X-axis: Route Length
     Series: One per Model
     """
     series_list = []
 
     for stats in models_stats:
-        # Determine which metric object to grab
+        metric_obj = None
         if metric_type == "Solvability":
             metric_obj = stats.solvability
         elif metric_type == "Top-K":
             metric_obj = stats.top_k_accuracy.get(k)
-        else:
-            metric_obj = None
 
-        if not metric_obj:
-            continue
-
-        series_list.append(
-            _create_depth_series(
-                metric_obj,
-                name=stats.model_name,
-                color=get_model_color(stats.model_name),
-                mode="scatter",  # Comparisons are usually scatter/line
+        if metric_obj:
+            series_list.append(
+                _create_length_series(
+                    metric_obj, name=stats.model_name, color=get_model_color(stats.model_name), mode="scatter"
+                )
             )
-        )
 
     return series_list
 
 
-def stats_to_overall_series(models_stats: list[ModelStatistics]) -> list[PlotSeries]:
+def stats_to_overall_series(
+    models_stats: list[ModelStatistics], top_k_values: list[int] | None = None
+) -> list[PlotSeries]:
     """
     Converts multiple models into series for Overall performance summary.
     X-axis: Metric Name (Solvability, Top-1, etc.)
     Series: One per Model
-    """
-    metrics_config = [
-        {"key": "solvability", "label": "Solvability"},
-        {"key": "top-1", "label": "Top-1"},
-        {"key": "top-5", "label": "Top-5"},
-        {"key": "top-10", "label": "Top-10"},
-    ]
 
+    Args:
+        models_stats: List of model statistics
+        top_k_values: List of k values to display (default: [1, 2, 3, 4, 5, 10, 20, 50])
+    """
+    if top_k_values is None:
+        top_k_values = [1, 2, 3, 4, 5, 10, 20, 50]
+
+    metrics_config = [{"key": "solvability", "label": "Solvability"}]
+    metrics_config.extend([{"key": f"top-{k}", "label": f"Top-{k}"} for k in top_k_values])
     series_list = []
 
     for stats in models_stats:
-        x_vals = []
-        y_vals = []
-        y_up = []
-        y_low = []
-        custom = []
-
+        x_vals, y_vals, y_up, y_low, custom = [], [], [], [], []
         for i, config in enumerate(metrics_config):
-            key = config["key"]
             res = None
-
-            if key == "solvability":
+            if config["key"] == "solvability":
                 res = stats.solvability.overall
-            elif key.startswith("top-"):
-                k = int(key.split("-")[1])
+            elif config["key"].startswith("top-"):
+                k = int(config["key"].split("-")[1])
                 if k in stats.top_k_accuracy:
                     res = stats.top_k_accuracy[k].overall
 
             if res:
-                x_vals.append(i)  # Integer index for X
+                x_vals.append(i)
                 y_vals.append(res.value * 100)
                 y_up.append((res.ci_upper - res.value) * 100)
                 y_low.append((res.value - res.ci_lower) * 100)
-
                 custom.append(
                     [res.n_samples, res.ci_lower * 100, res.ci_upper * 100, res.reliability.code, config["label"]]
                 )
@@ -166,91 +159,73 @@ def stats_to_overall_series(models_stats: list[ModelStatistics]) -> list[PlotSer
     return series_list
 
 
-def stats_to_heatmap_matrix(models_stats: list[ModelStatistics]) -> HeatmapData:
+def stats_to_heatmap_matrix(models_stats: list[ModelStatistics]) -> SplitHeatmapData:
     """
-    Creates a comprehensive matrix: Models (Columns) vs Metrics (Rows).
-    Metrics: Solvability, Top-1, 2, 3, 4, 5, 10, 20, 50 (if available).
+    Creates data for a split heatmap:
+    - Panel 1: Solvability
+    - Panel 2: Top-K Accuracies
     """
-    # 1. Define Metrics (Rows)
-    # Always start with Solvability
-    metric_keys = ["Solvability"]
-    # Find all unique K present across all models
+    # 1. Define Metrics for each panel
+    solv_metrics = ["Solvability"]
     all_k = set()
     for m in models_stats:
         all_k.update(m.top_k_accuracy.keys())
+    top_k_metrics = [f"Top-{k}" for k in sorted(list(all_k))]
 
-    sorted_k = sorted(list(all_k))
-    metric_keys.extend([f"Top-{k}" for k in sorted_k])
-
-    # 2. Define Models (Columns)
+    # 2. Define Models (Rows / Y-axis) - shared for both
     model_names = [m.model_name for m in models_stats]
 
-    # 3. Build Matrix
-    z_values = []  # List of rows
-    text_values = []
+    # 3. Build Matrices
+    solv_z, solv_text = [], []
+    top_k_z, top_k_text = [], []
 
-    for metric_label in metric_keys:
-        z_row = []
-        t_row = []
+    for stats in models_stats:  # Outer loop for rows (models)
+        # Solvability Panel
+        solv_val = stats.solvability.overall.value
+        solv_z.append([solv_val * 100])
+        solv_text.append([f"{solv_val:.1%}"])
 
-        for stats in models_stats:
-            val = None
-
-            if metric_label == "Solvability":
-                val = stats.solvability.overall.value
-            else:
-                k = int(metric_label.split("-")[1])
-                if k in stats.top_k_accuracy:
-                    val = stats.top_k_accuracy[k].overall.value
+        # Top-K Panel
+        top_k_row_z, top_k_row_text = [], []
+        for metric_label in top_k_metrics:
+            k = int(metric_label.split("-")[1])
+            res = stats.top_k_accuracy.get(k)
+            val = res.overall.value if res else None
 
             if val is not None:
-                z_row.append(val * 100)  # Store as percentage
-                t_row.append(f"{val:.1%}")
+                top_k_row_z.append(val * 100)
+                top_k_row_text.append(f"{val:.1%}")
             else:
-                z_row.append(None)
-                t_row.append("")
+                top_k_row_z.append(None)
+                top_k_row_text.append("")
+        top_k_z.append(top_k_row_z)
+        top_k_text.append(top_k_row_text)
 
-        z_values.append(z_row)
-        text_values.append(t_row)
-
-    # Note: We structure it so Y=Metrics, X=Models.
-    # Plotly Heatmap expects z[row][col].
-
-    return HeatmapData(
-        z=z_values,
-        x_labels=model_names,
-        y_labels=metric_keys,
-        text=text_values,
-        title="Comprehensive Performance Matrix",
+    return SplitHeatmapData(
+        solvability=HeatmapData(
+            z=solv_z, x_labels=solv_metrics, y_labels=model_names, text=solv_text, title="Solvability"
+        ),
+        top_k=HeatmapData(
+            z=top_k_z, x_labels=top_k_metrics, y_labels=model_names, text=top_k_text, title="Top-K Accuracy"
+        ),
     )
 
 
 # --- Internal Helper ---
 
 
-def _create_depth_series(
-    metric_obj,  # StratifiedMetric
-    name: str,
-    color: str,
-    mode: str,
-) -> PlotSeries:
-    """Helper to extract stratified data into a PlotSeries."""
-    sorted_keys = sorted(metric_obj.by_group.keys())
+def _create_length_series(metric_obj: StratifiedMetric, name: str, color: str, mode: str) -> PlotSeries:
+    """Helper to extract stratified data by route length into a PlotSeries."""
+    # FIX: Cast keys to int before sorting to handle "10" vs "2" correctly.
+    sorted_keys = sorted(metric_obj.by_group.keys(), key=int)
 
-    x_vals = []
-    y_vals = []
-    y_up = []
-    y_low = []
-    custom = []
-
+    x_vals, y_vals, y_up, y_low, custom = [], [], [], [], []
     for k in sorted_keys:
         res = metric_obj.by_group[k]
-
-        x_vals.append(k)
+        x_vals.append(int(k))  # Ensure x is numeric for jittering
         y_vals.append(res.value * 100)
         y_up.append((res.ci_upper - res.value) * 100)
         y_low.append((res.value - res.ci_lower) * 100)
-
         custom.append([res.n_samples, res.ci_lower * 100, res.ci_upper * 100, res.reliability.code])
 
     return PlotSeries(

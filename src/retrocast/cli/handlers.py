@@ -257,7 +257,7 @@ def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any
             stat_solvability = compute_metric_with_ci(targets, get_is_solvable, "Solvability", group_by=get_length)
 
             stat_topk = {}
-            for k in [1, 5, 10]:
+            for k in [1, 2, 3, 4, 5, 10, 20, 50]:
                 stat_topk[k] = compute_metric_with_ci(targets, make_get_top_k(k), f"Top-{k}", group_by=get_length)
 
             final_stats = ModelStatistics(

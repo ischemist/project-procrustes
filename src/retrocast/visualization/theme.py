@@ -6,6 +6,7 @@ It acts as a local configuration layer on top of `ischemist`.
 """
 
 import hashlib
+from typing import Any
 
 import plotly.graph_objects as go
 from ischemist.colors import ColorPalette
@@ -86,23 +87,28 @@ def get_metric_color(metric_name: str, k: int | None = None) -> str:
 
 def apply_layout(
     fig: go.Figure,
-    title: str,
+    height: int = 600,
+    title: str | None = None,
+    width: int | None = None,
     x_title: str | None = None,
     y_title: str | None = None,
-    height: int = 600,
-    width: int | None = None,
     legend_top: bool = True,
 ) -> go.Figure:
     """
     Applies the standard RetroCast layout configuration.
     Wraps Styler().apply_style() with project-specific defaults.
     """
-    layout_args = dict(
-        title=title,
+    layout_args: dict[str, Any] = dict(
         height=height,
-        yaxis=dict(title=y_title) if y_title else None,
-        xaxis=dict(title=x_title) if x_title else None,
+        title=title,
+        margin=dict(t=30),
     )
+
+    if x_title:
+        layout_args.setdefault("xaxis", {})["title"] = x_title
+
+    if y_title:
+        layout_args.setdefault("yaxis", {})["title"] = y_title
 
     if width:
         layout_args["width"] = width
