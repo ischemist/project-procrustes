@@ -36,13 +36,12 @@ retrocast score --all-models --all-datasets
 
 Create plots:
 ```bash
-uv run scripts/06-check-seed-stability.py --model dms-explorer-xl --base-benchmark ref-lin-600 --seeds 42 299792458 19910806 20260317 17760704 17890304 20251030 662607015 20180329 20170612 20180818 20151225 19690721 20160310 19450716 --stock n5-stock
+export SEEDS="42 299792458 19910806 20260317 17760704 17890304 20251030 662607015 20180329 20170612 20180818 20151225 19690721 20160310 19450716"
 
-uv run scripts/06-check-seed-stability.py --model dms-explorer-xl --base-benchmark ref-cnv-400 --seeds 42 299792458 19910806 20260317 17760704 17890304 20251030 662607015 20180329 20170612 20180818 20151225 19690721 20160310 19450716 --stock n5-stock
-
-uv run scripts/06-check-seed-stability.py --model dms-explorer-xl --base-benchmark mkt-lin-500 --seeds 42 299792458 19910806 20260317 17760704 17890304 20251030 662607015 20180329 20170612 20180818 20151225 19690721 20160310 19450716 --stock buyables-stock
-
-uv run scripts/06-check-seed-stability.py --model dms-explorer-xl --base-benchmark mkt-cnv-160 --seeds 42 299792458 19910806 20260317 17760704 17890304 20251030 662607015 20180329 20170612 20180818 20151225 19690721 20160310 19450716 --stock buyables-stock
+uv run scripts/06-check-seed-stability.py --model dms-explorer-xl --base-benchmark ref-lin-600 --seeds $SEEDS --stock n5-stock
+uv run scripts/06-check-seed-stability.py --model dms-explorer-xl --base-benchmark ref-cnv-400 --seeds $SEEDS --stock n5-stock
+uv run scripts/06-check-seed-stability.py --model dms-explorer-xl --base-benchmark mkt-lin-500 --seeds $SEEDS --stock buyables-stock
+uv run scripts/06-check-seed-stability.py --model dms-explorer-xl --base-benchmark mkt-cnv-160 --seeds $SEEDS --stock buyables-stock
 ```
 
 ref-lin-600 Stability Statistics

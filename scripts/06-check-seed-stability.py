@@ -31,7 +31,7 @@ def main():
     parser.add_argument("--model", required=True)
     parser.add_argument("--base-benchmark", required=True, help="Base name (e.g. stratified-linear-600)")
     parser.add_argument("--seeds", nargs="+", required=True, help="List of seeds to check")
-    parser.add_argument("--stock", required=True, default="n5-stock")
+    parser.add_argument("--stock", required=True, help="Stock to use for evaluation")
     args = parser.parse_args()
 
     loader = BenchmarkResultsLoader(DATA_DIR)

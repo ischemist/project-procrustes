@@ -14,8 +14,8 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from retrocast.curation.filtering import filter_by_route_type
-from retrocast.curation.sampling import sample_stratified_priority
+from retrocast.curation.filtering import clean_and_prioritize_pools, filter_by_route_type
+from retrocast.curation.sampling import sample_random, sample_stratified_priority
 from retrocast.io import create_manifest, load_benchmark, save_json_gz
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.utils.logging import configure_script_logging, logger
@@ -121,40 +121,40 @@ def main():
             seed=CANONICAL_SEED,
         )
 
-        # n1 = load_benchmark(n1_path)
-        # n5_pool, n1_pool = clean_and_prioritize_pools(list(n5.targets.values()), list(n1.targets.values()))
-        # long_counts = {d: 100 for d in range(8, 11)}
-        # # note - there are much fewer than 100 routes for such lengths, so 100 acts as "take all"
-        # target_long = sample_stratified_priority(
-        #     pools=[n5_pool, n1_pool],
-        #     group_fn=lambda t: t.route_length,
-        #     counts=long_counts,
-        #     seed=CANONICAL_SEED,
-        # )
-        # create_subset(
-        #     name=f"ref-lng-84-seed={CANONICAL_SEED}",
-        #     targets=target_long,
-        #     source_paths=[n5_path, n1_path],
-        #     stock_name="n1-n5-stock",
-        #     description="84 targets with extra long (8-10 steps) ground truth routes.",
-        #     out_dir=DEF_DIR,
-        #     seed=CANONICAL_SEED,
-        # )
+        n1 = load_benchmark(n1_path)
+        n5_pool, n1_pool = clean_and_prioritize_pools(list(n5.targets.values()), list(n1.targets.values()))
+        long_counts = {d: 100 for d in range(8, 11)}
+        # note - there are much fewer than 100 routes for such lengths, so 100 acts as "take all"
+        target_long = sample_stratified_priority(
+            pools=[n5_pool, n1_pool],
+            group_fn=lambda t: t.route_length,
+            counts=long_counts,
+            seed=CANONICAL_SEED,
+        )
+        create_subset(
+            name=f"ref-lng-84-seed={CANONICAL_SEED}",
+            targets=target_long,
+            source_paths=[n5_path, n1_path],
+            stock_name="n1-n5-stock",
+            description="84 targets with extra long (8-10 steps) ground truth routes.",
+            out_dir=DEF_DIR,
+            seed=CANONICAL_SEED,
+        )
 
-        # # 5. Create Random Legacy Set
-        # n5_pool = list(n5.targets.values())
-        # for n in [100, 250, 500, 1000, 2000]:
-        #     targets_random = sample_random(n5_pool, n, seed=CANONICAL_SEED)
+        # 5. Create Random Legacy Set
+        n5_pool = list(n5.targets.values())
+        for n in [100, 250, 500, 1000, 2000]:
+            targets_random = sample_random(n5_pool, n, seed=CANONICAL_SEED)
 
-        #     create_subset(
-        #         name=f"ref-rnd-{n}-seed={CANONICAL_SEED}",
-        #         targets=targets_random,
-        #         source_paths=[n5_path],
-        #         stock_name="n5-stock",
-        #         description=f"Random sample of {n} routes from n5 (legacy comparison).",
-        #         out_dir=DEF_DIR,
-        #         seed=CANONICAL_SEED,
-        #     )
+            create_subset(
+                name=f"ref-rnd-{n}-seed={CANONICAL_SEED}",
+                targets=targets_random,
+                source_paths=[n5_path],
+                stock_name="n5-stock",
+                description=f"Random sample of {n} routes from n5 (legacy comparison).",
+                out_dir=DEF_DIR,
+                seed=CANONICAL_SEED,
+            )
         # ------------ PaRoutes with Buyables Enforced ----------
         n5_path = DEF_DIR / "paroutes-n5-full-buyables.json.gz"
 
