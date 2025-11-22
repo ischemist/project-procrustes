@@ -8,8 +8,10 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
-    "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
-    "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.14' and sys_platform != 'win32' and extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
@@ -3165,8 +3167,10 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
-    "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
-    "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
 ]
@@ -3310,6 +3314,10 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.14' and sys_platform != 'win32' and extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
@@ -3912,10 +3920,10 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-retro-star' or extra == 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
-    { name = "python-dateutil", marker = "extra == 'extra-9-retrocast-retro-star' or extra == 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
-    { name = "pytz", marker = "extra == 'extra-9-retrocast-retro-star' or extra == 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
-    { name = "tzdata", marker = "extra == 'extra-9-retrocast-retro-star' or extra == 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "python-dateutil", marker = "extra == 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "pytz", marker = "extra == 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "tzdata", marker = "extra == 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3d/0e/2c225d7a5de6ca0ec7d729aff6ef560544596f3a9bfed77f6dbc1713dbb5/pandas-2.1.1.tar.gz", hash = "sha256:fecb198dc389429be557cde50a2d46da8434a17fe37d7d41ff102e3987fd947b", size = 4266250, upload-time = "2023-09-20T21:05:19.391Z" }
 wheels = [
@@ -3942,6 +3950,10 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.14' and sys_platform != 'win32' and extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
@@ -3954,10 +3966,10 @@ resolution-markers = [
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
 ]
 dependencies = [
-    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-aizyn' or extra == 'extra-9-retrocast-dms' or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus') or (extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner')" },
-    { name = "python-dateutil", marker = "extra == 'extra-9-retrocast-aizyn' or extra == 'extra-9-retrocast-dms' or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus') or (extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner')" },
-    { name = "pytz", marker = "extra == 'extra-9-retrocast-aizyn' or extra == 'extra-9-retrocast-dms' or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus') or (extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner')" },
-    { name = "tzdata", marker = "extra == 'extra-9-retrocast-aizyn' or extra == 'extra-9-retrocast-dms' or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus') or (extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner')" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-aizyn' or extra == 'extra-9-retrocast-dms' or extra == 'extra-9-retrocast-retro-star' or extra != 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "python-dateutil", marker = "extra == 'extra-9-retrocast-aizyn' or extra == 'extra-9-retrocast-dms' or extra == 'extra-9-retrocast-retro-star' or extra != 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "pytz", marker = "extra == 'extra-9-retrocast-aizyn' or extra == 'extra-9-retrocast-dms' or extra == 'extra-9-retrocast-retro-star' or extra != 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "tzdata", marker = "extra == 'extra-9-retrocast-aizyn' or extra == 'extra-9-retrocast-dms' or extra == 'extra-9-retrocast-retro-star' or extra != 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/6f/41/eb562668eaf93790762f600536b28c97b45803cba9253cd8e436cda96aef/pandas-2.1.4.tar.gz", hash = "sha256:fcb68203c833cc735321512e13861358079a96c174a61f5116a1de89c58c0ef7", size = 4274800, upload-time = "2023-12-08T15:38:29.713Z" }
 wheels = [
@@ -4073,8 +4085,10 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
-    "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
-    "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
@@ -5173,16 +5187,18 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
-    "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
-    "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
 ]
 dependencies = [
-    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-dms' or extra == 'extra-9-retrocast-syntheseus' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner')" },
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-retro-star' or extra == 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-dms' or extra == 'extra-9-retrocast-retro-star' or extra == 'extra-9-retrocast-syntheseus' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-synplanner') or (extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-synplanner')" },
+    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
     { name = "pillow", version = "12.0.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-dms' or extra == 'extra-9-retrocast-retro-star' or extra == 'extra-9-retrocast-synplanner' or extra == 'extra-9-retrocast-syntheseus' or extra != 'extra-9-retrocast-aizyn'" },
 ]
 wheels = [
@@ -5286,10 +5302,11 @@ source = { git = "https://github.com/anmorgunov/retro_star?branch=master#e12f57d
 dependencies = [
     { name = "graphviz" },
     { name = "networkx", version = "3.5", source = { registry = "https://pypi.org/simple" } },
-    { name = "pandas", version = "2.1.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "pandas", version = "2.1.4", source = { registry = "https://pypi.org/simple" } },
     { name = "rdchiral" },
     { name = "rdkit", version = "2025.9.1", source = { registry = "https://pypi.org/simple" } },
-    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "torch", version = "2.9.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "torch", version = "2.9.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
     { name = "torchvision" },
     { name = "tqdm" },
 ]
@@ -5317,9 +5334,11 @@ dms = [
     { name = "directmultistep" },
 ]
 retro-star = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" } },
-    { name = "pandas", version = "2.1.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" } },
+    { name = "pandas", version = "2.1.4", source = { registry = "https://pypi.org/simple" } },
     { name = "retro-star" },
+    { name = "torch", version = "2.9.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "torch", version = "2.9.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
 ]
 synplanner = [
     { name = "synplanner" },
@@ -5345,8 +5364,8 @@ viz = [
 dev = [
     { name = "hypothesis" },
     { name = "ipykernel" },
-    { name = "pandas", version = "2.1.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-retro-star' or extra == 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
-    { name = "pandas", version = "2.1.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-aizyn' or extra == 'extra-9-retrocast-dms' or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus') or (extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner')" },
+    { name = "pandas", version = "2.1.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "pandas", version = "2.1.4", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-aizyn' or extra == 'extra-9-retrocast-dms' or extra == 'extra-9-retrocast-retro-star' or extra != 'extra-9-retrocast-synplanner' or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-mock" },
@@ -5369,9 +5388,9 @@ requires-dist = [
     { name = "ischemist", marker = "extra == 'viz'", specifier = ">=0.2.0" },
     { name = "kaleido", marker = "extra == 'viz'", specifier = ">=1.1.0" },
     { name = "numpy", marker = "extra == 'aizyn'", specifier = "<=2.2" },
-    { name = "numpy", marker = "extra == 'retro-star'" },
+    { name = "numpy", marker = "extra == 'retro-star'", specifier = "<2" },
     { name = "numpy", marker = "extra == 'syntheseus'", specifier = "<2" },
-    { name = "pandas", marker = "extra == 'retro-star'" },
+    { name = "pandas", marker = "extra == 'retro-star'", specifier = "<2.2" },
     { name = "pandas", marker = "extra == 'syntheseus'", specifier = "<2.2" },
     { name = "plotly", marker = "extra == 'viz'", specifier = ">=6.3.0" },
     { name = "pydantic" },
@@ -5381,12 +5400,13 @@ requires-dist = [
     { name = "rich", marker = "extra == 'cli'", specifier = ">=14.2.0" },
     { name = "synplanner", marker = "extra == 'synplanner'", specifier = "==1.2.0" },
     { name = "syntheseus", extras = ["local-retro"], marker = "extra == 'syntheseus'", specifier = ">=0.5.0" },
+    { name = "torch", marker = "extra == 'retro-star'", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "retrocast", extra = "retro-star" } },
     { name = "torch", marker = "extra == 'syntheseus'", specifier = "<=2.1" },
     { name = "torch-scatter", marker = "extra == 'syntheseus'" },
     { name = "torchdata", marker = "extra == 'syntheseus'", specifier = "<=0.7.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
 ]
-provides-extras = ["aizyn", "dms", "retro-star", "synplanner", "syntheseus", "viz", "cli"]
+provides-extras = ["aizyn", "cli", "dms", "retro-star", "synplanner", "syntheseus", "viz"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -6209,6 +6229,32 @@ wheels = [
 [[package]]
 name = "torch"
 version = "2.9.1"
+source = { registry = "https://download.pytorch.org/whl/cpu" }
+resolution-markers = [
+    "python_full_version >= '3.12' and sys_platform == 'darwin'",
+    "python_full_version < '3.12' and sys_platform == 'darwin'",
+]
+dependencies = [
+    { name = "filelock", marker = "sys_platform == 'darwin'" },
+    { name = "fsspec", marker = "sys_platform == 'darwin'" },
+    { name = "jinja2", marker = "sys_platform == 'darwin'" },
+    { name = "networkx", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
+    { name = "setuptools", marker = "python_full_version >= '3.12' and sys_platform == 'darwin'" },
+    { name = "sympy", marker = "sys_platform == 'darwin'" },
+    { name = "typing-extensions", marker = "sys_platform == 'darwin'" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1-cp311-none-macosx_11_0_arm64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1-cp312-none-macosx_11_0_arm64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1-cp313-cp313t-macosx_11_0_arm64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1-cp313-none-macosx_11_0_arm64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1-cp314-cp314-macosx_11_0_arm64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1-cp314-cp314t-macosx_11_0_arm64.whl" },
+]
+
+[[package]]
+name = "torch"
+version = "2.9.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -6264,6 +6310,47 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/86/5c/5b2e5d84f5b9850cd1e71af07524d8cbb74cba19379800f1f9f7c997fc70/torch-2.9.1-cp314-cp314t-manylinux_2_28_aarch64.whl", hash = "sha256:0a2bd769944991c74acf0c4ef23603b9c777fdf7637f115605a4b2d8023110c7", size = 104145788, upload-time = "2025-11-12T15:23:52.109Z" },
     { url = "https://files.pythonhosted.org/packages/a9/8c/3da60787bcf70add986c4ad485993026ac0ca74f2fc21410bc4eb1bb7695/torch-2.9.1-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:07c8a9660bc9414c39cac530ac83b1fb1b679d7155824144a40a54f4a47bfa73", size = 899735500, upload-time = "2025-11-12T15:24:08.788Z" },
     { url = "https://files.pythonhosted.org/packages/db/2b/f7818f6ec88758dfd21da46b6cd46af9d1b3433e53ddbb19ad1e0da17f9b/torch-2.9.1-cp314-cp314t-win_amd64.whl", hash = "sha256:c88d3299ddeb2b35dcc31753305612db485ab6f1823e37fb29451c8b2732b87e", size = 111163659, upload-time = "2025-11-12T15:23:20.009Z" },
+]
+
+[[package]]
+name = "torch"
+version = "2.9.1+cpu"
+source = { registry = "https://download.pytorch.org/whl/cpu" }
+resolution-markers = [
+    "python_full_version >= '3.12' and sys_platform != 'darwin'",
+    "python_full_version < '3.12' and sys_platform != 'darwin'",
+]
+dependencies = [
+    { name = "filelock", marker = "sys_platform != 'darwin'" },
+    { name = "fsspec", marker = "sys_platform != 'darwin'" },
+    { name = "jinja2", marker = "sys_platform != 'darwin'" },
+    { name = "networkx", version = "3.5", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin'" },
+    { name = "setuptools", marker = "python_full_version >= '3.12' and sys_platform != 'darwin'" },
+    { name = "sympy", marker = "sys_platform != 'darwin'" },
+    { name = "typing-extensions", marker = "sys_platform != 'darwin'" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp311-cp311-manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp311-cp311-manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp311-cp311-win_amd64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp311-cp311-win_arm64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp312-cp312-manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp312-cp312-win_amd64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp312-cp312-win_arm64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp313-cp313-manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp313-cp313-win_amd64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp313-cp313-win_arm64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp313-cp313t-manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp313-cp313t-manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp313-cp313t-win_amd64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp314-cp314-manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp314-cp314-manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp314-cp314-win_amd64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp314-cp314t-manylinux_2_28_aarch64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp314-cp314t-manylinux_2_28_x86_64.whl" },
+    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.1%2Bcpu-cp314-cp314t-win_amd64.whl" },
 ]
 
 [[package]]
@@ -6343,9 +6430,10 @@ name = "torchvision"
 version = "0.24.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" } },
     { name = "pillow", version = "12.0.0", source = { registry = "https://pypi.org/simple" } },
-    { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" } },
+    { name = "torch", version = "2.9.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "torch", version = "2.9.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e7/69/30f5f03752aa1a7c23931d2519b31e557f3f10af5089d787cddf3b903ecf/torchvision-0.24.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:056c525dc875f18fe8e9c27079ada166a7b2755cea5a2199b0bc7f1f8364e600", size = 1891436, upload-time = "2025-11-12T15:25:04.3Z" },
@@ -6574,8 +6662,10 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
-    "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
-    "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
@@ -6678,8 +6768,10 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
-    "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
-    "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and extra != 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-synplanner' and extra != 'extra-9-retrocast-syntheseus'",

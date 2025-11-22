@@ -5,7 +5,7 @@ This script processes targets from a CSV file using AiZynthFinder's MCTS algorit
 and saves results in a structured format similar to the DMS predictions script.
 
 Example usage:
-    uv run --extra aizyn scripts/aizynthfinder/3-run-aizyn-mcts.py --benchmark random-n5-2-seed=20251030
+    uv run --extra aizyn scripts/aizynthfinder/3-run-aizyn-mcts.py --benchmark uspto-190
 
 The target CSV file should be located at: data/{target_name}.csv
 Results are saved to: data/evaluations/aizynthfinder-mcts/{target_name}/
@@ -13,6 +13,24 @@ Results are saved to: data/evaluations/aizynthfinder-mcts/{target_name}/
 You might need to install some build tools to install aizynthfinder deps on a clean EC2 instance.
 ```bash
 sudo apt-get update && sudo apt-get install build-essential python3.11-dev libxrender1
+```
+
+Also, cgrtools doesn't have any wheels on linux, so you have to do some yak shaving, thankfully uv is a godsend
+```bash
+# create a temp env to build the artifact
+uv venv .build_tmp
+source .build_tmp/bin/activate
+
+# install the legacy build stack
+uv pip install "cython<3" setuptools wheel
+
+# build cgrtools without isolation (uses the old cython we just installed)
+uv pip install cgrtools==4.1.35 --no-build-isolation
+
+# now nuke the temp env and run sync
+deactivate
+rm -rf .build_tmp
+uv sync --extra aizyn
 ```
 """
 

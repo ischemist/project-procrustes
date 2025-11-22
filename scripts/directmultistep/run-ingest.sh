@@ -2,16 +2,16 @@
 
 MODELS=(
     "dms-flash"
-    "dms-flash-20M"
     "dms-flex-duo"
     "dms-wide"
-    "dms-deep"
     "dms-explorer-xl"
 )
 
 BENCHMARKS=(
-    "stratified-convergent-450"
-    "stratified-linear-600"
+    "ref-lin-600"
+    "ref-cnv-400"
+    "mkt-lin-500"
+    "mkt-cnv-160"
     # "random-n5-100"
     # "random-n5-250"
     # "random-n5-500"
@@ -19,15 +19,15 @@ BENCHMARKS=(
 )
 
 seeds=(
-    # 299792458
-    # 19910806
-    # 20260317
-    # 17760704
-    # 17890304
-    # 42
-    # 20251030
-    # 662607015
-    # 20180329
+    299792458
+    19910806
+    20260317
+    17760704
+    17890304
+    42
+    20251030
+    662607015
+    20180329
     20170612
     20180818
     20151225

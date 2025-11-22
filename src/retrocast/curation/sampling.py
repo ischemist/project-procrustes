@@ -116,7 +116,7 @@ def sample_stratified_priority(
                 collected_for_group.extend(available)
 
         if len(collected_for_group) < target_count:
-            raise ValueError(
+            logger.warning(
                 f"Cannot sample {target_count} items for group {key}; "
                 f"only found {len(collected_for_group)} across all pools."
             )

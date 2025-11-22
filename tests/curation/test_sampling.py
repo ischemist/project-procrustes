@@ -247,20 +247,26 @@ class TestSampleStratifiedPriority:
 
         assert len(result) == 3
 
-    def test_raises_when_insufficient_items(self):
-        """Should raise ValueError when not enough items across all pools."""
+    def test_logs_warning_when_insufficient_items(self, caplog):
+        """Should log warning when not enough items across all pools."""
         pool1 = [1]
         pool2 = [1]
 
         counts = {1: 5}  # Want 5 but only have 2
 
-        with pytest.raises(ValueError, match="Cannot sample 5 items"):
-            sample_stratified_priority(
+        with caplog.at_level("WARNING"):
+            result = sample_stratified_priority(
                 pools=[pool1, pool2],
                 group_fn=lambda x: x,
                 counts=counts,
                 seed=42,
             )
+
+        # Should return what it could find (2 items)
+        assert len(result) == 2
+        # Should have logged a warning
+        assert "Cannot sample 5 items for group 1" in caplog.text
+        assert "only found 2 across all pools" in caplog.text
 
     def test_deterministic_with_seed(self):
         """Should produce same results with same seed."""
