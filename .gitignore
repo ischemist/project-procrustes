@@ -78,6 +78,8 @@ data/3-processed/random-n5-*
 data/4-scored/random-n5-*
 !data/5-results/**/*.json.gz
 data/5-results/random-n5-*
+data/5-results/**/*.html
+data/5-results/**/*.jpg
 data/6-comparisons
 data/7-meta-analysis
 
