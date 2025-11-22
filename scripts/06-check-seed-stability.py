@@ -4,8 +4,6 @@ Generates a Forest Plot showing variance due to subset sampling.
 
 Usage:
     uv run scripts/06-check-seed-stability.py --model dms-explorer-xl --base-benchmark stratified-linear-600 --seeds 42 299792458 19910806 20260317 17760704 17890304 20251030 662607015 20180329 20170612 20180818 20151225 19690721 20160310 19450716
-
-    uv run scripts/06-check-seed-stability.py --model dms-explorer-xl --base-benchmark stratified-convergent-450 --seeds 42 299792458 19910806 20260317 17760704 17890304 20251030 662607015 20180329 20170612 20180818 20151225 19690721 20160310 19450716
 """
 
 import argparse
@@ -33,7 +31,7 @@ def main():
     parser.add_argument("--model", required=True)
     parser.add_argument("--base-benchmark", required=True, help="Base name (e.g. stratified-linear-600)")
     parser.add_argument("--seeds", nargs="+", required=True, help="List of seeds to check")
-    parser.add_argument("--stock", default="n5-stock")
+    parser.add_argument("--stock", required=True, default="n5-stock")
     args = parser.parse_args()
 
     loader = BenchmarkResultsLoader(DATA_DIR)
@@ -114,10 +112,11 @@ def main():
     out_dir = DATA_DIR / "7-meta-analysis" / args.base_benchmark
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    fig = plots.plot_stability_analysis(plot_data, args.model)
+    fig = plots.plot_stability_analysis(plot_data, args.base_benchmark, args.model)
     out_file = out_dir / "seed_stability.html"
 
     fig.write_html(out_file, include_plotlyjs="cdn", auto_open=True)
+    fig.write_image(out_dir / "seed_stability.jpg", scale=4, height=600, width=1200)
     logger.info(f"Stability plot saved to: [underline]{out_file}[/]")
 
     # Suggest the best seed

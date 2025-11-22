@@ -285,7 +285,7 @@ def plot_pairwise_matrix(comparisons: list[ModelComparison], metric_name: str) -
     return fig
 
 
-def plot_stability_analysis(data_list: list[adapters.StabilityData], model_name: str) -> go.Figure:
+def plot_stability_analysis(data_list: list[adapters.StabilityData], bench_name: str, model_name: str) -> go.Figure:
     """
     Plots a Forest Plot showing variance across random seeds.
     """
@@ -314,10 +314,10 @@ def plot_stability_analysis(data_list: list[adapters.StabilityData], model_name:
             annotation_text=f"μ={data.grand_mean:.1f}% (σ={data.std_dev:.2f})",
             annotation_position="top right",
         )
-
+    fig.update_xaxes(dtick=10, range=[20, 100])
     theme.apply_layout(
         fig,
-        title=f"Benchmark Stability Analysis: {model_name}",
+        title=f"[{bench_name}] Stability Analysis ({model_name})",
         x_title="Performance (%)",
         y_title="Seed Variant",
         height=max(600, len(data_list[0].seeds) * 25),  # Dynamic height
