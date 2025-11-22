@@ -12,8 +12,10 @@ Usage:
 
 from pathlib import Path
 
-from retrocast.curation.filtering import clean_and_prioritize_pools, filter_by_route_type
-from retrocast.curation.sampling import sample_random, sample_stratified_priority
+from tqdm import tqdm
+
+from retrocast.curation.filtering import filter_by_route_type
+from retrocast.curation.sampling import sample_stratified_priority
 from retrocast.io import create_manifest, load_benchmark, save_json_gz
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.utils.logging import configure_script_logging, logger
@@ -33,7 +35,7 @@ def create_subset(
     # Create manifest
     manifest_path = out_dir / f"{name}.manifest.json"
     manifest = create_manifest(
-        action="create_subset",
+        action="scripts/paroutes/02-create-subsets",
         sources=source_paths,
         outputs=[(out_path, subset)],
         root_dir=BASE_DIR / "data",
@@ -50,28 +52,26 @@ def create_subset(
 def main():
     configure_script_logging()
     seeds = [
-        # 299792458,
-        # 19910806,
-        # 20260317,
-        # 17760704,
-        # 17890304,
-        # 42,
-        # 20251030,
-        # 662607015,
-        # 20180329,
-        # 20170612,
-        # 20180818,
-        # 20151225,
-        # 19690721,
-        # 20160310,
-        # 19450716,
+        299792458,
+        19910806,
+        20260317,
+        17760704,
+        17890304,
+        42,
+        20251030,
+        662607015,
+        20180329,
+        20170612,
+        20180818,
+        20151225,
+        19690721,
+        20160310,
+        19450716,
     ]
-    seeds = [20251030]
-    for CANONICAL_SEED in seeds:
-        # CANONICAL_SEED = 42
+    for CANONICAL_SEED in tqdm(seeds):
         DEF_DIR = BASE_DIR / "data" / "1-benchmarks" / "definitions"
 
-        # 1. Load Universe
+        # Reference Routes (full paroutes)
         n1_path = DEF_DIR / "paroutes-n1-full.json.gz"
         n5_path = DEF_DIR / "paroutes-n5-full.json.gz"
 
@@ -80,30 +80,21 @@ def main():
             return
 
         n5 = load_benchmark(n5_path)
-        n1 = load_benchmark(n1_path)
-
-        # 2. Prepare Pools
-        # We use n5 as primary, n1 as fallback
-        n5_linear, n1_linear = clean_and_prioritize_pools(
-            filter_by_route_type(n5, "linear"), filter_by_route_type(n1, "linear")
-        )
-
-        n5_conv, n1_conv = clean_and_prioritize_pools(
-            filter_by_route_type(n5, "convergent"), filter_by_route_type(n1, "convergent")
-        )
+        n5_linear = filter_by_route_type(n5, "linear")
+        n5_conv = filter_by_route_type(n5, "convergent")
 
         # 3. Create Stratified Linear
         # 100 routes for lengths 2-7
         linear_counts = {d: 100 for d in range(2, 8)}
 
         targets_linear = sample_stratified_priority(
-            pools=[n5_linear, n1_linear], group_fn=lambda t: t.route_length, counts=linear_counts, seed=CANONICAL_SEED
+            pools=[n5_linear], group_fn=lambda t: t.route_length, counts=linear_counts, seed=CANONICAL_SEED
         )
 
         create_subset(
-            name=f"stratified-linear-600-seed={CANONICAL_SEED}",
+            name=f"ref-lin-600-seed={CANONICAL_SEED}",
             targets=targets_linear,
-            source_paths=[n5_path, n1_path],
+            source_paths=[n5_path],
             stock_name="n5-stock",  # Using n5 stock as standard
             description="Stratified set of 600 linear routes (100 each for lengths 2-7).",
             out_dir=DEF_DIR,
@@ -111,41 +102,104 @@ def main():
         )
 
         # 4. Create Stratified Convergent
-        # 50 routes for lengths 2-6
         convergent_counts = {d: 100 for d in range(2, 6)}
-        convergent_counts[6] = 50
 
         targets_convergent = sample_stratified_priority(
-            pools=[n5_linear, n1_linear],
+            pools=[n5_conv],
             group_fn=lambda t: t.route_length,
             counts=convergent_counts,
             seed=CANONICAL_SEED,
         )
 
         create_subset(
-            name=f"stratified-convergent-450-seed={CANONICAL_SEED}",
+            name=f"ref-cnv-400-seed={CANONICAL_SEED}",
             targets=targets_convergent,
-            source_paths=[n5_path, n1_path],
+            source_paths=[n5_path],
             stock_name="n5-stock",
-            description="Stratified set of 450 convergent routes (100 each for lengths 2-5, 50 for length 6).",
+            description="Stratified set of 400 convergent routes (100 each for lengths 2-5).",
             out_dir=DEF_DIR,
             seed=CANONICAL_SEED,
         )
 
-        # 5. Create Random Legacy Set (from n5 only, to match PaRoutes spirit)
-        n5_pool = list(n5.targets.values())
-        for n in [10, 100, 250, 500, 1000][:1]:
-            targets_random = sample_random(n5_pool, n, seed=CANONICAL_SEED)
+        # n1 = load_benchmark(n1_path)
+        # n5_pool, n1_pool = clean_and_prioritize_pools(list(n5.targets.values()), list(n1.targets.values()))
+        # long_counts = {d: 100 for d in range(8, 11)}
+        # # note - there are much fewer than 100 routes for such lengths, so 100 acts as "take all"
+        # target_long = sample_stratified_priority(
+        #     pools=[n5_pool, n1_pool],
+        #     group_fn=lambda t: t.route_length,
+        #     counts=long_counts,
+        #     seed=CANONICAL_SEED,
+        # )
+        # create_subset(
+        #     name=f"ref-lng-84-seed={CANONICAL_SEED}",
+        #     targets=target_long,
+        #     source_paths=[n5_path, n1_path],
+        #     stock_name="n1-n5-stock",
+        #     description="84 targets with extra long (8-10 steps) ground truth routes.",
+        #     out_dir=DEF_DIR,
+        #     seed=CANONICAL_SEED,
+        # )
 
-            create_subset(
-                name=f"random-n5-{n}-seed={CANONICAL_SEED}",
-                targets=targets_random,
-                source_paths=[n5_path],
-                stock_name="n1-n5-stock",
-                description=f"Random sample of {n} routes from n5 (legacy comparison).",
-                out_dir=DEF_DIR,
-                seed=CANONICAL_SEED,
-            )
+        # # 5. Create Random Legacy Set
+        # n5_pool = list(n5.targets.values())
+        # for n in [100, 250, 500, 1000, 2000]:
+        #     targets_random = sample_random(n5_pool, n, seed=CANONICAL_SEED)
+
+        #     create_subset(
+        #         name=f"ref-rnd-{n}-seed={CANONICAL_SEED}",
+        #         targets=targets_random,
+        #         source_paths=[n5_path],
+        #         stock_name="n5-stock",
+        #         description=f"Random sample of {n} routes from n5 (legacy comparison).",
+        #         out_dir=DEF_DIR,
+        #         seed=CANONICAL_SEED,
+        #     )
+        # ------------ PaRoutes with Buyables Enforced ----------
+        n5_path = DEF_DIR / "paroutes-n5-full-buyables.json.gz"
+
+        if not n5_path.exists():
+            logger.error("Full datasets not found. Run 01-cast-paroutes.py first.")
+            return
+
+        n5 = load_benchmark(n5_path)
+        n5_linear = filter_by_route_type(n5, "linear")
+        n5_conv = filter_by_route_type(n5, "convergent")
+        # 3. Create Stratified Linear
+        linear_counts = {d: 100 for d in range(2, 7)}
+        targets_linear = sample_stratified_priority(
+            pools=[n5_linear], group_fn=lambda t: t.route_length, counts=linear_counts, seed=CANONICAL_SEED
+        )
+
+        create_subset(
+            name=f"mkt-lin-500-seed={CANONICAL_SEED}",
+            targets=targets_linear,
+            source_paths=[n5_path],
+            stock_name="buyables-stock",
+            description="Stratified set of 500 linear routes (100 each for lengths 2-6) that are solvable with buyables stock set.",
+            out_dir=DEF_DIR,
+            seed=CANONICAL_SEED,
+        )
+
+        # 4. Create Stratified Convergent
+        convergent_counts = {d: 40 for d in range(2, 6)}
+
+        targets_convergent = sample_stratified_priority(
+            pools=[n5_conv],
+            group_fn=lambda t: t.route_length,
+            counts=convergent_counts,
+            seed=CANONICAL_SEED,
+        )
+
+        create_subset(
+            name=f"mkt-cnv-160-seed={CANONICAL_SEED}",
+            targets=targets_convergent,
+            source_paths=[n5_path],
+            stock_name="buyables-stock",
+            description="Stratified set of 160 convergent routes (40 each for lengths 2-5) that are solvable with buyables stock set.",
+            out_dir=DEF_DIR,
+            seed=CANONICAL_SEED,
+        )
 
 
 if __name__ == "__main__":

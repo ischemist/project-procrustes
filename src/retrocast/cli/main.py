@@ -116,7 +116,7 @@ def main() -> None:
     create_bm_parser.add_argument("--input", required=True, help="Path to .txt or .csv")
     create_bm_parser.add_argument("--name", required=True, help="Name of the benchmark")
     create_bm_parser.add_argument("--output", required=True, help="Output path (.json.gz)")
-    create_bm_parser.add_argument("--stock-name", help="Associated stock name (optional)")
+    create_bm_parser.add_argument("--stock-name", required=True, help="Associated stock name (optional)")
 
     # --- VERIFY ---
     verify_parser = subparsers.add_parser("verify", help="Verify data integrity and lineage")

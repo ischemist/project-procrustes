@@ -2,7 +2,7 @@
 Create USPTO-190 in Benchmark format:
 
 ```bash
-retrocast create-benchmark --input data/uspto-190.csv --output data/1-benchmarks/definitions/uspto-190 --name "USPTO 190"
+retrocast create-benchmark --input data/uspto-190.csv --output data/1-benchmarks/definitions/uspto-190 --name "USPTO 190" --stock-name "buyables-stock"
 ```
 
 Verify integrity:

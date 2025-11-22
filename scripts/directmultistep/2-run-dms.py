@@ -5,9 +5,9 @@ This script processes targets from a benchmark using DirectMultiStep algorithm
 and saves results in a structured format matching other prediction scripts.
 
 Example usage:
-    uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark random-n5-2-seed=20251030 --model-name "flash" --device cpu --use_fp16
+    uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark uspto-190 --model-name "explorer XL" --device cuda --use_fp16
 
-    uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark random-n5-2-seed=20251030 --model-name "flash" --device cuda --use_fp16
+    uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark uspto-190 --model-name "flash" --device cuda --use_fp16
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
 Results are saved to: data/2-raw/dms-{model_name}/{benchmark_name}/
@@ -170,6 +170,7 @@ if __name__ == "__main__":
     manifest = create_manifest(
         action="scripts/directmultistep/2-run-dms.py",
         sources=[bench_path],
+        root_dir=BASE_DIR / "data",
         outputs=[
             (save_dir / "valid_results.json.gz", valid_results),
             (save_dir / "buyables_results.json.gz", buyables_results),

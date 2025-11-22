@@ -1,11 +1,11 @@
 {
   "schema_version": "1.0",
-  "retrocast_version": "0.3.0.dev16",
-  "created_at": "2025-11-21T16:55:40.993341Z",
+  "retrocast_version": "0.3.0",
+  "created_at": "2025-11-21T20:53:31.117195Z",
   "action": "[cli]create-benchmark",
   "parameters": {
     "name": "USPTO 190",
-    "stock_name": null
+    "stock_name": "buyables-stock"
   },
   "source_files": [
     {
@@ -17,7 +17,7 @@
   "output_files": [
     {
       "path": "1-benchmarks/definitions/uspto-190.json.gz",
-      "file_hash": "494d320f25c2bddc6b16034e268333d0764bcf1a1fa89ccab9033a834302d6fa",
+      "file_hash": "29c6d3abb398121660fcb632eb12cc0474e35a4441f8c6bb6821acf554f8f050",
       "content_hash": "11572cf0e73a44abc1d6f989366f9959888bd439269da16212d385d66bc850a8"
     }
   ],

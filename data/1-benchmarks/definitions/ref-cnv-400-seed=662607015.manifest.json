@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.4.0.dev0",
+  "created_at": "2025-11-22T16:31:22.412887Z",
+  "action": "scripts/paroutes/02-create-subsets",
+  "parameters": {
+    "seed": 662607015,
+    "name": "ref-cnv-400-seed=662607015"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/paroutes-n5-full.json.gz",
+      "file_hash": "85aa5fe67c08651a0eec4ae3ce5c3724553930a956084b0daf618b9a0b4c7800",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/ref-cnv-400-seed=662607015.json.gz",
+      "file_hash": "edffcce79e608c74c44363f0b4ec0150833c2c784f07357d0224c9755ac2b6cc",
+      "content_hash": "23c4644059f5ac0ee3424d4989ebd4efef776e7d0f932a6c4a427ccb28a93382"
+    }
+  ],
+  "statistics": {
+    "n_targets": 400
+  }
+}

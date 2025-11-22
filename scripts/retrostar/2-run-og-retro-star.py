@@ -5,7 +5,7 @@ This script processes targets from a benchmark using Retro* algorithm
 and saves results in a structured format matching other prediction scripts.
 
 Example usage:
-    uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark random-n5-2-seed=20251030
+    uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark uspto-190
     uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz

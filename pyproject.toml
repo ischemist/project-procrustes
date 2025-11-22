@@ -25,8 +25,11 @@ aizyn = [
   "aizynthfinder==4.4.0",
   "numpy<=2.2",  # Numba needs NumPy 2.2 or less. Got NumPy 2.3.
 ]
+cli = [
+  "rich>=14.2.0",
+]
 dms = ["directmultistep"]
-retro-star = ["retro-star>=0.1.0", "numpy", "pandas"]
+retro-star = ["retro-star>=0.1.0", "numpy<2", "pandas<2.2", "torch"]
 synplanner = ["synplanner==1.2.0"]
 syntheseus = [
   "syntheseus[local-retro]>=0.5.0",
@@ -42,9 +45,6 @@ viz = [
   "ischemist>=0.2.0",
   "kaleido>=1.1.0",
   "plotly>=6.3.0",
-]
-cli = [
-    "rich>=14.2.0",
 ]
 
 [dependency-groups]
@@ -133,12 +133,6 @@ conflicts = [
   ]
 ]
 
-[tool.uv.sources]
-dgl = [
-  { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin'" },
-]
-retro_star = { git = "https://github.com/anmorgunov/retro_star", branch = "master" }
-
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
@@ -148,3 +142,12 @@ explicit = true
 name = "pytorch-cu126"
 url = "https://download.pytorch.org/whl/cu126"
 explicit = true
+
+[tool.uv.sources]
+dgl = [
+  { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin'" },
+]
+retro_star = { git = "https://github.com/anmorgunov/retro_star", branch = "master" }
+torch = [
+  { index = "pytorch-cpu", extra = "retro-star" },
+]

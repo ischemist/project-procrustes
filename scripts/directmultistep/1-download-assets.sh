@@ -1,6 +1,6 @@
 #!/bin/bash
 
-mkdir -p data/models/dms/checkpoints
+mkdir -p data/0-assets/model-configs/dms/checkpoints
 
 # Define URLs
 CKPT_URL="https://files.batistalab.com/DirectMultiStep/ckpts"

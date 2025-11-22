@@ -104,7 +104,7 @@ def create_route_comparison_figure(
     Returns:
         Plotly Figure object.
     """
-    fig = make_subplots(rows=5, cols=1, vertical_spacing=0.06)
+    fig = make_subplots(rows=5, cols=1, vertical_spacing=0.03)
     N1_COLOR = "#5e548e"
     N5_COLOR = "#a53860"
 
@@ -210,11 +210,35 @@ def create_route_comparison_figure(
         margin=dict(t=40),
     )
 
-    fig.update_xaxes(title_text="Route Length", row=5, col=1)
-    fig.update_yaxes(title_text="Total Count", range=[0, 5000], row=1, col=1)
-    fig.update_yaxes(title_text="Convergent Count", row=2, col=1)
-    fig.update_yaxes(title_text="Heavy Atom Count", dtick=10, row=3, col=1)
-    fig.update_yaxes(title_text="Molecular Weight (Da)", dtick=100, row=4, col=1)
-    fig.update_yaxes(title_text="Chiral Centers", dtick=1, row=5, col=1)
+    # Set x-axis range to always show route lengths 2-10 on all rows
+    for row in range(1, 6):
+        fig.update_xaxes(title_text="Route Length" if row == 5 else None, range=[1.5, 10.5], row=row, col=1)
+
+    # Set consistent title standoff for y-axis alignment
+    title_standoff = 10
+
+    # Rows 1-2: Bar charts - adjust range to prevent text cutoff
+    max_total = max(max(n1_total_vals, default=0), max(n5_total_vals, default=0))
+    max_conv = max(max(n1_conv_vals, default=0), max(n5_conv_vals, default=0))
+
+    fig.update_yaxes(
+        title_text="Total Count",
+        title_standoff=title_standoff,
+        range=[0, max_total * 1.15],  # Add 15% padding for text labels
+        row=1,
+        col=1,
+    )
+    fig.update_yaxes(
+        title_text="Convergent Count",
+        title_standoff=title_standoff,
+        range=[0, max_conv * 1.15],  # Add 15% padding for text labels
+        row=2,
+        col=1,
+    )
+
+    # Rows 3-5: Violin plots - use consistent standoff
+    fig.update_yaxes(title_text="Heavy Atom Count", title_standoff=title_standoff, dtick=10, row=3, col=1)
+    fig.update_yaxes(title_text="Molecular Weight (Da)", title_standoff=title_standoff, dtick=100, row=4, col=1)
+    fig.update_yaxes(title_text="Chiral Centers", title_standoff=title_standoff, dtick=2, row=5, col=1)
     Styler().apply_style(fig)
     return fig

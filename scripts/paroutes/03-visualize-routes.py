@@ -23,27 +23,28 @@ OUTPUT_DIR = BASE_DIR / "data" / "5-results" / "paroutes"
 
 def main() -> None:
     """Main script execution."""
+    variants = ["", "-buyables"]
+    for var in variants:
+        logger.info("Loading routes...")
+        n1_set = load_benchmark(PROCESSED_DIR / f"paroutes-n1-full{var}.json.gz")
+        n5_set = load_benchmark(PROCESSED_DIR / f"paroutes-n5-full{var}.json.gz")
 
-    logger.info("Loading routes...")
-    n1_set = load_benchmark(PROCESSED_DIR / "paroutes-n1-full.json.gz")
-    n5_set = load_benchmark(PROCESSED_DIR / "paroutes-n5-full.json.gz")
+        n1_routes = {k: v.ground_truth for k, v in n1_set.targets.items()}
+        n5_routes = {k: v.ground_truth for k, v in n5_set.targets.items()}
 
-    n1_routes = {k: v.ground_truth for k, v in n1_set.targets.items()}
-    n5_routes = {k: v.ground_truth for k, v in n5_set.targets.items()}
+        logger.info("Extracting route statistics...")
+        n1_stats = extract_route_stats(n1_routes)
+        n5_stats = extract_route_stats(n5_routes)
+        logger.info(f"n1: {len(n1_stats)} routes, n5: {len(n5_stats)} routes")
 
-    logger.info("Extracting route statistics...")
-    n1_stats = extract_route_stats(n1_routes)
-    n5_stats = extract_route_stats(n5_routes)
-    logger.info(f"n1: {len(n1_stats)} routes, n5: {len(n5_stats)} routes")
+        logger.info("Creating figure...")
+        fig = create_route_comparison_figure(n1_stats, n5_stats)
 
-    logger.info("Creating figure...")
-    fig = create_route_comparison_figure(n1_stats, n5_stats)
-
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    output_file = OUTPUT_DIR / "route-comparison.html"
-    fig.write_html(output_file, include_plotlyjs="cdn", auto_open=True)
-    fig.write_image(output_file.with_suffix(".jpg"), scale=4, width=1200, height=1000)
-    logger.info(f"Saved figure to {output_file.relative_to(BASE_DIR)}")
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        output_file = OUTPUT_DIR / f"route-comparison{var}.html"
+        fig.write_html(output_file, include_plotlyjs="cdn", auto_open=True)
+        fig.write_image(output_file.with_suffix(".jpg"), scale=4, width=1200, height=1000)
+        logger.info(f"Saved figure to {output_file.relative_to(BASE_DIR)}")
 
 
 if __name__ == "__main__":
