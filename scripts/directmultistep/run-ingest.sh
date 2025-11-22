@@ -8,15 +8,16 @@ MODELS=(
 )
 
 BENCHMARKS=(
-    "ref-lin-600"
-    "ref-cnv-400"
-    "mkt-lin-500"
-    "mkt-cnv-160"
-    "random-n5-100"
-    "random-n5-250"
-    "random-n5-500"
-    "random-n5-1000"
-    "random-n5-2000"
+    "ref-lng-84"
+    # "ref-lin-600"
+    # "ref-cnv-400"
+    # "mkt-lin-500"
+    # "mkt-cnv-160"
+    # "random-n5-100"
+    # "random-n5-250"
+    # "random-n5-500"
+    # "random-n5-1000"
+    # "random-n5-2000"
 )
 
 # seeds=(
