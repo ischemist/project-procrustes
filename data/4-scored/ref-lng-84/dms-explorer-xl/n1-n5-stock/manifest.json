@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.3.1",
+  "created_at": "2025-11-22T18:52:20.459561Z",
+  "action": "score_model",
+  "parameters": {
+    "model": "dms-explorer-xl",
+    "benchmark": "ref-lng-84",
+    "stock": "n1-n5-stock"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/ref-lng-84.json.gz",
+      "file_hash": "aff9a74e5a3eeb2f55d03e2918b1241143224c089697ac099f46d31849b28b49",
+      "content_hash": null
+    },
+    {
+      "path": "3-processed/ref-lng-84/dms-explorer-xl/routes.json.gz",
+      "file_hash": "ec8beccaaa146c5b354d4cbd7065bec7167d25892236b81d766a1e3c3d198147",
+      "content_hash": null
+    },
+    {
+      "path": "1-benchmarks/stocks/n1-n5-stock.txt",
+      "file_hash": "d118f880569bb09bac8dbe5bfa59b2fcaefd009878e581975a3df6936116466c",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "4-scored/ref-lng-84/dms-explorer-xl/n1-n5-stock/evaluation.json.gz",
+      "file_hash": "e896f598a525c66a8c28b18c8d0800dff2a49c09c0ddff363942c6bb0fed0244",
+      "content_hash": null
+    }
+  ],
+  "statistics": {
+    "n_targets": 84,
+    "n_solvable": 53
+  }
+}

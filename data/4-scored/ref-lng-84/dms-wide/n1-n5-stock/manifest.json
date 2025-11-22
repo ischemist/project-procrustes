@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.3.1",
+  "created_at": "2025-11-22T18:52:20.421387Z",
+  "action": "score_model",
+  "parameters": {
+    "model": "dms-wide",
+    "benchmark": "ref-lng-84",
+    "stock": "n1-n5-stock"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/ref-lng-84.json.gz",
+      "file_hash": "aff9a74e5a3eeb2f55d03e2918b1241143224c089697ac099f46d31849b28b49",
+      "content_hash": null
+    },
+    {
+      "path": "3-processed/ref-lng-84/dms-wide/routes.json.gz",
+      "file_hash": "b8d786371c9d1bde5cfd89cf0aaee004d4aa21a3cdecd260915add20e3065611",
+      "content_hash": null
+    },
+    {
+      "path": "1-benchmarks/stocks/n1-n5-stock.txt",
+      "file_hash": "d118f880569bb09bac8dbe5bfa59b2fcaefd009878e581975a3df6936116466c",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "4-scored/ref-lng-84/dms-wide/n1-n5-stock/evaluation.json.gz",
+      "file_hash": "dcd704ff79fd432128239174a85a2df0cba7ee065ba8c11888f2dea3564012c2",
+      "content_hash": null
+    }
+  ],
+  "statistics": {
+    "n_targets": 84,
+    "n_solvable": 56
+  }
+}

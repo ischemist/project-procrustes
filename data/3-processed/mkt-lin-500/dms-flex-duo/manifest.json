@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.3.1",
+  "created_at": "2025-11-22T18:25:23.291934Z",
+  "action": "scripts/directmultistep/ingest-dms-legacy",
+  "parameters": {
+    "benchmark": "mkt-lin-500",
+    "model": "dms-flex-duo"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/mkt-lin-500.json.gz",
+      "file_hash": "b83166d1c71b669db9d69a24964ab229fd6ca42cc18c1ec3a61f8736db5ac1e5",
+      "content_hash": null
+    },
+    {
+      "path": "2-raw/dms-flex-duo/n1/n1_correct_paths_NS2n.pkl",
+      "file_hash": "3122bc2eb604e3051265a7942ced294bd4a806a08f7703d2f6696e6ee96355e9",
+      "content_hash": null
+    },
+    {
+      "path": "2-raw/dms-flex-duo/n5/n5_correct_paths_NS2n.pkl",
+      "file_hash": "e68d52b22ad9315e2c5d278b7bc004434366f159df7d1a3d0fe706fac0e54d11",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "3-processed/mkt-lin-500/dms-flex-duo/routes.json.gz",
+      "file_hash": "6368f4944cf0e1c61350f45064b17fb53a6c8a3620c667f2048e9b18ecdb08fc",
+      "content_hash": "13584cc564ad15a1c19c4256ed17000e447838b65dc7c4d583f5e52459bee8b5"
+    }
+  ],
+  "statistics": {
+    "n_targets_found": 476
+  }
+}

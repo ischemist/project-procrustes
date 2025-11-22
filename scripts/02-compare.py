@@ -2,7 +2,7 @@
 Compares multiple scored models on the same benchmark.
 
 Usage:
-    uv run scripts/02-compare.py --benchmark stratified-linear-600 --models dms-flash dms-wide dms-deep dms-flash-20M dms-explorer-xl dms-flex-duo
+    uv run scripts/02-compare.py --benchmark ref-lin-600 --models dms-flash dms-flex-duo dms-wide dms-explorer-xl
 """
 
 import argparse

@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.3.1",
+  "created_at": "2025-11-22T18:30:20.938886Z",
+  "action": "score_model",
+  "parameters": {
+    "model": "dms-wide",
+    "benchmark": "mkt-lin-500",
+    "stock": "buyables-stock"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/mkt-lin-500.json.gz",
+      "file_hash": "b83166d1c71b669db9d69a24964ab229fd6ca42cc18c1ec3a61f8736db5ac1e5",
+      "content_hash": null
+    },
+    {
+      "path": "3-processed/mkt-lin-500/dms-wide/routes.json.gz",
+      "file_hash": "bd925535d802a5e8b83cae63b2690b428f942d8476e2e8dd388e1627e61027fb",
+      "content_hash": null
+    },
+    {
+      "path": "1-benchmarks/stocks/buyables-stock.txt",
+      "file_hash": "c160639793528966ced3f31344d4b4fe480b6c79ecbd6a49bb5f46e8df9d420e",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "4-scored/mkt-lin-500/dms-wide/buyables-stock/evaluation.json.gz",
+      "file_hash": "429c844461fd1a5172eb625e9e56ddd1a391d037efe5dc870b30b02c7813008e",
+      "content_hash": null
+    }
+  ],
+  "statistics": {
+    "n_targets": 500,
+    "n_solvable": 455
+  }
+}

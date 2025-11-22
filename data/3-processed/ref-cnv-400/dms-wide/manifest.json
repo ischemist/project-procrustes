@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.3.1",
+  "created_at": "2025-11-22T18:26:22.705905Z",
+  "action": "scripts/directmultistep/ingest-dms-legacy",
+  "parameters": {
+    "benchmark": "ref-cnv-400",
+    "model": "dms-wide"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/ref-cnv-400.json.gz",
+      "file_hash": "e003bc706609d0d0cb4a2179b094be1777a6e41ae854db8a28db3c45ef000900",
+      "content_hash": null
+    },
+    {
+      "path": "2-raw/dms-wide/n1/n1_correct_paths_NS2n.pkl",
+      "file_hash": "645025aaa238f2acdc50f24aec7cbb088092db18370bca5a0dc638d80ae7b837",
+      "content_hash": null
+    },
+    {
+      "path": "2-raw/dms-wide/n5/n5_correct_paths_NS2n.pkl",
+      "file_hash": "68c7321c7c670650333a734b8800d93ac8be329c8f172341de9abf624cfe23b0",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "3-processed/ref-cnv-400/dms-wide/routes.json.gz",
+      "file_hash": "56a04b9ec4f02f93e2c7e80f69064c682b7732e252846236a8fe17e6ca16bcc7",
+      "content_hash": "ca9c4b0b0da3d73db5df8fb8547c46f9fd8b8cbc7a6845d78f56298b1c2145fd"
+    }
+  ],
+  "statistics": {
+    "n_targets_found": 281
+  }
+}
