@@ -10,3 +10,4 @@ filter:
 stock:
   buyables-stock: data/1-benchmarks/stocks/buyables-stock.hdf5
   n1-n5-stock: data/1-benchmarks/stocks/n1-n5-stock.hdf5
+  n5-stock: data/1-benchmarks/stocks/n5-stock.hdf5
