@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.3.1",
+  "created_at": "2025-11-22T18:24:00.610952Z",
+  "action": "scripts/directmultistep/ingest-dms-legacy",
+  "parameters": {
+    "benchmark": "ref-lin-600",
+    "model": "dms-flash"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/ref-lin-600.json.gz",
+      "file_hash": "efa4f819b57eef41b100509249abd87f041df6c5293908c5198e16f9a10e51c9",
+      "content_hash": null
+    },
+    {
+      "path": "2-raw/dms-flash/n1/n1_correct_paths_NS2n.pkl",
+      "file_hash": "e6d444599a65c342e65355cba7c5319210f6110f9a1decf7165fe4c9d64328d9",
+      "content_hash": null
+    },
+    {
+      "path": "2-raw/dms-flash/n5/n5_correct_paths_NS2n.pkl",
+      "file_hash": "0774552f3aa3245257dc3b5089c3ed0fd499bfccff81316edf1c79429215fafa",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "3-processed/ref-lin-600/dms-flash/routes.json.gz",
+      "file_hash": "e4790a1f16186a83c076f2b8c7c04fd28f4902d342ca148affd3ef308def0d3e",
+      "content_hash": "1039f954778c7459fe92bcd12e521b5dfe03e4d0fc4969fec2e4ecb134bdc1b5"
+    }
+  ],
+  "statistics": {
+    "n_targets_found": 520
+  }
+}

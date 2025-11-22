@@ -26,6 +26,19 @@ retrocast verify --target data/1-benchmarks/definitions/paroutes-n1-full-buyable
 retrocast verify --target data/1-benchmarks/definitions/paroutes-n5-full-buyables.manifest.json
 ```
 
+### Creating standard comparisons
+
+```bash
+uv run scripts/02-compare.py --benchmark ref-lin-600 --models dms-flash dms-flex-duo dms-wide dms-explorer-xl
+
+uv run scripts/03-compare-paired.py --benchmark ref-lin-600 --baseline dms-flash --challengers dms-flex-duo
+
+uv run scripts/04-rank.py --benchmark ref-lin-600 --models dms-flash dms-flex-duo dms-wide dms-explorer-xl
+
+uv run scripts/05-tournament.py --benchmark ref-lin-600 --models dms-flash dms-flex-duo dms-wide dms-explorer-xl
+```
+
+
 ### Testing seed stability
 
 ```bash

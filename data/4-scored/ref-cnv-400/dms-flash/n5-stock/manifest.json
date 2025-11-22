@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.3.1",
+  "created_at": "2025-11-22T18:30:17.502934Z",
+  "action": "score_model",
+  "parameters": {
+    "model": "dms-flash",
+    "benchmark": "ref-cnv-400",
+    "stock": "n5-stock"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/ref-cnv-400.json.gz",
+      "file_hash": "e003bc706609d0d0cb4a2179b094be1777a6e41ae854db8a28db3c45ef000900",
+      "content_hash": null
+    },
+    {
+      "path": "3-processed/ref-cnv-400/dms-flash/routes.json.gz",
+      "file_hash": "f5c525136476b452b2593399fce14a567e4c1e3a99b835a9c7cabbd5656c20a3",
+      "content_hash": null
+    },
+    {
+      "path": "1-benchmarks/stocks/n5-stock.txt",
+      "file_hash": "199ec2d9fad0638c3ae53f2ea091dcd6bf9207a938b12ae1aa9429c37dd097af",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "4-scored/ref-cnv-400/dms-flash/n5-stock/evaluation.json.gz",
+      "file_hash": "75c2bcf9c79d8827245bd061604cb2460ccd0b4998903c5d99a026f7a0da0b5f",
+      "content_hash": null
+    }
+  ],
+  "statistics": {
+    "n_targets": 400,
+    "n_solvable": 304
+  }
+}

@@ -27,6 +27,9 @@ models:
   dms-flash:
     adapter: dms
     raw_results_filename: valid_results.json.gz
+  dms-flex-duo:
+    adapter: dms
+    raw_results_filename: valid_results.json.gz
   dms-wide:
     adapter: dms
     raw_results_filename: valid_results.json.gz
