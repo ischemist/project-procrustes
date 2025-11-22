@@ -3,11 +3,11 @@
 set -e
 
 SERVERS=(
-    # "ubuntu@150.136.221.12"
-    # "ubuntu@150.136.221.157"
-    # "ubuntu@129.213.30.97"
-    "aws-spot-1"
-    "aws-spot-2"
+    "ubuntu@129.213.94.122"
+    "ubuntu@193.122.153.180"
+    "ubuntu@129.213.82.162"
+    # "aws-spot-1"
+    # "aws-spot-2"
     # "aws-spot-3"
 )
 
@@ -15,9 +15,9 @@ FILES=(
     "uspto-190.json.gz"
 )
 STOCK_FILES=(
-    "buyables-stock.hdf5"
+    # "buyables-stock.hdf5"
     "buyables-stock.txt"
-    "n1-n5-stock.hdf5"
+    # "n1-n5-stock.hdf5"
     "n1-n5-stock.txt"
 )
 

@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.3.1",
+  "created_at": "2025-11-22T21:12:37.579992Z",
+  "action": "ingest",
+  "parameters": {
+    "model": "dms-explorer-xl",
+    "benchmark": "uspto-190",
+    "sampling": null,
+    "k": null
+  },
+  "source_files": [
+    {
+      "path": "2-raw/dms-explorer-xl/uspto-190/valid_results.json.gz",
+      "file_hash": "c1f3957e0f842c1a27c96254a8a57d2176186c5a61a4a1ba99601a9076231c0c",
+      "content_hash": null
+    },
+    {
+      "path": "1-benchmarks/definitions/uspto-190.json.gz",
+      "file_hash": "99ff8ec8e007a04179932d0d2275db2a292878d0ffc91365dc54213a238af4df",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "3-processed/USPTO 190/dms-explorer-xl/routes.json.gz",
+      "file_hash": "4fb6d0936c74c842ec46dfbaaab20570877c98377288daf83a917dce06be4d0c",
+      "content_hash": "8763371edf3ccbd348cd63f84f480ec8f8d2794fd36d5e38dc19b409a07e3520"
+    }
+  ],
+  "statistics": {
+    "total_routes_in_raw_files": 190,
+    "total_routes_failed_or_duplicate": 7,
+    "final_unique_routes_saved": 5934,
+    "num_targets_with_at_least_one_route": 189,
+    "duplication_factor": 1.0,
+    "min_routes_per_target": 4,
+    "max_routes_per_target": 48,
+    "avg_routes_per_target": 31.4,
+    "median_routes_per_target": 32
+  }
+}
