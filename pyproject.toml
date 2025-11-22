@@ -157,6 +157,7 @@ explicit = true
 [tool.uv.sources]
 dgl = [
   { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin'" },
+  { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
 ]
 retro_star = { git = "https://github.com/anmorgunov/retro_star", branch = "master" }
 torch = [

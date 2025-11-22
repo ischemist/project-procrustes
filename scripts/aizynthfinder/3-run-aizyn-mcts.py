@@ -109,6 +109,7 @@ if __name__ == "__main__":
     manifest = create_manifest(
         action="scripts/aizynthfinder/3-run-aizyn-mcts.py",
         sources=[bench_path, config_path],
+        root_dir=BASE_DIR / "data",
         outputs=[(save_dir / "results.json.gz", results)],
         statistics=summary,
     )

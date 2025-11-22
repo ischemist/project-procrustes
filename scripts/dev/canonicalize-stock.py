@@ -3,7 +3,7 @@ Check that the canonicalization of the buyables stock is correct.
 
 Usage:
 
-uv run scripts/dev/canonicalize-stock.py -i retrocast-bb-stock-v3 -o retrocast-bb-stock-v3-canon
+uv run scripts/dev/canonicalize-stock.py -i buyables-stock -o buyables-stock-canon
 
 """
 
@@ -15,14 +15,14 @@ from tqdm import tqdm
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import InvalidSmilesError
 
-data_path = Path(__name__).resolve().parent / "data" / "models" / "assets"
+data_path = Path(__name__).resolve().parent / "data" / "1-benchmarks" / "stocks"
 argparser = argparse.ArgumentParser()
 argparser.add_argument("-i", "--input", help="Input file name")
 argparser.add_argument("-o", "--output", help="Output file name")
 args = argparser.parse_args()
 
-stock_fname = args.input + ".csv"
-save_fname = args.output + ".csv"
+stock_fname = args.input + ".txt"
+save_fname = args.output + ".txt"
 
 stock_lines = (data_path / stock_fname).read_text().splitlines()
 
@@ -31,7 +31,7 @@ canon_smi = set()
 invalid = set()
 pbar = tqdm(stock_lines, unit="smiles")
 for line in pbar:
-    smiles = line.split(",")[1]
+    smiles = line.strip()
     old_smi.add(smiles)
     try:
         canon_smi.add(canonicalize_smiles(smiles))

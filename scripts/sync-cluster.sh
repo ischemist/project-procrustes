@@ -8,7 +8,8 @@ SERVERS=(
     # "ubuntu@129.213.82.162"
     # "aws-spot-1"
     # "aws-spot-2"
-    "aws-spot-3"
+    # "aws-spot-3"
+    "aws-spot-4"
 )
 
 FILES=(
@@ -17,6 +18,7 @@ FILES=(
 STOCK_FILES=(
     # "buyables-stock.hdf5"
     "buyables-stock.txt"
+    "buyables-stock-canon.txt"
     # "n5-stock.hdf5"
     # "n1-n5-stock.hdf5"
     "n1-n5-stock.txt"
