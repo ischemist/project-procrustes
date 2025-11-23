@@ -41,16 +41,6 @@ syntheseus = [
   "faiss-cpu",
   "torch-scatter"
 ]
-syntheseus-linux = [
-  "syntheseus[local-retro]>=0.5.0",
-  "numpy<2",
-  "pandas<2.2",
-  "dgl",
-  "torch<=2.1",
-  "torchdata<=0.7.0",
-  "faiss-cpu",
-  "torch-scatter"
-]
 viz = [
   "ischemist>=0.2.0",
   "kaleido>=1.1.0",
@@ -140,7 +130,6 @@ conflicts = [
     { extra = "retro-star" },
     { extra = "synplanner" },
     { extra = "syntheseus" },
-    { extra = "syntheseus-linux" },
   ]
 ]
 

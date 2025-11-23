@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.3.0.dev16",
+  "created_at": "2025-11-23T03:00:37.003721Z",
+  "action": "score_model",
+  "parameters": {
+    "model": "aizynthfinder-retro-star",
+    "benchmark": "uspto-190",
+    "stock": "buyables-stock"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/uspto-190.json.gz",
+      "file_hash": "9b14f315c5469f7690d84fcf955558f19079674e88745ee90f72dc76bde5fb77",
+      "content_hash": null
+    },
+    {
+      "path": "3-processed/uspto-190/aizynthfinder-retro-star/routes.json.gz",
+      "file_hash": "f16d5af4a8e666e0e14378a26555311536a09697e421b74c62da5eea4e51408f",
+      "content_hash": null
+    },
+    {
+      "path": "1-benchmarks/stocks/buyables-stock.txt",
+      "file_hash": "c160639793528966ced3f31344d4b4fe480b6c79ecbd6a49bb5f46e8df9d420e",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "4-scored/uspto-190/aizynthfinder-retro-star/buyables-stock/evaluation.json.gz",
+      "file_hash": "ac9d8c00749be4dc5c54a8771da191b7ea390a590e04e5ec8642a4dad91522f9",
+      "content_hash": null
+    }
+  ],
+  "statistics": {
+    "n_targets": 190,
+    "n_solvable": 52
+  }
+}

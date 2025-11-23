@@ -2,7 +2,9 @@
 Compares multiple scored models on the same benchmark.
 
 Usage:
-    uv run scripts/02-compare.py --benchmark ref-lin-600 --models dms-flash dms-flex-duo dms-wide dms-explorer-xl
+    uv run scripts/02-compare.py --benchmark uspto-190 --models dms-explorer-xl dms-flash aizynthfinder-mcts aizynthfinder-retro-star retro-star retro-star-high syntheseus-retro0-local-retro --stock buyables-stock
+
+    uv run scripts/02-compare.py --benchmark mkt-cnv-160 --models dms-explorer-xl aizynthfinder-mcts aizynthfinder-retro-star retro-star retro-star-high syntheseus-retro0-local-retro --stock buyables-stock
 """
 
 import argparse
@@ -25,7 +27,7 @@ def main():
     logger.setLevel(logging.INFO)
     parser = argparse.ArgumentParser(description="Generate benchmark comparison plots.")
     parser.add_argument("--benchmark", required=True, help="Name of the benchmark set")
-    parser.add_argument("--stock", default="n5-stock", help="Stock definition used")
+    parser.add_argument("--stock", required=True, help="Stock definition used")
     parser.add_argument("--models", nargs="+", required=True, help="List of models to compare")
     parser.add_argument(
         "--top-k",

@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.3.0.dev16",
+  "created_at": "2025-11-23T01:36:25.028166Z",
+  "action": "ingest",
+  "parameters": {
+    "model": "aizynthfinder-mcts",
+    "benchmark": "mkt-lin-500",
+    "sampling": null,
+    "k": null
+  },
+  "source_files": [
+    {
+      "path": "2-raw/aizynthfinder-mcts/mkt-lin-500/results.json.gz",
+      "file_hash": "d3d6ef4feb1ba6e1c775fbba5052f86c360983cf6eb4bef99901c8306046a2e8",
+      "content_hash": null
+    },
+    {
+      "path": "1-benchmarks/definitions/mkt-lin-500.json.gz",
+      "file_hash": "b83166d1c71b669db9d69a24964ab229fd6ca42cc18c1ec3a61f8736db5ac1e5",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "3-processed/mkt-lin-500/aizynthfinder-mcts/routes.json.gz",
+      "file_hash": "c40d70e32b30b99cc558497c3516c44005c4a0c7fd8767a08b3e5eab5d0555d8",
+      "content_hash": "94f64cbf08b6e59ae04ce5bf8da87c62caf712c9ab703d42493ac20ed1e0f49e"
+    }
+  ],
+  "statistics": {
+    "total_routes_in_raw_files": 500,
+    "total_routes_failed_or_duplicate": 34,
+    "final_unique_routes_saved": 5795,
+    "num_targets_with_at_least_one_route": 500,
+    "duplication_factor": 1.01,
+    "min_routes_per_target": 1,
+    "max_routes_per_target": 25,
+    "avg_routes_per_target": 11.59,
+    "median_routes_per_target": 10.0
+  }
+}
