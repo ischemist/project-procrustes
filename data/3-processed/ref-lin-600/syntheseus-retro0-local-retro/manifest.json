@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.4.0.dev8",
+  "created_at": "2025-11-23T17:30:44.887820Z",
+  "action": "ingest",
+  "parameters": {
+    "model": "syntheseus-retro0-local-retro",
+    "benchmark": "ref-lin-600",
+    "sampling": null,
+    "k": null
+  },
+  "source_files": [
+    {
+      "path": "2-raw/syntheseus-retro0-local-retro/ref-lin-600/results.json.gz",
+      "file_hash": "26b189860a8c960be09e82f5d971aa269993cd4b18238d6fb8cf4979d8664b4d",
+      "content_hash": null
+    },
+    {
+      "path": "1-benchmarks/definitions/ref-lin-600.json.gz",
+      "file_hash": "efa4f819b57eef41b100509249abd87f041df6c5293908c5198e16f9a10e51c9",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "3-processed/ref-lin-600/syntheseus-retro0-local-retro/routes.json.gz",
+      "file_hash": "16c6b50257dc047b87790165b9035d0c3fce883d169ba93c3592291be3f0c932",
+      "content_hash": "ee6dc80a603d644877662f9aed2e8d458165ed8cf212053a2eaaebabc72e87c2"
+    }
+  ],
+  "statistics": {
+    "total_routes_in_raw_files": 600,
+    "total_routes_failed_or_duplicate": 93,
+    "final_unique_routes_saved": 3548,
+    "num_targets_with_at_least_one_route": 403,
+    "duplication_factor": 1.03,
+    "min_routes_per_target": 1,
+    "max_routes_per_target": 10,
+    "avg_routes_per_target": 8.8,
+    "median_routes_per_target": 10
+  }
+}
