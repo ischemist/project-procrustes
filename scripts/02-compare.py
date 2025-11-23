@@ -2,9 +2,17 @@
 Compares multiple scored models on the same benchmark.
 
 Usage:
-    uv run scripts/02-compare.py --benchmark uspto-190 --models dms-explorer-xl dms-flash aizynthfinder-mcts aizynthfinder-retro-star retro-star retro-star-high syntheseus-retro0-local-retro --stock buyables-stock
+    uv run scripts/02-compare.py --benchmark uspto-190 --models dms-explorer-xl dms-flash dms-wide aizynthfinder-mcts aizynthfinder-retro-star retro-star retro-star-high syntheseus-retro0-local-retro --stock buyables-stock
 
     uv run scripts/02-compare.py --benchmark mkt-cnv-160 --models dms-explorer-xl aizynthfinder-mcts aizynthfinder-retro-star retro-star retro-star-high syntheseus-retro0-local-retro --stock buyables-stock
+
+    uv run scripts/02-compare.py --benchmark mkt-lin-500 --models dms-explorer-xl aizynthfinder-mcts aizynthfinder-retro-star retro-star retro-star-high syntheseus-retro0-local-retro --stock buyables-stock
+
+    uv run scripts/02-compare.py --benchmark ref-lng-84 --models dms-explorer-xl aizynthfinder-mcts aizynthfinder-retro-star retro-star retro-star-high syntheseus-retro0-local-retro --stock n1-n5-stock
+
+    uv run scripts/02-compare.py --benchmark ref-lin-600 --models dms-explorer-xl aizynthfinder-mcts aizynthfinder-retro-star retro-star retro-star-high syntheseus-retro0-local-retro --stock n5-stock
+
+    uv run scripts/02-compare.py --benchmark ref-cnv-400 --models dms-explorer-xl aizynthfinder-mcts aizynthfinder-retro-star retro-star retro-star-high syntheseus-retro0-local-retro --stock n5-stock
 """
 
 import argparse

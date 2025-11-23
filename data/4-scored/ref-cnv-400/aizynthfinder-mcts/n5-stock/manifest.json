@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.4.0.dev8",
+  "created_at": "2025-11-23T15:35:22.695156Z",
+  "action": "score_model",
+  "parameters": {
+    "model": "aizynthfinder-mcts",
+    "benchmark": "ref-cnv-400",
+    "stock": "n5-stock"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/ref-cnv-400.json.gz",
+      "file_hash": "e003bc706609d0d0cb4a2179b094be1777a6e41ae854db8a28db3c45ef000900",
+      "content_hash": null
+    },
+    {
+      "path": "3-processed/ref-cnv-400/aizynthfinder-mcts/routes.json.gz",
+      "file_hash": "1de4e8cecdc1e192453d822ffe675fc846b583149cd87f4dc9cafe677675aff4",
+      "content_hash": null
+    },
+    {
+      "path": "1-benchmarks/stocks/n5-stock.txt",
+      "file_hash": "199ec2d9fad0638c3ae53f2ea091dcd6bf9207a938b12ae1aa9429c37dd097af",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "4-scored/ref-cnv-400/aizynthfinder-mcts/n5-stock/evaluation.json.gz",
+      "file_hash": "adbaffa64dca6b4940a9411418b4d54a2fb4411d20205a6ee344e7aa05bc4827",
+      "content_hash": null
+    }
+  ],
+  "statistics": {
+    "n_targets": 400,
+    "n_solvable": 309
+  }
+}
