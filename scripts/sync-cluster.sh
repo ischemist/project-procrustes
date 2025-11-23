@@ -6,8 +6,8 @@ SERVERS=(
     # "ubuntu@129.213.94.122"
     # "ubuntu@193.122.153.180"
     # "ubuntu@129.213.82.162"
-    # "aws-spot-1"
-    "aws-spot-2"
+    "aws-spot-1"
+    # "aws-spot-2"
     # "aws-spot-3"
     # "aws-spot-4"
 )
@@ -16,9 +16,9 @@ FILES=(
     "uspto-190.json.gz"
 )
 STOCK_FILES=(
-    # "buyables-stock.hdf5"
+    "buyables-stock.hdf5"
     "n5-stock.hdf5"
-    # "n1-n5-stock.hdf5"
+    "n1-n5-stock.hdf5"
     # "buyables-stock-canon.txt"
     # "buyables-stock.txt"
     # "n1-n5-stock.txt"

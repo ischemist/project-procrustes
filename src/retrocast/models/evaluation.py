@@ -43,6 +43,7 @@ class EvaluationResults(BaseModel):
     model_name: str
     benchmark_name: str
     stock_name: str
+    has_ground_truth: bool  # Whether the benchmark has ground truth routes (not whether model found them)
 
     # Map target_id -> Evaluation
     results: dict[str, TargetEvaluation] = Field(default_factory=dict)

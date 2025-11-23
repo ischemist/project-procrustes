@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "retrocast_version": "0.4.0.dev8",
-  "created_at": "2025-11-23T17:30:12.526429Z",
+  "created_at": "2025-11-23T17:48:20.609338Z",
   "action": "score_model",
   "parameters": {
     "model": "syntheseus-retro0-local-retro",
@@ -28,7 +28,7 @@
   "output_files": [
     {
       "path": "4-scored/ref-lng-84/syntheseus-retro0-local-retro/n1-n5-stock/evaluation.json.gz",
-      "file_hash": "2c1f7f320bd26d26ba0b50397a2a556544549e824d2551e932366bf56ce4e27b",
+      "file_hash": "6d1de22ddbcf1a9bf76c3f2a48a0c09e16ad5bcead6d4f9f9326bba94f30758f",
       "content_hash": null
     }
   ],

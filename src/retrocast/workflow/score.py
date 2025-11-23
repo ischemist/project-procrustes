@@ -15,7 +15,12 @@ def score_model(
 ) -> EvaluationResults:
     logger.info(f"Scoring {model_name} on {benchmark.name}...")
 
-    eval_results = EvaluationResults(model_name=model_name, benchmark_name=benchmark.name, stock_name=stock_name)
+    # Check if benchmark has any ground truth routes
+    has_ground_truth = any(target.ground_truth is not None for target in benchmark.targets.values())
+
+    eval_results = EvaluationResults(
+        model_name=model_name, benchmark_name=benchmark.name, stock_name=stock_name, has_ground_truth=has_ground_truth
+    )
 
     # Iterate Targets (The Denominator)
     for target_id, target in benchmark.targets.items():

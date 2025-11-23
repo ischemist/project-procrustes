@@ -32,18 +32,18 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
     )
 
     # --- 3. Top-K Accuracy ---
-    # Only calculate this if we actually have ground truth ranks.
-    # If this is a pure prediction benchmark (no GT), gt_rank will be None for all.
-    has_gt = any(t.gt_rank is not None for t in targets)
+    # Only calculate this if the benchmark actually has ground truth routes.
+    # If this is a pure prediction benchmark (no GT), we skip Top-K metrics.
+    # Note: We check if the *benchmark* has GT, not if the *model* found any GT matches.
     stat_topk: dict[int, StratifiedMetric] = {}
-    if has_gt:
+    if eval_results.has_ground_truth:
         # calculating many K is cheap, we just filter what we display later
         for k in [1, 2, 3, 4, 5, 10, 20, 50, 100]:
             stat_topk[k] = compute_metric_with_ci(
                 targets, make_get_top_k(k), f"Top-{k}", group_by=group_fn, n_boot=n_boot, seed=seed
             )
     else:
-        logger.info("No ground truth ranks found. Skipping Top-K metrics.")
+        logger.info("Benchmark has no ground truth routes. Skipping Top-K metrics.")
 
     return ModelStatistics(
         model_name=eval_results.model_name,
