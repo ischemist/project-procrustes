@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.4.0.dev8",
+  "created_at": "2025-11-24T02:17:12.168716Z",
+  "action": "score_model",
+  "parameters": {
+    "model": "askcos",
+    "benchmark": "mkt-cnv-160",
+    "stock": "buyables-stock"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/mkt-cnv-160.json.gz",
+      "file_hash": "11d9df88045c97289bab89a2bec70f72f579247a1f52d900d64b0cfa142194e9",
+      "content_hash": null
+    },
+    {
+      "path": "3-processed/mkt-cnv-160/askcos/routes.json.gz",
+      "file_hash": "d16630d8705f5887aac4ecd8e8ba84cc1eb89472f446a13d57e7f1daab7aa9ae",
+      "content_hash": null
+    },
+    {
+      "path": "1-benchmarks/stocks/buyables-stock.txt",
+      "file_hash": "c160639793528966ced3f31344d4b4fe480b6c79ecbd6a49bb5f46e8df9d420e",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "4-scored/mkt-cnv-160/askcos/buyables-stock/evaluation.json.gz",
+      "file_hash": "220c4b08a15e34f268f16d708fb6c9a59b9e2c86fa4f59ed8675abc9f2a3528e",
+      "content_hash": null
+    }
+  ],
+  "statistics": {
+    "n_targets": 160,
+    "n_solvable": 145
+  }
+}

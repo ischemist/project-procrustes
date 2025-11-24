@@ -2,7 +2,7 @@
 Compares multiple scored models on the same benchmark.
 
 Usage:
-    uv run scripts/02-compare.py --benchmark uspto-190 --models dms-explorer-xl dms-flash dms-wide aizynthfinder-mcts aizynthfinder-retro-star retro-star retro-star-high syntheseus-retro0-local-retro --stock buyables-stock
+    uv run scripts/02-compare.py --benchmark uspto-190 --models dms-explorer-xl dms-flash dms-wide aizynthfinder-mcts aizynthfinder-retro-star retro-star retro-star-high syntheseus-retro0-local-retro askcos --stock buyables-stock
 
     uv run scripts/02-compare.py --benchmark mkt-cnv-160 --models dms-explorer-xl aizynthfinder-mcts aizynthfinder-retro-star retro-star retro-star-high syntheseus-retro0-local-retro --stock buyables-stock
 

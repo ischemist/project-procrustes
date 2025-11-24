@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.4.0.dev8",
+  "created_at": "2025-11-24T00:49:48.063141Z",
+  "action": "score_model",
+  "parameters": {
+    "model": "askcos",
+    "benchmark": "uspto-190",
+    "stock": "buyables-stock"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/uspto-190.json.gz",
+      "file_hash": "9b14f315c5469f7690d84fcf955558f19079674e88745ee90f72dc76bde5fb77",
+      "content_hash": null
+    },
+    {
+      "path": "3-processed/uspto-190/askcos/routes.json.gz",
+      "file_hash": "bc4063225686ea4116bf322fa89d51113ab58d654627b91ae967c7d51eed1080",
+      "content_hash": null
+    },
+    {
+      "path": "1-benchmarks/stocks/buyables-stock.txt",
+      "file_hash": "c160639793528966ced3f31344d4b4fe480b6c79ecbd6a49bb5f46e8df9d420e",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "4-scored/uspto-190/askcos/buyables-stock/evaluation.json.gz",
+      "file_hash": "8959a368e38947485afb5a333ee8057e1002e2e700f8e6c42905d680dbaecd84",
+      "content_hash": null
+    }
+  ],
+  "statistics": {
+    "n_targets": 190,
+    "n_solvable": 31
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.4.0.dev8",
+  "created_at": "2025-11-24T00:49:43.530250Z",
+  "action": "ingest",
+  "parameters": {
+    "model": "askcos",
+    "benchmark": "uspto-190",
+    "sampling": null,
+    "k": null
+  },
+  "source_files": [
+    {
+      "path": "2-raw/askcos/uspto-190/results.json.gz",
+      "file_hash": "300cab3b2b1c26d902d36d703ff021ef70b70e617d24196ad15814ffa8f6a329",
+      "content_hash": null
+    },
+    {
+      "path": "1-benchmarks/definitions/uspto-190.json.gz",
+      "file_hash": "9b14f315c5469f7690d84fcf955558f19079674e88745ee90f72dc76bde5fb77",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "3-processed/uspto-190/askcos/routes.json.gz",
+      "file_hash": "bc4063225686ea4116bf322fa89d51113ab58d654627b91ae967c7d51eed1080",
+      "content_hash": null
+    }
+  ],
+  "statistics": {
+    "total_routes_in_raw_files": 190,
+    "total_routes_failed_or_duplicate": 188,
+    "final_unique_routes_saved": 1925,
+    "num_targets_with_at_least_one_route": 33,
+    "duplication_factor": 1.1,
+    "min_routes_per_target": 2,
+    "max_routes_per_target": 200,
+    "avg_routes_per_target": 58.33,
+    "median_routes_per_target": 39
+  }
+}
