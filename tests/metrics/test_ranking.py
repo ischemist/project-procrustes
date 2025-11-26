@@ -103,18 +103,21 @@ def three_models_perfect_data():
             model_name="model_a",
             benchmark_name="test_bench",
             stock_name="test_stock",
+            has_ground_truth=True,
             results=results_a,
         ),
         "model_b": EvaluationResults(
             model_name="model_b",
             benchmark_name="test_bench",
             stock_name="test_stock",
+            has_ground_truth=True,
             results=results_b,
         ),
         "model_c": EvaluationResults(
             model_name="model_c",
             benchmark_name="test_bench",
             stock_name="test_stock",
+            has_ground_truth=True,
             results=results_c,
         ),
     }
@@ -138,12 +141,14 @@ def two_models_identical():
             model_name="model_x",
             benchmark_name="test",
             stock_name="test",
+            has_ground_truth=True,
             results=results_shared.copy(),
         ),
         "model_y": EvaluationResults(
             model_name="model_y",
             benchmark_name="test",
             stock_name="test",
+            has_ground_truth=True,
             results=results_shared.copy(),
         ),
     }
@@ -163,6 +168,7 @@ class TestComputeProbabilisticRanking:
                 model_name="model_only",
                 benchmark_name="test",
                 stock_name="test",
+                has_ground_truth=True,
                 results={
                     "t1": _make_target_evaluation("t1", solvable=True, gt_rank=1),
                     "t2": _make_target_evaluation("t2", solvable=True, gt_rank=1),
@@ -434,12 +440,14 @@ class TestRankingIntegration:
                 model_name="a",
                 benchmark_name="test",
                 stock_name="test",
+                has_ground_truth=True,
                 results=results_a,
             ),
             "b": EvaluationResults(
                 model_name="b",
                 benchmark_name="test",
                 stock_name="test",
+                has_ground_truth=True,
                 results=results_b,
             ),
         }

@@ -623,6 +623,7 @@ class TestBenchmarkResultsLoader:
             model_name=model_name,
             benchmark_name=benchmark,
             stock_name=stock,
+            has_ground_truth=True,
             results={"test-001": target_eval},
         )
 
