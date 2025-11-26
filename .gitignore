@@ -61,6 +61,7 @@ scripts/dms/private/
 # Testing
 .coverage*
 archive
+archive-v2
 collectors/
 
 tests/testing_data/**/results.json
@@ -72,11 +73,8 @@ data/seed-stability-archive
 !data/1-benchmarks/definitions/*.json.gz
 data/1-benchmarks/**/*.hdf5
 data/2-raw
-!data/3-processed/**/*.json.gz
 data/3-processed/random-n5-*
-!data/4-scored/**/*.json.gz
 data/4-scored/random-n5-*
-!data/5-results/**/*.json.gz
 data/5-results/random-n5-*
 data/5-results/**/*.html
 data/5-results/**/*.jpg

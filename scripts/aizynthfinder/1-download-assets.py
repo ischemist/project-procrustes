@@ -38,6 +38,10 @@ FILES_TO_DOWNLOAD = {
         "filename": "uspto_filter_model.onnx",
         "url": "https://zenodo.org/record/7797465/files/uspto_filter_model.onnx",
     },
+    "retrostar_value_model": {
+        "filename": "retrostar_value_model.pickle",
+        "url": "https://github.com/MolecularAI/PaRoutes/blob/main/publication/retrostar_value_model.pickle?raw=true",
+    },
 }
 
 YAML_TEMPLATE = """expansion:

@@ -29,7 +29,7 @@ cli = [
   "rich>=14.2.0",
 ]
 dms = ["directmultistep"]
-retro-star = ["retro-star>=0.1.0", "numpy<2", "pandas<2.2", "torch"]
+retro-star = ["retro-star>=0.1.0", "torch"]
 synplanner = ["synplanner==1.2.0"]
 syntheseus = [
   "syntheseus[local-retro]>=0.5.0",
@@ -151,3 +151,6 @@ retro_star = { git = "https://github.com/anmorgunov/retro_star", branch = "maste
 torch = [
   { index = "pytorch-cpu", extra = "retro-star" },
 ]
+
+[tool.uv.extra-build-dependencies]
+torch-scatter = ["torch"]

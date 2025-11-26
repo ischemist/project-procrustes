@@ -5,7 +5,7 @@ This script processes targets from a benchmark using AiZynthFinder's Retro* algo
 and saves results in a structured format similar to the MCTS predictions script.
 
 Example usage:
-    uv run --extra aizyn scripts/aizynthfinder/4-run-aizyn-retro-star.py --benchmark uspto-190
+    uv run --extra aizyn scripts/aizynthfinder/4-run-aizyn-retro-star.py --benchmark ref-cnv-400
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
 Results are saved to: data/2-raw/aizynthfinder-retro-star/{benchmark_name}/
@@ -86,6 +86,7 @@ if __name__ == "__main__":
     manifest = create_manifest(
         action="scripts/aizynthfinder/4-run-aizyn-retro-star.py",
         sources=[bench_path, config_path],
+        root_dir=BASE_DIR / "data",
         outputs=[(save_dir / "results.json.gz", results)],
         statistics=summary,
     )

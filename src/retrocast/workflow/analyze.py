@@ -1,8 +1,8 @@
 import logging
 
 from retrocast.metrics.bootstrap import compute_metric_with_ci, get_is_solvable, make_get_top_k
-from retrocast.models.evaluation import EvaluationResults
-from retrocast.models.stats import ModelStatistics
+from retrocast.models.evaluation import EvaluationResults, TargetEvaluation
+from retrocast.models.stats import ModelStatistics, StratifiedMetric
 
 logger = logging.getLogger(__name__)
 
@@ -14,23 +14,36 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
     logger.info(f"Computing statistics for {eval_results.model_name}...")
 
     targets = list(eval_results.results.values())
+    has_lengths = any(t.route_length is not None for t in targets)
+    group_fn = None
+    if has_lengths:
 
-    # Grouping key for stratification
-    def get_length(t):
-        return t.route_length
+        def _get_length(t: TargetEvaluation) -> int:
+            # Use -1 as a safe fallback for mixed datasets (some lengths known, some not)
+            # to ensure keys are always integers (required for visualization sorting).
+            return t.route_length if t.route_length is not None else -1
 
-    # 1. Solvability
+        group_fn = _get_length
+
+    # --- 2. Solvability ---
+    # This is always calculable as long as we have a stock.
     stat_solvability = compute_metric_with_ci(
-        targets, get_is_solvable, "Solvability", group_by=get_length, n_boot=n_boot, seed=seed
+        targets, get_is_solvable, "Solvability", group_by=group_fn, n_boot=n_boot, seed=seed
     )
 
-    # 2. Top-K
-    stat_topk = {}
-    # calculating many K is cheap, we just filter what we display later
-    for k in [1, 2, 3, 4, 5, 10, 20, 50, 100]:
-        stat_topk[k] = compute_metric_with_ci(
-            targets, make_get_top_k(k), f"Top-{k}", group_by=get_length, n_boot=n_boot, seed=seed
-        )
+    # --- 3. Top-K Accuracy ---
+    # Only calculate this if the benchmark actually has ground truth routes.
+    # If this is a pure prediction benchmark (no GT), we skip Top-K metrics.
+    # Note: We check if the *benchmark* has GT, not if the *model* found any GT matches.
+    stat_topk: dict[int, StratifiedMetric] = {}
+    if eval_results.has_ground_truth:
+        # calculating many K is cheap, we just filter what we display later
+        for k in [1, 2, 3, 4, 5, 10, 20, 50, 100]:
+            stat_topk[k] = compute_metric_with_ci(
+                targets, make_get_top_k(k), f"Top-{k}", group_by=group_fn, n_boot=n_boot, seed=seed
+            )
+    else:
+        logger.info("Benchmark has no ground truth routes. Skipping Top-K metrics.")
 
     return ModelStatistics(
         model_name=eval_results.model_name,

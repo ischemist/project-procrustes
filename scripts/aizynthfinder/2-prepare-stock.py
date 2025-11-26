@@ -2,9 +2,9 @@
 
 Usage:
     uv run --extra aizyn scripts/aizynthfinder/2-prepare-stock.py \
-        --files data/1-benchmarks/stocks/n1-n5-stock.txt \
+        --files data/1-benchmarks/stocks/n5-stock.txt \
         --source plain \
-        --output data/1-benchmarks/stocks/n1-n5-stock.hdf5 \
+        --output data/1-benchmarks/stocks/n5-stock.hdf5 \
         --target hdf5
 
 """

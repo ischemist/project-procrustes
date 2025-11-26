@@ -59,6 +59,7 @@ def evaluation_results_factory(target_evaluation_factory):
             model_name=model_name,
             benchmark_name="test_benchmark",
             stock_name="test_stock",
+            has_ground_truth=True,
             results=results,
         )
 
@@ -519,6 +520,7 @@ def _make_evaluation_results(model_name: str, n_targets: int, solvability_rate: 
         model_name=model_name,
         benchmark_name="test_benchmark",
         stock_name="test_stock",
+        has_ground_truth=True,
         results=results,
     )
 

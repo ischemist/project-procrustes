@@ -3,12 +3,13 @@
 set -e
 
 SERVERS=(
-    # "ubuntu@150.136.221.12"
-    # "ubuntu@150.136.221.157"
-    # "ubuntu@129.213.30.97"
+    # "ubuntu@129.213.94.122"
+    # "ubuntu@193.122.153.180"
+    # "ubuntu@129.213.82.162"
     "aws-spot-1"
-    "aws-spot-2"
+    # "aws-spot-2"
     # "aws-spot-3"
+    # "aws-spot-4"
 )
 
 FILES=(
@@ -16,9 +17,12 @@ FILES=(
 )
 STOCK_FILES=(
     "buyables-stock.hdf5"
-    "buyables-stock.txt"
+    "n5-stock.hdf5"
     "n1-n5-stock.hdf5"
-    "n1-n5-stock.txt"
+    # "buyables-stock-canon.txt"
+    # "buyables-stock.txt"
+    # "n1-n5-stock.txt"
+    # "n5-stock.txt"
 )
 
 for server in "${SERVERS[@]}"; do
@@ -26,9 +30,9 @@ for server in "${SERVERS[@]}"; do
     for stock_file in "${STOCK_FILES[@]}"; do
         rsync -avz data/1-benchmarks/stocks/${stock_file} "${server}:~/project-procrustes/data/1-benchmarks/stocks/"
     done
-    for file in "${FILES[@]}"; do
-        rsync -avz data/1-benchmarks/definitions/${file} "${server}:~/project-procrustes/data/1-benchmarks/definitions/"
-    done
+    # for file in "${FILES[@]}"; do
+    #     rsync -avz data/1-benchmarks/definitions/${file} "${server}:~/project-procrustes/data/1-benchmarks/definitions/"
+    # done
 done
 
 echo "Done!"
