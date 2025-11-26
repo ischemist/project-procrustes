@@ -3,7 +3,10 @@ Check that the canonicalization of the buyables stock is correct.
 
 Usage:
 
-uv run scripts/dev/canonicalize-stock.py -i buyables-stock -o buyables-stock-export
+    uv run scripts/dev/canonicalize-stock.py -i buyables-stock -o buyables-stock-export
+    uv run scripts/dev/canonicalize-stock.py -i n1-stock -o n1-stock-export
+    uv run scripts/dev/canonicalize-stock.py -i n5-stock -o n5-stock-export
+    uv run scripts/dev/canonicalize-stock.py -i n1-n5-stock -o n1-n5-stock-export
 
 """
 
@@ -44,7 +47,7 @@ for line in pbar:
 diff = old_smiles - canon_smiles
 logger.info(f"{len(diff)} SMILES are not canonical")
 
-with open(data_path / save_fname, "w") as f:
+with open(data_path / "export" / save_fname, "w") as f:
     f.write("SMILES,InChi Key\n")
     for canon_smi in sorted(canon_smiles):
         try:

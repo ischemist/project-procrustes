@@ -61,6 +61,7 @@ scripts/dms/private/
 # Testing
 .coverage*
 archive
+archive-v2
 collectors/
 
 tests/testing_data/**/results.json
