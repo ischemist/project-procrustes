@@ -173,6 +173,18 @@ class Route(BaseModel):
 
         return _check_convergent(self.target)
 
+    @computed_field
+    @property
+    def content_hash(self) -> str:
+        """Computed content hash for deduplication."""
+        return self.get_content_hash()
+
+    @computed_field
+    @property
+    def signature(self) -> str:
+        """Computed topology signature for structural comparison."""
+        return self.get_signature()
+
     def get_signature(self) -> str:
         """
         Generates a canonical, order-invariant hash for the entire route,
@@ -215,7 +227,8 @@ class Route(BaseModel):
 
         # Exclude computed fields to ensure deterministic serialization
         # (sets like 'leaves' have non-deterministic iteration order across processes)
-        route_dict = self.model_dump(mode="json", exclude={"leaves", "depth"})
+        # Also exclude content_hash and signature to avoid circular recursion
+        route_dict = self.model_dump(mode="json", exclude={"leaves", "depth", "content_hash", "signature"})
         route_json = json.dumps(route_dict, sort_keys=True)
         return hashlib.sha256(route_json.encode()).hexdigest()
 

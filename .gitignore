@@ -71,6 +71,7 @@ data/statistics
 data/seed-stability-archive
 
 !data/1-benchmarks/definitions/*.json.gz
+data/1-benchmarks/definitions/re-export
 data/1-benchmarks/**/*.hdf5
 data/2-raw
 data/3-processed/random-n5-*
