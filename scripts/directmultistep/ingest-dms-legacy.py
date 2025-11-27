@@ -2,9 +2,9 @@
 Ingests legacy DMS predictions (pickle format) into the retrocast processed format.
 
 Usage:
-    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-flash-fp16 --benchmark stratified-convergent-250
-    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-flash-fp16 --benchmark stratified-linear-600
-    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-flash-fp16 --benchmark random-n5-500
+    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-explorer-xl --benchmark mkt-cnv-160
+    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-explorer-xl --benchmark stratified-linear-600
+    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-explorer-xl --benchmark random-n5-500
 """
 
 import argparse
