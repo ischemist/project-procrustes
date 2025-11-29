@@ -7,6 +7,7 @@ real-ish molecule fixtures.
 
 import pytest
 
+from retrocast.chem import get_inchi_key
 from retrocast.curation.filtering import (
     clean_and_prioritize_pools,
     deduplicate_routes,
@@ -263,6 +264,7 @@ class TestFilterByRouteType:
         linear_target = BenchmarkTarget(
             id="LINEAR-TARGET",
             smiles="CCC",
+            inchikey=get_inchi_key("CCC"),
             ground_truth=linear_route,
             is_convergent=linear_route.has_convergent_reaction,
             route_length=linear_route.length,
@@ -270,6 +272,7 @@ class TestFilterByRouteType:
         convergent_target = BenchmarkTarget(
             id="CONVERGENT-TARGET",
             smiles="CCCC",
+            inchikey=get_inchi_key("CCCC"),
             ground_truth=convergent_route,
             is_convergent=convergent_route.has_convergent_reaction,
             route_length=convergent_route.length,
@@ -319,6 +322,7 @@ class TestCleanAndPrioritizePools:
         primary_target = BenchmarkTarget(
             id="PRIMARY",
             smiles="CCC",
+            inchikey=get_inchi_key("CCC"),
             ground_truth=route,
             is_convergent=route.has_convergent_reaction,
             route_length=route.length,
@@ -326,7 +330,8 @@ class TestCleanAndPrioritizePools:
         # Same route signature in secondary
         secondary_target = BenchmarkTarget(
             id="SECONDARY",
-            smiles="CCC-alt",
+            smiles="CCC",
+            inchikey=get_inchi_key("CCC"),
             ground_truth=route,
             is_convergent=route.has_convergent_reaction,
             route_length=route.length,
@@ -346,6 +351,7 @@ class TestCleanAndPrioritizePools:
         primary_target = BenchmarkTarget(
             id="PRIMARY",
             smiles="CCC",  # Same SMILES
+            inchikey=get_inchi_key("CCC"),
             ground_truth=route1,
             is_convergent=route1.has_convergent_reaction,
             route_length=route1.length,
@@ -353,6 +359,7 @@ class TestCleanAndPrioritizePools:
         secondary_target = BenchmarkTarget(
             id="SECONDARY",
             smiles="CCC",  # Same SMILES
+            inchikey=get_inchi_key("CCC"),
             ground_truth=route2,
             is_convergent=route2.has_convergent_reaction,
             route_length=route2.length,
@@ -372,6 +379,7 @@ class TestCleanAndPrioritizePools:
         primary_target = BenchmarkTarget(
             id="PRIMARY",
             smiles="CC",
+            inchikey=get_inchi_key("CC"),
             ground_truth=route1,
             is_convergent=route1.has_convergent_reaction,
             route_length=route1.length,
@@ -379,6 +387,7 @@ class TestCleanAndPrioritizePools:
         secondary_target = BenchmarkTarget(
             id="SECONDARY",
             smiles="CCC",
+            inchikey=get_inchi_key("CCC"),
             ground_truth=route2,
             is_convergent=route2.has_convergent_reaction,
             route_length=route2.length,
@@ -400,6 +409,7 @@ class TestCleanAndPrioritizePools:
         primary_target = BenchmarkTarget(
             id="PRIMARY",
             smiles="CC",
+            inchikey=get_inchi_key("CC"),
             ground_truth=None,
             is_convergent=None,
             route_length=None,
@@ -407,6 +417,7 @@ class TestCleanAndPrioritizePools:
         secondary_target = BenchmarkTarget(
             id="SECONDARY",
             smiles="CCC",
+            inchikey=get_inchi_key("CCC"),
             ground_truth=None,
             is_convergent=None,
             route_length=None,
@@ -442,9 +453,11 @@ class TestFilteringIntegration:
         # Create benchmark for filtering
         targets = {}
         for i, route in enumerate(unique):
+            smiles = f"C{'C' * i}"
             target = BenchmarkTarget(
                 id=f"INCHI_{i}",
-                smiles=f"SMILES_{i}",
+                smiles=smiles,
+                inchikey=get_inchi_key(smiles),
                 ground_truth=route,
                 is_convergent=route.has_convergent_reaction,
                 route_length=route.length,

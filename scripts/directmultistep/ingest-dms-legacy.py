@@ -2,9 +2,9 @@
 Ingests legacy DMS predictions (pickle format) into the retrocast processed format.
 
 Usage:
-    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-flash-fp16 --benchmark stratified-convergent-250
-    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-flash-fp16 --benchmark stratified-linear-600
-    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-flash-fp16 --benchmark random-n5-500
+    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-explorer-xl --benchmark mkt-cnv-160
+    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-explorer-xl --benchmark stratified-linear-600
+    uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-explorer-xl --benchmark random-n5-500
 """
 
 import argparse
@@ -13,6 +13,7 @@ from pathlib import Path
 
 from retrocast import adapt_routes
 from retrocast.chem import canonicalize_smiles
+from retrocast.curation.filtering import deduplicate_routes
 from retrocast.io import create_manifest, load_benchmark, save_routes
 from retrocast.models.chem import Route
 from retrocast.utils.logging import configure_script_logging, logger
@@ -73,7 +74,8 @@ def main():
             for tid in target_ids:
                 target_obj = benchmark.targets[tid]
                 adapted_routes = adapt_routes(raw_routes, target_obj, "dms")
-                processed_predictions[tid] = adapted_routes
+                unique_routes = deduplicate_routes(adapted_routes)
+                processed_predictions[tid] = unique_routes
                 hits += 1
 
     logger.info(f"Matched {hits} targets from pickle out of {len(benchmark.targets)} in benchmark.")

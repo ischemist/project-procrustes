@@ -53,6 +53,7 @@ class TestHandleScoreFile:
         target = BenchmarkTarget(
             id="test-1",
             smiles="CC",
+            inchikey=get_inchi_key("CC"),
             is_convergent=False,
             route_length=1,
             ground_truth=make_simple_route("CC", "C"),
@@ -133,6 +134,7 @@ class TestHandleScoreFile:
         target = BenchmarkTarget(
             id="test-1",
             smiles="CC",
+            inchikey=get_inchi_key("CC"),
             is_convergent=False,
             route_length=1,
         )

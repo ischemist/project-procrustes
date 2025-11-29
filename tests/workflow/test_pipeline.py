@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.chem import get_inchi_key
 from retrocast.io.data import load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Route, TargetIdentity
@@ -68,6 +69,7 @@ def synthetic_benchmark() -> BenchmarkSet:
     targets["target_1"] = BenchmarkTarget(
         id="target_1",
         smiles=SmilesStr("CC"),
+        inchikey=get_inchi_key("CC"),
         ground_truth=gt_route_1,
         is_convergent=False,
         route_length=1,
@@ -78,6 +80,7 @@ def synthetic_benchmark() -> BenchmarkSet:
     targets["target_2"] = BenchmarkTarget(
         id="target_2",
         smiles=SmilesStr("CCC"),
+        inchikey=get_inchi_key("CCC"),
         ground_truth=gt_route_2,
         is_convergent=False,
         route_length=2,
@@ -87,6 +90,7 @@ def synthetic_benchmark() -> BenchmarkSet:
     targets["target_3"] = BenchmarkTarget(
         id="target_3",
         smiles=SmilesStr("CCCC"),
+        inchikey=get_inchi_key("CCCC"),
         ground_truth=None,
         is_convergent=None,
         route_length=None,
@@ -607,6 +611,7 @@ class TestSyntheticAdapter:
         target = BenchmarkTarget(
             id="test",
             smiles=SmilesStr("CC"),
+            inchikey=get_inchi_key("CC"),
             is_convergent=False,
             route_length=1,
         )
@@ -624,6 +629,7 @@ class TestSyntheticAdapter:
         target = BenchmarkTarget(
             id="test",
             smiles=SmilesStr("CC"),
+            inchikey=get_inchi_key("CC"),
             is_convergent=False,
             route_length=1,
         )
@@ -639,6 +645,7 @@ class TestSyntheticAdapter:
         target = BenchmarkTarget(
             id="test",
             smiles=SmilesStr("CC"),
+            inchikey=get_inchi_key("CC"),
             is_convergent=False,
             route_length=1,
         )

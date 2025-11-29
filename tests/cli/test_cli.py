@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from retrocast.chem import get_inchi_key
 from retrocast.cli import handlers
 from retrocast.io.blob import save_json_gz
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
@@ -50,6 +51,7 @@ def synthetic_data(synthetic_config):
     target = BenchmarkTarget(
         id="t1",
         smiles="CC",  # Ethane - matches our route target
+        inchikey=get_inchi_key("CC"),
         is_convergent=True,  # Two reactants merge in one reaction
         route_length=1,  # One reaction step
         ground_truth=None,

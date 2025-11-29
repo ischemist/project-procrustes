@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from retrocast.models.chem import Route
-from retrocast.typing import SmilesStr
+from retrocast.typing import InchiKeyStr, SmilesStr
 
 
 class ExecutionStats(BaseModel):
@@ -22,6 +22,7 @@ class BenchmarkTarget(BaseModel):
 
     id: str = Field(..., description="Unique identifier within the benchmark (e.g., 'n5-00123').")
     smiles: SmilesStr = Field(..., description="The canonical SMILES of the target.")
+    inchikey: InchiKeyStr = Field(..., description="The InChI key of the target molecule.")
 
     # Bucket for anything else (e.g. "source_patent_id", "reaction_classes", "original_index")
     metadata: dict[str, Any] = Field(default_factory=dict)
