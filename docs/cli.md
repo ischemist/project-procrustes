@@ -1,112 +1,47 @@
 # Command Line Interface
 
-The RetroCast CLI manages the evaluation lifecycle, from ingesting raw model outputs to generating statistical reports. It enforces the directory structure and provenance tracking described in the [Concepts](concepts.md) documentation.
+The RetroCast CLI provides a unified interface for standardizing, scoring, and analyzing retrosynthesis predictions. It supports two modes of operation:
+1.  **Project Mode**: A structured workflow for reproducible benchmarking of multiple models.
+2.  **Ad-Hoc Mode**: Direct commands for processing individual files without a configuration setup.
 
-## Configuration
+## Installation
 
-The CLI relies on a configuration file, typically named `retrocast-config.yaml`, to map model names to their specific adapters and settings.
-
-**Example Configuration:**
-```yaml
-data_dir: data
-models:
-  dms-explorer:
-    adapter: dms
-    raw_results_filename: predictions.json
-    sampling:
-      strategy: top-k
-      k: 50
-  aizynth-mcts:
-    adapter: aizynth
-    raw_results_filename: results.json.gz
-```
-
-*   **`adapter`**: Matches a key in the internal `ADAPTER_MAP` (e.g., `dms`, `aizynth`, `retrostar`).
-*   **`raw_results_filename`**: The expected filename within the `data/2-raw/<model>/<benchmark>/` directory.
-*   **`sampling`**: Defines how to select routes if the model produces more than required. Strategies include `top-k`, `random-k`, and `by-length`.
-
-## The Standard Pipeline
-
-The evaluation workflow consists of three sequential stages: `ingest`, `score`, and `analyze`.
-
-### 1. Ingest
-
-The `ingest` command transforms raw model outputs into the canonical `Route` format. It validates the data against the adapter's schema, deduplicates routes based on their topological signature, and applies sampling strategies.
-
-**Usage:**
 ```bash
-retrocast ingest --model <model_name> --dataset <benchmark_name> [options]
+uv tool install retrocast
 ```
 
-**Options:**
-*   `--model`: The model key defined in `retrocast-config.yaml`.
-*   `--dataset`: The name of the benchmark (corresponding to a file in `data/1-benchmarks/definitions`).
-*   `--anonymize`: If set, the output directory uses a hashed model name. This supports blind peer review.
-*   `--sampling-strategy` / `--k`: Overrides the sampling configuration defined in the YAML file.
+## 1. Ad-Hoc Workflow (Quick Start)
 
-**Output:**
-Saves a dictionary of routes (`target_id` -> `list[Route]`) to `data/3-processed/<benchmark>/<model>/routes.json.gz`.
+Use these commands to process single files immediately without setting up a project directory.
 
-### 2. Score
+### Adapt Raw Predictions
+Convert raw output from a supported model (e.g., AiZynthFinder, Retro*) into the standardized RetroCast format.
 
-The `score` command evaluates processed routes against a specific building block stock. It determines solvability and checks for ground truth matches. This step is separated from ingestion to allow the same predictions to be scored against multiple stocks.
-
-**Usage:**
 ```bash
-retrocast score --model <model_name> --dataset <benchmark_name> [options]
+retrocast adapt \
+  --input raw_predictions.json.gz \
+  --adapter aizynth \
+  --output standardized_routes.json.gz
 ```
 
-**Options:**
-*   `--model`: The model name.
-*   `--dataset`: The benchmark name.
-*   `--stock`: (Optional) The name of the stock file in `data/1-benchmarks/stocks/`. If omitted, the default stock defined in the benchmark definition is used.
+*   `--adapter`: See `retrocast list` for available adapters.
+*   `--benchmark`: (Optional) Provide a benchmark definition file to ensure target IDs match exactly.
 
-**Output:**
-Saves `EvaluationResults` to `data/4-scored/<benchmark>/<model>/<stock>/evaluation.json.gz`.
+### Score Predictions
+Evaluate standardized routes against a stock file.
 
-### 3. Analyze
-
-The `analyze` command aggregates scored results into statistical distributions. It uses bootstrap resampling to calculate confidence intervals for metrics such as Top-K accuracy and solvability.
-
-**Usage:**
-```bash
-retrocast analyze --model <model_name> --dataset <benchmark_name> [options]
-```
-
-**Options:**
-*   `--model`: The model name.
-*   `--dataset`: The benchmark name.
-*   `--stock`: (Optional) The specific stock context to analyze.
-*   `--top-k`: A list of K values to include in the summary table (e.g., `1 5 10`).
-*   `--make-plots`: Generates interactive HTML visualizations (requires the `viz` dependency group).
-
-**Output:**
-Generates the following in `data/5-results/<benchmark>/<model>/<stock>/`:
-*   `statistics.json.gz`: Raw statistical data.
-*   `report.md`: A Markdown summary suitable for GitHub or documentation.
-*   `diagnostics.html`: (If `--make-plots` is used) Interactive Plotly charts.
-
-## Ad-Hoc Workflows
-
-RetroCast supports workflows outside the standard directory structure for quick checks or integration into external pipelines.
-
-### Score File
-The `score-file` command processes a single predictions file against a benchmark and stock file, bypassing the `data/` directory requirements.
-
-**Usage:**
 ```bash
 retrocast score-file \
-  --benchmark path/to/benchmark.json.gz \
-  --routes path/to/predictions.json.gz \
-  --stock path/to/stock.txt \
-  --output path/to/output_scores.json.gz \
+  --benchmark benchmark.json.gz \
+  --routes standardized_routes.json.gz \
+  --stock stock_smiles.txt \
+  --output scores.json.gz \
   --model-name "My-Experiment"
 ```
 
 ### Create Benchmark
-The `create-benchmark` command generates a valid `BenchmarkSet` file from a simple list of SMILES strings (TXT or CSV).
+Generate a benchmark definition file from a simple list of SMILES strings (TXT or CSV).
 
-**Usage:**
 ```bash
 retrocast create-benchmark \
   --input targets.txt \
@@ -115,19 +50,75 @@ retrocast create-benchmark \
   --output custom-benchmark.json.gz
 ```
 
-## Verification
+---
 
-The `verify` command audits the data lineage using the manifest files generated at each step.
+## 2. Project Workflow (Reproducible Benchmarking)
 
-**Usage:**
+For large-scale evaluations, RetroCast enforces a directory structure (`data/1-benchmarks`, `data/2-raw`, etc.) and uses a configuration file to manage model settings.
+
+### Initialization
+
+To start a new benchmarking project, generate a default configuration file in your current directory:
+
 ```bash
-retrocast verify --target <path_to_manifest_or_dir> [--deep]
+retrocast init
 ```
 
-*   **Standard Verification:** Checks that files on disk match the SHA256 hashes recorded in their manifests.
-*   **Deep Verification (`--deep`)**: Recursively loads the entire dependency graph (e.g., Score -> Ingest -> Raw). It validates logical consistency, ensuring that the input hash recorded in a child step matches the output hash of the parent step.
+This creates `retrocast-config.yaml`. Edit this file to register your models and their specific settings (adapter type, sampling strategy, etc.).
+
+**Configuration Example:**
+```yaml
+models:
+  dms-explorer:
+    adapter: dms
+    raw_results_filename: predictions.json
+    sampling:
+      strategy: top-k
+      k: 50
+```
+
+### Step A: Ingest
+Transforms raw model outputs from `data/2-raw/` into standardized routes in `data/3-processed/`.
+
+```bash
+retrocast ingest --model dms-explorer --dataset paroutes-n1
+```
+
+*   `--anonymize`: Hashes the model name in the output directory for blind review.
+
+### Step B: Score
+Evaluates processed routes against the stock defined in the benchmark (or an override). Results are saved to `data/4-scored/`.
+
+```bash
+retrocast score --model dms-explorer --dataset paroutes-n1
+```
+
+### Step C: Analyze
+Aggregates scores into statistical reports with confidence intervals. Results are saved to `data/5-results/`.
+
+```bash
+retrocast analyze --model dms-explorer --dataset paroutes-n1 --make-plots
+```
+
+*   `--make-plots`: Generates interactive HTML visualizations (requires `viz` dependencies).
+*   `--top-k`: Customizes the K values in the summary report (default: 1, 3, 5, 10, 20, 50, 100).
+
+---
+
+## 3. Verification & Auditing
+
+RetroCast generates a `manifest.json` for every file it creates. These manifests track the lineage (inputs, parameters, hashes) of the data.
+
+To verify the integrity of your data pipeline:
+
+```bash
+retrocast verify --target data/5-results/paroutes-n1/dms-explorer
+```
+
+*   **Standard Check**: Verifies that the file on disk matches the SHA256 hash in its manifest.
+*   **Deep Check (`--deep`)**: Recursively verifies the entire dependency graph (Analyze -> Score -> Ingest -> Raw), ensuring logical consistency across the pipeline.
 
 ## Helper Commands
 
-*   `retrocast list`: Lists all models currently defined in the configuration file.
-*   `retrocast info --model <name>`: Displays the configuration details for a specific model.
+*   `retrocast list`: Lists all models configured in `retrocast-config.yaml`.
+*   `retrocast info --model <name>`: Displays details for a specific model configuration.

@@ -13,7 +13,9 @@ from retrocast.metrics.bootstrap import compute_metric_with_ci
 from retrocast.metrics.ranking import compute_probabilistic_ranking
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.evaluation import EvaluationResults
+from retrocast.models.stats import ModelStatistics
 from retrocast.typing import SmilesStr
+from retrocast.workflow import analyze as analyze_workflow  # Added import
 from retrocast.workflow import score as score_workflow
 
 __all__ = [
@@ -21,6 +23,7 @@ __all__ = [
     "load_routes",
     "load_stock_file",
     "score_predictions",
+    "compute_model_statistics",
     "compute_metric_with_ci",
     "compute_probabilistic_ranking",
 ]
@@ -59,3 +62,18 @@ def score_predictions(
         stock_name=name,
         model_name=model_name,
     )
+
+
+def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 10000, seed: int = 42) -> ModelStatistics:
+    """
+    Compute aggregated statistics (Solvability, Top-K) with bootstrap confidence intervals.
+
+    Args:
+        eval_results: The output from score_predictions().
+        n_boot: Number of bootstrap iterations (default: 10,000).
+        seed: Random seed for reproducibility.
+
+    Returns:
+        ModelStatistics object containing stratified metrics and CIs.
+    """
+    return analyze_workflow.compute_model_statistics(eval_results, n_boot=n_boot, seed=seed)
