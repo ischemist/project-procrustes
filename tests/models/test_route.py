@@ -23,7 +23,6 @@ class TestRoute:
         route = Route(target=target, rank=1)
         assert route.target == target
         assert route.rank == 1
-        assert route.solvability == {}
         assert route.metadata == {}
 
     def test_depth_single_leaf(self):
@@ -335,16 +334,6 @@ class TestRoute:
         # Should produce a valid signature
         assert isinstance(signature, str)
         assert len(signature) == 64
-
-    def test_solvability_field(self):
-        """Test solvability field handling."""
-        target = Molecule(
-            smiles=SmilesStr("CCO"),
-            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
-        )
-        route = Route(target=target, rank=1, solvability={"emolecules": True, "mcule": False})
-        assert route.solvability["emolecules"] is True
-        assert route.solvability["mcule"] is False
 
     def test_metadata_handling(self):
         """Test route-level metadata."""

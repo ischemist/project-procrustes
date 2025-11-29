@@ -179,7 +179,6 @@ class TestExciseReactionsFromRoute:
             target=mol_c,
             rank=1,
             metadata={"source": "test"},
-            solvability={"stock": True},
         )
 
         sig_c_from_b: ReactionSignature = (frozenset(["INCHI-B"]), "INCHI-C")

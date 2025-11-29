@@ -25,7 +25,7 @@ class Molecule(BaseModel):
     """Represents a molecule instance within a specific route."""
 
     smiles: SmilesStr
-    inchikey: InchiKeyStr  # The TRUE canonical identifier.
+    inchikey: InchiKeyStr
 
     # A molecule is formed by at most ONE reaction step in a tree.
     # If this is None, the molecule is a leaf.
@@ -113,10 +113,6 @@ class Route(BaseModel):
 
     target: Molecule
     rank: int  # The rank of this prediction (e.g., 1 for top-1)
-
-    # This will be populated by the analysis pipeline, not the adapter.
-    # It maps a building block set name to a boolean.
-    solvability: dict[str, bool] = Field(default_factory=dict)
 
     # Metadata for the entire route
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -228,7 +224,7 @@ class Route(BaseModel):
         # Exclude computed fields to ensure deterministic serialization
         # (sets like 'leaves' have non-deterministic iteration order across processes)
         # Also exclude content_hash and signature to avoid circular recursion
-        route_dict = self.model_dump(mode="json", exclude={"leaves", "depth", "content_hash", "signature"})
+        route_dict = self.model_dump(mode="json", exclude={"leaves", "length", "content_hash", "signature"})
         route_json = json.dumps(route_dict, sort_keys=True)
         return hashlib.sha256(route_json.encode()).hexdigest()
 

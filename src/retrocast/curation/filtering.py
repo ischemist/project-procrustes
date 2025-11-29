@@ -109,7 +109,6 @@ def excise_reactions_from_route(
         main_route = Route(
             target=main_target,
             rank=route.rank,
-            solvability=route.solvability.copy(),
             metadata=route.metadata.copy(),
         )
         result.append(main_route)
