@@ -5,205 +5,175 @@
 [![ty](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json)](https://github.com/astral-sh/ty)
 ![coverage](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/ischemist/project-procrustes/master/coverage.json&query=$.totals.percent_covered_display&label=coverage&color=brightgreen&suffix=%25)
 
-## The Problem
+**RetroCast** is a comprehensive toolkit for standardizing, scoring, and analyzing multistep retrosynthesis models. It decouples **prediction** from **evaluation**, allowing rigorous, apples-to-apples comparison of disparate algorithms on a unified playing field.
 
-Every multistep retrosynthesis model returns routes in a different format. AiZynthFinder uses bipartite molecule-reaction graphs. Retro* outputs precursor maps. DirectMultiStep produces recursive dictionaries. SynPlanner has its own schema. This fragmentation makes working with routes unnecessarily difficult.
+## The Crisis of Evaluation
 
-## The Solution
+The field of retrosynthesis is fragmented. 
+1.  **Incompatible Outputs:** AiZynthFinder outputs bipartite graphs; Retro* outputs precursor maps; DirectMultiStep outputs recursive dictionaries. Comparing them requires writing bespoke parsers for every paper.
+2.  **Ad-Hoc Metrics:** "Solvability" is often calculated differently across publications, with varying definitions of commercial stock (e.g., using eMolecules screening sets vs. actual buyable catalogs).
+3.  **Flawed Benchmarks:** The standard PaRoutes n5 dataset is heavily skewed (74% of routes are length 3-4), masking performance failures on complex targets. Furthermore, the standard stock definition for PaRoutes creates synthetic "ground truths" that are often physically unobtainable.
 
-RetroCast provides:
+**RetroCast solves this.** It provides a canonical schema, adapters for 10+ models, and a rigorous statistical pipeline to turn retrosynthesis from a qualitative art into a quantitative science.
 
-1. **A canonical data model** for retrosynthesis routes ([`schemas.py`](src/retrocast/schemas.py)) - a simple, recursive `Molecule`/`ReactionStep`/`Route` structure that any model output can be cast into.
+---
 
-2. **Tested adapters for every major model** - AiZynthFinder, Retro*, DirectMultiStep, SynPlanner, Syntheseus, ASKCOS, RetroChimera, DreamRetro, MultiStepTTL, SynLlama, PARoutes (14 adapters and counting).
+## Key Features
 
-3. **Reproducible infrastructure** - UV-managed dependencies with conflict resolution, locked versions, and deterministic processing with cryptographic hashing.
+*   **Universal Adapters:** "Air-gapped" translation layers for **AiZynthFinder**, **Retro***, **DirectMultiStep**, **SynPlanner**, **Syntheseus**, **ASKCOS**, **RetroChimera**, **DreamRetro**, **MultiStepTTL**, **SynLlama**, and **PaRoutes**.
+*   **Canonical Schema:** All routes are cast into a strict, recursive `Molecule` / `ReactionStep` Pydantic model.
+*   **Curated Benchmarks:** Includes the **Reference Series** (for algorithm comparison) and **Market Series** (for practical utility), stratified by route length and topology to eliminate statistical noise.
+*   **Rigorous Statistics:** Built-in bootstrapping (95% CI), pairwise tournaments, and probabilistic ranking. No more "Model A is 0.1% better than Model B" without significance testing.
+*   **Reproducibility:** Every artifact is tracked via cryptographic manifests (`SHA256`).
 
-4. **Curated evaluation sets** - Subsets of the PaRoutes n=1 and n=5 test sets (100, 200, 500, 1k, 2k targets) designed to preserve statistical properties while enabling faster benchmarking.
+---
+
+## Installation
+
+We recommend using [uv](https://github.com/astral-sh/uv) for fast, reliable dependency management.
+
+```bash
+# Install as a standalone tool
+uv tool install retrocast
+
+# Or add to your project
+uv add retrocast
+```
+
+---
 
 ## Quick Start
 
-### Install
+### 1. The Ad-Hoc Workflow
+Have a raw output file from a model? Score it immediately.
 
 ```bash
-git clone https://github.com/ischemist/project-procrustes
-cd project-procrustes
+# Convert raw AiZynthFinder JSON to RetroCast format
+retrocast adapt \
+    --input raw_predictions.json.gz \
+    --adapter aizynth \
+    --output routes.json.gz
+
+# Score against a stock file
+retrocast score-file \
+    --benchmark data/1-benchmarks/definitions/ref-lin-600.json.gz \
+    --routes routes.json.gz \
+    --stock data/1-benchmarks/stocks/n5-stock.txt \
+    --output scores.json.gz \
+    --model-name "My-Experimental-Model"
 ```
 
-No need to manage virtual environments - UV handles everything.
+### 2. The Project Workflow
+For full-scale benchmarking, RetroCast enforces a structured data lifecycle: `Ingest` $\to$ `Score` $\to$ `Analyze`.
 
-### Run Any Model in Three Commands
-
-**Example: AiZynthFinder with MCTS**
-
+**Initialize a project:**
 ```bash
-# 1. Download model assets (once)
-uv run scripts/aizynthfinder/1-download-assets.py data/models/aizynthfinder
-
-# 2. Prepare stock file (once)
-uv run --extra aizyn scripts/aizynthfinder/2-prepare-stock.py \
-    --files data/models/assets/retrocast-bb-stock-v3-canon.csv \
-    --source plain \
-    --output data/models/assets/retrocast-bb-stock-v3.hdf5 \
-    --target hdf5
-
-# 3. Run predictions
-uv run --extra aizyn scripts/aizynthfinder/3-run-aizyn-mcts.py --target-name "uspto-190"
+retrocast init
 ```
 
-**Example: DirectMultiStep**
+**Configure your model in `retrocast-config.yaml`:**
+```yaml
+models:
+  dms-explorer:
+    adapter: dms
+    raw_results_filename: predictions.json
+    sampling: { strategy: top-k, k: 50 }
+```
 
+**Run the pipeline:**
 ```bash
-# 1. Download model checkpoint
-bash scripts/directmultistep/1-download-assets.sh
+# 1. Ingest: Standardize raw outputs from data/2-raw/
+retrocast ingest --model dms-explorer --dataset ref-lin-600
 
-# 2. Run predictions
-uv run --extra dms --extra torch-gpu scripts/directmultistep/2-run-dms.py \
-    --model-name "explorer-xl" \
-    --use-fp16 \
-    --target-name "uspto-190"
+# 2. Score: Evaluate against the benchmark's defined stock
+retrocast score --model dms-explorer --dataset ref-lin-600
+
+# 3. Analyze: Generate bootstrap statistics and HTML plots
+retrocast analyze --model dms-explorer --dataset ref-lin-600 --make-plots
 ```
 
-Each model follows the same pattern: numbered scripts in `scripts/<model-name>/`. UV automatically handles conflicting dependencies (PyTorch versions, NumPy pinning, etc.) via optional dependency groups.
+**Output:** Interactive diagnostic plots (Solvability vs Depth, Top-K) and a Markdown report in `data/5-results/`.
 
-### Convert to Unified Format
+---
 
-Once you have raw model outputs, convert them to the canonical RetroCast format:
+## The Benchmarks
 
-```bash
-# Process a single model run
-uv run scripts/process-predictions.py process --model aizynthfinder-mcts --dataset uspto-190
+RetroCast introduces two new benchmark series derived from PaRoutes, fixing the skew and stock issues of the original dataset. These subsets were selected via **seed stability analysis** to ensure they are statistically representative of the underlying difficulty distribution.
 
-# List available models
-uv run scripts/process-predictions.py list
+### The Reference Series (`ref-`)
+*Target Audience: Algorithm Developers*
+Designed to compare search algorithms (e.g., MCTS vs. Retro* vs. Transformers). Uses the internal PaRoutes stock to isolate search failures from stock availability issues.
 
-# Show configuration for a specific model
-uv run scripts/process-predictions.py info --model directmultistep
-```
+| Benchmark | Targets | Description |
+| :--- | :--- | :--- |
+| **ref-lin-600** | 600 | **Linear** routes stratified by length (100 each for lengths 2–7). |
+| **ref-cnv-400** | 400 | **Convergent** routes stratified by length (100 each for lengths 2–5). |
+| **ref-lng-84** | 84 | All available routes of extreme length (8–10 steps). |
 
-This will:
-- Validate the raw output using model-specific schemas
-- Transform it via the appropriate adapter to `Route` objects
-- Deduplicate routes
-- Save canonical output with a deterministic hash
+### The Market Series (`mkt-`)
+*Target Audience: Computational Chemists*
+Designed to assess practical utility. Targets are filtered to be solvable using **Buyables**, a curated catalog of 300k compounds available for <$100/g.
 
-### Use as a Python Library
+| Benchmark | Targets | Description |
+| :--- | :--- | :--- |
+| **mkt-lin-500** | 500 | Linear routes solvable with commercial buyables (Stratified). |
+| **mkt-cnv-160** | 160 | Convergent routes solvable with commercial buyables (Stratified). |
 
-You can also use RetroCast programmatically to adapt individual routes from any supported model:
+---
+
+## Python API
+
+RetroCast is also a library. You can use it to integrate standardization directly into your training or inference loops.
 
 ```python
-from retrocast import adapt_single_route, TargetIdentity
+from retrocast import adapt_single_route, TargetInput
 
-# Define your target
-target = TargetIdentity(id="aspirin", smiles="CC(=O)Oc1ccccc1C(=O)O")
+# Define the target
+target = TargetInput(id="t1", smiles="CC(=O)Oc1ccccc1C(=O)O")
 
-# Your model's raw prediction (e.g., DMS format)
-raw_route = {
+# Your model's raw output (any supported format)
+raw_output = {
     "smiles": "CC(=O)Oc1ccccc1C(=O)O",
-    "children": [
-        {"smiles": "Oc1ccccc1C(=O)O", "children": []},
-        {"smiles": "CC(=O)Cl", "children": []}
-    ]
+    "children": [...]
 }
 
-# Adapt to unified format - works with both route-centric (DMS, AiZynth)
-# and target-centric (RetroChimera, ASKCOS) adapter formats
-route = adapt_single_route(raw_route, target, adapter_name="dms")
+# Cast to the canonical Route object
+route = adapt_single_route(raw_output, target, adapter_name="dms")
 
-if route:
-    print(f"Route depth: {route.length}")
-    print(f"Starting materials: {len(route.leaves)}")
+print(f"Depth: {route.length}")
+print(f"Leaves: {[m.smiles for m in route.leaves]}")
 ```
 
-See [`docs/api_usage.md`](docs/api_usage.md) for complete API documentation and examples.
+---
 
-## Available Models
+## Visualization: SynthArena
 
-Adapters are implemented and tested for:
+RetroCast powers **[SynthArena](https://syntharena.ischemist.com)**, an open-source web platform for visualizing and comparing retrosynthetic routes.
 
-- **AiZynthFinder** (MCTS, Retro*)
-- **Retro*** (original implementation)
-- **DirectMultiStep** (Flash, Explorer variants)
-- **SynPlanner**
-- **Syntheseus** (BFS, Retro-0)
-- **ASKCOS**
-- **RetroChimera**
-- **DreamRetro**
-- **MultiStepTTL**
-- **SynLlama**
-- **PARoutes**
+*   Compare predictions from any two models side-by-side.
+*   Visualize ground truth vs. predicted routes with diff overlays.
+*   Inspect stratified performance metrics interactively.
 
-See [`retrocast-config.yaml`](retrocast-config.yaml) for full configuration details.
+---
 
-## Evaluation Sets
+## Vision: Structural AI for Chemistry
 
-We provide curated subsets of the PaRoutes benchmark:
+Applications of ML to Chemistry have mostly centered on **quantitative problems** (predicting toxicity, pKd, yield)—tasks constrained by the scarcity of labeled data. 
 
-- **uspto-190**: Full USPTO test set (190 targets)
-- **paroutes-n1-{100,200,500,1k,2k}**: Stratified subsets of the n=1 test set
-- **paroutes-n5-{100,200,500,1k,2k}**: Stratified subsets of the n=5 test set
+However, we observe that the most transformative breakthroughs in AI (LLMs, AlphaFold) have occurred in **structural problems**: tasks that require generating complex, structured outputs (like language or protein folding) rather than regression scalars. 
 
-Each subset is:
-- Hashed for reproducibility
-- Balanced across route lengths and complexities
-- Small enough for rapid iteration (100 targets ~10min vs 10k targets ~10hrs)
+Retrosynthesis is the premier structural problem of organic chemistry. But effectively solving it requires a fundamental shift: we must move beyond fragmented data formats and inconsistent evaluation methods. We need a unified, rigorous infrastructure to standardize, track, and measure progress in this domain.
 
-Subsets are selected such that top-k accuracy on the subset is within 0.05-1% of the full set, depending on size.
-
-## The Canonical Format
-
-At the core of RetroCast is a clean recursive schema ([`src/retrocast/schemas.py`](src/retrocast/schemas.py)):
-
-```python
-class Molecule(BaseModel):
-    smiles: SmilesStr
-    inchikey: InchiKeyStr
-    synthesis_step: ReactionStep | None  # None = leaf (starting material)
-    metadata: dict[str, Any]
-
-class ReactionStep(BaseModel):
-    reactants: list[Molecule]
-    mapped_smiles: ReactionSmilesStr | None
-    template: str | None
-    reagents: list[SmilesStr] | None
-    solvents: list[SmilesStr] | None
-    metadata: dict[str, Any]
-
-class Route(BaseModel):
-    target: Molecule
-    rank: int
-    solvability: dict[str, bool]  # per building block set
-    metadata: dict[str, Any]
-```
-
-Every route from every model gets cast into this structure. No ambiguity, no special cases.
-
-## Architecture
-
-RetroCast is built on three principles:
-
-1. **Adapters are the air gap** - All model-specific logic is isolated in pluggable adapters. The core pipeline never touches raw formats directly.
-
-2. **Contracts, not handshakes** - Pydantic schemas enforce validation at every boundary. Invalid data is rejected immediately.
-
-3. **Deterministic & auditable** - Every output is identified by a cryptographic hash of its inputs. Results are reproducible and traceable.
-
-The pipeline:
-
-```
-load raw data → adapter → Route → deduplicate → save + manifest
-```
-
-See [`docs/adapters.md`](docs/adapters.md) for details on adding new adapters.
+**RetroCast is that infrastructure.**
 
 ## Citation
 
 If you use RetroCast in your research, please cite:
 
 ```bibtex
-# ArXiv citation - TODO: add link
+# TODO: add
 ```
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License. See [LICENSE](LICENSE) for details.
