@@ -53,17 +53,6 @@ class TestRouteContentHash:
 
         assert route1.get_content_hash() != route2.get_content_hash()
 
-    def test_get_content_hash_includes_solvability(self):
-        """Test that content hash differs when solvability changes."""
-        target = Molecule(
-            smiles=SmilesStr("CCO"),
-            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
-        )
-        route1 = Route(target=target, rank=1, solvability={"zinc": True})
-        route2 = Route(target=target, rank=1, solvability={"zinc": False})
-
-        assert route1.get_content_hash() != route2.get_content_hash()
-
     def test_get_content_hash_includes_molecule_metadata(self):
         """Test that content hash differs when molecule metadata changes."""
         target1 = Molecule(

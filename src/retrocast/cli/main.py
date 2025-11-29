@@ -1,4 +1,5 @@
 import argparse
+import importlib.resources
 import sys
 from pathlib import Path
 from typing import Any
@@ -11,17 +12,27 @@ from retrocast.utils.logging import configure_script_logging, logger
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
-    if not config_path.exists():
-        # Fallback for dev environment
-        dev_path = Path("retrocast-config.yaml")
-        if dev_path.exists():
-            config_path = dev_path
-        else:
-            logger.error(f"Config file not found at {config_path}")
-            sys.exit(1)
+    """
+    Loads configuration.
+    Priority:
+    1. Local file (config_path)
+    2. Package default (src/retrocast/resources/default_config.yaml)
+    """
+    # 1. Try Local
+    if config_path.exists():
+        logger.debug(f"Loading local config from {config_path}")
+        with open(config_path) as f:
+            return yaml.safe_load(f)
 
-    with open(config_path) as f:
-        return yaml.safe_load(f)
+    # 2. Try Package Default
+    try:
+        logger.debug("Local config not found. Falling back to package defaults.")
+        resource = importlib.resources.files("retrocast.resources").joinpath("default_config.yaml")
+        with resource.open(encoding="utf-8") as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        logger.error(f"Could not load default configuration: {e}")
+        sys.exit(1)
 
 
 def main() -> None:
@@ -33,6 +44,19 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=Path("retrocast-config.yaml"), help="Path to config file")
 
     subparsers = parser.add_subparsers(dest="command", required=True, help="Command to run")
+
+    # --- INIT ---
+    init_parser = subparsers.add_parser("init", help="Initialize a local configuration file")
+    init_parser.add_argument("--force", action="store_true", help="Overwrite existing config file")
+
+    # --- ADAPT (Ad-Hoc) ---
+    adapt_parser = subparsers.add_parser(
+        "adapt", help="Convert raw predictions file to RetroCast schema (No config needed)"
+    )
+    adapt_parser.add_argument("--input", required=True, help="Path to raw predictions (.json.gz)")
+    adapt_parser.add_argument("--output", required=True, help="Path to save processed routes (.json.gz)")
+    adapt_parser.add_argument("--adapter", required=True, help="Name of the adapter to use (e.g. aizynth, dms)")
+    adapt_parser.add_argument("--benchmark", help="Optional: Path to benchmark definition to ensure correct IDs")
 
     # --- LIST ---
     subparsers.add_parser("list", help="List configured models")
@@ -127,10 +151,20 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    if args.command != "score-file":
-        config = load_config(args.config)
-    else:
-        config = {}  # dummy
+    # Commands that don't need config loading
+    if args.command in ["init", "adapt", "score-file", "create-benchmark"]:
+        if args.command == "init":
+            adhoc.handle_init(args)
+        elif args.command == "adapt":
+            adhoc.handle_adapt(args)
+        elif args.command == "score-file":
+            adhoc.handle_score_file(args)
+        elif args.command == "create-benchmark":
+            adhoc.handle_create_benchmark(args)
+        return
+
+    # Load config (local or default)
+    config = load_config(args.config)
 
     try:
         if args.command == "list":
@@ -143,10 +177,6 @@ def main() -> None:
             handlers.handle_score(args, config)
         elif args.command == "analyze":
             handlers.handle_analyze(args, config)
-        elif args.command == "score-file":
-            adhoc.handle_score_file(args)
-        elif args.command == "create-benchmark":
-            adhoc.handle_create_benchmark(args)
         elif args.command == "verify":
             handlers.handle_verify(args, config)
 

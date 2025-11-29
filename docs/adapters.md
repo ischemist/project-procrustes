@@ -1,392 +1,193 @@
-# Adding a New Model Adapter
+# Writing a Custom Adapter
 
-The adapter is the bridge from a model's unique output format to RetroCast's canonical schema. This document explains how to write one.
+The adapter is the "air gap" between a model's internal representation and RetroCast's canonical `Route` schema. If you are integrating a new model, you will likely need to write a new adapter.
 
-## Overview
+## The Adapter Contract
 
-Most model outputs fall into one of a few common patterns. Identify the pattern, use the appropriate common builder, and your adapter will be trivial.
-
-The adapter is responsible for:
-- **Parsing** raw model output (JSON, pickles, text files, etc.)
-- **Validating** the structure using Pydantic schemas
-- **Transforming** to the canonical `Route` format
-- **Handling errors** gracefully (invalid routes, schema mismatches, etc.)
-
-## Common Patterns
-
-### Pattern A: Bipartite Graph
-
-**Examples**: AiZynthFinder, SynPlanner
-
-If the raw output is a JSON tree where molecule nodes point to reaction nodes and vice-versa:
+A RetroCast adapter is a class that inherits from `BaseAdapter`. It implements a single method, `cast`, which validates raw model output and transforms it into `Route` objects.
 
 ```python
-# in retrocast/adapters/bipartite_model_adapter.py
-from collections.abc import Generator
-from typing import Annotated, Any, Literal
-from pydantic import BaseModel, Field, RootModel, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.common import build_molecule_from_bipartite_node
 from retrocast.models.chem import Route, TargetIdentity
-from retrocast.exceptions import RetroCastException
-import logging
-logger = logging.getLogger(__name__)
+from typing import Any, Generator
 
-# --- pydantic schemas for raw input validation ---
-class BipartiteBaseNode(BaseModel):
-    smiles: str
-    children: list["BipartiteNode"] = Field(default_factory=list)
+class MyModelAdapter(BaseAdapter):
+    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
+        """
+        Args:
+            raw_target_data: A single entry from the raw results file (dict or list).
+            target: The expected target identity (ID and canonical SMILES).
+            
+        Yields:
+            Valid Route objects.
+        """
+        # 1. Validate raw_target_data (Pydantic recommended)
+        # 2. Transform to Route objects
+        # 3. Yield valid routes
+        yield route
+```
 
-class BipartiteMoleculeInput(BipartiteBaseNode):
-    type: Literal["mol"]
-    in_stock: bool
+## Common Architecture Patterns
 
-class BipartiteReactionInput(BipartiteBaseNode):
-    type: Literal["reaction"]
-    metadata: dict[str, Any] = Field(default_factory=dict)
+Most retrosynthesis models output data in one of three patterns. RetroCast provides helper functions (`retrocast.adapters.common`) to handle the heavy lifting for these patterns, including recursion and cycle detection.
 
-BipartiteNode = Annotated[BipartiteMoleculeInput | BipartiteReactionInput, Field(discriminator="type")]
+### Pattern A: Bipartite Graph Recursion
+**Used by:** AiZynthFinder, SynPlanner, Syntheseus
 
-class BipartiteRouteList(RootModel[list[BipartiteMoleculeInput]]):
-    pass
+In this pattern, the output is a nested JSON tree where Molecule nodes point to Reaction nodes, which point to reactant Molecule nodes.
 
-class BipartiteModelAdapter(BaseAdapter):
-    def cast(self, raw_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
-        validated_routes = BipartiteRouteList.model_validate(raw_data)
-        for i, root_node in enumerate(validated_routes.root, start=1):
+**Helper:** `build_molecule_from_bipartite_node`
+
+To use this, your raw data structure must conform (via duck typing or Protocol) to the `BipartiteMolNode` interface: it must have `smiles` (str), `type` ("mol"), and `children` (list of reaction nodes).
+
+```python
+from retrocast.adapters.common import build_molecule_from_bipartite_node
+
+class MyAdapter(BaseAdapter):
+    def cast(self, raw_data, target):
+        # Validate that raw_data fits the Bipartite schema
+        validated = MyRawOutput.model_validate(raw_data)
+        
+        for i, tree_root in enumerate(validated.trees):
             try:
-                # Use the helper to get a Molecule object
-                target_molecule = build_molecule_from_bipartite_node(root_node)
-
-                # Verify the target SMILES matches
-                if target_molecule.smiles != target.smiles:
-                    logger.warning(
-                        f"Mismatched SMILES for target '{target.id}'. "
-                        f"Expected {target.smiles}, got {target_molecule.smiles}."
-                    )
+                # The helper handles the recursive tree construction
+                target_mol = build_molecule_from_bipartite_node(tree_root)
+                
+                # Verify the root matches the target
+                if target_mol.smiles != target.smiles:
                     continue
 
-                yield Route(target=target_molecule, rank=i, metadata={})
-            except (RetroCastException, ValidationError) as e:
-                logger.warning(f"Route for '{target.id}' failed validation or processing: {e}")
-
-**Key points**:
-1. Define Pydantic schemas for the raw input structure matching the BipartiteMolNode/BipartiteRxnNode protocols
-2. Use `build_molecule_from_bipartite_node` from `retrocast.adapters.common`
-3. Yield `Route` objects with target `Molecule`, rank, and metadata for each valid route
+                yield Route(target=target_mol, rank=i+1, metadata={})
+            except Exception:
+                continue
+```
 
 ### Pattern B: Precursor Map
+**Used by:** Retro*, DreamRetro, SynLlama
 
-**Examples**: Retro*, DreamRetro
+In this pattern, the output is a flat list of reactions or a string representation (e.g., `P >> R1.R2 | R1 >> R3`). The tree structure is implicit in the connectivity.
 
-If the raw output can be parsed into a `dict[product_smiles, list[reactant_smiles]]`:
+**Helper:** `build_molecule_from_precursor_map`
 
-```python
-# in retrocast/adapters/precursor_model_adapter.py
-from collections.abc import Generator
-from typing import Any
-from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
-from retrocast.models.chem import Route, TargetIdentity
-from retrocast.exceptions import RetroCastException
-import logging
-logger = logging.getLogger(__name__)
-
-class PrecursorModelAdapter(BaseAdapter):
-    def _parse_route_string(self, route_str: str) -> PrecursorMap:
-        # model-specific logic to parse the string "p1>>r1.r2|p2>>r3..."
-        precursor_map: PrecursorMap = {}
-        # ... your parsing logic here ...
-        return precursor_map
-
-    def cast(self, raw_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
-        try:
-            precursor_map = self._parse_route_string(raw_data["routes"])
-            # Use the helper to build the tree from the target SMILES
-            target_molecule = build_molecule_from_precursor_map(target.smiles, precursor_map)
-            yield Route(target=target_molecule, rank=1, metadata={})
-        except (RetroCastException, KeyError) as e:
-            logger.warning(f"Route for '{target.id}' failed: {e}")
-
-**Key points**:
-1. Write a model-specific parser to extract the precursor map (`dict[SmilesStr, list[SmilesStr]]`)
-2. Use `build_molecule_from_precursor_map` from `retrocast.adapters.common`
-3. The builder handles recursive tree construction, cycle detection, and validation
-
-### Pattern C: Custom Recursive
-
-**Examples**: DirectMultiStep (DMS)
-
-If the raw output is already a recursive tree but with a different schema:
+You simply need to parse the raw format into a Python dictionary mapping `Product SMILES -> [Reactant SMILES, ...]`.
 
 ```python
-# in retrocast/adapters/custom_model_adapter.py
-from collections.abc import Generator
-from typing import Any
-from pydantic import BaseModel, RootModel, Field
-from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
+from retrocast.adapters.common import build_molecule_from_precursor_map
 
-# --- pydantic schemas for raw input validation ---
-class CustomTree(BaseModel):
+class MyAdapter(BaseAdapter):
+    def cast(self, raw_data, target):
+        # 1. Parse your model's specific string format
+        # Input: "target >> int_1.int_2 | int_1 >> sm_1.sm_2"
+        # Output: {"target": ["int_1", "int_2"], "int_1": ["sm_1", "sm_2"]}
+        precursor_map = self._parse_custom_string(raw_data["route_string"])
+        
+        # 2. Build the tree
+        # The helper walks the map recursively starting from the target SMILES
+        target_mol = build_molecule_from_precursor_map(target.smiles, precursor_map)
+        
+        yield Route(target=target_mol, rank=1, metadata={})
+```
+
+### Pattern C: Custom / Mixed
+**Used by:** DirectMultiStep (DMS), ASKCOS
+
+Some models have unique structures that don't fit the above patterns (e.g., graphs defined by edge lists, or recursive trees that don't strictly alternate molecule/reaction nodes).
+
+For these, you must implement your own recursive builder. See `retrocast.adapters.dms_adapter` for a reference implementation.
+
+## Implementation Guidelines
+
+### 1. Define Pydantic Schemas
+Always define Pydantic models for the **raw** input format. This separates validation logic from transformation logic and ensures bad data is rejected early.
+
+```python
+class MyRawNode(BaseModel):
     smiles: str
-    children: list["CustomTree"] = Field(default_factory=list)
-
-class CustomRouteList(RootModel[list[CustomTree]]):
-    pass
-
-class CustomModelAdapter(BaseAdapter):
-    def _build_molecule(self, custom_node: CustomTree) -> Molecule:
-        # Logic to convert one custom node to one Molecule
-        canon_smiles = canonicalize_smiles(custom_node.smiles)
-        inchikey = get_inchi_key(canon_smiles)
-        
-        synthesis_step = None
-        if custom_node.children:
-            reactants = [self._build_molecule(child) for child in custom_node.children]
-            synthesis_step = ReactionStep(
-                reactants=reactants,
-                mapped_smiles=None,
-                template=None,
-                reagents=None,
-                solvents=None,
-                metadata={}
-            )
-        
-        return Molecule(
-            smiles=canon_smiles,
-            inchikey=inchikey,
-            synthesis_step=synthesis_step,
-            metadata={}
-        )
-
-    def cast(self, raw_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
-        validated_routes = CustomRouteList.model_validate(raw_data)
-        for i, root_node in enumerate(validated_routes.root, start=1):
-            target_molecule = self._build_molecule(root_node)
-            yield Route(target=target_molecule, rank=i, metadata={})
+    probability: float
+    children: list["MyRawNode"]
 ```
 
-**Key points**:
-1. Define Pydantic schemas for the raw tree structure
-2. Write a recursive builder (`_build_molecule`) that traverses the raw tree
-3. Construct the canonical `Molecule` tree with `ReactionStep` objects linking reactants
-4. Always canonicalize SMILES and generate InChIKeys for all molecules
+### 2. Canonicalization
+RetroCast relies on exact SMILES matching.
+*   **Always** canonicalize raw SMILES using `retrocast.chem.canonicalize_smiles`.
+*   The standard helpers (`build_molecule_...`) do this automatically.
+*   If writing a custom builder, you must call it explicitly.
+*   Always check that the root of your built tree matches `target.smiles`.
 
-## Integration Steps
+### 3. Cycle Detection
+Retrosynthetic graphs must be acyclic trees.
+*   The standard helpers include cycle detection (raising `AdapterLogicError` if a node appears twice in a path).
+*   If writing a custom builder, maintain a `visited` set during recursion.
 
-Once your adapter class is implemented, follow these steps:
+### 4. Metadata
+Do not discard model-specific data (scores, template IDs, etc.). Store it in the `metadata` dictionary of the `Molecule` or `ReactionStep`. This data is preserved throughout the pipeline and can be used for custom analysis later.
 
-### 1. Write Tests
+## Registration
 
-Create `tests/adapters/test_new_adapter.py` and inherit from `BaseAdapterTest`:
+Once your adapter logic is written, you must register it so the CLI can find it.
 
-```python
-# in tests/adapters/test_new_adapter.py
-import pytest
-from tests.adapters.test_base_adapter import BaseAdapterTest
-from retrocast.adapters.new_model_adapter import NewModelAdapter
-from retrocast.models.chem import TargetIdentity
-
-class TestNewModelAdapterUnit(BaseAdapterTest):
-    @pytest.fixture
-    def adapter_instance(self):
-        return NewModelAdapter()
-
-    @pytest.fixture
-    def raw_valid_route_data(self) -> Any:
-        # return a valid json blob for your model
-        ...
-
-    @pytest.fixture
-    def raw_unsuccessful_run_data(self) -> Any:
-        # return data representing a failed prediction
-        ...
-
-    @pytest.fixture
-    def raw_invalid_schema_data(self) -> Any:
-        # return malformed data that should fail validation
-        ...
-
-    @pytest.fixture
-    def target_input(self) -> TargetIdentity:
-        # return target info matching your valid route
-
-    @pytest.fixture
-    def mismatched_target_info(self) -> TargetIdentity:
-        # return target info that doesn't match your route
-        ...
-```
-
-The `BaseAdapterTest` class provides a standard test suite that verifies:
-- Valid routes are parsed correctly
-- Invalid schemas are rejected
-- Target mismatches are caught
-- Error handling works as expected
-
-### 2. Register the Adapter
-
-Add your adapter to the factory in `retrocast/adapters/factory.py`:
+### 1. Add to Factory
+Add your adapter to the map in `src/retrocast/adapters/factory.py`:
 
 ```python
-# in retrocast/adapters/factory.py
-from retrocast.adapters.new_model_adapter import NewModelAdapter
+from retrocast.adapters.my_adapter import MyModelAdapter
 
-ADAPTER_MAP: dict[str, BaseAdapter] = {
+ADAPTER_MAP = {
     "aizynth": AizynthAdapter(),
-    "retrostar": RetrostarAdapter(),
     # ...
-    "new-model": NewModelAdapter(),  # <-- ADD THIS
+    "my-model": MyModelAdapter(),
 }
 ```
 
-### 3. Update Configuration
-
-Add an entry for your model in `retrocast-config.yaml`:
+### 2. Update Config
+When using the adapter in a project, reference the key from `ADAPTER_MAP` in your `retrocast-config.yaml`:
 
 ```yaml
-# in retrocast-config.yaml
 models:
-  # ...
-  new-model:
-    adapter: new-model  # must match the key from ADAPTER_MAP
-    raw_results_filename: results.json.gz
-    sampling:
-      strategy: top-k
-      k: 10
-```
-
-**Configuration fields**:
-- `adapter`: The adapter key from `ADAPTER_MAP`
-- `raw_results_filename`: Expected filename in `data/evaluations/<model>/<dataset>/`
-- `sampling`: How to sample routes if the model returns more than needed
-  - `strategy`: `"top-k"` or `"all"`
-  - `k`: Number of routes to keep (for top-k strategy)
-
-### 4. Create Model Scripts
-
-Add numbered scripts to `scripts/<model-name>/` following the pattern:
-
-```
-scripts/new-model/
-├── 1-download-assets.py      # Download model checkpoints, config files, etc.
-├── 2-prepare-data.py          # Convert stock files, prepare inputs (optional)
-└── 3-run-new-model.py         # Run inference and save results.json.gz
-```
-
-Each script should:
-- Include a module-level docstring with usage examples
-- Accept `--target-name` argument (dataset name)
-- Save output to `data/evaluations/<model-name>/<dataset-name>/results.json.gz`
-- Use `uv run --extra <model-extra>` to ensure correct dependencies
-
-**Example script header**:
-
-```python
-"""
-Run NewModel predictions on a target set.
-
-Usage:
-    uv run --extra new-model scripts/new-model/3-run-new-model.py --target-name "uspto-190"
-"""
+  experimental-run-1:
+    adapter: my-model
+    raw_results_filename: predictions.json
 ```
 
 ## Testing Your Adapter
 
-Run the adapter tests:
+RetroCast provides a strict test harness to ensure your adapter behaves correctly. Create a test file inheriting from `BaseAdapterTest`.
 
+```python
+# tests/adapters/test_my_adapter.py
+from tests.adapters.test_base_adapter import BaseAdapterTest
+from retrocast.adapters.my_adapter import MyAdapter
+
+class TestMyAdapter(BaseAdapterTest):
+    @pytest.fixture
+    def adapter_instance(self):
+        return MyAdapter()
+
+    @pytest.fixture
+    def raw_valid_route_data(self):
+        # Return a sample JSON blob that represents a valid output
+        return {"smiles": "CCO", "tree": ...}
+    
+    @pytest.fixture
+    def raw_unsuccessful_run_data(self):
+        # Return data representing a failed prediction (empty list, success=False, etc.)
+        return {"success": False}
+
+    @pytest.fixture
+    def raw_invalid_schema_data(self):
+        # Return malformed data that should fail Pydantic validation
+        return {"malformed": True}
+    
+    # ... implement target identity fixtures ...
+```
+
+Run the tests using `pytest`:
 ```bash
-# Test only your adapter
-pytest tests/adapters/test_new_adapter.py -v
-
-# Run the full adapter test suite
-pytest tests/adapters/ -v
+pytest tests/adapters/test_my_adapter.py
 ```
 
-Test the full pipeline:
-
-```bash
-# 1. Run your model scripts to generate raw output
-uv run --extra new-model scripts/new-model/3-run-new-model.py --target-name "uspto-190"
-
-# 2. Process with RetroCast
-uv run scripts/process-predictions.py process --model new-model --dataset uspto-190
-
-# 3. Verify the hash is reproducible
-uv run scripts/verify-hash.py --model new-model --dataset uspto-190
-```
-
-## Common Pitfalls
-
-1. **SMILES canonicalization**: Always canonicalize SMILES using `canonicalize_smiles()` before creating nodes. Different SMILES for the same molecule will break deduplication.
-
-2. **Target mismatch**: Ensure the root molecule in your tree matches `target.smiles` (after canonicalization).
-
-3. **Circular references**: The tree must be acyclic. If a molecule appears multiple times, create separate `Molecule` instances (deduplication happens later).
-
-4. **Error handling**: Wrap tree building in try/except and log warnings for invalid routes. Don't fail the entire batch because one route is malformed.
-
-5. **Metadata preservation**: Use the `metadata` fields on `Molecule` and `ReactionStep` to preserve model-specific data (scores, templates, etc.).
-
-## Advanced Topics
-
-### Custom Validation
-
-If your model has special validation requirements, override the `validate()` method:
-
-```python
-class NewModelAdapter(BaseAdapter):
-    def validate(self, raw_data: Any, target: TargetIdentity) -> None:
-        super().validate(raw_data, target)
-        # additional model-specific checks
-        if not isinstance(raw_data, dict):
-            raise ValueError("NewModel output must be a dictionary")
-```
-
-### Handling Multiple Output Files
-
-If your model produces multiple files per run, override the loading logic:
-
-```python
-class NewModelAdapter(BaseAdapter):
-    def load_raw_data(self, results_dir: Path) -> Any:
-        # load multiple files and combine
-        tree_file = results_dir / "trees.pkl"
-        scores_file = results_dir / "scores.json"
-        # ... custom loading logic
-        return combined_data
-```
-
-### Metadata Extraction
-
-Preserve model-specific information in metadata fields:
-
-```python
-synthesis_step = ReactionStep(
-    reactants=[...],
-    mapped_smiles=reaction_data.get("mapped_smiles"),
-    template=reaction_data.get("template"),
-    reagents=reaction_data.get("reagents"),
-    solvents=reaction_data.get("solvents"),
-    metadata={
-        "confidence": reaction_data.get("score"),
-        "source": "retro-model-v2",
-    }
-)
-```
-
-This data is preserved in the canonical format and can be used for downstream analysis.
-
-## Reference Implementations
-
-For real-world examples, see:
-
-- **Bipartite graph**: `retrocast/adapters/aizynth_adapter.py`, `retrocast/adapters/synplanner_adapter.py`
-- **Precursor map**: `retrocast/adapters/retrostar_adapter.py`, `retrocast/adapters/dreamretro_adapter.py`
-- **Custom recursive**: `retrocast/adapters/dms_adapter.py`
-- **Pickle files**: `retrocast/adapters/multistepttl_adapter.py`
-
-## Questions?
-
-Open an issue at [github.com/ischemist/project-procrustes/issues](https://github.com/ischemist/project-procrustes/issues).
+This test suite automatically verifies that your adapter:
+1.  Correctly parses valid data.
+2.  Rejects invalid schemas without crashing (returns empty generator).
+3.  Correctly identifies target mismatches.
+4.  Handles failed predictions gracefully.
