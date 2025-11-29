@@ -28,9 +28,8 @@ def load_config(config_path: Path) -> dict[str, Any]:
     try:
         logger.debug("Local config not found. Falling back to package defaults.")
         resource = importlib.resources.files("retrocast.resources").joinpath("default_config.yaml")
-        with importlib.resources.as_file(resource) as p:  # noqa: SIM117
-            with open(p) as f:
-                return yaml.safe_load(f)
+        with resource.open(encoding="utf-8") as f:
+            return yaml.safe_load(f)
     except Exception as e:
         logger.error(f"Could not load default configuration: {e}")
         sys.exit(1)
