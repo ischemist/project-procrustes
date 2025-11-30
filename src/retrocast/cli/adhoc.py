@@ -11,15 +11,11 @@ from tqdm import tqdm
 
 from retrocast.adapters import get_adapter
 from retrocast.api import score_predictions
-from retrocast.chem import (
-    canonicalize_smiles,
-    get_inchi_key,
-)
 from retrocast.curation.filtering import deduplicate_routes
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.io.data import load_benchmark, load_routes, save_routes
 from retrocast.io.provenance import create_manifest
-from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
+from retrocast.models.benchmark import create_benchmark, create_benchmark_target
 from retrocast.models.chem import TargetInput
 
 logger = logging.getLogger(__name__)
@@ -43,7 +39,7 @@ def _find_column(fieldnames: Sequence[str], candidates: Sequence[str]) -> str | 
     return None
 
 
-def _process_csv_file(input_path: Path) -> dict[str, BenchmarkTarget]:
+def _process_csv_file(input_path: Path) -> dict[str, Any]:
     """
     Process a CSV file and extract benchmark targets.
 
@@ -82,17 +78,13 @@ def _process_csv_file(input_path: Path) -> dict[str, BenchmarkTarget]:
             tid = row[id_col].strip()
             raw_smi = row[smiles_col].strip()
 
-            # Basic Validation & Calculation
-            canon_smi = canonicalize_smiles(raw_smi)
-            inchi_key = get_inchi_key(canon_smi)
-
             # Capture extra columns as metadata
             meta = {k: v for k, v in row.items() if k not in (id_col, smiles_col)}
 
-            targets[tid] = BenchmarkTarget(
+            # Use official constructor (canonicalizes SMILES and computes InChIKey)
+            targets[tid] = create_benchmark_target(
                 id=tid,
-                smiles=canon_smi,
-                inchi_key=inchi_key,
+                smiles=raw_smi,
                 metadata=meta,
                 ground_truth=None,
                 is_convergent=None,
@@ -102,7 +94,7 @@ def _process_csv_file(input_path: Path) -> dict[str, BenchmarkTarget]:
     return targets
 
 
-def _process_txt_file(input_path: Path) -> dict[str, BenchmarkTarget]:
+def _process_txt_file(input_path: Path) -> dict[str, Any]:
     """
     Process a TXT file (one SMILES per line) and extract benchmark targets.
     Auto-generates sequential IDs.
@@ -121,11 +113,10 @@ def _process_txt_file(input_path: Path) -> dict[str, BenchmarkTarget]:
     width = len(str(len(lines)))
     for i, raw_smi in enumerate(lines):
         tid = f"target-{i + 1:0{width}d}"
-        canon_smi = canonicalize_smiles(raw_smi)
-        inchi_key = get_inchi_key(canon_smi)
 
-        targets[tid] = BenchmarkTarget(
-            id=tid, smiles=canon_smi, inchi_key=inchi_key, ground_truth=None, is_convergent=None, route_length=None
+        # Use official constructor (canonicalizes SMILES and computes InChIKey)
+        targets[tid] = create_benchmark_target(
+            id=tid, smiles=raw_smi, ground_truth=None, is_convergent=None, route_length=None
         )
 
     return targets
@@ -153,8 +144,8 @@ def handle_create_benchmark(args: Any) -> None:
             logger.error("Unsupported file extension. Use .csv or .txt")
             sys.exit(1)
 
-        # Create the BenchmarkSet
-        bm = BenchmarkSet(
+        # Create the BenchmarkSet with validation
+        bm = create_benchmark(
             name=args.name, description=f"Created from {input_path.name}", stock_name=args.stock_name, targets=targets
         )
 

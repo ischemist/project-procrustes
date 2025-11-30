@@ -185,8 +185,9 @@ class TestHandleCreateBenchmark:
     def test_create_benchmark_from_txt_id_padding(self, tmp_path):
         """Test TXT file auto-generates IDs with correct padding."""
         txt_path = tmp_path / "targets.txt"
-        # Create 12 targets to test zero-padding
-        smiles_list = ["C"] * 12
+        # Create 12 distinct targets to test zero-padding
+        # Use different alkanes: C, CC, CCC, etc.
+        smiles_list = ["C" * (i + 1) for i in range(12)]
         txt_path.write_text("\n".join(smiles_list))
 
         output_base = tmp_path / "txt-padding-benchmark"
@@ -308,10 +309,11 @@ class TestHandleCreateBenchmark:
         assert exc_info.value.code == 1
 
     def test_create_benchmark_canonicalization(self, tmp_path):
-        """Test SMILES are canonicalized."""
+        """Test SMILES are canonicalized and duplicates are detected."""
         csv_path = tmp_path / "targets.csv"
-        # Non-canonical SMILES: ethanol as CCO vs OCC
-        csv_path.write_text("id,smiles\nt1,CCO\nt2,OCC\n")
+        # Non-canonical SMILES for different molecules
+        # CCO = ethanol, c1ccccc1 = benzene (non-canonical)
+        csv_path.write_text("id,smiles\nt1,CCO\nt2,c1ccccc1\n")
 
         output_base = tmp_path / "canon-benchmark"
         args = Namespace(
@@ -327,8 +329,28 @@ class TestHandleCreateBenchmark:
         data = load_json_gz(output_path)
         benchmark = BenchmarkSet.model_validate(data)
 
-        # Both should be canonicalized to same SMILES
-        assert benchmark.targets["t1"].smiles == benchmark.targets["t2"].smiles
+        # Should be canonicalized
+        assert benchmark.targets["t1"].smiles == "CCO"
+        assert benchmark.targets["t2"].smiles == "c1ccccc1"  # Canonical form
+
+    def test_create_benchmark_rejects_duplicate_smiles(self, tmp_path):
+        """Test that duplicate SMILES (after canonicalization) are rejected."""
+        csv_path = tmp_path / "targets.csv"
+        # Non-canonical SMILES: ethanol as CCO vs OCC (both canonicalize to CCO)
+        csv_path.write_text("id,smiles\nt1,CCO\nt2,OCC\n")
+
+        output_base = tmp_path / "canon-benchmark"
+        args = Namespace(
+            input=str(csv_path),
+            output=str(output_base),
+            name="canon-test",
+            stock_name="stock",
+        )
+
+        # Should fail due to duplicate SMILES
+        with pytest.raises(SystemExit) as exc_info:
+            handle_create_benchmark(args)
+        assert exc_info.value.code == 1
 
     def test_create_benchmark_manifest_content(self, tmp_path):
         """Test manifest contains expected metadata."""
