@@ -13,6 +13,7 @@ from retrocast.adapters import get_adapter
 from retrocast.api import score_predictions
 from retrocast.chem import (
     canonicalize_smiles,
+    get_inchi_key,
 )
 from retrocast.curation.filtering import deduplicate_routes
 from retrocast.io.blob import load_json_gz, save_json_gz
@@ -83,12 +84,19 @@ def _process_csv_file(input_path: Path) -> dict[str, BenchmarkTarget]:
 
             # Basic Validation & Calculation
             canon_smi = canonicalize_smiles(raw_smi)
+            inchi_key = get_inchi_key(canon_smi)
 
             # Capture extra columns as metadata
             meta = {k: v for k, v in row.items() if k not in (id_col, smiles_col)}
 
             targets[tid] = BenchmarkTarget(
-                id=tid, smiles=canon_smi, metadata=meta, ground_truth=None, is_convergent=None, route_length=None
+                id=tid,
+                smiles=canon_smi,
+                inchi_key=inchi_key,
+                metadata=meta,
+                ground_truth=None,
+                is_convergent=None,
+                route_length=None,
             )
 
     return targets
@@ -114,9 +122,10 @@ def _process_txt_file(input_path: Path) -> dict[str, BenchmarkTarget]:
     for i, raw_smi in enumerate(lines):
         tid = f"target-{i + 1:0{width}d}"
         canon_smi = canonicalize_smiles(raw_smi)
+        inchi_key = get_inchi_key(canon_smi)
 
         targets[tid] = BenchmarkTarget(
-            id=tid, smiles=canon_smi, ground_truth=None, is_convergent=None, route_length=None
+            id=tid, smiles=canon_smi, inchi_key=inchi_key, ground_truth=None, is_convergent=None, route_length=None
         )
 
     return targets

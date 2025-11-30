@@ -138,8 +138,8 @@ mkt-cnv-160 Stability Statistics
 
 ```bash
 uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-explorer-xl --benchmark uspto-190
-retrocast score --model dms-explorer-xl --dataset mkt-cnv-160
-retrocast analyze --model dms-explorer-xl --dataset mkt-cnv-160
+retrocast score --model dms-explorer-xl --dataset uspto-190
+retrocast analyze --model dms-explorer-xl --dataset uspto-190
 retrocast verify --target data/4-scored/mkt-cnv-160/dms-explorer-xl/buyables-stock/manifest.json --deep
 
 retrocast ingest --model retro-star --dataset mkt-lin-500

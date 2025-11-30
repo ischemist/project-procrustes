@@ -12,7 +12,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 from retrocast import adapt_single_route
-from retrocast.chem import canonicalize_smiles
+from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.io import create_manifest, load_raw_paroutes_list, load_stock_file, save_json_gz
 from retrocast.metrics.solvability import is_route_solved
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
@@ -58,6 +58,7 @@ def process_dataset(name: str, check_buyables: bool = False):
 
         # 1. Canonicalize SMILES
         smiles = canonicalize_smiles(raw_item["smiles"])
+        inchi_key = get_inchi_key(smiles)
 
         # 2. Adapt the Route
         # (We construct a temporary TargetIdentity for the adapter)
@@ -80,6 +81,7 @@ def process_dataset(name: str, check_buyables: bool = False):
         target = BenchmarkTarget(
             id=target_id,
             smiles=smiles,
+            inchi_key=inchi_key,
             ground_truth=route,
             route_length=route.length,
             is_convergent=route.has_convergent_reaction,

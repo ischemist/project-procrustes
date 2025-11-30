@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from retrocast.models.chem import Route
-from retrocast.typing import SmilesStr
+from retrocast.typing import InchiKeyStr, SmilesStr
 
 
 class ExecutionStats(BaseModel):
@@ -22,6 +22,7 @@ class BenchmarkTarget(BaseModel):
 
     id: str = Field(..., description="Unique identifier within the benchmark (e.g., 'n5-00123').")
     smiles: SmilesStr = Field(..., description="The canonical SMILES of the target.")
+    inchi_key: InchiKeyStr = Field(..., description="The InChIKey of the target molecule.")
 
     # Bucket for anything else (e.g. "source_patent_id", "reaction_classes", "original_index")
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -64,6 +65,18 @@ class BenchmarkSet(BaseModel):
         mapping = defaultdict(list)
         for target in self.targets.values():
             mapping[target.smiles].append(target.id)
+        return dict(mapping)
+
+    def get_inchikey_map(self) -> dict[str, list[str]]:
+        """
+        Returns a mapping of {inchi_key: [target_id_1, target_id_2, ...]}.
+
+        Similar to get_smiles_map but uses InChIKeys as keys. Useful for
+        canonical molecule identity lookups and handling tautomers/stereoisomers.
+        """
+        mapping = defaultdict(list)
+        for target in self.targets.values():
+            mapping[target.inchi_key].append(target.id)
         return dict(mapping)
 
     def get_target_ids(self) -> list[str]:

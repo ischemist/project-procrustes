@@ -32,6 +32,7 @@ from retrocast.io.provenance import (
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.evaluation import EvaluationResults, ScoredRoute, TargetEvaluation
 from retrocast.models.stats import MetricResult, ModelStatistics, ReliabilityFlag, StratifiedMetric
+from tests.helpers import _synthetic_inchikey
 
 # =============================================================================
 # Tests for calculate_file_hash
@@ -141,6 +142,7 @@ class TestBenchmarkContentHash:
         target = BenchmarkTarget(
             id="test-001",
             smiles="CC",
+            inchi_key=_synthetic_inchikey("CC"),
             is_convergent=False,
             route_length=1,
             ground_truth=route,
@@ -163,9 +165,11 @@ class TestBenchmarkContentHash:
         # Create targets in one order
         targets1 = {}
         for i in range(5):
+            smiles = f"{'C' * (i + 1)}"
             targets1[f"t{i}"] = BenchmarkTarget(
                 id=f"t{i}",
-                smiles=f"{'C' * (i + 1)}",
+                smiles=smiles,
+                inchi_key=_synthetic_inchikey(smiles),
                 is_convergent=False,
                 route_length=i + 1,
                 ground_truth=route if i == 0 else None,
@@ -174,9 +178,11 @@ class TestBenchmarkContentHash:
         # Create targets in reverse order
         targets2 = {}
         for i in reversed(range(5)):
+            smiles = f"{'C' * (i + 1)}"
             targets2[f"t{i}"] = BenchmarkTarget(
                 id=f"t{i}",
-                smiles=f"{'C' * (i + 1)}",
+                smiles=smiles,
+                inchi_key=_synthetic_inchikey(smiles),
                 is_convergent=False,
                 route_length=i + 1,
                 ground_truth=route if i == 0 else None,
@@ -189,8 +195,12 @@ class TestBenchmarkContentHash:
 
     def test_content_sensitive_smiles_change(self):
         """Changing a SMILES should change the hash."""
-        target1 = BenchmarkTarget(id="t1", smiles="CC", is_convergent=False, route_length=1)
-        target2 = BenchmarkTarget(id="t1", smiles="CCC", is_convergent=False, route_length=1)
+        target1 = BenchmarkTarget(
+            id="t1", smiles="CC", inchi_key=_synthetic_inchikey("CC"), is_convergent=False, route_length=1
+        )
+        target2 = BenchmarkTarget(
+            id="t1", smiles="CCC", inchi_key=_synthetic_inchikey("CCC"), is_convergent=False, route_length=1
+        )
 
         bench1 = BenchmarkSet(name="test", targets={"t1": target1})
         bench2 = BenchmarkSet(name="test", targets={"t1": target2})
@@ -202,6 +212,7 @@ class TestBenchmarkContentHash:
         target1 = BenchmarkTarget(
             id="t1",
             smiles="CC",
+            inchi_key=_synthetic_inchikey("CC"),
             is_convergent=False,
             route_length=1,
             metadata={"source": "A"},
@@ -209,6 +220,7 @@ class TestBenchmarkContentHash:
         target2 = BenchmarkTarget(
             id="t1",
             smiles="CC",
+            inchi_key=_synthetic_inchikey("CC"),
             is_convergent=False,
             route_length=1,
             metadata={"source": "B"},
@@ -224,6 +236,7 @@ class TestBenchmarkContentHash:
         target1 = BenchmarkTarget(
             id="t1",
             smiles="CC",
+            inchi_key=_synthetic_inchikey("CC"),
             is_convergent=False,
             route_length=1,
             metadata={"a": 1, "b": 2, "c": 3},
@@ -231,6 +244,7 @@ class TestBenchmarkContentHash:
         target2 = BenchmarkTarget(
             id="t1",
             smiles="CC",
+            inchi_key=_synthetic_inchikey("CC"),
             is_convergent=False,
             route_length=1,
             metadata={"c": 3, "a": 1, "b": 2},
@@ -327,6 +341,7 @@ class TestCreateManifest:
         target = BenchmarkTarget(
             id="t1",
             smiles="CC",
+            inchi_key=_synthetic_inchikey("CC"),
             is_convergent=False,
             route_length=1,
             ground_truth=route,
@@ -466,6 +481,7 @@ class TestBenchmarkRoundtrip:
         target = BenchmarkTarget(
             id="test-001",
             smiles="CC",
+            inchi_key=_synthetic_inchikey("CC"),
             is_convergent=False,
             route_length=1,
             ground_truth=route,

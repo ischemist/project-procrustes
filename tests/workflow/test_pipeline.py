@@ -17,7 +17,7 @@ from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import SmilesStr
 from retrocast.workflow.ingest import ingest_model_predictions
 from retrocast.workflow.score import score_model
-from tests.helpers import _make_simple_route, _make_two_step_route
+from tests.helpers import _make_simple_route, _make_two_step_route, _synthetic_inchikey
 
 # =============================================================================
 # Test Adapter - Minimal adapter for synthetic data
@@ -68,6 +68,7 @@ def synthetic_benchmark() -> BenchmarkSet:
     targets["target_1"] = BenchmarkTarget(
         id="target_1",
         smiles=SmilesStr("CC"),
+        inchi_key=_synthetic_inchikey("CC"),
         ground_truth=gt_route_1,
         is_convergent=False,
         route_length=1,
@@ -78,6 +79,7 @@ def synthetic_benchmark() -> BenchmarkSet:
     targets["target_2"] = BenchmarkTarget(
         id="target_2",
         smiles=SmilesStr("CCC"),
+        inchi_key=_synthetic_inchikey("CCC"),
         ground_truth=gt_route_2,
         is_convergent=False,
         route_length=2,
@@ -87,6 +89,7 @@ def synthetic_benchmark() -> BenchmarkSet:
     targets["target_3"] = BenchmarkTarget(
         id="target_3",
         smiles=SmilesStr("CCCC"),
+        inchi_key=_synthetic_inchikey("CCCC"),
         ground_truth=None,
         is_convergent=None,
         route_length=None,
@@ -607,6 +610,7 @@ class TestSyntheticAdapter:
         target = BenchmarkTarget(
             id="test",
             smiles=SmilesStr("CC"),
+            inchi_key=_synthetic_inchikey("CC"),
             is_convergent=False,
             route_length=1,
         )
@@ -624,6 +628,7 @@ class TestSyntheticAdapter:
         target = BenchmarkTarget(
             id="test",
             smiles=SmilesStr("CC"),
+            inchi_key=_synthetic_inchikey("CC"),
             is_convergent=False,
             route_length=1,
         )
@@ -639,6 +644,7 @@ class TestSyntheticAdapter:
         target = BenchmarkTarget(
             id="test",
             smiles=SmilesStr("CC"),
+            inchi_key=_synthetic_inchikey("CC"),
             is_convergent=False,
             route_length=1,
         )

@@ -14,6 +14,7 @@ import pytest
 from retrocast.cli import handlers
 from retrocast.io.blob import save_json_gz
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
+from tests.helpers import _synthetic_inchikey
 
 # --- Fixtures ---
 
@@ -50,6 +51,7 @@ def synthetic_data(synthetic_config):
     target = BenchmarkTarget(
         id="t1",
         smiles="CC",  # Ethane - matches our route target
+        inchi_key=_synthetic_inchikey("CC"),
         is_convergent=True,  # Two reactants merge in one reaction
         route_length=1,  # One reaction step
         ground_truth=None,
