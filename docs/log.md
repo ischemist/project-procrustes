@@ -132,3 +132,17 @@ mkt-cnv-160 Stability Statistics
 │    4 │ 20151225  │          0.5326 │           (-0.0, +0.7, -0.2) │
 │    5 │ 20260317  │          1.2371 │           (-1.0, +0.3, +0.2) │
 └──────┴───────────┴─────────────────┴──────────────────────────────┘
+
+### Scoring eval runs
+
+
+```bash
+uv run scripts/directmultistep/ingest-dms-legacy.py --model dms-explorer-xl --benchmark uspto-190
+retrocast score --model dms-explorer-xl --dataset mkt-cnv-160
+retrocast analyze --model dms-explorer-xl --dataset mkt-cnv-160
+retrocast verify --target data/4-scored/mkt-cnv-160/dms-explorer-xl/buyables-stock/manifest.json --deep
+
+retrocast ingest --model retro-star --dataset mkt-lin-500
+retrocast score --model retro-star --dataset mkt-lin-500
+retrocast analyze --model retro-star --dataset mkt-lin-500
+```
