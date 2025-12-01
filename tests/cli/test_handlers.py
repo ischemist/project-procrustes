@@ -15,6 +15,7 @@ from retrocast.cli import adhoc, handlers
 from retrocast.io.blob import save_json_gz
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Molecule, ReactionStep, Route
+from tests.helpers import _synthetic_inchikey
 
 # --- Helpers ---
 
@@ -53,6 +54,7 @@ class TestHandleScoreFile:
         target = BenchmarkTarget(
             id="test-1",
             smiles="CC",
+            inchi_key=_synthetic_inchikey("CC"),
             is_convergent=False,
             route_length=1,
             ground_truth=make_simple_route("CC", "C"),
@@ -133,6 +135,7 @@ class TestHandleScoreFile:
         target = BenchmarkTarget(
             id="test-1",
             smiles="CC",
+            inchi_key=_synthetic_inchikey("CC"),
             is_convergent=False,
             route_length=1,
         )

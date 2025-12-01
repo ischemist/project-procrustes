@@ -16,6 +16,12 @@ class SchemaLogicError(RetroCastException, ValueError):
     pass
 
 
+class BenchmarkValidationError(RetroCastException, ValueError):
+    """Raised when benchmark data violates uniqueness or validation constraints."""
+
+    pass
+
+
 class AdapterLogicError(RetroCastException):
     """Raised when an adapter fails to correctly fulfill its transformation contract."""
 

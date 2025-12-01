@@ -15,7 +15,7 @@ from retrocast import adapt_single_route
 from retrocast.chem import canonicalize_smiles
 from retrocast.io import create_manifest, load_raw_paroutes_list, load_stock_file, save_json_gz
 from retrocast.metrics.solvability import is_route_solved
-from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
+from retrocast.models.benchmark import create_benchmark, create_benchmark_target
 from retrocast.models.chem import TargetInput
 from retrocast.utils.logging import configure_script_logging, logger
 
@@ -42,12 +42,7 @@ def process_dataset(name: str, check_buyables: bool = False):
     if check_buyables:
         buyables = load_stock_file(stock_dir / "buyables-stock.txt")
 
-    benchmark = BenchmarkSet(
-        name=f"paroutes-{name}-full{suffix}",
-        description=f"Full raw import of PaRoutes {name} set.",
-        stock_name=f"{name}-stock",
-    )
-
+    targets = {}
     failures = 0
     unsolved = 0
 
@@ -75,9 +70,9 @@ def process_dataset(name: str, check_buyables: bool = False):
                 unsolved += 1
                 continue
 
-        # 3. Create BenchmarkTarget
-        # Calculate metadata immediately so we can query it later
-        target = BenchmarkTarget(
+        # 3. Create BenchmarkTarget using official constructor
+        # (canonicalizes SMILES and computes InChIKey)
+        target = create_benchmark_target(
             id=target_id,
             smiles=smiles,
             ground_truth=route,
@@ -85,7 +80,15 @@ def process_dataset(name: str, check_buyables: bool = False):
             is_convergent=route.has_convergent_reaction,
         )
 
-        benchmark.targets[target_id] = target
+        targets[target_id] = target
+
+    # Create benchmark with validation
+    benchmark = create_benchmark(
+        name=f"paroutes-{name}-full{suffix}",
+        description=f"Full raw import of PaRoutes {name} set.",
+        stock_name=f"{name}-stock",
+        targets=targets,
+    )
 
     logger.info(f"Created {len(benchmark.targets)} targets. {failures} failed.")
     if check_buyables:

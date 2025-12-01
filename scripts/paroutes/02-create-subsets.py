@@ -15,7 +15,7 @@ from pathlib import Path
 from retrocast.curation.filtering import clean_and_prioritize_pools, filter_by_route_type
 from retrocast.curation.sampling import sample_random, sample_stratified_priority
 from retrocast.io import create_manifest, load_benchmark, save_json_gz
-from retrocast.models.benchmark import BenchmarkSet
+from retrocast.models.benchmark import create_benchmark
 from retrocast.utils.logging import configure_script_logging, logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -25,7 +25,9 @@ def create_subset(
     name: str, targets: list, source_paths: list[Path], stock_name: str, description: str, out_dir: Path, seed: int
 ) -> None:
     """Helper to assemble, save, and manifest a subset."""
-    subset = BenchmarkSet(name=name, description=description, stock_name=stock_name, targets={t.id: t for t in targets})
+    subset = create_benchmark(
+        name=name, description=description, stock_name=stock_name, targets={t.id: t for t in targets}
+    )
 
     out_path = out_dir / f"{name}.json.gz"
     save_json_gz(subset, out_path)

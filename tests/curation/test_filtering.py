@@ -16,6 +16,7 @@ from retrocast.curation.filtering import (
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Molecule, ReactionSignature, ReactionStep, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
+from tests.helpers import _synthetic_inchikey
 
 # =============================================================================
 # Helper functions for creating test data
@@ -262,6 +263,7 @@ class TestFilterByRouteType:
         linear_target = BenchmarkTarget(
             id="LINEAR-TARGET",
             smiles="CCC",
+            inchi_key=_synthetic_inchikey("CCC"),
             ground_truth=linear_route,
             is_convergent=linear_route.has_convergent_reaction,
             route_length=linear_route.length,
@@ -269,6 +271,7 @@ class TestFilterByRouteType:
         convergent_target = BenchmarkTarget(
             id="CONVERGENT-TARGET",
             smiles="CCCC",
+            inchi_key=_synthetic_inchikey("CCCC"),
             ground_truth=convergent_route,
             is_convergent=convergent_route.has_convergent_reaction,
             route_length=convergent_route.length,
@@ -318,6 +321,7 @@ class TestCleanAndPrioritizePools:
         primary_target = BenchmarkTarget(
             id="PRIMARY",
             smiles="CCC",
+            inchi_key=_synthetic_inchikey("CCC"),
             ground_truth=route,
             is_convergent=route.has_convergent_reaction,
             route_length=route.length,
@@ -326,6 +330,7 @@ class TestCleanAndPrioritizePools:
         secondary_target = BenchmarkTarget(
             id="SECONDARY",
             smiles="CCC-alt",
+            inchi_key=_synthetic_inchikey("CCC-alt"),
             ground_truth=route,
             is_convergent=route.has_convergent_reaction,
             route_length=route.length,
@@ -345,6 +350,7 @@ class TestCleanAndPrioritizePools:
         primary_target = BenchmarkTarget(
             id="PRIMARY",
             smiles="CCC",  # Same SMILES
+            inchi_key=_synthetic_inchikey("CCC"),
             ground_truth=route1,
             is_convergent=route1.has_convergent_reaction,
             route_length=route1.length,
@@ -352,6 +358,7 @@ class TestCleanAndPrioritizePools:
         secondary_target = BenchmarkTarget(
             id="SECONDARY",
             smiles="CCC",  # Same SMILES
+            inchi_key=_synthetic_inchikey("CCC"),
             ground_truth=route2,
             is_convergent=route2.has_convergent_reaction,
             route_length=route2.length,
@@ -371,6 +378,7 @@ class TestCleanAndPrioritizePools:
         primary_target = BenchmarkTarget(
             id="PRIMARY",
             smiles="CC",
+            inchi_key=_synthetic_inchikey("CC"),
             ground_truth=route1,
             is_convergent=route1.has_convergent_reaction,
             route_length=route1.length,
@@ -378,6 +386,7 @@ class TestCleanAndPrioritizePools:
         secondary_target = BenchmarkTarget(
             id="SECONDARY",
             smiles="CCC",
+            inchi_key=_synthetic_inchikey("CCC"),
             ground_truth=route2,
             is_convergent=route2.has_convergent_reaction,
             route_length=route2.length,
@@ -399,6 +408,7 @@ class TestCleanAndPrioritizePools:
         primary_target = BenchmarkTarget(
             id="PRIMARY",
             smiles="CC",
+            inchi_key=_synthetic_inchikey("CC"),
             ground_truth=None,
             is_convergent=None,
             route_length=None,
@@ -406,6 +416,7 @@ class TestCleanAndPrioritizePools:
         secondary_target = BenchmarkTarget(
             id="SECONDARY",
             smiles="CCC",
+            inchi_key=_synthetic_inchikey("CCC"),
             ground_truth=None,
             is_convergent=None,
             route_length=None,
@@ -441,9 +452,11 @@ class TestFilteringIntegration:
         # Create benchmark for filtering
         targets = {}
         for i, route in enumerate(unique):
+            smiles = f"SMILES_{i}"
             target = BenchmarkTarget(
                 id=f"INCHI_{i}",
-                smiles=f"SMILES_{i}",
+                smiles=smiles,
+                inchi_key=_synthetic_inchikey(smiles),
                 ground_truth=route,
                 is_convergent=route.has_convergent_reaction,
                 route_length=route.length,

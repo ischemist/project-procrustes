@@ -38,7 +38,7 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
     stat_topk: dict[int, StratifiedMetric] = {}
     if eval_results.has_ground_truth:
         # calculating many K is cheap, we just filter what we display later
-        for k in [1, 2, 3, 4, 5, 10, 20, 50, 100]:
+        for k in [1, 2, 3, 4, 5, 10, 20, 50, 100, 500, 1000, 10000]:
             stat_topk[k] = compute_metric_with_ci(
                 targets, make_get_top_k(k), f"Top-{k}", group_by=group_fn, n_boot=n_boot, seed=seed
             )

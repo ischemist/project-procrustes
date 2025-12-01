@@ -5,6 +5,7 @@ from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
 from retrocast.adapters.factory import get_adapter
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
@@ -359,8 +360,12 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
 
     manifests_to_check = []
     if args.all:
-        logger.info(f"Scanning for all manifests under {root_dir}...")
-        manifests_to_check = sorted(list(root_dir.glob("**/manifest.json")))
+        logger.info("Scanning for manifests in 2-raw, 3-processed, and 4-results...")
+        # Only scan specific folders: 2-raw, 3-processed, and 4-results
+        for folder in [paths["raw"], paths["processed"], paths["results"]]:
+            if folder.exists():
+                manifests_to_check.extend(folder.glob("**/manifest.json"))
+        manifests_to_check = sorted(manifests_to_check)
     elif args.target:
         manifests_to_check = [Path(args.target)]
 
@@ -368,19 +373,71 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
         logger.warning("No manifests found to verify.")
         return
 
-    logger.info(f"Verifying {len(manifests_to_check)} manifest(s)...")
-    overall_valid = True
-    for m_path in manifests_to_check:
-        report = verify.verify_manifest(m_path, root_dir=root_dir, deep=args.deep)
-        _render_report(report)
-        if not report.is_valid:
-            overall_valid = False
+    # Different behavior for --all vs single manifest
+    if args.all:
+        # Batch mode: single progress bar and summary at the end
+        logger.info(f"Verifying {len(manifests_to_check)} manifest(s)...")
 
-    if overall_valid:
-        console.print("\n[bold green]✅ Overall verification successful![/]")
+        passed_manifests = []
+        failed_manifests = []
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("[cyan]Verifying manifests...", total=len(manifests_to_check))
+
+            for m_path in manifests_to_check:
+                progress.update(task, description=f"[cyan]Verifying {m_path.relative_to(root_dir)}...")
+                report = verify.verify_manifest(m_path, root_dir=root_dir, deep=args.deep)
+
+                if report.is_valid:
+                    passed_manifests.append(m_path.relative_to(root_dir))
+                else:
+                    failed_manifests.append((m_path.relative_to(root_dir), report))
+
+                progress.advance(task)
+
+        # Print summary
+        console.print()
+        console.print("[bold]Verification Summary[/bold]")
+        console.print(f"  [green]✓[/] Passed: {len(passed_manifests)} manifest(s)")
+        console.print(f"  [red]✗[/] Failed: {len(failed_manifests)} manifest(s)")
+
+        if failed_manifests:
+            console.print()
+            console.print("[bold red]Failed Manifests:[/bold red]")
+            for failed_path, report in failed_manifests:
+                console.print(f"\n[bold]→ {failed_path}[/bold]")
+                # Show only FAIL-level issues in summary
+                fail_issues = [issue for issue in report.issues if issue.level == "FAIL"]
+                for issue in fail_issues[:5]:  # Show first 5 failures per manifest
+                    console.print(f"  [red]✗[/] {issue.path}: {issue.message}")
+                if len(fail_issues) > 5:
+                    console.print(f"  [dim]... and {len(fail_issues) - 5} more failure(s)[/dim]")
+
+            console.print("\n[bold red]❌ Overall verification failed.[/]")
+            sys.exit(1)
+        else:
+            console.print("\n[bold green]✅ All manifests verified successfully![/]")
     else:
-        console.print("\n[bold red]❌ Verification failed for one or more manifests.[/]")
-        sys.exit(1)
+        # Single manifest mode: show detailed report
+        logger.info("Verifying manifest...")
+        overall_valid = True
+        for m_path in manifests_to_check:
+            report = verify.verify_manifest(m_path, root_dir=root_dir, deep=args.deep)
+            _render_report(report)
+            if not report.is_valid:
+                overall_valid = False
+
+        if overall_valid:
+            console.print("\n[bold green]✅ Overall verification successful![/]")
+        else:
+            console.print("\n[bold red]❌ Verification failed for one or more manifests.[/]")
+            sys.exit(1)
 
 
 # --- UTILS ---
