@@ -23,6 +23,7 @@ data/transfers/
 data/**/*.json.gz
 data/**/*.csv
 data/**/*.txt
+data/0-assets/*.pkl
 data/0-assets/model-configs/**/*.pickle
 data/0-assets/model-configs/**/*.pkl
 data/0-assets/model-configs/**/*.onnx
