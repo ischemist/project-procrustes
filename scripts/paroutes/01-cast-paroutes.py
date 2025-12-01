@@ -49,7 +49,7 @@ def process_dataset(name: str, check_buyables: bool = False):
         stock_for_validation = buyables
         stock_name_str = "buyables-stock"
     else:
-        stock_path = stock_dir / f"{name}-stock.txt"
+        stock_path = stock_dir / f"{name}-stock.csv.gz"
         stock_for_validation = load_stock_file(stock_path)
         stock_name_str = f"{name}-stock"
 

@@ -69,9 +69,7 @@ def synthetic_benchmark() -> BenchmarkSet:
         id="target_1",
         smiles=SmilesStr("CC"),
         inchi_key=_synthetic_inchikey("CC"),
-        ground_truth=gt_route_1,
-        is_convergent=False,
-        route_length=1,
+        acceptable_routes=[gt_route_1],
     )
 
     # Target 2: Two-step synthesis
@@ -80,9 +78,7 @@ def synthetic_benchmark() -> BenchmarkSet:
         id="target_2",
         smiles=SmilesStr("CCC"),
         inchi_key=_synthetic_inchikey("CCC"),
-        ground_truth=gt_route_2,
-        is_convergent=False,
-        route_length=2,
+        acceptable_routes=[gt_route_2],
     )
 
     # Target 3: No ground truth (pure prediction)
@@ -90,9 +86,7 @@ def synthetic_benchmark() -> BenchmarkSet:
         id="target_3",
         smiles=SmilesStr("CCCC"),
         inchi_key=_synthetic_inchikey("CCCC"),
-        ground_truth=None,
-        is_convergent=None,
-        route_length=None,
+        acceptable_routes=[],
     )
 
     return BenchmarkSet(
@@ -400,21 +394,21 @@ class TestScoreModel:
             model_name="test-model",
         )
 
-        # target_1: First route matches GT
+        # target_1: First route matches acceptable
         t1 = eval_results.results["target_1"]
-        assert t1.routes[0].is_gt_match is True
-        assert t1.routes[1].is_gt_match is False
-        assert t1.gt_rank == 1  # First solved route is GT match
+        assert t1.routes[0].matches_acceptable is True
+        assert t1.routes[1].matches_acceptable is False
+        assert t1.acceptable_rank == 1  # First solved route is acceptable match
 
-        # target_2: Route matches GT
+        # target_2: Route matches acceptable
         t2 = eval_results.results["target_2"]
-        assert t2.routes[0].is_gt_match is True
-        assert t2.gt_rank == 1
+        assert t2.routes[0].matches_acceptable is True
+        assert t2.acceptable_rank == 1
 
-        # target_3: No GT defined
+        # target_3: No acceptable routes defined
         t3 = eval_results.results["target_3"]
-        assert t3.routes[0].is_gt_match is False
-        assert t3.gt_rank is None
+        assert t3.routes[0].matches_acceptable is False
+        assert t3.acceptable_rank is None
 
     @pytest.mark.integration
     def test_score_empty_predictions(self, synthetic_benchmark, minimal_stock):
@@ -436,7 +430,7 @@ class TestScoreModel:
         for target_id in ["target_1", "target_2", "target_3"]:
             t = eval_results.results[target_id]
             assert t.is_solvable is False
-            assert t.gt_rank is None
+            assert t.acceptable_rank is None
             assert len(t.routes) == 0
 
     @pytest.mark.integration
@@ -472,16 +466,16 @@ class TestScoreModel:
 
         # Check metadata from benchmark target is copied
         t1 = eval_results.results["target_1"]
-        assert t1.route_length == 1
-        assert t1.is_convergent is False
+        assert t1.matched_route_length == 1
+        assert t1.matched_route_is_convergent is False
 
         t2 = eval_results.results["target_2"]
-        assert t2.route_length == 2
-        assert t2.is_convergent is False
+        assert t2.matched_route_length == 2
+        assert t2.matched_route_is_convergent is False
 
         t3 = eval_results.results["target_3"]
-        assert t3.route_length is None
-        assert t3.is_convergent is None
+        assert t3.matched_route_length is None
+        assert t3.matched_route_is_convergent is None
 
 
 # =============================================================================

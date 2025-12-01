@@ -57,9 +57,7 @@ class TestHandleScoreFile:
             id="test-1",
             smiles="CC",
             inchi_key=_synthetic_inchikey("CC"),
-            is_convergent=False,
-            route_length=1,
-            ground_truth=make_simple_route("CC", "C"),
+            acceptable_routes=[make_simple_route("CC", "C")],
         )
         benchmark = BenchmarkSet(
             name="test-benchmark",
@@ -141,8 +139,7 @@ class TestHandleScoreFile:
             id="test-1",
             smiles="CC",
             inchi_key=_synthetic_inchikey("CC"),
-            is_convergent=False,
-            route_length=1,
+            acceptable_routes=[],
         )
         benchmark = BenchmarkSet(
             name="test",

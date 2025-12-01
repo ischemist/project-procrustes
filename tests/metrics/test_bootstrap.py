@@ -31,13 +31,13 @@ from retrocast.models.evaluation import EvaluationResults, TargetEvaluation
 def target_evaluation_factory():
     """Factory to create TargetEvaluation objects with controlled properties."""
 
-    def _make(target_id: str, is_solvable: bool, gt_rank: int | None = None) -> TargetEvaluation:
+    def _make(target_id: str, is_solvable: bool, acceptable_rank: int | None = None) -> TargetEvaluation:
         return TargetEvaluation(
             target_id=target_id,
             is_solvable=is_solvable,
-            gt_rank=gt_rank,
-            route_length=3,
-            is_convergent=False,
+            acceptable_rank=acceptable_rank,
+            matched_route_length=3,
+            matched_route_is_convergent=False,
         )
 
     return _make
@@ -59,7 +59,7 @@ def evaluation_results_factory(target_evaluation_factory):
             model_name=model_name,
             benchmark_name="test_benchmark",
             stock_name="test_stock",
-            has_ground_truth=True,
+            has_acceptable_routes=True,
             results=results,
         )
 
@@ -275,14 +275,14 @@ class TestComputeMetricWithCI:
         targets = []
         for i in range(50):
             t = target_evaluation_factory(f"t{i}", is_solvable=i < 25)
-            t.route_length = 3 if i < 30 else 5  # Two groups
+            t.matched_route_length = 3 if i < 30 else 5  # Two groups
             targets.append(t)
 
         def get_solvable(t):
             return 1.0 if t.is_solvable else 0.0
 
         def group_by_length(t):
-            return t.route_length
+            return t.matched_route_length
 
         result = compute_metric_with_ci(
             targets, get_solvable, "solvability", group_by=group_by_length, n_boot=1000, seed=42
@@ -512,15 +512,15 @@ def _make_evaluation_results(model_name: str, n_targets: int, solvability_rate: 
         results[target_id] = TargetEvaluation(
             target_id=target_id,
             is_solvable=is_solvable,
-            gt_rank=None,
-            route_length=3,
-            is_convergent=False,
+            acceptable_rank=None,
+            matched_route_length=3,
+            matched_route_is_convergent=False,
         )
     return EvaluationResults(
         model_name=model_name,
         benchmark_name="test_benchmark",
         stock_name="test_stock",
-        has_ground_truth=True,
+        has_acceptable_routes=True,
         results=results,
     )
 

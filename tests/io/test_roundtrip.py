@@ -143,9 +143,7 @@ class TestBenchmarkContentHash:
             id="test-001",
             smiles="CC",
             inchi_key=_synthetic_inchikey("CC"),
-            is_convergent=False,
-            route_length=1,
-            ground_truth=route,
+            acceptable_routes=[route],
         )
         benchmark = BenchmarkSet(
             name="test",
@@ -170,9 +168,7 @@ class TestBenchmarkContentHash:
                 id=f"t{i}",
                 smiles=smiles,
                 inchi_key=_synthetic_inchikey(smiles),
-                is_convergent=False,
-                route_length=i + 1,
-                ground_truth=route if i == 0 else None,
+                acceptable_routes=[route] if i == 0 else [],
             )
 
         # Create targets in reverse order
@@ -183,9 +179,7 @@ class TestBenchmarkContentHash:
                 id=f"t{i}",
                 smiles=smiles,
                 inchi_key=_synthetic_inchikey(smiles),
-                is_convergent=False,
-                route_length=i + 1,
-                ground_truth=route if i == 0 else None,
+                acceptable_routes=[route] if i == 0 else [],
             )
 
         bench1 = BenchmarkSet(name="test", targets=targets1)
@@ -195,12 +189,8 @@ class TestBenchmarkContentHash:
 
     def test_content_sensitive_smiles_change(self):
         """Changing a SMILES should change the hash."""
-        target1 = BenchmarkTarget(
-            id="t1", smiles="CC", inchi_key=_synthetic_inchikey("CC"), is_convergent=False, route_length=1
-        )
-        target2 = BenchmarkTarget(
-            id="t1", smiles="CCC", inchi_key=_synthetic_inchikey("CCC"), is_convergent=False, route_length=1
-        )
+        target1 = BenchmarkTarget(id="t1", smiles="CC", inchi_key=_synthetic_inchikey("CC"), acceptable_routes=[])
+        target2 = BenchmarkTarget(id="t1", smiles="CCC", inchi_key=_synthetic_inchikey("CCC"), acceptable_routes=[])
 
         bench1 = BenchmarkSet(name="test", targets={"t1": target1})
         bench2 = BenchmarkSet(name="test", targets={"t1": target2})
@@ -213,16 +203,14 @@ class TestBenchmarkContentHash:
             id="t1",
             smiles="CC",
             inchi_key=_synthetic_inchikey("CC"),
-            is_convergent=False,
-            route_length=1,
+            acceptable_routes=[],
             metadata={"source": "A"},
         )
         target2 = BenchmarkTarget(
             id="t1",
             smiles="CC",
             inchi_key=_synthetic_inchikey("CC"),
-            is_convergent=False,
-            route_length=1,
+            acceptable_routes=[],
             metadata={"source": "B"},
         )
 
@@ -237,16 +225,14 @@ class TestBenchmarkContentHash:
             id="t1",
             smiles="CC",
             inchi_key=_synthetic_inchikey("CC"),
-            is_convergent=False,
-            route_length=1,
+            acceptable_routes=[],
             metadata={"a": 1, "b": 2, "c": 3},
         )
         target2 = BenchmarkTarget(
             id="t1",
             smiles="CC",
             inchi_key=_synthetic_inchikey("CC"),
-            is_convergent=False,
-            route_length=1,
+            acceptable_routes=[],
             metadata={"c": 3, "a": 1, "b": 2},
         )
 
@@ -342,9 +328,7 @@ class TestCreateManifest:
             id="t1",
             smiles="CC",
             inchi_key=_synthetic_inchikey("CC"),
-            is_convergent=False,
-            route_length=1,
-            ground_truth=route,
+            acceptable_routes=[route],
         )
         benchmark = BenchmarkSet(name="test", targets={"t1": target})
 
@@ -482,9 +466,7 @@ class TestBenchmarkRoundtrip:
             id="test-001",
             smiles="CC",
             inchi_key=_synthetic_inchikey("CC"),
-            is_convergent=False,
-            route_length=1,
-            ground_truth=route,
+            acceptable_routes=[route],
             metadata={"source": "test"},
         )
         benchmark = BenchmarkSet(
@@ -506,8 +488,8 @@ class TestBenchmarkRoundtrip:
         loaded_target = loaded.targets["test-001"]
         assert loaded_target.smiles == "CC"
         assert loaded_target.metadata == {"source": "test"}
-        assert loaded_target.ground_truth is not None
-        assert loaded_target.ground_truth.length == 1
+        assert loaded_target.primary_route is not None
+        assert loaded_target.primary_route.length == 1
 
 
 # =============================================================================
@@ -691,20 +673,20 @@ class TestBenchmarkResultsLoader:
 
     def _create_mock_evaluation(self, model_name: str, benchmark: str, stock: str) -> EvaluationResults:
         """Helper to create a minimal EvaluationResults object."""
-        scored_route = ScoredRoute(rank=1, is_solved=True, is_gt_match=True)
+        scored_route = ScoredRoute(rank=1, is_solved=True, matches_acceptable=True)
         target_eval = TargetEvaluation(
             target_id="test-001",
             routes=[scored_route],
             is_solvable=True,
-            gt_rank=1,
-            route_length=3,
-            is_convergent=False,
+            acceptable_rank=1,
+            matched_route_length=3,
+            matched_route_is_convergent=False,
         )
         return EvaluationResults(
             model_name=model_name,
             benchmark_name=benchmark,
             stock_name=stock,
-            has_ground_truth=True,
+            has_acceptable_routes=True,
             results={"test-001": target_eval},
         )
 

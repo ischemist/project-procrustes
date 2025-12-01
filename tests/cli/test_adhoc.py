@@ -54,10 +54,9 @@ class TestHandleCreateBenchmark:
         assert benchmark.targets["target-002"].smiles == "CC"
         assert benchmark.targets["target-003"].smiles == "CCC"
 
-        # Verify no ground truth
-        assert benchmark.targets["target-001"].ground_truth is None
-        assert benchmark.targets["target-001"].is_convergent is None
-        assert benchmark.targets["target-001"].route_length is None
+        # Verify no acceptable routes (no ground truth)
+        assert benchmark.targets["target-001"].acceptable_routes == []
+        assert benchmark.targets["target-001"].primary_route is None
 
     def test_create_benchmark_from_csv_flexible_columns(self, tmp_path):
         """Test CSV with flexible column names (SMILES, Target ID)."""
