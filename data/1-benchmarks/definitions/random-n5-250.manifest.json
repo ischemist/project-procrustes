@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "retrocast_version": "0.4.0.dev3",
-  "created_at": "2025-12-01T17:45:52.524988Z",
+  "retrocast_version": "0.5.0",
+  "created_at": "2025-12-01T19:38:02.170782Z",
   "action": "scripts/paroutes/02-create-subsets",
   "parameters": {
     "seed": 42,
@@ -10,7 +10,7 @@
   "source_files": [
     {
       "path": "1-benchmarks/definitions/paroutes-n5-full-pruned.json.gz",
-      "file_hash": "da184f27ca60363ef1a22d353d17fe0c1bc66d525c3415c59c112d5cdebd887a",
+      "file_hash": "ddd087377551e106e8b39954459988d2ee40261150d4d5b3c802da4c6c4dfb99",
       "content_hash": null
     },
     {
@@ -22,8 +22,8 @@
   "output_files": [
     {
       "path": "1-benchmarks/definitions/random-n5-250.json.gz",
-      "file_hash": "c1a3661973dccd6dc4b30fb351da817c68aaa6b95f2d4399ad7a523b3b81ee85",
-      "content_hash": "7c7d5b1b55cbee9f4fb06a1e50e7974b0b230da86649c0905061946a2f5ee8e0"
+      "file_hash": "27d6072c18f1be0e5b884ed789952478599be67d70c53c794faa97f7801c3254",
+      "content_hash": "e0973dd5e7eb1b6c68b57d9b0c805808aa28016a0781bc9fd2156401e4507b18"
     }
   ],
   "statistics": {

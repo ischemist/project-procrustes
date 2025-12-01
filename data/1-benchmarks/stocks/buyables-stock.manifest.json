@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "retrocast_version": "0.4.0.dev3",
-  "created_at": "2025-12-01T00:30:51.050435Z",
+  "retrocast_version": "0.5.0",
+  "created_at": "2025-12-01T19:39:31.606017Z",
   "action": "canonicalize-stock",
   "parameters": {
     "stock_name": "buyables-stock"
@@ -16,12 +16,12 @@
   "output_files": [
     {
       "path": "1-benchmarks/stocks/buyables-stock.csv.gz",
-      "file_hash": "b144cd96adf19694dcf35f6ccd28432062682ea43a47f4c2203fd3f813ea1bac",
+      "file_hash": "aee42d44c9a96279dd13732d8a298bcfcad34a3ac0ba6b4b2715ec36ad18ec0b",
       "content_hash": "83798603df79f1c0dcae5513edc5bd3396c8dd329a4c792b5961b3889d423465"
     },
     {
       "path": "1-benchmarks/stocks/buyables-stock.txt.gz",
-      "file_hash": "26e93ac694b0f98e5d481e85661b7f59d8b48b3e6b633cad504b7a2e7830dab1",
+      "file_hash": "397b94a4ad90b93ae8b0c3d97a1cc8cfb6e69b4b350ba48b1320d5d6605f8a90",
       "content_hash": "83798603df79f1c0dcae5513edc5bd3396c8dd329a4c792b5961b3889d423465"
     }
   ],
