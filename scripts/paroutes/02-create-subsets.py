@@ -138,7 +138,7 @@ def main():
 
     # 5. Create Random Legacy Set
     n5_pool = list(n5.targets.values())
-    for n in [100, 250, 500, 1000, 2000]:
+    for n in [50, 100, 250, 500, 1000, 2000]:
         targets_random = sample_random(n5_pool, n, seed=42)
 
         create_subset(

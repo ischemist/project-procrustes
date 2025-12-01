@@ -1,11 +1,11 @@
 {
   "schema_version": "1.0",
   "retrocast_version": "0.4.0.dev3",
-  "created_at": "2025-12-01T17:45:52.524988Z",
+  "created_at": "2025-12-01T17:45:52.356369Z",
   "action": "scripts/paroutes/02-create-subsets",
   "parameters": {
     "seed": 42,
-    "name": "random-n5-250"
+    "name": "random-n5-50"
   },
   "source_files": [
     {
@@ -21,12 +21,12 @@
   ],
   "output_files": [
     {
-      "path": "1-benchmarks/definitions/random-n5-250.json.gz",
-      "file_hash": "c1a3661973dccd6dc4b30fb351da817c68aaa6b95f2d4399ad7a523b3b81ee85",
-      "content_hash": "7c7d5b1b55cbee9f4fb06a1e50e7974b0b230da86649c0905061946a2f5ee8e0"
+      "path": "1-benchmarks/definitions/random-n5-50.json.gz",
+      "file_hash": "ce87151d8946bbcb1eb13b7e14257bae4ba6fb7a2b2a6e738d50a945864cd664",
+      "content_hash": "80cd4512d9d0707b877991b91c5655f4d2e315c85c539b165476de4dc3ec49a3"
     }
   ],
   "statistics": {
-    "n_targets": 250
+    "n_targets": 50
   }
 }
