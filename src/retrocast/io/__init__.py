@@ -7,6 +7,7 @@ from retrocast.io.data import (
     load_stock_file,
     save_execution_stats,
     save_routes,
+    save_stock_files,
 )
 from retrocast.io.provenance import (
     calculate_file_hash,
@@ -26,6 +27,7 @@ __all__ = [
     "load_stock_file",
     "save_execution_stats",
     "save_routes",
+    "save_stock_files",
     # provenance
     "calculate_file_hash",
     "create_manifest",

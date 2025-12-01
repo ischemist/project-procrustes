@@ -3,6 +3,7 @@ In-process integration tests for CLI handlers.
 This executes the actual handler logic within the test process, ensuring coverage tracking.
 """
 
+import csv
 import gzip
 import json
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from retrocast.chem import get_inchi_key
 from retrocast.cli import handlers
 from retrocast.io.blob import save_json_gz
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
@@ -61,7 +63,11 @@ def synthetic_data(synthetic_config):
 
     # 2. Create Stock
     # Stock contains methane (C), which is the reactant in our route
-    (base / "1-benchmarks" / "stocks" / "test-stock.txt").write_text("C\n")
+    stock_path = base / "1-benchmarks" / "stocks" / "test-stock.csv.gz"
+    with gzip.open(stock_path, "wt", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["SMILES", "InChIKey"])
+        writer.writerow(["C", get_inchi_key("C")])
 
     # 3. Create Raw Results
     # ParoutesAdapter expects a molecule node with reaction children

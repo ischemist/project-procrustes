@@ -271,6 +271,35 @@ class Route(BaseModel):
 Molecule.model_rebuild()
 
 
+class StockStatistics(BaseModel):
+    """Statistics for stock canonicalization and deduplication."""
+
+    raw_input_lines: int = 0
+    empty_lines: int = 0
+    invalid_smiles: int = 0
+    inchi_generation_failed: int = 0
+    duplicate_smiles: int = 0
+    duplicate_inchikeys: int = 0
+    unique_molecules: int = 0
+
+    def to_manifest_dict(self) -> dict[str, int]:
+        """Generates a dictionary suitable for including in the manifest."""
+        return {
+            "raw_input_lines": self.raw_input_lines,
+            "empty_lines": self.empty_lines,
+            "invalid_smiles": self.invalid_smiles,
+            "inchi_generation_failed": self.inchi_generation_failed,
+            "duplicate_smiles": self.duplicate_smiles,
+            "duplicate_inchikeys": self.duplicate_inchikeys,
+            "unique_molecules": self.unique_molecules,
+            "total_filtered": self.empty_lines
+            + self.invalid_smiles
+            + self.inchi_generation_failed
+            + self.duplicate_smiles
+            + self.duplicate_inchikeys,
+        }
+
+
 class RunStatistics(BaseModel):
     """A Pydantic model to hold and calculate statistics for a processing run."""
 

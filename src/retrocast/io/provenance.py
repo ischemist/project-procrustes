@@ -103,6 +103,29 @@ def _calculate_predictions_content_hash(routes: dict[str, list[Route]]) -> str:
     return hashlib.sha256(combined.encode()).hexdigest()
 
 
+def _calculate_stock_content_hash(stock: dict[str, str]) -> str:
+    """
+    Internal: Hash a stock dictionary (InChIKey -> SMILES).
+
+    Only considers InChI keys (not SMILES) since multiple SMILES
+    can represent the same molecule (tautomers, etc.).
+
+    Args:
+        stock: dict mapping InChIKey -> canonical SMILES
+
+    Returns:
+        SHA256 hash of sorted InChI keys
+    """
+    # Sort InChI keys for deterministic order
+    sorted_inchi_keys = sorted(stock.keys())
+
+    # Concatenate all InChI keys
+    combined = "".join(sorted_inchi_keys)
+
+    # Hash the result
+    return hashlib.sha256(combined.encode()).hexdigest()
+
+
 def create_manifest(
     action: str,
     sources: list[Path],
@@ -141,9 +164,14 @@ def create_manifest(
         if isinstance(obj, BenchmarkSet):
             c_hash = _calculate_benchmark_content_hash(obj)
         elif isinstance(obj, dict) and len(obj) > 0:
-            # Check if this is truly a dict[str, list[Route]]
+            # Check if this is a stock dict (InChIKey -> SMILES)
+            first_key = next(iter(obj.keys()))
             first_value = next(iter(obj.values()))
-            if (
+            if isinstance(first_key, str) and isinstance(first_value, str):
+                # Assume it's a stock if both key and value are strings
+                # (Routes dict has str keys but list values)
+                c_hash = _calculate_stock_content_hash(obj)
+            elif (
                 isinstance(first_value, list)
                 and len(first_value) > 0
                 and all(isinstance(r, Route) for r in first_value)

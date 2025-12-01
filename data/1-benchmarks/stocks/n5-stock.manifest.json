@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.4.0.dev3",
+  "created_at": "2025-12-01T00:29:36.027364Z",
+  "action": "canonicalize-stock",
+  "parameters": {
+    "stock_name": "n5-stock"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/raw-stocks/n5-stock.txt",
+      "file_hash": "199ec2d9fad0638c3ae53f2ea091dcd6bf9207a938b12ae1aa9429c37dd097af",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/stocks/n5-stock.csv.gz",
+      "file_hash": "f452ef469ac51ff5ced1abda298db41125cc6b51a310dd735d67637e1399f72d",
+      "content_hash": "b4b02933565121b2b89f6c46d7478c0108ad87e8ffaf6520b22b06a4231fcf63"
+    },
+    {
+      "path": "1-benchmarks/stocks/n5-stock.txt.gz",
+      "file_hash": "5f040656344623e1ed6222acba82d115c12cfba1391b58998d65b708ad4c60b9",
+      "content_hash": "b4b02933565121b2b89f6c46d7478c0108ad87e8ffaf6520b22b06a4231fcf63"
+    }
+  ],
+  "statistics": {
+    "raw_input_lines": 13328,
+    "empty_lines": 0,
+    "invalid_smiles": 0,
+    "inchi_generation_failed": 0,
+    "duplicate_smiles": 2,
+    "duplicate_inchikeys": 20,
+    "unique_molecules": 13306,
+    "total_filtered": 22
+  }
+}

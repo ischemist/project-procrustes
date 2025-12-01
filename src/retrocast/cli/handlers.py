@@ -168,7 +168,7 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
             logger.error(f"Skipping {benchmark_name}: No stock specified in definition or CLI.")
             return
 
-        stock_path = paths["stocks"] / f"{stock_name}.txt"
+        stock_path = paths["stocks"] / f"{stock_name}.csv.gz"
         if not stock_path.exists():
             logger.error(f"Stock file missing: {stock_path}")
             return

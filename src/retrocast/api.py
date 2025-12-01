@@ -14,7 +14,7 @@ from retrocast.metrics.ranking import compute_probabilistic_ranking
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.stats import ModelStatistics
-from retrocast.typing import SmilesStr
+from retrocast.typing import InchiKeyStr
 from retrocast.workflow import analyze as analyze_workflow  # Added import
 from retrocast.workflow import score as score_workflow
 
@@ -32,7 +32,7 @@ __all__ = [
 def score_predictions(
     benchmark: BenchmarkSet,
     predictions: dict,
-    stock: set[SmilesStr] | Path | str,
+    stock: set[InchiKeyStr] | Path | str,
     model_name: str = "custom-model",
     stock_name: str | None = None,
 ) -> EvaluationResults:

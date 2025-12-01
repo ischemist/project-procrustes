@@ -5,13 +5,13 @@ from retrocast.metrics.similarity import is_exact_match
 from retrocast.metrics.solvability import is_route_solved
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.evaluation import EvaluationResults, ScoredRoute, TargetEvaluation
-from retrocast.typing import SmilesStr
+from retrocast.typing import InchiKeyStr
 
 logger = logging.getLogger(__name__)
 
 
 def score_model(
-    benchmark: BenchmarkSet, predictions: RoutesDict, stock: set[SmilesStr], stock_name: str, model_name: str
+    benchmark: BenchmarkSet, predictions: RoutesDict, stock: set[InchiKeyStr], stock_name: str, model_name: str
 ) -> EvaluationResults:
     logger.info(f"Scoring {model_name} on {benchmark.name}...")
 

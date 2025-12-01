@@ -5,6 +5,8 @@ These tests call handlers directly to contribute to coverage metrics.
 For actual CLI integration tests (subprocess), see test_cli.py.
 """
 
+import csv
+import gzip
 from argparse import Namespace
 from pathlib import Path
 
@@ -74,8 +76,11 @@ class TestHandleScoreFile:
         save_json_gz(predictions, routes_path)
 
         # Create stock file
-        stock_path = tmp_path / "stock.txt"
-        stock_path.write_text("C\n")
+        stock_path = tmp_path / "stock.csv.gz"
+        with gzip.open(stock_path, "wt", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["SMILES", "InChIKey"])
+            writer.writerow(["C", get_inchi_key("C")])
 
         # Output path
         output_path = tmp_path / "output.json.gz"
@@ -153,8 +158,11 @@ class TestHandleScoreFile:
         save_json_gz(predictions, routes_path)
 
         # Stock only has carbon
-        stock_path = tmp_path / "stock.txt"
-        stock_path.write_text("C\n")
+        stock_path = tmp_path / "stock.csv.gz"
+        with gzip.open(stock_path, "wt", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["SMILES", "InChIKey"])
+            writer.writerow(["C", get_inchi_key("C")])
 
         output_path = tmp_path / "output.json.gz"
 
