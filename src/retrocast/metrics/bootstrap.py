@@ -111,7 +111,7 @@ def get_is_solvable(t: TargetEvaluation) -> float:
 
 def make_get_top_k(k: int) -> Callable[[TargetEvaluation], float]:
     def _get_top_k(t: TargetEvaluation) -> float:
-        return 1.0 if (t.gt_rank is not None and t.gt_rank <= k) else 0.0
+        return 1.0 if (t.acceptable_rank is not None and t.acceptable_rank <= k) else 0.0
 
     return _get_top_k
 

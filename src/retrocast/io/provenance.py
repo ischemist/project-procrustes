@@ -52,6 +52,9 @@ def generate_model_hash(model_name: str) -> str:
 def _calculate_benchmark_content_hash(benchmark: BenchmarkSet) -> str:
     """
     Internal: Hash a BenchmarkSet definition.
+
+    The hash includes all acceptable routes for each target, ensuring that
+    changes to the acceptable routes list will result in a different hash.
     """
     target_hashes = []
     for t in benchmark.targets.values():
@@ -59,7 +62,7 @@ def _calculate_benchmark_content_hash(benchmark: BenchmarkSet) -> str:
 
         # 1. Basic fields
         # Use a separator that won't appear in identifiers
-        parts = [t.id, t.smiles, str(t.route_length), str(t.is_convergent)]
+        parts = [t.id, t.smiles]
 
         # 2. Metadata (sort keys)
         if t.metadata:
@@ -67,11 +70,11 @@ def _calculate_benchmark_content_hash(benchmark: BenchmarkSet) -> str:
         else:
             parts.append("")
 
-        # 3. Ground Truth Route
-        # We use the route's OWN content hash method, which is designed to be safe
-        # (it excludes 'leaves' and handles sorting).
-        if t.ground_truth:
-            parts.append(t.ground_truth.get_content_hash())
+        # 3. Acceptable Routes
+        # Hash all acceptable routes in order (order matters - first is primary)
+        if t.acceptable_routes:
+            route_hashes = [route.get_content_hash() for route in t.acceptable_routes]
+            parts.append("|".join(route_hashes))
         else:
             parts.append("None")
 

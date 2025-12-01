@@ -145,12 +145,22 @@ def deduplicate_routes(routes: list[Route]) -> list[Route]:
 
 def filter_by_route_type(benchmark: BenchmarkSet, route_type: RouteType) -> list[BenchmarkTarget]:
     """
-    Extracts targets based on their synthesis topology.
+    Extracts targets based on their primary acceptable route's synthesis topology.
+
+    Uses the first acceptable route (primary route) to determine convergence.
+    Targets without acceptable routes are excluded.
+
+    Args:
+        benchmark: The benchmark set to filter
+        route_type: "convergent" or "linear"
+
+    Returns:
+        List of targets matching the specified route type
     """
     if route_type == "convergent":
-        return [t for t in benchmark.targets.values() if t.is_convergent]
+        return [t for t in benchmark.targets.values() if t.is_convergent is True]
     elif route_type == "linear":
-        return [t for t in benchmark.targets.values() if not t.is_convergent]
+        return [t for t in benchmark.targets.values() if t.is_convergent is False]
     else:
         raise ValueError(f"Unknown route type: {route_type}")
 
@@ -161,17 +171,20 @@ def clean_and_prioritize_pools(
     """
     Cleans two pools of targets based on conflicts, but keeps them separate.
 
+    Removes duplicates based on primary acceptable route signatures and
+    identifies/removes targets with ambiguous SMILES across pools.
+
     Returns:
         (cleaned_primary, cleaned_secondary)
     """
     logger.info(f"Cleaning pools: Primary ({len(primary)}) + Secondary ({len(secondary)})")
 
-    # 1. Filter Secondary by Route Signature (remove duplicates)
-    primary_sigs = {t.ground_truth.get_signature() for t in primary if t.ground_truth}
+    # 1. Filter Secondary by Route Signature (remove duplicates based on primary route)
+    primary_sigs = {t.primary_route.get_signature() for t in primary if t.primary_route}
 
     secondary_unique_routes = []
     for t in secondary:
-        if t.ground_truth and t.ground_truth.get_signature() in primary_sigs:
+        if t.primary_route and t.primary_route.get_signature() in primary_sigs:
             continue
         secondary_unique_routes.append(t)
 

@@ -86,9 +86,7 @@ def _process_csv_file(input_path: Path) -> dict[str, Any]:
                 id=tid,
                 smiles=raw_smi,
                 metadata=meta,
-                ground_truth=None,
-                is_convergent=None,
-                route_length=None,
+                acceptable_routes=[],  # Pure prediction task, no acceptable routes
             )
 
     return targets
@@ -116,7 +114,9 @@ def _process_txt_file(input_path: Path) -> dict[str, Any]:
 
         # Use official constructor (canonicalizes SMILES and computes InChIKey)
         targets[tid] = create_benchmark_target(
-            id=tid, smiles=raw_smi, ground_truth=None, is_convergent=None, route_length=None
+            id=tid,
+            smiles=raw_smi,
+            acceptable_routes=[],  # Pure prediction task
         )
 
     return targets
@@ -145,8 +145,13 @@ def handle_create_benchmark(args: Any) -> None:
             sys.exit(1)
 
         # Create the BenchmarkSet with validation
+        # Pure prediction tasks have no acceptable routes, so pass empty stock
         bm = create_benchmark(
-            name=args.name, description=f"Created from {input_path.name}", stock_name=args.stock_name, targets=targets
+            name=args.name,
+            description=f"Created from {input_path.name}",
+            stock=set(),  # Empty stock for pure prediction tasks
+            stock_name=args.stock_name,
+            targets=targets,
         )
 
         save_json_gz(bm, output_path)
