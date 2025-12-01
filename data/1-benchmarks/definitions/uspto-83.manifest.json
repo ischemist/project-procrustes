@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.4.0.dev3",
+  "created_at": "2025-12-01T19:14:51.837692Z",
+  "action": "scripts/curation/uspto-190/create-benchmark-from-pickle",
+  "parameters": {
+    "check_buyables": true
+  },
+  "source_files": [
+    {
+      "path": "0-assets/routes_possible_test_hard.pkl",
+      "file_hash": "a9fdde23fc044a1ca6e2c67f24f7d713e457c303b835a5c8383eeeb5e90a4981",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/uspto-83.json.gz",
+      "file_hash": "448bd4dbf0b403cc58a7dc8c5b94b2ca18bae0baa21203c52f4bf397ce7fd278",
+      "content_hash": "a0f0935a313dc7e0c2eb6872044068913a97e9fd807ba7730e51ef4c0301fa1d"
+    }
+  ],
+  "statistics": {
+    "n_targets": 83,
+    "n_failed": 0,
+    "n_unsolvable": 107
+  }
+}
