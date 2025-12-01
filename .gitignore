@@ -72,8 +72,9 @@ data/seed-stability-archive
 
 !data/1-benchmarks/definitions/*.json.gz
 data/1-benchmarks/definitions/re-export
-data/1-benchmarks/**/*.csv.gz
-data/1-benchmarks/**/*.txt.gz
+data/1-benchmarks/**/*.gz
+data/1-benchmarks/**/*.gz
+data/1-benchmarks/**/*.gz
 data/2-raw
 data/3-processed/
 data/4-scored/

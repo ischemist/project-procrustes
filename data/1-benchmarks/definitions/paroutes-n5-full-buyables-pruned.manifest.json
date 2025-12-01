@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.4.0.dev3",
+  "created_at": "2025-12-01T17:42:13.418051Z",
+  "action": "scripts/paroutes/01-cast-paroutes",
+  "parameters": {
+    "dataset": "n5",
+    "check_buyables": true,
+    "prune_intermediates": true
+  },
+  "source_files": [
+    {
+      "path": "0-assets/paroutes/n5-routes.json.gz",
+      "file_hash": "5333b4aeb4e65a2c50e42a8f3a3701c75d76c8045280ec6cc460fbb3ebd605ad",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/paroutes-n5-full-buyables-pruned.json.gz",
+      "file_hash": "6f650a3aeab405d03edafec9bf73e0041eb91f30450e2355a888e1a60ff7d231",
+      "content_hash": "8729604c9980bbedeb985da0801bb51a75ee6b34047622d20582e40b7a0442a7"
+    }
+  ],
+  "statistics": {
+    "n_targets": 4279,
+    "n_failures": 0,
+    "n_unsolved": 5721,
+    "n_targets_with_pruning": 1774,
+    "n_total_pruned_routes": 2599,
+    "avg_pruned_routes_per_target": 1.4650507328072153
+  }
+}
