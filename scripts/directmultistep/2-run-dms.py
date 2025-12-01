@@ -172,9 +172,9 @@ if __name__ == "__main__":
         sources=[bench_path],
         root_dir=BASE_DIR / "data",
         outputs=[
-            (save_dir / "valid_results.json.gz", valid_results),
-            (save_dir / "buyables_results.json.gz", buyables_results),
-            (save_dir / "n1n5_results.json.gz", n1n5_results),
+            (save_dir / "valid_results.json.gz", valid_results, "predictions"),
+            (save_dir / "buyables_results.json.gz", buyables_results, "predictions"),
+            (save_dir / "n1n5_results.json.gz", n1n5_results, "predictions"),
         ],
         statistics=summary,
     )

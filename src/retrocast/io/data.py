@@ -1,4 +1,6 @@
+import csv
 import gzip
+import json
 import logging
 from pathlib import Path
 
@@ -6,11 +8,12 @@ from pydantic import TypeAdapter
 
 from retrocast.exceptions import RetroCastIOError
 from retrocast.io.blob import load_json_gz, save_json_gz
+from retrocast.io.provenance import create_manifest
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
-from retrocast.models.chem import Route
+from retrocast.models.chem import Route, StockStatistics
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.stats import ModelStatistics
-from retrocast.typing import SmilesStr
+from retrocast.typing import InchiKeyStr, SmilesStr
 
 logger = logging.getLogger(__name__)
 
@@ -30,15 +33,11 @@ def save_routes(routes: RoutesDict, path: Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    try:
-        # dump_json returns bytes, so we use "wb"
-        json_bytes = _ROUTES_ADAPTER.dump_json(routes, indent=2)
-        with gzip.open(path, "wb") as f:
-            f.write(json_bytes)
-        logger.debug(f"Saved {sum(len(r) for r in routes.values())} routes to {path}")
-    except Exception as e:
-        logger.error(f"Failed to save routes to {path}: {e}")
-        raise
+    # dump_json returns bytes, so we use "wb"
+    json_bytes = _ROUTES_ADAPTER.dump_json(routes, indent=2)
+    with gzip.open(path, "wb") as f:
+        f.write(json_bytes)
+    logger.debug(f"Saved {sum(len(r) for r in routes.values())} routes to {path}")
 
 
 def load_routes(path: Path) -> RoutesDict:
@@ -51,16 +50,12 @@ def load_routes(path: Path) -> RoutesDict:
     path = Path(path)
     logger.debug(f"Loading routes from {path}...")
 
-    try:
-        with gzip.open(path, "rb") as f:
-            json_bytes = f.read()
+    with gzip.open(path, "rb") as f:
+        json_bytes = f.read()
 
-        routes = _ROUTES_ADAPTER.validate_json(json_bytes)
-        logger.debug(f"Loaded {sum(len(r) for r in routes.values())} routes for {len(routes)} targets.")
-        return routes
-    except Exception as e:
-        logger.error(f"Failed to load routes from {path}: {e}")
-        raise
+    routes = _ROUTES_ADAPTER.validate_json(json_bytes)
+    logger.debug(f"Loaded {sum(len(r) for r in routes.values())} routes for {len(routes)} targets.")
+    return routes
 
 
 def load_benchmark(path: Path) -> BenchmarkSet:
@@ -86,22 +81,58 @@ def load_raw_paroutes_list(path: Path) -> list[dict]:
     return data
 
 
-def load_stock_file(path: Path) -> set[SmilesStr]:
+def load_stock_file(path: Path) -> set[InchiKeyStr]:
     """
-    Loads a set of stock SMILES from a text file (one per line).
-    Assumes the file is already canonicalized.
-    """
-    logger.debug(f"Loading stock from {path}...")
-    try:
-        with path.open("r", encoding="utf-8") as f:
-            stock = {line.strip() for line in f if line.strip()}
+    Loads a set of stock InChI keys from a CSV.GZ file.
 
-        logger.info(f"Loaded {len(stock):,} molecules from stock file.")
-        return stock
+    Expects gzipped CSV format with header: SMILES,InChIKey
+
+    Args:
+        path: Path to stock file (.csv.gz)
+
+    Returns:
+        Set of InChI keys representing available stock molecules
+
+    Raises:
+        RetroCastIOError: If file cannot be read or format is invalid
+    """
+    path = Path(path)
+
+    if not path.exists():
+        raise RetroCastIOError(
+            f"Stock file not found: {path}. "
+            f"Expected .csv.gz format. Run scripts/1-canonicalize-stock.py to generate stock files."
+        )
+
+    if not path.name.endswith(".csv.gz"):
+        raise RetroCastIOError(
+            f"Invalid stock file format: {path}. "
+            f"Only .csv.gz format is supported. Run scripts/1-canonicalize-stock.py to convert."
+        )
+
+    logger.debug(f"Loading stock from {path}...")
+
+    try:
+        inchi_keys = set()
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+
+            # Validate header
+            if reader.fieldnames is None or "InChIKey" not in reader.fieldnames:
+                raise RetroCastIOError(
+                    f"Invalid stock CSV format. Expected header with 'InChIKey' column. Got: {reader.fieldnames}"
+                )
+
+            for row in reader:
+                inchi_key = row.get("InChIKey", "").strip()
+                if inchi_key:
+                    inchi_keys.add(InchiKeyStr(inchi_key))
+
+        logger.info(f"Loaded {len(inchi_keys):,} molecules from {path.name}")
+        return inchi_keys
 
     except OSError as e:
-        logger.error(f"Failed to read stock file: {path}")
-        raise RetroCastIOError(f"Stock loading error on {path}: {e}") from e
+        raise RetroCastIOError(f"Failed to read stock file {path}: {e}") from e
 
 
 def load_execution_stats(path: Path) -> ExecutionStats:
@@ -126,6 +157,104 @@ def save_execution_stats(stats: ExecutionStats, path: Path) -> None:
     logger.info(
         f"Saved execution stats with {len(stats.wall_time)} wall_time and {len(stats.cpu_time)} cpu_time entries."
     )
+
+
+def save_stock_files(
+    stock: dict[InchiKeyStr, SmilesStr],
+    stock_name: str,
+    output_dir: Path,
+    source_path: Path | None = None,
+    statistics: StockStatistics | None = None,
+) -> tuple[Path, Path, Path]:
+    """
+    Saves stock in dual format: CSV (with InChI keys) and TXT (SMILES only).
+
+    Also generates a manifest file with provenance tracking, file hashes, and statistics.
+
+    Args:
+        stock: Dictionary mapping InChIKey -> canonical SMILES
+        stock_name: Base name for output files (without extension)
+        output_dir: Directory to write output files
+        source_path: Optional path to source file for provenance tracking
+        statistics: Optional StockStatistics for manifest
+
+    Returns:
+        Tuple of (csv_path, txt_path, manifest_path)
+
+    Example:
+        stock = {
+            "UHOVQNZJYSORNB-UHFFFAOYSA-N": "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O",
+            ...
+        }
+        csv_path, txt_path, manifest_path = save_stock_files(
+            stock=stock,
+            stock_name="buyables-stock",
+            output_dir=Path("data/1-benchmarks/stocks"),
+            source_path=Path("data/1-benchmarks/raw-stocks/buyables-stock.txt"),
+            statistics=stats
+        )
+    """
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Define output paths (gzipped)
+    csv_path = output_dir / f"{stock_name}.csv.gz"
+    txt_path = output_dir / f"{stock_name}.txt.gz"
+    manifest_path = output_dir / f"{stock_name}.manifest.json"
+
+    logger.info(f"Saving stock files for '{stock_name}'...")
+
+    # Sort by InChI key for deterministic output
+    sorted_items = sorted(stock.items(), key=lambda x: x[0])
+
+    # Save CSV (SMILES, InChIKey) - gzipped
+    logger.debug(f"Writing CSV to {csv_path}...")
+    try:
+        with gzip.open(csv_path, "wt", encoding="utf-8", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["SMILES", "InChIKey"])  # Header
+            for inchi_key, smiles in sorted_items:
+                writer.writerow([smiles, inchi_key])
+    except OSError as e:
+        raise RetroCastIOError(f"Failed to write CSV file {csv_path}: {e}") from e
+
+    # Save TXT (SMILES only, for models that need plain text) - gzipped
+    logger.debug(f"Writing TXT to {txt_path}...")
+    try:
+        with gzip.open(txt_path, "wt", encoding="utf-8") as f:
+            for _, smiles in sorted_items:
+                f.write(f"{smiles}\n")
+    except OSError as e:
+        raise RetroCastIOError(f"Failed to write TXT file {txt_path}: {e}") from e
+
+    # Create manifest
+    logger.debug(f"Creating manifest at {manifest_path}...")
+
+    sources: list[Path] = [source_path] if source_path else []
+
+    manifest = create_manifest(
+        action="canonicalize-stock",
+        sources=sources,
+        outputs=[
+            (csv_path, stock, "stock"),  # CSV file with stock dict for content hashing
+            (txt_path, stock, "stock"),  # TXT file (same content hash)
+        ],
+        root_dir=output_dir.parent.parent,  # Project root (2 levels up from stocks/)
+        parameters={"stock_name": stock_name},
+        statistics=statistics.to_manifest_dict() if statistics else {},
+    )
+
+    manifest_json = manifest.model_dump(mode="json")
+    with manifest_path.open("w", encoding="utf-8") as f:
+        json.dump(manifest_json, f, indent=2, sort_keys=False)
+
+    logger.info(f"✓ Saved {len(stock):,} molecules")
+    logger.debug(f"  CSV: {csv_path}")
+    logger.debug(f"  TXT: {txt_path}")
+    logger.debug(f"  Manifest: {manifest_path}")
+
+    return csv_path, txt_path, manifest_path
 
 
 class BenchmarkResultsLoader:

@@ -157,7 +157,7 @@ def handle_create_benchmark(args: Any) -> None:
         manifest = create_manifest(
             action="[cli]create-benchmark",
             sources=[input_path],
-            outputs=[(output_path, bm)],
+            outputs=[(output_path, bm, "benchmark")],
             root_dir=output_path.parents[2],
             parameters={"name": args.name, "stock_name": args.stock_name},
             statistics={"n_targets": len(targets)},
@@ -320,7 +320,7 @@ def handle_adapt(args: Any) -> None:
         manifest = create_manifest(
             action="[cli]adapt",
             sources=[input_path],
-            outputs=[(output_path, processed_routes)],
+            outputs=[(output_path, processed_routes, "predictions")],
             root_dir=output_path.parent,
             parameters={"adapter": adapter_name, "benchmark_provided": bool(args.benchmark)},
             statistics={"n_routes_saved": sum(len(r) for r in processed_routes.values())},

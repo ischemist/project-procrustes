@@ -92,7 +92,7 @@ def main():
     manifest = create_manifest(
         action="scripts/directmultistep/ingest-dms-legacy",
         sources=[bench_def_path, n1_pickle, n5_pickle],
-        outputs=[(out_path, processed_predictions)],
+        outputs=[(out_path, processed_predictions, "predictions")],
         root_dir=BASE_DIR / "data",
         parameters={"benchmark": args.benchmark, "model": model_name},
         statistics={"n_targets_found": hits},

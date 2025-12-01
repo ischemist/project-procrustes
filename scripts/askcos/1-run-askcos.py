@@ -145,7 +145,7 @@ if __name__ == "__main__":
         sources=[bench_path],
         root_dir=BASE_DIR / "data",
         outputs=[
-            (save_dir / "results.json.gz", results),
+            (save_dir / "results.json.gz", results, "predictions"),
         ],
         statistics={
             "total_targets": len(benchmark.targets),

@@ -327,7 +327,7 @@ class TestCreateManifest:
         manifest = create_manifest(
             action="test",
             sources=[source],
-            outputs=[(output, {"key": "value"})],
+            outputs=[(output, {"key": "value"}, "unknown")],
             root_dir=tmp_path,
         )
 
@@ -354,7 +354,7 @@ class TestCreateManifest:
         manifest = create_manifest(
             action="test",
             sources=[],
-            outputs=[(output_path, benchmark)],
+            outputs=[(output_path, benchmark, "benchmark")],
             root_dir=tmp_path,
         )
 
@@ -373,7 +373,7 @@ class TestCreateManifest:
         manifest = create_manifest(
             action="test",
             sources=[],
-            outputs=[(output_path, routes)],
+            outputs=[(output_path, routes, "predictions")],
             root_dir=tmp_path,
         )
 
@@ -388,7 +388,7 @@ class TestCreateManifest:
         manifest = create_manifest(
             action="test",
             sources=[],
-            outputs=[(output, {})],
+            outputs=[(output, {}, "unknown")],
             root_dir=tmp_path,
             parameters={"key": "value", "number": 42},
         )
@@ -403,7 +403,7 @@ class TestCreateManifest:
         manifest = create_manifest(
             action="test",
             sources=[],
-            outputs=[(output, {})],
+            outputs=[(output, {}, "unknown")],
             root_dir=tmp_path,
             statistics={"count": 100, "rate": 0.95},
         )
@@ -519,32 +519,97 @@ class TestBenchmarkRoundtrip:
 class TestStockFile:
     """Tests for stock file operations."""
 
-    def test_load_stock_file(self, tmp_path):
-        """Stock file should load as set of SMILES."""
-        stock_file = tmp_path / "stock.txt"
-        stock_file.write_text("C\nCC\nCCC\nO\n")
+    def test_load_stock_csv_returns_inchi_keys(self, tmp_path):
+        """Stock CSV.GZ file should load as set of InChI keys."""
+        import csv
+        import gzip
+
+        stock_file = tmp_path / "stock.csv.gz"
+        with gzip.open(stock_file, "wt", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["SMILES", "InChIKey"])
+            writer.writerow(["C", "VNWKTOKETHGBQD-UHFFFAOYSA-N"])
+            writer.writerow(["CC", "OTMSDBZUPAUEDD-UHFFFAOYSA-N"])
+            writer.writerow(["CCC", "ATUOYWHBWRKTHZ-UHFFFAOYSA-N"])
 
         stock = load_stock_file(stock_file)
 
-        assert stock == {"C", "CC", "CCC", "O"}
+        assert stock == {
+            "VNWKTOKETHGBQD-UHFFFAOYSA-N",
+            "OTMSDBZUPAUEDD-UHFFFAOYSA-N",
+            "ATUOYWHBWRKTHZ-UHFFFAOYSA-N",
+        }
 
-    def test_stock_file_strips_whitespace(self, tmp_path):
-        """Whitespace should be stripped from stock entries."""
-        stock_file = tmp_path / "stock.txt"
-        stock_file.write_text("  C  \nCC\t\n  CCC  \n")
+    def test_load_stock_csv_strips_whitespace(self, tmp_path):
+        """Whitespace should be stripped from CSV.GZ entries."""
+        import csv
+        import gzip
+
+        stock_file = tmp_path / "stock.csv.gz"
+        with gzip.open(stock_file, "wt", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["SMILES", "InChIKey"])
+            writer.writerow(["C", "  VNWKTOKETHGBQD-UHFFFAOYSA-N  "])
+            writer.writerow(["CC", " OTMSDBZUPAUEDD-UHFFFAOYSA-N\t"])
 
         stock = load_stock_file(stock_file)
 
-        assert stock == {"C", "CC", "CCC"}
+        assert stock == {
+            "VNWKTOKETHGBQD-UHFFFAOYSA-N",
+            "OTMSDBZUPAUEDD-UHFFFAOYSA-N",
+        }
 
-    def test_stock_file_ignores_empty_lines(self, tmp_path):
-        """Empty lines should be ignored in stock files."""
-        stock_file = tmp_path / "stock.txt"
-        stock_file.write_text("C\n\nCC\n\n\nCCC\n")
+    def test_load_stock_csv_ignores_empty_inchikeys(self, tmp_path):
+        """Empty InChI keys should be ignored."""
+        import csv
+        import gzip
+
+        stock_file = tmp_path / "stock.csv.gz"
+        with gzip.open(stock_file, "wt", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["SMILES", "InChIKey"])
+            writer.writerow(["C", "VNWKTOKETHGBQD-UHFFFAOYSA-N"])
+            writer.writerow(["", ""])  # Empty row
+            writer.writerow(["CC", "OTMSDBZUPAUEDD-UHFFFAOYSA-N"])
 
         stock = load_stock_file(stock_file)
 
-        assert stock == {"C", "CC", "CCC"}
+        assert stock == {
+            "VNWKTOKETHGBQD-UHFFFAOYSA-N",
+            "OTMSDBZUPAUEDD-UHFFFAOYSA-N",
+        }
+
+    def test_load_stock_invalid_extension_raises(self, tmp_path):
+        """Non-CSV.GZ files should raise RetroCastIOError."""
+        from retrocast.exceptions import RetroCastIOError
+
+        stock_file = tmp_path / "stock.txt"
+        stock_file.write_text("C\nCC\n")
+
+        with pytest.raises(RetroCastIOError, match="Only .csv.gz format is supported"):
+            load_stock_file(stock_file)
+
+    def test_load_stock_csv_invalid_header_raises(self, tmp_path):
+        """Invalid CSV.GZ header should raise RetroCastIOError."""
+        import gzip
+
+        from retrocast.exceptions import RetroCastIOError
+
+        stock_file = tmp_path / "stock.csv.gz"
+        with gzip.open(stock_file, "wt") as f:
+            f.write("WrongHeader1,WrongHeader2\nC,VNWKTOKETHGBQD-UHFFFAOYSA-N\n")
+
+        with pytest.raises(RetroCastIOError, match="Invalid stock CSV format"):
+            load_stock_file(stock_file)
+
+    def test_load_stock_missing_file_raises(self, tmp_path):
+        """Missing file should raise RetroCastIOError."""
+        from retrocast.exceptions import RetroCastIOError
+
+        stock_file = tmp_path / "nonexistent.csv.gz"
+
+        with pytest.raises(RetroCastIOError, match="Stock file not found"):
+            load_stock_file(stock_file)
 
 
 # =============================================================================

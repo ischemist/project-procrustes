@@ -121,7 +121,7 @@ def _ingest_single(model_name: str, benchmark_name: str, config: dict, paths: di
         manifest = create_manifest(
             action="ingest",
             sources=[raw_path, paths["benchmarks"] / f"{benchmark_name}.json.gz"],
-            outputs=[(out_path, processed_routes)],
+            outputs=[(out_path, processed_routes, "predictions")],
             root_dir=paths["raw"].parent,  # The 'data/' directory
             parameters={"model": model_name, "benchmark": benchmark_name, "sampling": strategy, "k": k},
             statistics=stats.to_manifest_dict(),
@@ -168,7 +168,7 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
             logger.error(f"Skipping {benchmark_name}: No stock specified in definition or CLI.")
             return
 
-        stock_path = paths["stocks"] / f"{stock_name}.txt"
+        stock_path = paths["stocks"] / f"{stock_name}.csv.gz"
         if not stock_path.exists():
             logger.error(f"Stock file missing: {stock_path}")
             return
@@ -191,7 +191,7 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
         manifest = create_manifest(
             action="score_model",
             sources=[bench_path, routes_path, stock_path],
-            outputs=[(out_path, eval_results)],
+            outputs=[(out_path, eval_results, "unknown")],
             root_dir=paths["raw"].parent,  # The 'data/' directory
             parameters={"model": model_name, "benchmark": benchmark_name, "stock": stock_name},
             statistics={
