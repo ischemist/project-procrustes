@@ -125,6 +125,16 @@ def create_benchmark_from_pickle(
     n_success = len(benchmark_targets)
     logger.info(f"Converted {n_success}/{len(routes)} routes ({failed} failed, {unsolvable} unsolvable)")
 
+    # Log route length distribution
+    length_counts: dict[int, int] = {}
+    for target in benchmark_targets.values():
+        if target.acceptable_routes:  # type: ignore
+            length = target.acceptable_routes[0].length  # type: ignore
+            length_counts[length] = length_counts.get(length, 0) + 1
+
+    if length_counts:
+        logger.info(f"Route length distribution: {dict(sorted(length_counts.items()))}")
+
     # Create benchmark
     DEF_DIR.mkdir(parents=True, exist_ok=True)
     name = f"uspto-{n_success}"
