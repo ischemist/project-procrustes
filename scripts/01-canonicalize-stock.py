@@ -46,6 +46,8 @@ def canonicalize_stock(
     """
     Reads raw stock file, canonicalizes SMILES, and deduplicates by InChI key.
 
+    Uses streaming to handle arbitrarily large files with minimal memory footprint.
+
     Args:
         input_path: Path to raw stock file (one SMILES per line)
 
@@ -54,80 +56,78 @@ def canonicalize_stock(
         - stock_dict: mapping of InChIKey -> canonical SMILES
         - statistics: StockStatistics with processing metrics
     """
-    logger.info(f"Reading raw stock from {input_path}...")
+    logger.info(f"Streaming raw stock from {input_path}...")
 
-    # Read all lines (OSError will propagate naturally if file doesn't exist)
-    raw_lines = input_path.read_text(encoding="utf-8").splitlines()
-
-    # Statistics tracking
-    stats = StockStatistics(
-        raw_input_lines=len(raw_lines),
-    )
+    # Statistics tracking (we'll count lines as we go)
+    stats = StockStatistics(raw_input_lines=0)
 
     # Process each line
     stock_dict: dict[InchiKeyStr, SmilesStr] = {}
     smiles_to_inchi: dict[SmilesStr, InchiKeyStr] = {}  # Track for duplicate SMILES detection
 
-    logger.info(f"Processing {len(raw_lines):,} input lines...")
-    pbar = tqdm(raw_lines, unit="lines", desc="Canonicalizing")
+    # Stream file line-by-line (OSError will propagate naturally if file doesn't exist)
+    with input_path.open("r", encoding="utf-8") as f:
+        # No total for tqdm, but still get throughput and count
+        pbar = tqdm(f, unit="lines", desc="Canonicalizing")
 
-    for line_num, line in enumerate(pbar, start=1):
-        smiles = line.strip()
+        for line_num, line in enumerate(pbar, start=1):
+            stats.raw_input_lines += 1
+            smiles = line.strip()
 
-        # Skip empty lines
-        if not smiles:
-            stats.empty_lines += 1
-            continue
+            # Skip empty lines
+            if not smiles:
+                stats.empty_lines += 1
+                continue
 
-        # Skip header if present (CSV files)
-        if smiles.upper().startswith("SMILES") or smiles.upper().startswith("INCHI"):
-            stats.empty_lines += 1
-            continue
+            # Skip header if present (CSV files)
+            if smiles.upper().startswith("SMILES") or smiles.upper().startswith("INCHI"):
+                stats.empty_lines += 1
+                continue
 
-        # Canonicalize SMILES
-        try:
-            canon_smiles = canonicalize_smiles(smiles)
-        except RetroCastException as e:  # Covers InvalidSmilesError (subclass)
-            stats.invalid_smiles += 1
-            logger.debug(f"Line {line_num}: Failed to canonicalize '{smiles}': {e}")
-            pbar.set_postfix({"invalid": stats.invalid_smiles, "unique": len(stock_dict)})
-            continue
+            # Canonicalize SMILES
+            try:
+                canon_smiles = canonicalize_smiles(smiles)
+            except RetroCastException as e:  # Covers InvalidSmilesError (subclass)
+                stats.invalid_smiles += 1
+                logger.debug(f"Line {line_num}: Failed to canonicalize '{smiles}': {e}")
+                pbar.set_postfix({"invalid": stats.invalid_smiles, "unique": len(stock_dict)})
+                continue
 
-        # Generate InChI key
-        try:
-            inchi_key = get_inchi_key(canon_smiles)
-        except RetroCastException as e:  # Covers InvalidSmilesError (subclass)
-            stats.inchi_generation_failed += 1
-            logger.debug(f"Line {line_num}: Failed to generate InChI for '{canon_smiles}': {e}")
+            # Generate InChI key
+            try:
+                inchi_key = get_inchi_key(canon_smiles)
+            except RetroCastException as e:  # Covers InvalidSmilesError (subclass)
+                stats.inchi_generation_failed += 1
+                logger.debug(f"Line {line_num}: Failed to generate InChI for '{canon_smiles}': {e}")
+                pbar.set_postfix(
+                    {
+                        "inchi_fail": stats.inchi_generation_failed,
+                        "unique": len(stock_dict),
+                    }
+                )
+                continue
+
+            # Track SMILES duplicates (same SMILES, different representation)
+            if canon_smiles in smiles_to_inchi:
+                stats.duplicate_smiles += 1
+                continue
+
+            # Track InChI duplicates (tautomers, stereoisomers, etc.)
+            if inchi_key in stock_dict:
+                stats.duplicate_inchikeys += 1
+                # Keep the first SMILES we saw for this InChI
+                continue
+
+            # Add to stock
+            stock_dict[inchi_key] = canon_smiles
+            smiles_to_inchi[canon_smiles] = inchi_key
+
             pbar.set_postfix(
                 {
-                    "inchi_fail": stats.inchi_generation_failed,
                     "unique": len(stock_dict),
+                    "dup_inchi": stats.duplicate_inchikeys,
                 }
             )
-            continue
-
-        # Track SMILES duplicates (same SMILES, different representation)
-        if canon_smiles in smiles_to_inchi:
-            stats.duplicate_smiles += 1
-            continue
-
-        # Track InChI duplicates (tautomers, stereoisomers, etc.)
-        if inchi_key in stock_dict:
-            stats.duplicate_inchikeys += 1
-            # Keep the first SMILES we saw for this InChI
-            continue
-
-        # Add to stock
-        stock_dict[inchi_key] = canon_smiles
-        smiles_to_inchi[canon_smiles] = inchi_key
-
-        pbar.set_postfix(
-            {
-                "unique": len(stock_dict),
-                "dup_inchi": stats.duplicate_inchikeys,
-            }
-        )
 
     stats.unique_molecules = len(stock_dict)
 
