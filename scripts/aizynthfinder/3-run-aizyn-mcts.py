@@ -124,7 +124,7 @@ if __name__ == "__main__":
         action="scripts/aizynthfinder/3-run-aizyn-mcts.py",
         sources=[bench_path, config_path],
         root_dir=BASE_DIR / "data",
-        outputs=[(save_dir / "results.json.gz", results, "predictions")],
+        outputs=[(save_dir / "results.json.gz", results, "unknown")],
         statistics=summary,
     )
 

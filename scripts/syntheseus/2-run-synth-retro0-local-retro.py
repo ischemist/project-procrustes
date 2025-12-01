@@ -151,7 +151,7 @@ if __name__ == "__main__":
         action="scripts/syntheseus/2-run-synth-retro0-local-retro.py",
         sources=[bench_path, stock_path],
         root_dir=BASE_DIR / "data",
-        outputs=[(save_dir / "results.json.gz", results, "predictions")],
+        outputs=[(save_dir / "results.json.gz", results, "unknown")],
         statistics=summary,
     )
 

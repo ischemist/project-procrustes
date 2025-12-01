@@ -15,7 +15,23 @@ logger = logging.getLogger(__name__)
 
 
 class ContentType(str, Enum):
-    """Content types for manifest hashing."""
+    """
+    Content types for manifest hashing.
+
+    Usage guidelines:
+    - BENCHMARK: Use when hashing a BenchmarkSet definition (benchmark.json.gz).
+      The hash reflects all targets and their acceptable routes.
+
+    - PREDICTIONS: Use ONLY after ingestion when you have a dict[str, list[Route]].
+      This hashes Route objects (Pydantic models). Do NOT use during raw model
+      execution (use "unknown" instead).
+
+    - STOCK: Use when hashing a stock dictionary mapping InChIKey -> SMILES.
+
+    - UNKNOWN: Use for raw model outputs (dict of raw predictions before ingestion).
+      Content hashing is skipped; only file hash is computed. This prevents errors
+      when trying to hash raw dict predictions as if they were Route objects.
+    """
 
     BENCHMARK = "benchmark"
     PREDICTIONS = "predictions"
