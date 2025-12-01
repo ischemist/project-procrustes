@@ -5312,7 +5312,7 @@ wheels = [
 [[package]]
 name = "retro-star"
 version = "0.1.0"
-source = { git = "https://github.com/anmorgunov/retro_star?branch=master#e12f57dd53f76a25013153fdf1746e68b8c756bf" }
+source = { git = "https://github.com/anmorgunov/retro_star?branch=master#f392fdc920d12d325ef61b8622a8795ff06fa49f" }
 dependencies = [
     { name = "graphviz" },
     { name = "networkx", version = "3.5", source = { registry = "https://pypi.org/simple" } },

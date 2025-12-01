@@ -6,9 +6,10 @@ and saves results in a structured format similar to the DMS predictions script.
 
 Example usage:
     uv run --extra aizyn scripts/aizynthfinder/3-run-aizyn-mcts.py --benchmark uspto-190
+    uv run --extra aizyn scripts/aizynthfinder/3-run-aizyn-mcts.py --benchmark random-n5-2-seed=20251030 --effort high
 
-The target CSV file should be located at: data/{target_name}.csv
-Results are saved to: data/evaluations/aizynthfinder-mcts/{target_name}/
+The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
+Results are saved to: data/2-raw/aizynthfinder-mcts[-{effort}]/{benchmark_name}/
 
 You might need to install some build tools to install aizynthfinder deps on a clean EC2 instance.
 ```bash
@@ -53,6 +54,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--benchmark", type=str, required=True, help="Name of the benchmark set (e.g. stratified-linear-600)"
     )
+    parser.add_argument(
+        "--effort",
+        type=str,
+        default="normal",
+        choices=["normal", "high"],
+        help="Search effort level: normal (100 iterations) or high (500 iterations)",
+    )
     args = parser.parse_args()
 
     # 1. Load Benchmark
@@ -61,10 +69,16 @@ if __name__ == "__main__":
     assert benchmark.stock_name is not None, f"Stock name not found in benchmark {args.benchmark}"
 
     # 2. Setup Output
-    save_dir = BASE_DIR / "data" / "2-raw" / "aizynthfinder-mcts" / benchmark.name
+    folder_name = "aizynthfinder-mcts" if args.effort == "normal" else f"aizynthfinder-mcts-{args.effort}"
+    save_dir = BASE_DIR / "data" / "2-raw" / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    config_path = BASE_DIR / "data" / "0-assets" / "model-configs" / "aizynthfinder" / "config_mcts.yaml"
+    config_suffix = "" if args.effort == "normal" else f"-{args.effort}"
+    config_path = (
+        BASE_DIR / "data" / "0-assets" / "model-configs" / "aizynthfinder" / f"config-mcts{config_suffix}.yaml"
+    )
+
+    logger.info(f"effort: {args.effort} (config: {config_path.name})")
 
     results: dict[str, dict[str, Any]] = {}
     solved_count = 0

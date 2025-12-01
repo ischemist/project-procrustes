@@ -21,7 +21,7 @@ import numpy as np
 from retro_star.api import RSPlanner
 from tqdm import tqdm
 
-from retrocast.io import create_manifest, load_benchmark, load_stock_file, save_execution_stats, save_json_gz
+from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
 from retrocast.models.benchmark import ExecutionStats
 from retrocast.utils.logging import logger
 
@@ -67,9 +67,7 @@ if __name__ == "__main__":
     benchmark = load_benchmark(bench_path)
     assert benchmark.stock_name is not None, f"Stock name not found in benchmark {args.benchmark}"
 
-    # 2. Load Stock
-    stock_path = STOCKS_DIR / f"{benchmark.stock_name}.txt"
-    stock_set = load_stock_file(stock_path)
+    stock_path = STOCKS_DIR / f"{benchmark.stock_name}.txt.gz"
 
     # 3. Setup Output
     folder_name = "retro-star" if args.effort == "normal" else f"retro-star-{args.effort}"

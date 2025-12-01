@@ -1,3 +1,5 @@
+search:
+  iteration_limit: 100
 expansion:
   uspto:
     - data/0-assets/model-configs/aizynthfinder/uspto_model.onnx
