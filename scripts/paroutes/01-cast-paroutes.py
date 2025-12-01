@@ -37,21 +37,14 @@ def process_dataset(name: str, check_buyables: bool = False):
     logger.info(f"Processing {name}... (check_buyables={check_buyables})")
     raw_list = load_raw_paroutes_list(raw_path)
 
-    # Load buyables only if needed
-    buyables = None
-    if check_buyables:
-        buyables = load_stock_file(stock_dir / "buyables-stock.txt")
-
     # Load the appropriate stock for this dataset
-    # If check_buyables is enabled, we already have buyables loaded
-    # Otherwise, load the corresponding n1/n5 stock
     if check_buyables:
-        stock_for_validation = buyables
+        stock_path = stock_dir / "buyables-stock.txt"
         stock_name_str = "buyables-stock"
     else:
         stock_path = stock_dir / f"{name}-stock.csv.gz"
-        stock_for_validation = load_stock_file(stock_path)
         stock_name_str = f"{name}-stock"
+    stock_for_validation = load_stock_file(stock_path)
 
     targets = {}
     failures = 0

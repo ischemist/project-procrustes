@@ -27,7 +27,7 @@ def create_subset(
 ) -> None:
     """Helper to assemble, save, and manifest a subset."""
     # Load the stock for validation
-    stock_path = STOCKS_DIR / f"{stock_name}.txt"
+    stock_path = STOCKS_DIR / f"{stock_name}.csv.gz"
     stock = load_stock_file(stock_path)
 
     subset = create_benchmark(
