@@ -30,7 +30,7 @@ def create_simple_manifest(
 ) -> Manifest:
     """Helper to create a minimal manifest for testing."""
     sources = source_files or []
-    outputs = [(f, {}) for f in output_files]
+    outputs = [(f, {}, "unknown") for f in output_files]
     return create_manifest(action=action, sources=sources, outputs=outputs, root_dir=root_dir or Path.cwd())
 
 

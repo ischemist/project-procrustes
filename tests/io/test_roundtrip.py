@@ -327,7 +327,7 @@ class TestCreateManifest:
         manifest = create_manifest(
             action="test",
             sources=[source],
-            outputs=[(output, {"key": "value"})],
+            outputs=[(output, {"key": "value"}, "unknown")],
             root_dir=tmp_path,
         )
 
@@ -354,7 +354,7 @@ class TestCreateManifest:
         manifest = create_manifest(
             action="test",
             sources=[],
-            outputs=[(output_path, benchmark)],
+            outputs=[(output_path, benchmark, "benchmark")],
             root_dir=tmp_path,
         )
 
@@ -373,7 +373,7 @@ class TestCreateManifest:
         manifest = create_manifest(
             action="test",
             sources=[],
-            outputs=[(output_path, routes)],
+            outputs=[(output_path, routes, "predictions")],
             root_dir=tmp_path,
         )
 
@@ -388,7 +388,7 @@ class TestCreateManifest:
         manifest = create_manifest(
             action="test",
             sources=[],
-            outputs=[(output, {})],
+            outputs=[(output, {}, "unknown")],
             root_dir=tmp_path,
             parameters={"key": "value", "number": 42},
         )
@@ -403,7 +403,7 @@ class TestCreateManifest:
         manifest = create_manifest(
             action="test",
             sources=[],
-            outputs=[(output, {})],
+            outputs=[(output, {}, "unknown")],
             root_dir=tmp_path,
             statistics={"count": 100, "rate": 0.95},
         )

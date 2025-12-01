@@ -231,16 +231,15 @@ def save_stock_files(
     # Create manifest
     logger.debug(f"Creating manifest at {manifest_path}...")
 
-    sources = [source_path] if source_path else []
-    outputs = [
-        (csv_path, stock),  # CSV file with stock dict for content hashing
-        (txt_path, stock),  # TXT file (same content hash)
-    ]
+    sources: list[Path] = [source_path] if source_path else []
 
     manifest = create_manifest(
         action="canonicalize-stock",
         sources=sources,
-        outputs=outputs,
+        outputs=[
+            (csv_path, stock, "stock"),  # CSV file with stock dict for content hashing
+            (txt_path, stock, "stock"),  # TXT file (same content hash)
+        ],
         root_dir=output_dir.parent.parent,  # Project root (2 levels up from stocks/)
         parameters={"stock_name": stock_name},
         statistics=statistics.to_manifest_dict() if statistics else {},

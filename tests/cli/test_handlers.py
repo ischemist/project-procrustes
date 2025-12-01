@@ -331,7 +331,7 @@ class TestHandleVerify:
         manifest = create_manifest(
             action="test-action",
             sources=[],
-            outputs=[(data_file, {})],
+            outputs=[(data_file, {}, "unknown")],
             root_dir=tmp_path,
         )
 
@@ -352,7 +352,7 @@ class TestHandleVerify:
         manifest = create_manifest(
             action="test-action",
             sources=[],
-            outputs=[(data_file, {})],
+            outputs=[(data_file, {}, "unknown")],
             root_dir=tmp_path,
         )
 
@@ -409,7 +409,7 @@ class TestHandleVerify:
             manifest = create_manifest(
                 action=f"action-{i}",
                 sources=[],
-                outputs=[(data_file, {})],
+                outputs=[(data_file, {}, "unknown")],
                 root_dir=tmp_path,
             )
 

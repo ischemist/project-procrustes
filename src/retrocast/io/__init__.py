@@ -10,6 +10,8 @@ from retrocast.io.data import (
     save_stock_files,
 )
 from retrocast.io.provenance import (
+    ContentType,
+    ContentTypeHint,
     calculate_file_hash,
     create_manifest,
     generate_model_hash,
@@ -29,6 +31,8 @@ __all__ = [
     "save_routes",
     "save_stock_files",
     # provenance
+    "ContentType",
+    "ContentTypeHint",
     "calculate_file_hash",
     "create_manifest",
     "generate_model_hash",

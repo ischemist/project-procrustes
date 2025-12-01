@@ -2,8 +2,9 @@ import hashlib
 import json
 import logging
 from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from retrocast import __version__
 from retrocast.models.benchmark import BenchmarkSet
@@ -11,6 +12,18 @@ from retrocast.models.chem import Route
 from retrocast.models.provenance import FileInfo, Manifest
 
 logger = logging.getLogger(__name__)
+
+
+class ContentType(str, Enum):
+    """Content types for manifest hashing."""
+
+    BENCHMARK = "benchmark"
+    PREDICTIONS = "predictions"
+    STOCK = "stock"
+    UNKNOWN = "unknown"
+
+
+ContentTypeHint = Literal["benchmark", "predictions", "stock", "unknown"]
 
 
 def calculate_file_hash(path: Path) -> str:
@@ -129,15 +142,34 @@ def _calculate_stock_content_hash(stock: dict[str, str]) -> str:
 def create_manifest(
     action: str,
     sources: list[Path],
-    outputs: list[tuple[Path, Any]],  # Tuple of (path, python_object)
+    outputs: list[tuple[Path, Any, ContentType | ContentTypeHint]],
     root_dir: Path,
     parameters: dict[str, Any] | None = None,
     statistics: dict[str, Any] | None = None,
 ) -> Manifest:
     """
-    Generates a Manifest object. Automatically detects object type to calculate content hash.
+    Generates a Manifest object with explicit content type specification.
+
+    Args:
+        action: Name of the action that produced these outputs
+        sources: Input file paths
+        outputs: List of (path, content_object, content_type) tuples
+        root_dir: Root directory for relative path calculation
+        parameters: Action parameters to record
+        statistics: Action statistics to record
+
+    Returns:
+        Manifest object with file hashes and content hashes
     """
     logger.info("Generating manifest...")
+
+    # Dispatch table for content hashing
+    _HASH_DISPATCH = {
+        ContentType.BENCHMARK: _calculate_benchmark_content_hash,
+        ContentType.PREDICTIONS: _calculate_predictions_content_hash,
+        ContentType.STOCK: _calculate_stock_content_hash,
+        ContentType.UNKNOWN: lambda _: None,
+    }
 
     def _get_relative_path(p: Path) -> str:
         try:
@@ -154,30 +186,20 @@ def create_manifest(
             logger.debug(f"Manifest source path not found on disk: {p}")
 
     output_infos = []
-    for path, obj in outputs:
+    for path, obj, content_type in outputs:
         f_hash = "file-not-written"
         if path.exists():
             f_hash = calculate_file_hash(path)
 
-        # Polymorphic content hashing
-        c_hash = None
-        if isinstance(obj, BenchmarkSet):
-            c_hash = _calculate_benchmark_content_hash(obj)
-        elif isinstance(obj, dict) and len(obj) > 0:
-            # Check if this is a stock dict (InChIKey -> SMILES)
-            first_key = next(iter(obj.keys()))
-            first_value = next(iter(obj.values()))
-            if isinstance(first_key, str) and isinstance(first_value, str):
-                # Assume it's a stock if both key and value are strings
-                # (Routes dict has str keys but list values)
-                c_hash = _calculate_stock_content_hash(obj)
-            elif (
-                isinstance(first_value, list)
-                and len(first_value) > 0
-                and all(isinstance(r, Route) for r in first_value)
-            ):
-                c_hash = _calculate_predictions_content_hash(obj)
-            # Otherwise, fall through and only use file hash
+        # Explicit content hashing via dispatch table
+        if isinstance(content_type, str):
+            content_type = ContentType(content_type)
+
+        hash_fn = _HASH_DISPATCH.get(content_type)
+        if hash_fn is None:
+            raise ValueError(f"Unknown content type: {content_type}")
+
+        c_hash = hash_fn(obj) if content_type != ContentType.UNKNOWN else None
 
         output_infos.append(FileInfo(path=_get_relative_path(path), file_hash=f_hash, content_hash=c_hash))
 

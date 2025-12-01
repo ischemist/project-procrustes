@@ -37,7 +37,7 @@ def create_subset(
     manifest = create_manifest(
         action="scripts/paroutes/02-create-subsets",
         sources=source_paths,
-        outputs=[(out_path, subset)],
+        outputs=[(out_path, subset, "benchmark")],
         root_dir=BASE_DIR / "data",
         parameters={"seed": seed, "name": name},
         statistics={"n_targets": len(subset.targets)},

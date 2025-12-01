@@ -71,7 +71,7 @@ def main():
             manifest = create_manifest(
                 action="scripts/migrations/01-reexport-benchmarks-with-hashes",
                 sources=[benchmark_file],
-                outputs=[(output_file, benchmark)],
+                outputs=[(output_file, benchmark, "benchmark")],
                 root_dir=project_root / "data",
                 parameters={"migration": "add_computed_hashes", "original_file": benchmark_file.name},
                 statistics={

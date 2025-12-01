@@ -139,7 +139,7 @@ if __name__ == "__main__":
     manifest = create_manifest(
         action="scripts/syntheseus/1-run-synth-bfs-local-retro.py",
         sources=[bench_path, stock_path],
-        outputs=[(save_dir / "results.json.gz", results)],
+        outputs=[(save_dir / "results.json.gz", results, "predictions")],
         statistics=summary,
     )
 

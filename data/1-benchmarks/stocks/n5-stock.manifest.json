@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "retrocast_version": "0.4.0.dev3",
-  "created_at": "2025-12-01T00:41:02.559235Z",
+  "created_at": "2025-12-01T00:49:18.558123Z",
   "action": "canonicalize-stock",
   "parameters": {
     "stock_name": "n5-stock"
@@ -16,12 +16,12 @@
   "output_files": [
     {
       "path": "1-benchmarks/stocks/n5-stock.csv.gz",
-      "file_hash": "dbbbd1bf7ff9ac68298ae858167a4566b78ea447cc2bff9d80770225eff55044",
+      "file_hash": "e8ff1fd558bb8c8992ef808ca33b1f965674542bf9e4428e5ef3f9b8a078f6e9",
       "content_hash": "b4b02933565121b2b89f6c46d7478c0108ad87e8ffaf6520b22b06a4231fcf63"
     },
     {
       "path": "1-benchmarks/stocks/n5-stock.txt.gz",
-      "file_hash": "cd9d78676e1a420a9b9919dd39277fc4bf16a346c8a4f7c899e749e5b672f8e0",
+      "file_hash": "bb0064d7c66075909deff355e276558868467e917cec7c691b39fc00c5d6d0f3",
       "content_hash": "b4b02933565121b2b89f6c46d7478c0108ad87e8ffaf6520b22b06a4231fcf63"
     }
   ],

@@ -131,7 +131,7 @@ if __name__ == "__main__":
         action="scripts/retrostar/2-run-og-retro-star.py",
         sources=[bench_path, stock_path],
         root_dir=BASE_DIR / "data",
-        outputs=[(save_dir / "results.json.gz", results)],
+        outputs=[(save_dir / "results.json.gz", results, "predictions")],
         statistics=summary,
     )
 
