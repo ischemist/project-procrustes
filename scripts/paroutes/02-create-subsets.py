@@ -41,7 +41,7 @@ def create_subset(
     manifest_path = out_dir / f"{name}.manifest.json"
     manifest = create_manifest(
         action="scripts/paroutes/02-create-subsets",
-        sources=source_paths,
+        sources=source_paths + [stock_path],
         outputs=[(out_path, subset, "benchmark")],
         root_dir=BASE_DIR / "data",
         parameters={"seed": seed, "name": name},
@@ -67,8 +67,8 @@ def main():
     DEF_DIR = BASE_DIR / "data" / "1-benchmarks" / "definitions"
 
     # Reference Routes (full paroutes)
-    n1_path = DEF_DIR / "paroutes-n1-full.json.gz"
-    n5_path = DEF_DIR / "paroutes-n5-full.json.gz"
+    n1_path = DEF_DIR / "paroutes-n1-full-pruned.json.gz"
+    n5_path = DEF_DIR / "paroutes-n5-full-pruned.json.gz"
 
     if not n5_path.exists() or not n1_path.exists():
         logger.error("Full datasets not found. Run 01-cast-paroutes.py first.")
@@ -138,7 +138,7 @@ def main():
 
     # 5. Create Random Legacy Set
     n5_pool = list(n5.targets.values())
-    for n in [100, 250, 500, 1000, 2000]:
+    for n in [50, 100, 250, 500, 1000, 2000]:
         targets_random = sample_random(n5_pool, n, seed=42)
 
         create_subset(
@@ -151,7 +151,7 @@ def main():
             seed=42,
         )
     # ------------ PaRoutes with Buyables Enforced ----------
-    n5_path = DEF_DIR / "paroutes-n5-full-buyables.json.gz"
+    n5_path = DEF_DIR / "paroutes-n5-full-buyables-pruned.json.gz"
 
     if not n5_path.exists():
         logger.error("Full datasets not found. Run 01-cast-paroutes.py first.")

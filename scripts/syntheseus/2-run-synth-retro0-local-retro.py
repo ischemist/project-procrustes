@@ -13,6 +13,7 @@ Results are saved to: data/2-raw/syntheseus-retro0-local-retro[-{effort}]/{bench
 """
 
 import argparse
+import gzip
 import time
 from pathlib import Path
 from typing import Any
@@ -25,7 +26,7 @@ from syntheseus.search.mol_inventory import SmilesListInventory
 from syntheseus.search.node_evaluation.common import ConstantNodeEvaluator, ReactionModelLogProbCost
 from tqdm import tqdm
 
-from retrocast.io import create_manifest, load_benchmark, load_stock_file, save_execution_stats, save_json_gz
+from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
 from retrocast.models.benchmark import ExecutionStats
 from retrocast.utils.logging import logger
 from retrocast.utils.serializers import serialize_route
@@ -56,8 +57,9 @@ if __name__ == "__main__":
     assert benchmark.stock_name is not None, f"Stock name not found in benchmark {args.benchmark}"
 
     # 2. Load Stock
-    stock_path = STOCKS_DIR / f"{benchmark.stock_name}.txt"
-    building_blocks = load_stock_file(stock_path)
+    stock_path = STOCKS_DIR / f"{benchmark.stock_name}.txt.gz"
+    with gzip.open(stock_path, "rt") as f:
+        building_blocks = list(f.read().splitlines())
 
     # 3. Setup Output
     folder_name = (
@@ -149,7 +151,7 @@ if __name__ == "__main__":
         action="scripts/syntheseus/2-run-synth-retro0-local-retro.py",
         sources=[bench_path, stock_path],
         root_dir=BASE_DIR / "data",
-        outputs=[(save_dir / "results.json.gz", results, "predictions")],
+        outputs=[(save_dir / "results.json.gz", results, "unknown")],
         statistics=summary,
     )
 

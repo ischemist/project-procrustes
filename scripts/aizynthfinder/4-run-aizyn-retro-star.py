@@ -6,9 +6,10 @@ and saves results in a structured format similar to the MCTS predictions script.
 
 Example usage:
     uv run --extra aizyn scripts/aizynthfinder/4-run-aizyn-retro-star.py --benchmark ref-cnv-400
+    uv run --extra aizyn scripts/aizynthfinder/4-run-aizyn-retro-star.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
-Results are saved to: data/2-raw/aizynthfinder-retro-star/{benchmark_name}/
+Results are saved to: data/2-raw/aizynthfinder-retro-star[-{effort}]/{benchmark_name}/
 """
 
 import argparse
@@ -30,6 +31,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--benchmark", type=str, required=True, help="Name of the benchmark set (e.g. stratified-linear-600)"
     )
+    parser.add_argument(
+        "--effort",
+        type=str,
+        default="normal",
+        choices=["normal", "high"],
+        help="Search effort level: normal (100 iterations) or high (500 iterations)",
+    )
     args = parser.parse_args()
 
     # 1. Load Benchmark
@@ -38,10 +46,16 @@ if __name__ == "__main__":
     assert benchmark.stock_name is not None, f"Stock name not found in benchmark {args.benchmark}"
 
     # 2. Setup Output
-    save_dir = BASE_DIR / "data" / "2-raw" / "aizynthfinder-retro-star" / benchmark.name
+    folder_name = "aizynthfinder-retro-star" if args.effort == "normal" else f"aizynthfinder-retro-star-{args.effort}"
+    save_dir = BASE_DIR / "data" / "2-raw" / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    config_path = BASE_DIR / "data" / "0-assets" / "model-configs" / "aizynthfinder" / "config_retrostar.yaml"
+    config_suffix = "" if args.effort == "normal" else f"-{args.effort}"
+    config_path = (
+        BASE_DIR / "data" / "0-assets" / "model-configs" / "aizynthfinder" / f"config-retrostar{config_suffix}.yaml"
+    )
+
+    logger.info(f"effort: {args.effort} (config: {config_path.name})")
 
     results: dict[str, dict[str, Any]] = {}
     solved_count = 0
@@ -87,7 +101,7 @@ if __name__ == "__main__":
         action="scripts/aizynthfinder/4-run-aizyn-retro-star.py",
         sources=[bench_path, config_path],
         root_dir=BASE_DIR / "data",
-        outputs=[(save_dir / "results.json.gz", results, "predictions")],
+        outputs=[(save_dir / "results.json.gz", results, "unknown")],
         statistics=summary,
     )
 

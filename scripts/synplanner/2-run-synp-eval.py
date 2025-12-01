@@ -152,7 +152,7 @@ if __name__ == "__main__":
     manifest = create_manifest(
         action="scripts/synplanner/2-run-synp-eval.py",
         sources=[bench_path, stock_path],
-        outputs=[(save_dir / "results.json.gz", results, "predictions")],
+        outputs=[(save_dir / "results.json.gz", results, "unknown")],
         statistics=summary,
     )
 

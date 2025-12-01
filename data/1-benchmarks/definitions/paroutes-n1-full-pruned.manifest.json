@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.4.0.dev3",
+  "created_at": "2025-12-01T17:41:13.186167Z",
+  "action": "scripts/paroutes/01-cast-paroutes",
+  "parameters": {
+    "dataset": "n1",
+    "check_buyables": false,
+    "prune_intermediates": true
+  },
+  "source_files": [
+    {
+      "path": "0-assets/paroutes/n1-routes.json.gz",
+      "file_hash": "49d7e209328b7cf7edc09ca827b0a21938d520a6b1d2dc0a46a65c6f392c2c89",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/paroutes-n1-full-pruned.json.gz",
+      "file_hash": "e0aa47640fa4570429f85609a053b5b75cbf98347f2d04d46aa78771e44a680c",
+      "content_hash": "2c051a64e2465592de223f63ed776d3e9e2864af23566a283d9c5b324c2df5ae"
+    }
+  ],
+  "statistics": {
+    "n_targets": 10000,
+    "n_failures": 0,
+    "n_targets_with_pruning": 0,
+    "n_total_pruned_routes": 0,
+    "avg_pruned_routes_per_target": 0
+  }
+}

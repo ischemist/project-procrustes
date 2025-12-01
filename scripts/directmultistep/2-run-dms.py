@@ -5,7 +5,7 @@ This script processes targets from a benchmark using DirectMultiStep algorithm
 and saves results in a structured format matching other prediction scripts.
 
 Example usage:
-    uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark uspto-190 --model-name "explorer XL" --device cuda --use_fp16
+    uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark random-n5-50 --model-name "explorer XL" --device cuda --use_fp16
 
     uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark uspto-190 --model-name "flash" --device cuda --use_fp16
 
@@ -65,12 +65,12 @@ if __name__ == "__main__":
 
     logger.info("Loading stock compounds")
     stocks = {
-        "n1-n5": load_stock_file(STOCKS_DIR / "n1-n5-stock.txt"),
-        "buyables": load_stock_file(STOCKS_DIR / "buyables-stock.txt"),
+        "n1-n5": load_stock_file(STOCKS_DIR / "n1-n5-stock.csv.gz"),
+        "buyables": load_stock_file(STOCKS_DIR / "buyables-stock.csv.gz"),
     }
 
     model_name = args.model_name.replace("_", "-").replace(" ", "-")
-    folder_name = f"dms-{model_name}-fp16" if args.use_fp16 else f"dms-{model_name}"
+    folder_name = f"dms-{model_name}"
     save_dir = BASE_DIR / "data" / "2-raw" / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -172,9 +172,9 @@ if __name__ == "__main__":
         sources=[bench_path],
         root_dir=BASE_DIR / "data",
         outputs=[
-            (save_dir / "valid_results.json.gz", valid_results, "predictions"),
-            (save_dir / "buyables_results.json.gz", buyables_results, "predictions"),
-            (save_dir / "n1n5_results.json.gz", n1n5_results, "predictions"),
+            (save_dir / "valid_results.json.gz", valid_results, "unknown"),
+            (save_dir / "buyables_results.json.gz", buyables_results, "unknown"),
+            (save_dir / "n1n5_results.json.gz", n1n5_results, "unknown"),
         ],
         statistics=summary,
     )
