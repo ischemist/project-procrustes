@@ -65,12 +65,12 @@ if __name__ == "__main__":
 
     logger.info("Loading stock compounds")
     stocks = {
-        "n1-n5": load_stock_file(STOCKS_DIR / "n1-n5-stock.txt"),
-        "buyables": load_stock_file(STOCKS_DIR / "buyables-stock.txt"),
+        "n1-n5": load_stock_file(STOCKS_DIR / "n1-n5-stock.csv.gz"),
+        "buyables": load_stock_file(STOCKS_DIR / "buyables-stock.csv.gz"),
     }
 
     model_name = args.model_name.replace("_", "-").replace(" ", "-")
-    folder_name = f"dms-{model_name}-fp16" if args.use_fp16 else f"dms-{model_name}"
+    folder_name = f"dms-{model_name}"
     save_dir = BASE_DIR / "data" / "2-raw" / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
