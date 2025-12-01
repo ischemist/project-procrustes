@@ -14,7 +14,7 @@ from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.io.data import load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Route, TargetIdentity
-from retrocast.typing import SmilesStr
+from retrocast.typing import InchiKeyStr, SmilesStr
 from retrocast.workflow.ingest import ingest_model_predictions
 from retrocast.workflow.score import score_model
 from tests.helpers import _make_simple_route, _make_two_step_route, _synthetic_inchikey
@@ -131,15 +131,19 @@ def synthetic_predictions(synthetic_benchmark: BenchmarkSet) -> dict[str, list[R
 
 
 @pytest.fixture
-def minimal_stock() -> set[SmilesStr]:
+def minimal_stock() -> set[InchiKeyStr]:
     """Stock containing only C (methane)."""
-    return {SmilesStr("C")}
+    return {InchiKeyStr(_synthetic_inchikey("C"))}
 
 
 @pytest.fixture
-def extended_stock() -> set[SmilesStr]:
+def extended_stock() -> set[InchiKeyStr]:
     """Stock containing C, CC, and O."""
-    return {SmilesStr("C"), SmilesStr("CC"), SmilesStr("O")}
+    return {
+        InchiKeyStr(_synthetic_inchikey("C")),
+        InchiKeyStr(_synthetic_inchikey("CC")),
+        InchiKeyStr(_synthetic_inchikey("O")),
+    }
 
 
 # =============================================================================
