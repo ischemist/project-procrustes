@@ -18,33 +18,33 @@ from retrocast.models.stats import ModelComparison
 def _make_target_evaluation(
     target_id: str,
     solvable: bool,
-    gt_rank: int | None = None,
+    acceptable_rank: int | None = None,
     route_length: int = 1,
     is_convergent: bool = False,
 ) -> TargetEvaluation:
     """Create a synthetic TargetEvaluation with optional solved route."""
     routes = []
     if solvable:
-        # Add a solved route at gt_rank position
-        if gt_rank is None:
-            gt_rank = 1
-        # Add solved route at position gt_rank
-        for i in range(1, gt_rank + 1):
-            is_solved = i == gt_rank
+        # Add a solved route at acceptable_rank position
+        if acceptable_rank is None:
+            acceptable_rank = 1
+        # Add solved route at position acceptable_rank
+        for i in range(1, acceptable_rank + 1):
+            is_solved = i == acceptable_rank
             routes.append(
                 ScoredRoute(
                     rank=i,
                     is_solved=is_solved,
-                    is_gt_match=is_solved,
+                    matches_acceptable=is_solved,
                 )
             )
         # Add more unsolved routes for realism
-        for i in range(gt_rank + 1, gt_rank + 4):
+        for i in range(acceptable_rank + 1, acceptable_rank + 4):
             routes.append(
                 ScoredRoute(
                     rank=i,
                     is_solved=False,
-                    is_gt_match=False,
+                    matches_acceptable=False,
                 )
             )
 
@@ -52,9 +52,9 @@ def _make_target_evaluation(
         target_id=target_id,
         routes=routes,
         is_solvable=solvable,
-        gt_rank=gt_rank,
-        route_length=route_length,
-        is_convergent=is_convergent,
+        acceptable_rank=acceptable_rank,
+        matched_route_length=route_length,
+        matched_route_is_convergent=is_convergent,
     )
 
 
@@ -74,53 +74,53 @@ def three_models_perfect_data():
         results_a[f"target_{i}"] = _make_target_evaluation(
             f"target_{i}",
             solvable=True,
-            gt_rank=1,
+            acceptable_rank=1,
         )
 
     # Model B: 9/10 solved at rank 1, 1/10 at rank 2
     results_b = {}
     for i in range(n_targets):
-        gt_rank = 1 if i < 9 else 2
+        acceptable_rank = 1 if i < 9 else 2
         results_b[f"target_{i}"] = _make_target_evaluation(
             f"target_{i}",
             solvable=True,
-            gt_rank=gt_rank,
+            acceptable_rank=acceptable_rank,
         )
 
     # Model C: 5/10 solved at rank 1, others unsolved
     results_c = {}
     for i in range(n_targets):
         solvable = i < 5
-        gt_rank = 1 if solvable else None
+        acceptable_rank = 1 if solvable else None
         results_c[f"target_{i}"] = _make_target_evaluation(
             f"target_{i}",
             solvable=solvable,
-            gt_rank=gt_rank,
+            acceptable_rank=acceptable_rank,
         )
 
-    return {
-        "model_a": EvaluationResults(
-            model_name="model_a",
-            benchmark_name="test_bench",
-            stock_name="test_stock",
-            has_ground_truth=True,
-            results=results_a,
-        ),
-        "model_b": EvaluationResults(
-            model_name="model_b",
-            benchmark_name="test_bench",
-            stock_name="test_stock",
-            has_ground_truth=True,
-            results=results_b,
-        ),
-        "model_c": EvaluationResults(
-            model_name="model_c",
-            benchmark_name="test_bench",
-            stock_name="test_stock",
-            has_ground_truth=True,
-            results=results_c,
-        ),
-    }
+        return {
+            "model_a": EvaluationResults(
+                model_name="model_a",
+                benchmark_name="test_bench",
+                stock_name="test_stock",
+                has_acceptable_routes=True,
+                results=results_a,
+            ),
+            "model_b": EvaluationResults(
+                model_name="model_b",
+                benchmark_name="test_bench",
+                stock_name="test_stock",
+                has_acceptable_routes=True,
+                results=results_b,
+            ),
+            "model_c": EvaluationResults(
+                model_name="model_c",
+                benchmark_name="test_bench",
+                stock_name="test_stock",
+                has_acceptable_routes=True,
+                results=results_c,
+            ),
+        }
 
 
 @pytest.fixture
@@ -133,7 +133,7 @@ def two_models_identical():
         results_shared[f"target_{i}"] = _make_target_evaluation(
             f"target_{i}",
             solvable=True,
-            gt_rank=1,
+            acceptable_rank=1,
         )
 
     return {
@@ -141,14 +141,14 @@ def two_models_identical():
             model_name="model_x",
             benchmark_name="test",
             stock_name="test",
-            has_ground_truth=True,
+            has_acceptable_routes=True,
             results=results_shared.copy(),
         ),
         "model_y": EvaluationResults(
             model_name="model_y",
             benchmark_name="test",
             stock_name="test",
-            has_ground_truth=True,
+            has_acceptable_routes=True,
             results=results_shared.copy(),
         ),
     }
@@ -168,10 +168,10 @@ class TestComputeProbabilisticRanking:
                 model_name="model_only",
                 benchmark_name="test",
                 stock_name="test",
-                has_ground_truth=True,
+                has_acceptable_routes=True,
                 results={
-                    "t1": _make_target_evaluation("t1", solvable=True, gt_rank=1),
-                    "t2": _make_target_evaluation("t2", solvable=True, gt_rank=1),
+                    "t1": _make_target_evaluation("t1", solvable=True, acceptable_rank=1),
+                    "t2": _make_target_evaluation("t2", solvable=True, acceptable_rank=1),
                 },
             )
         }
@@ -273,15 +273,15 @@ class TestComputeProbabilisticRanking:
         assert order1 == order2
 
     def test_gt_rank_metric(self, three_models_perfect_data):
-        """Test with GT rank as metric."""
+        """Test with acceptable rank as metric."""
 
-        def gt_rank_metric(te: TargetEvaluation) -> float:
+        def acceptable_rank_metric(te: TargetEvaluation) -> float:
             # Convert to metric where lower is better (like rank position)
-            if te.gt_rank is None:
+            if te.acceptable_rank is None:
                 return 0.0  # Worst possible (no solution)
-            return 1.0 / te.gt_rank  # Reciprocal so higher is better for boot dist
+            return 1.0 / te.acceptable_rank  # Reciprocal so higher is better for boot dist
 
-        ranking = compute_probabilistic_ranking(three_models_perfect_data, gt_rank_metric, n_boot=100, seed=42)
+        ranking = compute_probabilistic_ranking(three_models_perfect_data, acceptable_rank_metric, n_boot=100, seed=42)
 
         assert len(ranking) == 3
         # Model A should be in top rankings (all at rank 1 = best)
@@ -440,14 +440,14 @@ class TestRankingIntegration:
                 model_name="a",
                 benchmark_name="test",
                 stock_name="test",
-                has_ground_truth=True,
+                has_acceptable_routes=True,
                 results=results_a,
             ),
             "b": EvaluationResults(
                 model_name="b",
                 benchmark_name="test",
                 stock_name="test",
-                has_ground_truth=True,
+                has_acceptable_routes=True,
                 results=results_b,
             ),
         }

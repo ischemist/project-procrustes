@@ -37,10 +37,14 @@ def process_dataset(name: str, check_buyables: bool = False):
     logger.info(f"Processing {name}... (check_buyables={check_buyables})")
     raw_list = load_raw_paroutes_list(raw_path)
 
-    # Load buyables only if needed
-    buyables = None
+    # Load the appropriate stock for this dataset
     if check_buyables:
-        buyables = load_stock_file(stock_dir / "buyables-stock.txt")
+        stock_path = stock_dir / "buyables-stock.txt"
+        stock_name_str = "buyables-stock"
+    else:
+        stock_path = stock_dir / f"{name}-stock.csv.gz"
+        stock_name_str = f"{name}-stock"
+    stock_for_validation = load_stock_file(stock_path)
 
     targets = {}
     failures = 0
@@ -65,7 +69,7 @@ def process_dataset(name: str, check_buyables: bool = False):
 
         # Check if route is solved (only if check_buyables is enabled)
         if check_buyables:
-            is_solved = is_route_solved(route, buyables)
+            is_solved = is_route_solved(route, stock_for_validation)
             if not is_solved:
                 unsolved += 1
                 continue
@@ -75,18 +79,18 @@ def process_dataset(name: str, check_buyables: bool = False):
         target = create_benchmark_target(
             id=target_id,
             smiles=smiles,
-            ground_truth=route,
-            route_length=route.length,
-            is_convergent=route.has_convergent_reaction,
+            acceptable_routes=[route],  # Single route becomes primary acceptable route
         )
 
         targets[target_id] = target
 
     # Create benchmark with validation
+    # This will validate that all acceptable routes are solvable with the stock
     benchmark = create_benchmark(
         name=f"paroutes-{name}-full{suffix}",
         description=f"Full raw import of PaRoutes {name} set.",
-        stock_name=f"{name}-stock",
+        stock=stock_for_validation,
+        stock_name=stock_name_str,
         targets=targets,
     )
 

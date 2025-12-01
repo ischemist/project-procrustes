@@ -113,7 +113,7 @@ class TestLibraryAPIWithRealData:
         first_target_id = target_ids[0]
         t1_eval = results.results[first_target_id]
         assert hasattr(t1_eval, "is_solvable")
-        assert hasattr(t1_eval, "gt_rank")
+        assert hasattr(t1_eval, "acceptable_rank")
         # Verify the target we provided predictions for has routes
         assert len(t1_eval.routes) > 0
 

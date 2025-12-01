@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import BenchmarkValidationError
+from retrocast.metrics.solvability import is_route_solved
 from retrocast.models.chem import Route
 from retrocast.typing import InchiKeyStr, SmilesStr
 
@@ -28,14 +29,26 @@ class BenchmarkTarget(BaseModel):
     # Bucket for anything else (e.g. "source_patent_id", "reaction_classes", "original_index")
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    # The "Gold Standard" route from the literature/patent.
-    # Optional, because some benchmarks might be pure prediction tasks.
-    ground_truth: Route | None = None
-    # First-class properties for stratification
-    is_convergent: bool | None = Field(..., description="True if the ground truth route contains convergent steps.")
-    route_length: int | None = Field(
-        ..., description="The length of the longest linear path in the ground truth route."
-    )
+    # List of acceptable routes for this target (first = primary route)
+    # Empty list = pure prediction task with no reference routes
+    acceptable_routes: list[Route] = Field(default_factory=list)
+
+    @property
+    def primary_route(self) -> Route | None:
+        """Returns the primary (first) acceptable route, if any."""
+        return self.acceptable_routes[0] if self.acceptable_routes else None
+
+    @property
+    def route_length(self) -> int | None:
+        """Length of the primary acceptable route (used for filtering/subset creation)."""
+        return self.primary_route.length if self.primary_route else None
+
+    @property
+    def is_convergent(self) -> bool | None:
+        """Whether the primary acceptable route is convergent (used for filtering)."""
+        if not self.primary_route:
+            return None
+        return self.primary_route.has_convergent_reaction
 
 
 class BenchmarkSet(BaseModel):
@@ -142,12 +155,45 @@ def validate_benchmark_targets(targets: dict[str, BenchmarkTarget]) -> None:
         )
 
 
+def validate_acceptable_routes_solvable(benchmark: BenchmarkSet, stock: set[InchiKeyStr]) -> None:
+    """
+    Validates that all acceptable routes are solvable with the given stock.
+
+    This validation should be run after benchmark creation/subset construction
+    to ensure all acceptable routes can actually be solved with the benchmark's stock.
+
+    Args:
+        benchmark: The benchmark to validate
+        stock: Set of InChIKeys representing available stock molecules
+
+    Raises:
+        BenchmarkValidationError: If any acceptable route is not solvable
+    """
+    errors = []
+
+    for target_id, target in benchmark.targets.items():
+        for idx, route in enumerate(target.acceptable_routes):
+            if not is_route_solved(route, stock):
+                missing_leaves = [leaf.inchikey for leaf in route.leaves if leaf.inchikey not in stock]
+                errors.append(
+                    f"Target '{target_id}' acceptable_routes[{idx}]: "
+                    f"{len(missing_leaves)}/{len(route.leaves)} leaves missing from stock"
+                )
+
+    if errors:
+        error_summary = errors[:10]  # Show first 10
+        if len(errors) > 10:
+            error_summary.append(f"... and {len(errors) - 10} more unsolvable routes")
+
+        raise BenchmarkValidationError(
+            f"Found {len(errors)} unsolvable acceptable routes:\n" + "\n".join(f"  - {e}" for e in error_summary)
+        )
+
+
 def create_benchmark_target(
     id: str,
     smiles: str,
-    ground_truth: Route | None = None,
-    is_convergent: bool | None = None,
-    route_length: int | None = None,
+    acceptable_routes: list[Route] | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> BenchmarkTarget:
     """
@@ -159,9 +205,7 @@ def create_benchmark_target(
     Args:
         id: Unique identifier for the target
         smiles: SMILES string (will be canonicalized)
-        ground_truth: Optional ground truth route
-        is_convergent: Whether the route is convergent
-        route_length: Length of the route
+        acceptable_routes: List of acceptable routes (first is primary)
         metadata: Additional metadata
 
     Returns:
@@ -177,9 +221,7 @@ def create_benchmark_target(
         id=id,
         smiles=canonical_smiles,
         inchi_key=inchi_key,
-        ground_truth=ground_truth,
-        is_convergent=is_convergent,
-        route_length=route_length,
+        acceptable_routes=acceptable_routes or [],
         metadata=metadata or {},
     )
 
@@ -187,6 +229,7 @@ def create_benchmark_target(
 def create_benchmark(
     name: str,
     targets: dict[str, BenchmarkTarget],
+    stock: set[InchiKeyStr],
     description: str = "",
     stock_name: str | None = None,
 ) -> BenchmarkSet:
@@ -194,11 +237,14 @@ def create_benchmark(
     Creates a BenchmarkSet with validation for unique SMILES and InChIKeys.
 
     This is the official constructor for creating new benchmarks.
-    It validates that all targets have unique SMILES and InChIKeys.
+    It validates that:
+    1. All targets have unique SMILES and InChIKeys
+    2. All acceptable routes are solvable with the provided stock
 
     Args:
         name: Name of the benchmark
         targets: Dictionary mapping target IDs to BenchmarkTarget objects
+        stock: Set of InChIKeys representing available stock molecules
         description: Human-readable description
         stock_name: Name of the stock file for this benchmark
 
@@ -206,13 +252,23 @@ def create_benchmark(
         A validated BenchmarkSet
 
     Raises:
-        BenchmarkValidationError: If duplicate SMILES or InChIKeys are found
+        BenchmarkValidationError: If validation fails (duplicates or unsolvable routes)
     """
+    # Validate unique SMILES and InChIKeys
     validate_benchmark_targets(targets)
 
-    return BenchmarkSet(
+    # Create the benchmark
+    benchmark = BenchmarkSet(
         name=name,
         description=description,
         stock_name=stock_name,
         targets=targets,
     )
+
+    # Validate that all acceptable routes are solvable with the provided stock
+    # Only validate if there are any acceptable routes
+    has_acceptable_routes = any(len(target.acceptable_routes) > 0 for target in targets.values())
+    if has_acceptable_routes:
+        validate_acceptable_routes_solvable(benchmark, stock)
+
+    return benchmark

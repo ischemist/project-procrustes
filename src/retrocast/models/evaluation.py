@@ -11,7 +11,8 @@ class ScoredRoute(BaseModel):
 
     rank: int
     is_solved: bool
-    is_gt_match: bool  # Does this route match the ground truth?
+    matches_acceptable: bool  # Does this route match any acceptable route?
+    matched_acceptable_index: int | None = None  # Index of matched acceptable route (if any)
     # We can add more here later: 'num_steps', 'confidence_score', etc.
 
 
@@ -28,11 +29,12 @@ class TargetEvaluation(BaseModel):
 
     # Shortcuts for the lazy
     is_solvable: bool = False  # At least one route is solved
-    gt_rank: int | None = None  # Rank of first solved GT match (None if not found)
+    acceptable_rank: int | None = None  # Rank of first solved acceptable match (None if not found)
 
-    # Metadata copied from BenchmarkTarget for easy stratification
-    route_length: int | None
-    is_convergent: bool | None
+    # Properties of the MATCHED acceptable route (used for stratification)
+    # These are extracted from the actual route that was matched, not pre-computed
+    matched_route_length: int | None = None
+    matched_route_is_convergent: bool | None = None
 
 
 class EvaluationResults(BaseModel):
@@ -43,7 +45,7 @@ class EvaluationResults(BaseModel):
     model_name: str
     benchmark_name: str
     stock_name: str
-    has_ground_truth: bool  # Whether the benchmark has ground truth routes (not whether model found them)
+    has_acceptable_routes: bool  # Whether the benchmark has acceptable routes (not whether model found them)
 
     # Map target_id -> Evaluation
     results: dict[str, TargetEvaluation] = Field(default_factory=dict)

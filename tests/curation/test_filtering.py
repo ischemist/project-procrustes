@@ -264,17 +264,13 @@ class TestFilterByRouteType:
             id="LINEAR-TARGET",
             smiles="CCC",
             inchi_key=_synthetic_inchikey("CCC"),
-            ground_truth=linear_route,
-            is_convergent=linear_route.has_convergent_reaction,
-            route_length=linear_route.length,
+            acceptable_routes=[linear_route],
         )
         convergent_target = BenchmarkTarget(
             id="CONVERGENT-TARGET",
             smiles="CCCC",
             inchi_key=_synthetic_inchikey("CCCC"),
-            ground_truth=convergent_route,
-            is_convergent=convergent_route.has_convergent_reaction,
-            route_length=convergent_route.length,
+            acceptable_routes=[convergent_route],
         )
 
         return BenchmarkSet(
@@ -322,18 +318,14 @@ class TestCleanAndPrioritizePools:
             id="PRIMARY",
             smiles="CCC",
             inchi_key=_synthetic_inchikey("CCC"),
-            ground_truth=route,
-            is_convergent=route.has_convergent_reaction,
-            route_length=route.length,
+            acceptable_routes=[route],
         )
         # Same route signature in secondary
         secondary_target = BenchmarkTarget(
             id="SECONDARY",
             smiles="CCC-alt",
             inchi_key=_synthetic_inchikey("CCC-alt"),
-            ground_truth=route,
-            is_convergent=route.has_convergent_reaction,
-            route_length=route.length,
+            acceptable_routes=[route],
         )
 
         clean_p, clean_s = clean_and_prioritize_pools([primary_target], [secondary_target])
@@ -351,17 +343,13 @@ class TestCleanAndPrioritizePools:
             id="PRIMARY",
             smiles="CCC",  # Same SMILES
             inchi_key=_synthetic_inchikey("CCC"),
-            ground_truth=route1,
-            is_convergent=route1.has_convergent_reaction,
-            route_length=route1.length,
+            acceptable_routes=[route1],
         )
         secondary_target = BenchmarkTarget(
             id="SECONDARY",
             smiles="CCC",  # Same SMILES
             inchi_key=_synthetic_inchikey("CCC"),
-            ground_truth=route2,
-            is_convergent=route2.has_convergent_reaction,
-            route_length=route2.length,
+            acceptable_routes=[route2],
         )
 
         clean_p, clean_s = clean_and_prioritize_pools([primary_target], [secondary_target])
@@ -379,17 +367,13 @@ class TestCleanAndPrioritizePools:
             id="PRIMARY",
             smiles="CC",
             inchi_key=_synthetic_inchikey("CC"),
-            ground_truth=route1,
-            is_convergent=route1.has_convergent_reaction,
-            route_length=route1.length,
+            acceptable_routes=[route1],
         )
         secondary_target = BenchmarkTarget(
             id="SECONDARY",
             smiles="CCC",
             inchi_key=_synthetic_inchikey("CCC"),
-            ground_truth=route2,
-            is_convergent=route2.has_convergent_reaction,
-            route_length=route2.length,
+            acceptable_routes=[route2],
         )
 
         clean_p, clean_s = clean_and_prioritize_pools([primary_target], [secondary_target])
@@ -409,17 +393,13 @@ class TestCleanAndPrioritizePools:
             id="PRIMARY",
             smiles="CC",
             inchi_key=_synthetic_inchikey("CC"),
-            ground_truth=None,
-            is_convergent=None,
-            route_length=None,
+            acceptable_routes=[],
         )
         secondary_target = BenchmarkTarget(
             id="SECONDARY",
             smiles="CCC",
             inchi_key=_synthetic_inchikey("CCC"),
-            ground_truth=None,
-            is_convergent=None,
-            route_length=None,
+            acceptable_routes=[],
         )
 
         clean_p, clean_s = clean_and_prioritize_pools([primary_target], [secondary_target])
@@ -457,9 +437,7 @@ class TestFilteringIntegration:
                 id=f"INCHI_{i}",
                 smiles=smiles,
                 inchi_key=_synthetic_inchikey(smiles),
-                ground_truth=route,
-                is_convergent=route.has_convergent_reaction,
-                route_length=route.length,
+                acceptable_routes=[route],
             )
             targets[f"INCHI_{i}"] = target
 

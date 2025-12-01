@@ -111,7 +111,7 @@ class TestBasicFunctionality:
             model_name="test-model",
             benchmark_name="test-benchmark",
             stock_name="test-stock",
-            has_ground_truth=False,
+            has_acceptable_routes=False,
         )
         assert results.model_name == "test-model"
         assert len(results.results) == 0
