@@ -26,7 +26,7 @@ from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import InvalidSmilesError, RetroCastException
 from retrocast.io import create_manifest, load_stock_file, save_json_gz
 from retrocast.metrics.solvability import is_route_solved
-from retrocast.models.benchmark import BenchmarkSet, create_benchmark, create_benchmark_target
+from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget, create_benchmark, create_benchmark_target
 from retrocast.models.chem import TargetInput
 from retrocast.utils.logging import configure_script_logging, logger
 
@@ -81,7 +81,7 @@ def create_benchmark_from_pickle(
 
     # Process routes into benchmark targets
     adapter = RetroStarAdapter()
-    benchmark_targets: dict[str, object] = {}  # type: ignore
+    benchmark_targets: dict[str, BenchmarkTarget] = {}
     failed = 0
     unsolvable = 0
 
