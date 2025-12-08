@@ -7,6 +7,12 @@ models:
   aizynthfinder-retro-star:
     adapter: aizynth
     raw_results_filename: results.json.gz
+  aizynthfinder-mcts-high:
+    adapter: aizynth
+    raw_results_filename: results.json.gz
+  aizynthfinder-retro-star-high:
+    adapter: aizynth
+    raw_results_filename: results.json.gz
   askcos:
     adapter: askcos
     raw_results_filename: results.json.gz

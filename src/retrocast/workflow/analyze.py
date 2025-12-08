@@ -18,16 +18,14 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
     logger.info(f"Computing statistics for {eval_results.model_name}...")
 
     targets = list(eval_results.results.values())
-    has_lengths = any(t.matched_route_length is not None for t in targets)
+    has_lengths = any(t.stratification_length is not None for t in targets)
     group_fn = None
     if has_lengths:
 
-        def _get_matched_length(t: TargetEvaluation) -> int:
-            # Use -1 as a safe fallback for targets without matches
-            # to ensure keys are always integers (required for visualization sorting).
-            return t.matched_route_length if t.matched_route_length is not None else -1
+        def _get_stratification_length(t: TargetEvaluation) -> int | None:
+            return t.stratification_length
 
-        group_fn = _get_matched_length
+        group_fn = _get_stratification_length
 
     # --- 2. Solvability ---
     # This is always calculable as long as we have a stock.
@@ -49,10 +47,33 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
     else:
         logger.info("Benchmark has no acceptable routes. Skipping Top-K metrics.")
 
+    # --- 4. Aggregate Runtime Statistics ---
+    total_wall_time = None
+    total_cpu_time = None
+    mean_wall_time = None
+    mean_cpu_time = None
+
+    wall_times = [t.wall_time for t in targets if t.wall_time is not None]
+    cpu_times = [t.cpu_time for t in targets if t.cpu_time is not None]
+
+    if wall_times:
+        total_wall_time = sum(wall_times)
+        mean_wall_time = total_wall_time / len(wall_times)
+        logger.info(f"Runtime: {total_wall_time:.2f}s total, {mean_wall_time:.2f}s mean (wall time)")
+
+    if cpu_times:
+        total_cpu_time = sum(cpu_times)
+        mean_cpu_time = total_cpu_time / len(cpu_times)
+        logger.info(f"Runtime: {total_cpu_time:.2f}s total, {mean_cpu_time:.2f}s mean (CPU time)")
+
     return ModelStatistics(
         model_name=eval_results.model_name,
         benchmark=eval_results.benchmark_name,
         stock=eval_results.stock_name,
         solvability=stat_solvability,
         top_k_accuracy=stat_topk,
+        total_wall_time=total_wall_time,
+        total_cpu_time=total_cpu_time,
+        mean_wall_time=mean_wall_time,
+        mean_cpu_time=mean_cpu_time,
     )

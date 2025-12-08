@@ -5,7 +5,9 @@ This script processes targets from a benchmark using DirectMultiStep algorithm
 and saves results in a structured format matching other prediction scripts.
 
 Example usage:
-    uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark random-n5-50 --model-name "explorer XL" --device cuda --use_fp16
+    uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark mkt-cnv-160 --model-name "explorer XL" --device cuda --use_fp16
+    uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark ref-cnv-400 --model-name "explorer XL" --device cuda --use_fp16
+    uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark uspto-190 --model-name "explorer XL" --device cuda --use_fp16
 
     uv run --extra dms scripts/directmultistep/2-run-dms.py --benchmark uspto-190 --model-name "flash" --device cuda --use_fp16
 

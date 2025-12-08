@@ -327,6 +327,173 @@ def plot_stability_analysis(data_list: list[adapters.StabilityData], bench_name:
     return fig
 
 
+def plot_pareto_frontier(
+    models_stats: list[ModelStatistics],
+    model_config: dict[str, dict[str, str]],
+    hourly_costs: dict[str, float],
+    k: int = 10,
+) -> go.Figure:
+    """
+    Creates a Pareto frontier plot showing cost vs accuracy trade-offs.
+
+    Args:
+        models_stats: List of model statistics
+        model_config: Dict mapping model_name -> {legend, short, color}
+        hourly_costs: Dict mapping model_name -> hourly compute cost (USD)
+        k: Which top-k accuracy to plot (default: 10)
+
+    Returns:
+        Plotly figure object
+    """
+    fig = go.Figure()
+
+    # Extract benchmark name for title (all stats should have same benchmark)
+    # benchmark = models_stats[0].benchmark if models_stats else "Unknown"
+    # stock = models_stats[0].stock if models_stats else "Unknown"
+
+    # Collect all points for Pareto frontier calculation
+    pareto_points = []
+
+    for stats in models_stats:
+        model_name = stats.model_name
+
+        # Skip if no wall time data
+        if stats.total_wall_time is None:
+            continue
+
+        # Skip if no cost data
+        if model_name not in hourly_costs:
+            continue
+
+        # Skip if no top-k data
+        if k not in stats.top_k_accuracy:
+            continue
+
+        # Calculate cost: wall_time (minutes) / 3600 * hourly_cost
+        wall_time_hours = stats.total_wall_time / 3600
+        cost = wall_time_hours * hourly_costs[model_name]
+
+        # Get accuracy metrics
+        metric = stats.top_k_accuracy[k].overall
+        accuracy = metric.value * 100
+        ci_lower = metric.ci_lower * 100
+        ci_upper = metric.ci_upper * 100
+
+        # Calculate error bar lengths
+        error_minus = accuracy - ci_lower
+        error_plus = ci_upper - accuracy
+
+        # Get display config (with fallback)
+        config = model_config.get(
+            model_name,
+            {
+                "legend": model_name,
+                "short": model_name[:10],
+                "color": theme.get_model_color(model_name),
+            },
+        )
+
+        # Store point for Pareto frontier
+        pareto_points.append((cost, accuracy, model_name))
+
+        # Add scatter point with error bars
+        fig.add_trace(
+            go.Scatter(
+                x=[cost],
+                y=[accuracy],
+                name=config["legend"],
+                mode="markers+text",
+                marker=dict(
+                    color=config["color"],
+                    size=12,
+                    symbol="circle",
+                    line=dict(width=1, color="white"),
+                ),
+                text=[config["short"]],
+                textposition="middle right",
+                textfont=dict(size=14),
+                error_y=dict(
+                    type="data",
+                    symmetric=False,
+                    array=[error_plus],
+                    arrayminus=[error_minus],
+                    visible=True,
+                    width=4,
+                    thickness=1.5,
+                ),
+                customdata=[
+                    [
+                        model_name,
+                        cost,
+                        wall_time_hours,
+                        metric.n_samples,
+                        ci_lower,
+                        ci_upper,
+                        metric.reliability.code,
+                    ]
+                ],
+                hovertemplate=(
+                    "<b>%{customdata[0]}</b><br>"
+                    "Cost: $%{customdata[1]:.2f}<br>"
+                    "Wall Time: %{customdata[2]:.2f} hours<br>"
+                    f"Top-{k} Accuracy: %{{y:.1f}}%<br>"
+                    "CI: [%{customdata[4]:.1f}%, %{customdata[5]:.1f}%]<br>"
+                    "N=%{customdata[3]}<br>"
+                    "Status: %{customdata[6]}"
+                    "<extra></extra>"
+                ),
+            )
+        )
+
+    # Calculate and draw Pareto frontier
+    if pareto_points:
+        # Sort by cost (ascending)
+        pareto_points.sort(key=lambda p: p[0])
+
+        # Find Pareto-optimal points (no point has both lower cost AND higher accuracy)
+        pareto_optimal = []
+        max_accuracy_so_far = -float("inf")
+
+        for cost, accuracy, _model_name in pareto_points:
+            if accuracy > max_accuracy_so_far:
+                pareto_optimal.append((cost, accuracy))
+                max_accuracy_so_far = accuracy
+
+        # Draw the Pareto frontier line
+        if len(pareto_optimal) > 1:
+            pareto_x = [p[0] for p in pareto_optimal]
+            pareto_y = [p[1] for p in pareto_optimal]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=pareto_x,
+                    y=pareto_y,
+                    mode="lines",
+                    name="Pareto Frontier",
+                    line=dict(color="rgba(128,128,128,0.5)", width=2, dash="dash"),
+                    showlegend=True,
+                    hoverinfo="skip",
+                )
+            )
+
+    # Apply layout
+    # title = f"<b>Pareto Frontier: Cost vs Accuracy</b><br><span style='font-size: 12px;'>Benchmark: {benchmark} | Stock: {stock}</span>"
+    theme.apply_layout(
+        fig,
+        # title=title,
+        x_title="Total Cost (USD)",
+        y_title=f"Top-{k} Accuracy (%)",
+        height=600,
+        width=1200,
+    )
+
+    fig.update_yaxes(range=[0, 100])
+    # fig.update_xaxes(range=[-0.2, 3.2])
+    fig.update_layout(legend=dict(y=0.9, orientation="h"))
+
+    return fig
+
+
 # --- Internal Rendering Helpers ---
 
 

@@ -3,7 +3,7 @@ import logging
 from retrocast.io.data import RoutesDict
 from retrocast.metrics.similarity import find_acceptable_match
 from retrocast.metrics.solvability import is_route_solved
-from retrocast.models.benchmark import BenchmarkSet
+from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
 from retrocast.models.evaluation import EvaluationResults, ScoredRoute, TargetEvaluation
 from retrocast.typing import InchiKeyStr
 
@@ -11,7 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 def score_model(
-    benchmark: BenchmarkSet, predictions: RoutesDict, stock: set[InchiKeyStr], stock_name: str, model_name: str
+    benchmark: BenchmarkSet,
+    predictions: RoutesDict,
+    stock: set[InchiKeyStr],
+    stock_name: str,
+    model_name: str,
+    execution_stats: ExecutionStats | None = None,
 ) -> EvaluationResults:
     """
     Scores model predictions against a benchmark.
@@ -20,8 +25,8 @@ def score_model(
     1. Solvability: Are all starting materials in stock?
     2. Acceptability: Does the route match any acceptable route?
 
-    Stratification is based on the properties of the MATCHED acceptable route,
-    not pre-computed target metadata.
+    Stratification is based on the matched acceptable route if found,
+    otherwise falls back to the primary acceptable route (benchmark ground truth).
 
     Args:
         benchmark: The benchmark set with acceptable routes
@@ -29,11 +34,15 @@ def score_model(
         stock: Set of available stock InChIKeys
         stock_name: Name of the stock set
         model_name: Name of the model being evaluated
+        execution_stats: Optional runtime statistics for predictions
 
     Returns:
         Evaluation results with per-target scoring and matched route metadata
     """
     logger.info(f"Scoring {model_name} on {benchmark.name}...")
+
+    if execution_stats:
+        logger.info(f"Runtime stats available for {len(execution_stats.wall_time)} targets")
 
     # Check if benchmark has any acceptable routes
     has_acceptable_routes = any(len(target.acceptable_routes) > 0 for target in benchmark.targets.values())
@@ -82,24 +91,22 @@ def score_model(
         # Summary for this target
         is_solvable = any(r.is_solved for r in scored_routes)
 
-        # Extract matched route properties for stratification
-        first_solved_match = next((r for r in scored_routes if r.is_solved and r.matches_acceptable), None)
+        # Always stratify by primary acceptable route (benchmark ground truth)
+        source_route = target.primary_route
 
-        if first_solved_match and first_solved_match.matched_acceptable_index is not None:
-            matched_route = target.acceptable_routes[first_solved_match.matched_acceptable_index]
-            matched_length = matched_route.length
-            matched_convergent = matched_route.has_convergent_reaction
-        else:
-            matched_length = None
-            matched_convergent = None
+        # Extract runtime metrics if available
+        wall_time = execution_stats.wall_time.get(target_id) if execution_stats else None
+        cpu_time = execution_stats.cpu_time.get(target_id) if execution_stats else None
 
         t_eval = TargetEvaluation(
             target_id=target_id,
             routes=scored_routes,
             is_solvable=is_solvable,
             acceptable_rank=acceptable_rank,
-            matched_route_length=matched_length,
-            matched_route_is_convergent=matched_convergent,
+            stratification_length=source_route.length if source_route else None,
+            stratification_is_convergent=source_route.has_convergent_reaction if source_route else None,
+            wall_time=wall_time,
+            cpu_time=cpu_time,
         )
 
         eval_results.results[target_id] = t_eval

@@ -8,12 +8,12 @@ logger = logging.getLogger("retrocast")
 logger.addHandler(logging.NullHandler())
 
 
-def configure_script_logging(use_rich: bool = True) -> None:
+def configure_script_logging(use_rich: bool = True, log_level: str = "INFO") -> None:
     """
     Configures logging for CLI scripts/applications.
     Call this at the start of your `main()` functions.
     """
-    log_level = os.getenv("RETROCAST_LOG", "INFO").upper()
+    log_level = os.getenv("RETROCAST_LOG", log_level).upper()
 
     if use_rich:
         from rich.console import Console

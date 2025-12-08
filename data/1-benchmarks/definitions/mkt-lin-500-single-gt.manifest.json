@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.5.0",
+  "created_at": "2025-12-03T18:31:48.620063Z",
+  "action": "scripts/migrations/02-reexport-benchmarks-with-single-gt",
+  "parameters": {
+    "migration": "keep-one-gt-route",
+    "original_file": "mkt-lin-500.json.gz"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/mkt-lin-500.json.gz",
+      "file_hash": "10aedb788717206977a72b64f1b3eb0779727dedd536aba90db28c564017490d",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/mkt-lin-500-single-gt.json.gz",
+      "file_hash": "e1476ee21b4e92077e78d7ed2b2c269e5394b8b39e509e7d3de6c3c47d0a74f1",
+      "content_hash": "511d2fe581188ccfdae2ca307de2a87b30dced9e8fba5ea00adf06cf1df2e86c"
+    }
+  ],
+  "statistics": {
+    "n_targets": 500,
+    "n_ground_truth_routes": 500
+  }
+}

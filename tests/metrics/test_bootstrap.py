@@ -36,8 +36,8 @@ def target_evaluation_factory():
             target_id=target_id,
             is_solvable=is_solvable,
             acceptable_rank=acceptable_rank,
-            matched_route_length=3,
-            matched_route_is_convergent=False,
+            stratification_length=3,
+            stratification_is_convergent=False,
         )
 
     return _make
@@ -275,14 +275,14 @@ class TestComputeMetricWithCI:
         targets = []
         for i in range(50):
             t = target_evaluation_factory(f"t{i}", is_solvable=i < 25)
-            t.matched_route_length = 3 if i < 30 else 5  # Two groups
+            t.stratification_length = 3 if i < 30 else 5  # Two groups
             targets.append(t)
 
         def get_solvable(t):
             return 1.0 if t.is_solvable else 0.0
 
         def group_by_length(t):
-            return t.matched_route_length
+            return t.stratification_length
 
         result = compute_metric_with_ci(
             targets, get_solvable, "solvability", group_by=group_by_length, n_boot=1000, seed=42
@@ -513,8 +513,8 @@ def _make_evaluation_results(model_name: str, n_targets: int, solvability_rate: 
             target_id=target_id,
             is_solvable=is_solvable,
             acceptable_rank=None,
-            matched_route_length=3,
-            matched_route_is_convergent=False,
+            stratification_length=3,
+            stratification_is_convergent=False,
         )
     return EvaluationResults(
         model_name=model_name,
