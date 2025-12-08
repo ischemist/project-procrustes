@@ -679,8 +679,8 @@ class TestBenchmarkResultsLoader:
             routes=[scored_route],
             is_solvable=True,
             acceptable_rank=1,
-            matched_route_length=3,
-            matched_route_is_convergent=False,
+            stratification_length=3,
+            stratification_is_convergent=False,
         )
         return EvaluationResults(
             model_name=model_name,

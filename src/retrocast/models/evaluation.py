@@ -31,10 +31,13 @@ class TargetEvaluation(BaseModel):
     is_solvable: bool = False  # At least one route is solved
     acceptable_rank: int | None = None  # Rank of first solved acceptable match (None if not found)
 
-    # Properties of the MATCHED acceptable route (used for stratification)
-    # These are extracted from the actual route that was matched, not pre-computed
-    matched_route_length: int | None = None
-    matched_route_is_convergent: bool | None = None
+    # Properties used for stratification (route length, convergence)
+    stratification_length: int | None = None
+    stratification_is_convergent: bool | None = None
+
+    # Runtime metrics for this target (in seconds)
+    wall_time: float | None = None
+    cpu_time: float | None = None
 
 
 class EvaluationResults(BaseModel):

@@ -10,7 +10,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn
 from retrocast.adapters.factory import get_adapter
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
 from retrocast.io.blob import load_json_gz, save_json_gz
-from retrocast.io.data import load_benchmark, load_routes, load_stock_file
+from retrocast.io.data import load_benchmark, load_execution_stats, load_routes, load_stock_file
 from retrocast.io.provenance import create_manifest
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.provenance import VerificationReport
@@ -176,8 +176,23 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
         stock_set = load_stock_file(stock_path)
         predictions = load_routes(routes_path)
 
+        # Load execution stats if available
+        execution_stats = None
+        exec_stats_path = paths["raw"] / model_name / benchmark_name / "execution_stats.json.gz"
+        if exec_stats_path.exists():
+            try:
+                execution_stats = load_execution_stats(exec_stats_path)
+                logger.info(f"Loaded execution stats from {exec_stats_path}")
+            except Exception as e:
+                logger.warning(f"Failed to load execution stats from {exec_stats_path}: {e}")
+
         eval_results = score.score_model(
-            benchmark=benchmark, predictions=predictions, stock=stock_set, stock_name=stock_name, model_name=model_name
+            benchmark=benchmark,
+            predictions=predictions,
+            stock=stock_set,
+            stock_name=stock_name,
+            model_name=model_name,
+            execution_stats=execution_stats,
         )
 
         # Save Output: data/4-scored/{benchmark}/{model}/{stock}/evaluation.json.gz

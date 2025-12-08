@@ -5,7 +5,7 @@ This script processes targets from a benchmark using Synplanner's MCTS algorithm
 and saves results in a structured format matching other prediction scripts.
 
 Example usage:
-    uv run --extra synplanner scripts/synplanner/2-run-synp-eval.py --benchmark random-n5-2-seed=20251030
+    uv run --extra synplanner scripts/synplanner/2-run-synp-eval.py --benchmark uspto-190
     uv run --extra synplanner scripts/synplanner/2-run-synp-eval.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     assert benchmark.stock_name is not None, f"Stock name not found in benchmark {args.benchmark}"
 
     # 2. Load Stock
-    stock_path = STOCKS_DIR / f"{benchmark.stock_name}.txt"
+    stock_path = STOCKS_DIR / f"{benchmark.stock_name}.csv.gz"
     building_blocks = load_stock_file(stock_path)
 
     # 3. Setup Output
@@ -152,6 +152,7 @@ if __name__ == "__main__":
     manifest = create_manifest(
         action="scripts/synplanner/2-run-synp-eval.py",
         sources=[bench_path, stock_path],
+        root_dir=BASE_DIR / "data",
         outputs=[(save_dir / "results.json.gz", results, "unknown")],
         statistics=summary,
     )

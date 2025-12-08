@@ -5,7 +5,7 @@ This script processes targets from a benchmark using Syntheseus's LocalRetroMode
 and saves results in a structured format matching other prediction scripts.
 
 Example usage:
-    uv run --extra syntheseus scripts/syntheseus/2-run-synth-retro0-local-retro.py --benchmark uspto-190
+    uv run --extra syntheseus scripts/syntheseus/2-run-synth-retro0-local-retro.py --benchmark mkt-lin-500
     uv run --extra syntheseus scripts/syntheseus/2-run-synth-retro0-local-retro.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz

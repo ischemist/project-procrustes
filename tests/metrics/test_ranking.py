@@ -53,8 +53,8 @@ def _make_target_evaluation(
         routes=routes,
         is_solvable=solvable,
         acceptable_rank=acceptable_rank,
-        matched_route_length=route_length,
-        matched_route_is_convergent=is_convergent,
+        stratification_length=route_length,
+        stratification_is_convergent=is_convergent,
     )
 
 

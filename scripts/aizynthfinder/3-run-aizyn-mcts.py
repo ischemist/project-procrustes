@@ -5,7 +5,7 @@ This script processes targets from a CSV file using AiZynthFinder's MCTS algorit
 and saves results in a structured format similar to the DMS predictions script.
 
 Example usage:
-    uv run --extra aizyn scripts/aizynthfinder/3-run-aizyn-mcts.py --benchmark uspto-190
+    uv run --extra aizyn scripts/aizynthfinder/3-run-aizyn-mcts.py --benchmark mkt-lin-500 --effort high
     uv run --extra aizyn scripts/aizynthfinder/3-run-aizyn-mcts.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz

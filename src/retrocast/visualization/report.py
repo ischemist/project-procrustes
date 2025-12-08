@@ -181,6 +181,44 @@ def create_single_model_summary_table(stats: ModelStatistics, visible_k: list[in
         if k in visible_k:
             _add(f"Top-{k}", stats.top_k_accuracy[k].overall)
 
+    # Add runtime metrics if available
+    if stats.total_wall_time is not None or stats.total_cpu_time is not None:
+        table.add_section()
+
+        if stats.total_wall_time is not None:
+            table.add_row(
+                "Total Wall Time",
+                f"[cyan]{stats.total_wall_time:.2f}s[/]",
+                "",
+                "",
+                "",
+            )
+            if stats.mean_wall_time is not None:
+                table.add_row(
+                    "Mean Wall Time",
+                    f"[cyan]{stats.mean_wall_time:.2f}s[/]",
+                    "",
+                    "",
+                    "",
+                )
+
+        if stats.total_cpu_time is not None:
+            table.add_row(
+                "Total CPU Time",
+                f"[cyan]{stats.total_cpu_time:.2f}s[/]",
+                "",
+                "",
+                "",
+            )
+            if stats.mean_cpu_time is not None:
+                table.add_row(
+                    "Mean CPU Time",
+                    f"[cyan]{stats.mean_cpu_time:.2f}s[/]",
+                    "",
+                    "",
+                    "",
+                )
+
     return table
 
 
@@ -243,10 +281,30 @@ def generate_markdown_report(stats: ModelStatistics, visible_k: list[int] | None
         f"**Benchmark**: {stats.benchmark}",
         f"**Stock**: {stats.stock}",
         "",
-        "## Solvability",
-        format_metric_table(stats.solvability),
-        "",
     ]
+
+    # Add runtime metrics if available
+    if stats.total_wall_time is not None or stats.total_cpu_time is not None:
+        sections.append("## Runtime Metrics")
+        sections.append("")
+        if stats.total_wall_time is not None:
+            sections.append(f"- **Total Wall Time**: {stats.total_wall_time:.2f}s")
+            if stats.mean_wall_time is not None:
+                sections.append(f"- **Mean Wall Time**: {stats.mean_wall_time:.2f}s per target")
+        if stats.total_cpu_time is not None:
+            sections.append(f"- **Total CPU Time**: {stats.total_cpu_time:.2f}s")
+            if stats.mean_cpu_time is not None:
+                sections.append(f"- **Mean CPU Time**: {stats.mean_cpu_time:.2f}s per target")
+        sections.append("")
+
+    sections.extend(
+        [
+            "## Solvability",
+            format_metric_table(stats.solvability),
+            "",
+        ]
+    )
+
     available_k = sorted(stats.top_k_accuracy.keys())
 
     for k in available_k:

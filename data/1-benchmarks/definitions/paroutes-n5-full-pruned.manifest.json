@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "retrocast_version": "0.4.0.dev3",
-  "created_at": "2025-12-01T17:41:35.257225Z",
+  "retrocast_version": "0.5.0",
+  "created_at": "2025-12-01T19:36:07.475984Z",
   "action": "scripts/paroutes/01-cast-paroutes",
   "parameters": {
     "dataset": "n5",
@@ -18,8 +18,8 @@
   "output_files": [
     {
       "path": "1-benchmarks/definitions/paroutes-n5-full-pruned.json.gz",
-      "file_hash": "da184f27ca60363ef1a22d353d17fe0c1bc66d525c3415c59c112d5cdebd887a",
-      "content_hash": "1315075799c700e17f13f6cb2ef53a6d85ed0491bef4a039c0a5756f07b5e0ab"
+      "file_hash": "ddd087377551e106e8b39954459988d2ee40261150d4d5b3c802da4c6c4dfb99",
+      "content_hash": "7dbadf21241886bb8770ffd6b00f1d5965389ce074088e887e3e46b7b68e52f0"
     }
   ],
   "statistics": {

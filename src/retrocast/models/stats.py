@@ -40,6 +40,12 @@ class ModelStatistics(BaseModel):
     solvability: StratifiedMetric
     top_k_accuracy: dict[int, StratifiedMetric]  # k -> metric
 
+    # Aggregate runtime metrics (in seconds)
+    total_wall_time: float | None = None
+    total_cpu_time: float | None = None
+    mean_wall_time: float | None = None
+    mean_cpu_time: float | None = None
+
 
 class ModelComparison(BaseModel):
     """Statistical comparison between two models (A vs B)."""

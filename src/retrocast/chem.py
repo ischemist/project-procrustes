@@ -8,7 +8,7 @@ from retrocast.typing import InchiKeyStr, SmilesStr
 
 logger = logging.getLogger(__name__)
 
-rdBase.DisableLog("rdApp.error")
+rdBase.DisableLog("rdApp.*")
 
 
 def canonicalize_smiles(smiles: str, remove_mapping: bool = False) -> SmilesStr:
@@ -33,7 +33,7 @@ def canonicalize_smiles(smiles: str, remove_mapping: bool = False) -> SmilesStr:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
             # this is rdkit's sad, C-style way of saying "parse failed"
-            logger.warning(f"RDKit failed to parse SMILES: '{smiles}'")
+            logger.debug(f"RDKit failed to parse SMILES: '{smiles}'")
             raise InvalidSmilesError(f"Invalid SMILES string: {smiles}")
         if remove_mapping:
             for atom in mol.GetAtoms():  # type: ignore
@@ -75,7 +75,7 @@ def get_inchi_key(smiles: str) -> InchiKeyStr:
     try:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
-            logger.warning(f"RDKit failed to parse SMILES for InChIKey generation: '{smiles}'")
+            logger.debug(f"RDKit failed to parse SMILES for InChIKey generation: '{smiles}'")
             raise InvalidSmilesError(f"Invalid SMILES string: {smiles}")
 
         # MolToInchiKey is the canonical RDKit function for this.
@@ -117,7 +117,7 @@ def get_heavy_atom_count(smiles: str) -> int:
     try:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
-            logger.warning(f"RDKit failed to parse SMILES for HAC calculation: '{smiles}'")
+            logger.debug(f"RDKit failed to parse SMILES for HAC calculation: '{smiles}'")
             raise InvalidSmilesError(f"Invalid SMILES string: {smiles}")
 
         return mol.GetNumAtoms()

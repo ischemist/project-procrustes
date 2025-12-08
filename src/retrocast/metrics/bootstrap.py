@@ -94,6 +94,9 @@ def compute_metric_with_ci(
             grouped[key].append(val)
 
         for key, vals in grouped.items():
+            # Skip None keys (e.g., unsolvable targets with no stratification length)
+            if key is None:
+                continue
             # Use a deterministic seed variant for each group to stabilize small-N noise
             # (seed + hash of key)
             group_seed = seed + abs(hash(key)) % 10000

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import statistics
+from enum import Enum
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field, computed_field
@@ -269,6 +270,27 @@ class Route(BaseModel):
 
 # We need to tell Pydantic to rebuild the forward references
 Molecule.model_rebuild()
+
+
+class VendorSource(str, Enum):
+    """Enumeration of buyables vendor sources."""
+
+    MCULE = "MC"
+    LABNETWORK = "LN"
+    EMOLECULES = "EM"
+    SIGMA_ALDRICH = "SA"
+    CHEMBRIDGE = "CB"
+
+
+class BuyableMolecule(BaseModel):
+    """Represents a molecule available for purchase with commercial metadata."""
+
+    smiles: SmilesStr
+    inchikey: InchiKeyStr
+    ppg: float | None = Field(None, description="Price per gram in USD")
+    source: VendorSource | None = Field(None, description="Source vendor")
+    lead_time: str | None = Field(None, description="Lead time for delivery (e.g., '7-21days', '1week')")
+    link: str | None = Field(None, description="URL to vendor product page")
 
 
 class StockStatistics(BaseModel):

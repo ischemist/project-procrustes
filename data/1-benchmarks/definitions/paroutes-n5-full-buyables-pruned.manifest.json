@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "retrocast_version": "0.4.0.dev3",
-  "created_at": "2025-12-01T17:42:13.418051Z",
+  "retrocast_version": "0.5.0",
+  "created_at": "2025-12-01T19:37:12.225222Z",
   "action": "scripts/paroutes/01-cast-paroutes",
   "parameters": {
     "dataset": "n5",
@@ -18,8 +18,8 @@
   "output_files": [
     {
       "path": "1-benchmarks/definitions/paroutes-n5-full-buyables-pruned.json.gz",
-      "file_hash": "6f650a3aeab405d03edafec9bf73e0041eb91f30450e2355a888e1a60ff7d231",
-      "content_hash": "8729604c9980bbedeb985da0801bb51a75ee6b34047622d20582e40b7a0442a7"
+      "file_hash": "824655ae1e0dd30b683259f0ffab0dc7b9f1c6f86cfe20dbef92a322772e28f5",
+      "content_hash": "636e34e8eb9adac4ef2b1c18a40bc67ce79efc5a76885c3c0fdb61995ec2db7a"
     }
   ],
   "statistics": {

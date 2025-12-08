@@ -466,16 +466,16 @@ class TestScoreModel:
 
         # Check metadata from benchmark target is copied
         t1 = eval_results.results["target_1"]
-        assert t1.matched_route_length == 1
-        assert t1.matched_route_is_convergent is False
+        assert t1.stratification_length == 1
+        assert t1.stratification_is_convergent is False
 
         t2 = eval_results.results["target_2"]
-        assert t2.matched_route_length == 2
-        assert t2.matched_route_is_convergent is False
+        assert t2.stratification_length == 2
+        assert t2.stratification_is_convergent is False
 
         t3 = eval_results.results["target_3"]
-        assert t3.matched_route_length is None
-        assert t3.matched_route_is_convergent is None
+        assert t3.stratification_length is None
+        assert t3.stratification_is_convergent is None
 
 
 # =============================================================================

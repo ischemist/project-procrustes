@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "retrocast_version": "0.4.0.dev3",
-  "created_at": "2025-12-01T17:45:55.485682Z",
+  "retrocast_version": "0.5.0",
+  "created_at": "2025-12-01T19:38:04.905141Z",
   "action": "scripts/paroutes/02-create-subsets",
   "parameters": {
     "seed": 19450716,
@@ -10,7 +10,7 @@
   "source_files": [
     {
       "path": "1-benchmarks/definitions/paroutes-n5-full-buyables-pruned.json.gz",
-      "file_hash": "6f650a3aeab405d03edafec9bf73e0041eb91f30450e2355a888e1a60ff7d231",
+      "file_hash": "824655ae1e0dd30b683259f0ffab0dc7b9f1c6f86cfe20dbef92a322772e28f5",
       "content_hash": null
     },
     {
@@ -22,8 +22,8 @@
   "output_files": [
     {
       "path": "1-benchmarks/definitions/mkt-lin-500.json.gz",
-      "file_hash": "79f9f108263649d7199f7b7989150a892e9db1057fa838e4ed7f3e741a779d46",
-      "content_hash": "9c2760995ffc4243dfa9b17b9ac377c43f8b830d48110b9e28e032064552316c"
+      "file_hash": "10aedb788717206977a72b64f1b3eb0779727dedd536aba90db28c564017490d",
+      "content_hash": "4c3adb442a5dcd0973e4ec8ee0d739bbfe0ebb2c6592bdda714bd653fa38eb27"
     }
   ],
   "statistics": {

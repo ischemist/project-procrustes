@@ -9,6 +9,7 @@ dependencies = [
   "pydantic",
   "pyyaml>=6.0.3",
   "rdkit",
+  "rich>=14.2.0",
   "tqdm>=4.67.1",
 ]
 dynamic = ["version"]
@@ -24,9 +25,6 @@ retrocast = "retrocast.cli.main:main"
 aizyn = [
   "aizynthfinder==4.4.0",
   "numpy<=2.2",  # Numba needs NumPy 2.2 or less. Got NumPy 2.3.
-]
-cli = [
-  "rich>=14.2.0",
 ]
 dms = ["directmultistep"]
 retro-star = ["retro-star>=0.1.0", "torch"]
