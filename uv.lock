@@ -5333,6 +5333,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "rdkit", version = "2023.9.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-aizyn' or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
     { name = "rdkit", version = "2025.9.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-dms' or extra == 'extra-9-retrocast-retro-star' or extra == 'extra-9-retrocast-synplanner' or extra == 'extra-9-retrocast-syntheseus' or extra != 'extra-9-retrocast-aizyn'" },
+    { name = "rich" },
     { name = "tqdm" },
 ]
 
@@ -5340,9 +5341,6 @@ dependencies = [
 aizyn = [
     { name = "aizynthfinder" },
     { name = "numpy", version = "1.26.4", source = { registry = "https://pypi.org/simple" } },
-]
-cli = [
-    { name = "rich" },
 ]
 dms = [
     { name = "directmultistep" },
@@ -5407,7 +5405,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "rdkit" },
     { name = "retro-star", marker = "extra == 'retro-star'", git = "https://github.com/anmorgunov/retro_star?branch=master" },
-    { name = "rich", marker = "extra == 'cli'", specifier = ">=14.2.0" },
+    { name = "rich", specifier = ">=14.2.0" },
     { name = "synplanner", marker = "extra == 'synplanner'", specifier = "==1.2.0" },
     { name = "syntheseus", extras = ["local-retro"], marker = "extra == 'syntheseus'", specifier = ">=0.5.0" },
     { name = "torch", marker = "extra == 'retro-star'", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "retrocast", extra = "retro-star" } },
@@ -5416,7 +5414,7 @@ requires-dist = [
     { name = "torchdata", marker = "extra == 'syntheseus'", specifier = "<=0.7.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
 ]
-provides-extras = ["aizyn", "cli", "dms", "retro-star", "synplanner", "syntheseus", "viz"]
+provides-extras = ["aizyn", "dms", "retro-star", "synplanner", "syntheseus", "viz"]
 
 [package.metadata.requires-dev]
 dev = [
