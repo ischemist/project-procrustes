@@ -375,7 +375,9 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
 
     manifests_to_check = []
     if args.all:
-        logger.info("Scanning for manifests in 2-raw, 3-processed, and 4-results...")
+        logger.info(
+            "Scanning for manifests in 1-benchmarks/definitions, 1-benchmarks/stocks, 2-raw, 3-processed, and 4-results..."
+        )
         # Only scan specific folders: 2-raw, 3-processed, and 4-results
         for folder in [paths["benchmarks"], paths["stocks"], paths["raw"], paths["processed"], paths["results"]]:
             if folder.exists():
