@@ -40,6 +40,28 @@ uv tool install retrocast
 uv add retrocast
 ```
 
+## Get Publication Data
+
+whole data/ folder with benchmarks, stocks, raw predictions, processed routes, scores, and results (with accompanying manifests) is available at [https://files.ischemist.com/retrocast/publication-data](files.ischemist.com/retrocast/publication-data). You can get any file from the index, or download whole folders using a bash script:
+
+```bash
+curl -fsSL https://files.ischemist.com/retrocast/get-pub-data.sh | bash -s
+```
+
+which will show you available folders and their sizes. To get all benchmark files, Run
+
+```bash
+curl -fsSL https://files.ischemist.com/retrocast/get-pub-data.sh | bash -s -- definitions
+```
+
+you can verify the integrity of downloaded files against the manifests by running
+
+```bash
+retrocast verify --all
+```
+
+that command might warn you about missing files---that is expected. Manifests for, say 4-scored, contain hashes of input files from 3-results, and if you downloaded only 4-scored, you will get warnings about missing 3-results files.
+
 ---
 
 ## Quick Start
