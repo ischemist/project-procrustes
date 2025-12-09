@@ -62,6 +62,8 @@ retrocast verify --all
 
 that command might warn you about missing files---that is expected. Manifests for, say 4-scored, contain hashes of input files from 3-results, and if you downloaded only 4-scored, you will get warnings about missing 3-results files.
 
+a dump of the sqlite db with the stocks, routes, and results loaded into SynthArena can be found in [https://github.com/ischemist/syntharena](ischemist/syntharena repo).
+
 ---
 
 ## Quick Start
