@@ -42,7 +42,7 @@ uv add retrocast
 
 ## Get Publication Data
 
-whole data/ folder with benchmarks, stocks, raw predictions, processed routes, scores, and results (with accompanying manifests) is available at [https://files.ischemist.com/retrocast/publication-data](files.ischemist.com/retrocast/publication-data). You can get any file from the index, or download whole folders using a bash script:
+whole data/ folder with benchmarks, stocks, raw predictions, processed routes, scores, and results (with accompanying manifests) is available at [files.ischemist.com/retrocast/publication-data](https://files.ischemist.com/retrocast/publication-data). You can get any file from the index, or download whole folders using a bash script:
 
 ```bash
 curl -fsSL https://files.ischemist.com/retrocast/get-pub-data.sh | bash -s
@@ -62,7 +62,7 @@ retrocast verify --all
 
 that command might warn you about missing files---that is expected. Manifests for, say 4-scored, contain hashes of input files from 3-results, and if you downloaded only 4-scored, you will get warnings about missing 3-results files.
 
-a dump of the sqlite db with the stocks, routes, and results loaded into SynthArena can be found in [https://github.com/ischemist/syntharena](ischemist/syntharena repo).
+a dump of the sqlite db with the stocks, routes, and results loaded into SynthArena can be found in [ischemist/syntharena repo](https://github.com/ischemist/syntharena).
 
 ---
 
