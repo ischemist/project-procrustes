@@ -373,11 +373,15 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
     paths = _get_paths(config)
     root_dir = paths["raw"].parent
 
+    # Determine lenient mode: default is True (lenient), --strict sets it to False
+    lenient = not getattr(args, "strict", False)
+
     manifests_to_check = []
     output_only_manifests = set()  # Track which manifests should only check outputs
 
     if args.all:
-        logger.info("Scanning for manifests in 1-benchmarks, 2-raw, 3-processed, and 4-scored...")
+        mode_desc = "strict" if not lenient else "lenient"
+        logger.info(f"Scanning for manifests in 1-benchmarks, 2-raw, 3-processed, and 4-scored... (mode: {mode_desc})")
         # Scan workflow folders (check both input and output hashes)
         for folder in [paths["raw"], paths["processed"], paths["scored"]]:
             if folder.exists():
@@ -405,6 +409,7 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
 
         passed_manifests = []
         failed_manifests = []
+        warnings_count = 0
 
         with Progress(
             SpinnerColumn(),
@@ -420,10 +425,14 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
 
                 # Check if this manifest should only verify output files
                 output_only = m_path in output_only_manifests
-                report = verify.verify_manifest(m_path, root_dir=root_dir, deep=args.deep, output_only=output_only)
+                report = verify.verify_manifest(
+                    m_path, root_dir=root_dir, deep=args.deep, output_only=output_only, lenient=lenient
+                )
 
                 if report.is_valid:
                     passed_manifests.append(m_path.relative_to(root_dir))
+                    # Count warnings even in passed manifests
+                    warnings_count += sum(1 for issue in report.issues if issue.level == "WARN")
                 else:
                     failed_manifests.append((m_path.relative_to(root_dir), report))
 
@@ -434,6 +443,10 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
         console.print("[bold]Verification Summary[/bold]")
         console.print(f"  [green]✓[/] Passed: {len(passed_manifests)} manifest(s)")
         console.print(f"  [red]✗[/] Failed: {len(failed_manifests)} manifest(s)")
+        if warnings_count > 0:
+            console.print(
+                f"  [yellow]![/] Warnings: {warnings_count} missing file(s) (use --strict to require all files)"
+            )
 
         if failed_manifests:
             console.print()
@@ -453,16 +466,25 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
             console.print("\n[bold green]✅ All manifests verified successfully![/]")
     else:
         # Single manifest mode: show detailed report
-        logger.info("Verifying manifest...")
+        mode_desc = "strict" if not lenient else "lenient"
+        logger.info(f"Verifying manifest... (mode: {mode_desc})")
         overall_valid = True
+        has_warnings = False
         for m_path in manifests_to_check:
-            report = verify.verify_manifest(m_path, root_dir=root_dir, deep=args.deep)
+            report = verify.verify_manifest(m_path, root_dir=root_dir, deep=args.deep, lenient=lenient)
             _render_report(report)
             if not report.is_valid:
                 overall_valid = False
+            if any(issue.level == "WARN" for issue in report.issues):
+                has_warnings = True
 
         if overall_valid:
-            console.print("\n[bold green]✅ Overall verification successful![/]")
+            if has_warnings and lenient:
+                console.print("\n[bold green]✅ Overall verification successful![/]")
+                console.print("[dim]Note: Some files are missing but all present files have valid hashes.[/]")
+                console.print("[dim]Use --strict to require all referenced files to be present.[/]")
+            else:
+                console.print("\n[bold green]✅ Overall verification successful![/]")
         else:
             console.print("\n[bold red]❌ Verification failed for one or more manifests.[/]")
             sys.exit(1)

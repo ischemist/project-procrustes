@@ -318,8 +318,8 @@ class TestVerifyPhysicalIntegrity:
         assert not report.is_valid
         assert any("HASH MISMATCH" in entry.message and entry.level == "FAIL" for entry in report.issues)
 
-    def test_missing_file_detection(self, tmp_path):
-        """Missing file should FAIL."""
+    def test_missing_file_detection_strict_mode(self, tmp_path):
+        """Missing file should FAIL in strict mode (lenient=False)."""
         data_file = tmp_path / "output.txt"
         data_file.write_text("test")
 
@@ -334,10 +334,32 @@ class TestVerifyPhysicalIntegrity:
         from retrocast.models.provenance import VerificationReport
 
         report = VerificationReport(manifest_path=manifest_path)
-        _verify_physical_integrity(graph, tmp_path, report)
+        _verify_physical_integrity(graph, tmp_path, report, lenient=False)
 
         assert not report.is_valid
         assert any("MISSING from disk" in entry.message and entry.level == "FAIL" for entry in report.issues)
+
+    def test_missing_file_detection_lenient_mode(self, tmp_path):
+        """Missing file should WARN in lenient mode (lenient=True, default)."""
+        data_file = tmp_path / "output.txt"
+        data_file.write_text("test")
+
+        manifest = create_simple_manifest("test", [data_file], root_dir=tmp_path)
+        manifest_path = Path("manifest.json")
+
+        # Delete file after creating manifest
+        data_file.unlink()
+
+        graph = {manifest_path: manifest}
+
+        from retrocast.models.provenance import VerificationReport
+
+        report = VerificationReport(manifest_path=manifest_path)
+        _verify_physical_integrity(graph, tmp_path, report, lenient=True)
+
+        # Should still be valid (only warnings, no failures)
+        assert report.is_valid
+        assert any("MISSING from disk" in entry.message and entry.level == "WARN" for entry in report.issues)
 
     def test_multiple_files_in_graph(self, tmp_path):
         """Multiple files across manifests should all be verified."""
@@ -361,6 +383,33 @@ class TestVerifyPhysicalIntegrity:
         assert report.is_valid
         pass_count = sum(1 for e in report.issues if e.level == "PASS" and "hash matches" in e.message.lower())
         assert pass_count == 2
+
+    def test_hash_mismatch_always_fails_regardless_of_lenient(self, tmp_path):
+        """Hash mismatch should ALWAYS fail, even in lenient mode."""
+        data_file = tmp_path / "output.txt"
+        data_file.write_text("original content")
+
+        manifest = create_simple_manifest("test", [data_file], root_dir=tmp_path)
+        manifest_path = Path("manifest.json")
+
+        # Modify file after creating manifest
+        data_file.write_text("MODIFIED CONTENT")
+
+        graph = {manifest_path: manifest}
+
+        from retrocast.models.provenance import VerificationReport
+
+        # Test with lenient=True - should still fail
+        report_lenient = VerificationReport(manifest_path=manifest_path)
+        _verify_physical_integrity(graph, tmp_path, report_lenient, lenient=True)
+        assert not report_lenient.is_valid
+        assert any("HASH MISMATCH" in entry.message and entry.level == "FAIL" for entry in report_lenient.issues)
+
+        # Test with lenient=False - should also fail
+        report_strict = VerificationReport(manifest_path=manifest_path)
+        _verify_physical_integrity(graph, tmp_path, report_strict, lenient=False)
+        assert not report_strict.is_valid
+        assert any("HASH MISMATCH" in entry.message and entry.level == "FAIL" for entry in report_strict.issues)
 
 
 # =============================================================================
@@ -411,8 +460,8 @@ class TestVerifyManifestShallow:
         assert not report.is_valid
         assert any("HASH MISMATCH" in e.message for e in report.issues)
 
-    def test_detect_missing_output_files(self, tmp_path):
-        """Shallow verification should detect missing output files."""
+    def test_detect_missing_output_files_strict(self, tmp_path):
+        """Shallow verification should detect missing output files in strict mode."""
         data_file = tmp_path / "output.txt"
         data_file.write_text("test")
 
@@ -423,10 +472,27 @@ class TestVerifyManifestShallow:
         # Delete file
         data_file.unlink()
 
-        report = verify_manifest(manifest_path, tmp_path, deep=False)
+        report = verify_manifest(manifest_path, tmp_path, deep=False, lenient=False)
 
         assert not report.is_valid
-        assert any("MISSING" in e.message for e in report.issues)
+        assert any("MISSING" in e.message and e.level == "FAIL" for e in report.issues)
+
+    def test_detect_missing_output_files_lenient(self, tmp_path):
+        """Shallow verification should warn about missing output files in lenient mode."""
+        data_file = tmp_path / "output.txt"
+        data_file.write_text("test")
+
+        manifest = create_simple_manifest("test", [data_file], root_dir=tmp_path)
+        manifest_path = tmp_path / "manifest.json"
+        write_manifest_to_disk(manifest, manifest_path)
+
+        # Delete file
+        data_file.unlink()
+
+        report = verify_manifest(manifest_path, tmp_path, deep=False, lenient=True)
+
+        assert report.is_valid  # Still valid in lenient mode
+        assert any("MISSING" in e.message and e.level == "WARN" for e in report.issues)
 
     def test_malformed_manifest_fails_gracefully(self, tmp_path):
         """Shallow verification should handle malformed manifest gracefully."""
@@ -670,7 +736,7 @@ class TestVerificationReport:
         report1 = verify_manifest(path1, tmp_path, deep=False)
         assert report1.is_valid
 
-        # Invalid case - missing file
+        # Invalid case in lenient mode - missing file (should still be valid, just warnings)
         invalid_file = tmp_path / "missing.txt"
         invalid_file.write_text("test")
         manifest2 = create_simple_manifest("test", [invalid_file], root_dir=tmp_path)
@@ -678,8 +744,12 @@ class TestVerificationReport:
         write_manifest_to_disk(manifest2, path2)
         invalid_file.unlink()  # Delete it
 
-        report2 = verify_manifest(path2, tmp_path, deep=False)
-        assert not report2.is_valid
+        report2_lenient = verify_manifest(path2, tmp_path, deep=False, lenient=True)
+        assert report2_lenient.is_valid  # Valid in lenient mode
+
+        # Invalid case in strict mode - missing file should fail
+        report2_strict = verify_manifest(path2, tmp_path, deep=False, lenient=False)
+        assert not report2_strict.is_valid
 
     def test_report_includes_all_files_in_graph(self, tmp_path):
         """Deep verification report should mention all files in the dependency graph."""
