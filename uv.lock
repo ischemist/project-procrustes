@@ -5329,6 +5329,7 @@ dependencies = [
 name = "retrocast"
 source = { editable = "." }
 dependencies = [
+    { name = "packaging" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rdkit", version = "2023.9.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-retrocast-aizyn' or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-synplanner') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-synplanner' and extra == 'extra-9-retrocast-syntheseus')" },
@@ -5399,6 +5400,7 @@ requires-dist = [
     { name = "kaleido", marker = "extra == 'viz'", specifier = ">=1.1.0" },
     { name = "numpy", marker = "extra == 'aizyn'", specifier = "<=2.2" },
     { name = "numpy", marker = "extra == 'syntheseus'", specifier = "<2" },
+    { name = "packaging", specifier = ">=25.0" },
     { name = "pandas", marker = "extra == 'syntheseus'", specifier = "<2.2" },
     { name = "plotly", marker = "extra == 'viz'", specifier = ">=6.3.0" },
     { name = "pydantic" },

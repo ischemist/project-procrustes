@@ -42,6 +42,7 @@ def main() -> None:
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("--config", type=Path, default=Path("retrocast-config.yaml"), help="Path to config file")
+    parser.add_argument("--version", "-V", action="version", version=f"retrocast {__version__}")
 
     subparsers = parser.add_subparsers(dest="command", required=True, help="Command to run")
 
@@ -148,6 +149,11 @@ def main() -> None:
     v_group.add_argument("--target", help="Path to a specific manifest or directory")
     v_group.add_argument("--all", action="store_true", help="Verify all manifests in the data directory")
     verify_parser.add_argument("--deep", action="store_true", help="Perform deep verification of source files")
+    verify_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Strict mode: missing files are failures (default: lenient mode treats missing files as warnings)",
+    )
 
     args = parser.parse_args()
 

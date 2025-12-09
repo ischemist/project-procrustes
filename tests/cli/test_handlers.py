@@ -362,6 +362,30 @@ class TestHandleVerify:
 
         return manifest_path, tmp_path
 
+    @pytest.fixture
+    def setup_corrupted_manifest(self, tmp_path):
+        """Create a manifest with corrupted file (hash mismatch)."""
+        data_file = tmp_path / "output.txt"
+        data_file.write_text("original content")
+
+        from retrocast.io.provenance import create_manifest
+
+        manifest = create_manifest(
+            action="test-action",
+            sources=[],
+            outputs=[(data_file, {}, "unknown")],
+            root_dir=tmp_path,
+        )
+
+        manifest_path = tmp_path / "manifest.json"
+        with open(manifest_path, "w") as f:
+            f.write(manifest.model_dump_json(indent=2))
+
+        # Modify the file to cause hash mismatch
+        data_file.write_text("CORRUPTED CONTENT")
+
+        return manifest_path, tmp_path
+
     def test_verify_single_manifest_valid(self, setup_valid_manifest):
         """Test --target with valid manifest completes successfully."""
         manifest_path, root_dir = setup_valid_manifest
@@ -376,8 +400,8 @@ class TestHandleVerify:
         # Should not raise SystemExit
         handlers.handle_verify(args, config)
 
-    def test_verify_single_manifest_invalid_exits_with_1(self, setup_invalid_manifest):
-        """Test --target with invalid manifest exits with code 1."""
+    def test_verify_single_manifest_invalid_lenient_mode(self, setup_invalid_manifest):
+        """Test --target with missing file passes in lenient mode (default)."""
         manifest_path, root_dir = setup_invalid_manifest
 
         config = {"data_dir": str(root_dir)}
@@ -385,12 +409,56 @@ class TestHandleVerify:
             target=str(manifest_path),
             all=False,
             deep=False,
+            strict=False,  # Lenient mode (default)
+        )
+
+        # Should not raise SystemExit in lenient mode
+        handlers.handle_verify(args, config)
+
+    def test_verify_single_manifest_invalid_strict_mode_exits_with_1(self, setup_invalid_manifest):
+        """Test --target with missing file exits with code 1 in strict mode."""
+        manifest_path, root_dir = setup_invalid_manifest
+
+        config = {"data_dir": str(root_dir)}
+        args = Namespace(
+            target=str(manifest_path),
+            all=False,
+            deep=False,
+            strict=True,  # Strict mode
         )
 
         with pytest.raises(SystemExit) as exc_info:
             handlers.handle_verify(args, config)
 
         assert exc_info.value.code == 1
+
+    def test_verify_corrupted_file_always_fails(self, setup_corrupted_manifest):
+        """Test hash mismatch always fails regardless of lenient/strict mode."""
+        manifest_path, root_dir = setup_corrupted_manifest
+
+        config = {"data_dir": str(root_dir)}
+
+        # Test lenient mode - should still fail on hash mismatch
+        args_lenient = Namespace(
+            target=str(manifest_path),
+            all=False,
+            deep=False,
+            strict=False,
+        )
+        with pytest.raises(SystemExit) as exc_info_lenient:
+            handlers.handle_verify(args_lenient, config)
+        assert exc_info_lenient.value.code == 1
+
+        # Test strict mode - should also fail on hash mismatch
+        args_strict = Namespace(
+            target=str(manifest_path),
+            all=False,
+            deep=False,
+            strict=True,
+        )
+        with pytest.raises(SystemExit) as exc_info_strict:
+            handlers.handle_verify(args_strict, config)
+        assert exc_info_strict.value.code == 1
 
     def test_verify_all_discovers_multiple_manifests(self, tmp_path):
         """Test --all scans directory and verifies multiple manifests."""
