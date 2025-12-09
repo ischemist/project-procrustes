@@ -6,7 +6,7 @@ from datetime import datetime
 
 # config
 DATA_DIR = "data"
-REMOTE_DEST = "grow:/var/www/files.ischemist.com/retrocast/publication-data/"
+REMOTE_DEST = "icgroup:/var/www/files.ischemist.com/retrocast/publication-data/"
 
 # only these paths (relative to data/) get hashed and uploaded
 WHITELIST = ["1-benchmarks/definitions", "1-benchmarks/stocks", "2-raw", "3-processed", "4-scored", "5-results"]

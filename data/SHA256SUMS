@@ -15,7 +15,6 @@ f763f6592ad9743e8f9ce3d5cfb8e5d030604c9165266eee93bc336d3d43dc7f  1-benchmarks/d
 e1476ee21b4e92077e78d7ed2b2c269e5394b8b39e509e7d3de6c3c47d0a74f1  1-benchmarks/definitions/mkt-lin-500-single-gt.json.gz
 68a6d1b10764d0e0c592008c73e10cc2647182d3a8619196e260d2ac7de46694  1-benchmarks/definitions/mkt-cnv-160.manifest.json
 c54e88c8327427ce16958c630d412f8f9a5f9c0de335a15c7792cee396a60519  1-benchmarks/definitions/random-n5-500.json.gz
-e1e8801bb83622f3f8f9329273c352dc321bcbfef6e0d38b29f4d37742c189e0  1-benchmarks/definitions/mkt-cnv-160.json
 bd266c9e53d2a7e9da3d5aedfdba52f78a7b6b662e0e327241fde36afc86f50c  1-benchmarks/definitions/random-n5-1000.json.gz
 992bfc723f5fbdb615de7a1d1070d2e7c87bdd156aae459c4a638940c1cd83ed  1-benchmarks/definitions/ref-lng-84.manifest.json
 0da9027211ee22e527a07f7a7d57700daf4ec9072139ec8aa2947ee243d05556  1-benchmarks/definitions/ref-cnv-400.json.gz
@@ -47,16 +46,12 @@ d69b2d64d155bab6d8fd16d9f7e6a6a823be39476a4405c90294ac65b37ae6b4  1-benchmarks/s
 1bbc48379f316672ac706578fb748217b692c102e71049ddae9f4f19f899ac66  1-benchmarks/stocks/n1-n5-stock.txt.gz
 397b94a4ad90b93ae8b0c3d97a1cc8cfb6e69b4b350ba48b1320d5d6605f8a90  1-benchmarks/stocks/buyables-stock.txt.gz
 b8534d4fd5934d4b287dad0fd0dd394b495e8314e7d0884d76965ba99611c556  1-benchmarks/stocks/n1-n5-stock.hdf5
-2470e40662d07a1da3b0a81b8d9fd91656d72d3d203d5a7c7366c5318ac631d6  1-benchmarks/stocks/buyables-stock.csv
 9f22110aba21c917b53fbe87ade8dbf6e838069726575df109c03e3bcf9d4141  1-benchmarks/stocks/buyables-meta.json.gz
-297aa69e24aab4df09fea558df77094a9ac52bbd99a661feed6fbd191f4047db  1-benchmarks/stocks/n5-stock.csv
 15f01accd34f97b2f9a26eba3cf3e32e352d44325c29836b0ec61ad727546cb7  1-benchmarks/stocks/n1-n5-stock.csv.gz
 2bc206a9fdb0e13bb98c3596ae04c20426952cf7e4fe67f95ef2b78a7d696132  1-benchmarks/stocks/buyables-stock.manifest.json
 aee42d44c9a96279dd13732d8a298bcfcad34a3ac0ba6b4b2715ec36ad18ec0b  1-benchmarks/stocks/buyables-stock.csv.gz
-edcfaf2288ebf4885a69b4533ff7a433dd3fe6c108210531d4613754f23f33ca  1-benchmarks/stocks/n1-n5-stock.csv
 ca7da89e30b94c8afb11ca96a3b554c4e5681ab9d8c22b5e8dad6ce61a5bd35f  1-benchmarks/stocks/n5-stock.hdf5
 165bb204aaeb07bf094df5b63902848ddce805abdcb741f232dc200d098a6584  1-benchmarks/stocks/buyables-stock.hdf5
-4da9146d1b3441b742df6e9eee0f23f5a0b2326ab6b7bf602b6712ce8e9d5cb7  1-benchmarks/stocks/n1-stock.csv
 1207cb1fa08f33c0170093b36ff29d0a399cb3e22afe7a0feda929bdb9bb73c9  1-benchmarks/stocks/n5-stock.csv.gz
 80d35a3db2ac3ccf1c74ab5be424ecf302cac2e9f528335d3047fd9fc56b18a9  1-benchmarks/stocks/n1-stock.txt.gz
 e2b3366002ebb27ea4a5d809c2d0938c8c6f648402dad25055f37a0e0a0ba1a2  2-raw/dms-explorer-XL/mkt-lin-500/valid_results.json.gz
