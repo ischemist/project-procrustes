@@ -113,7 +113,9 @@ def _verify_logical_chain(graph: dict[Path, Manifest], report: VerificationRepor
                 )
 
 
-def _verify_physical_integrity(graph: dict[Path, Manifest], root_dir: Path, report: VerificationReport) -> None:
+def _verify_physical_integrity(
+    graph: dict[Path, Manifest], root_dir: Path, report: VerificationReport, output_only: bool = False
+) -> None:
     """Phase 2: Verify ALL files mentioned in the graph against the disk."""
     report.add("INFO", report.manifest_path, "Phase 2 - Verifying on-disk file integrity", category="header")
 
@@ -123,11 +125,14 @@ def _verify_physical_integrity(graph: dict[Path, Manifest], root_dir: Path, repo
     for manifest in graph.values():
         for f in manifest.output_files:
             expected_hashes[Path(f.path)] = f.file_hash
-    for manifest in graph.values():
-        for f in manifest.source_files:
-            path = Path(f.path)
-            if path not in expected_hashes:  # Only add if it's not a generated output
-                expected_hashes[path] = f.file_hash
+
+    # Only check source files if not in output_only mode
+    if not output_only:
+        for manifest in graph.values():
+            for f in manifest.source_files:
+                path = Path(f.path)
+                if path not in expected_hashes:  # Only add if it's not a generated output
+                    expected_hashes[path] = f.file_hash
 
     # 2. Iterate and check every file against the disk.
     for relative_path, expected_hash in sorted(expected_hashes.items()):
@@ -144,9 +149,17 @@ def _verify_physical_integrity(graph: dict[Path, Manifest], root_dir: Path, repo
             report.add("PASS", relative_path, "On-disk file hash matches manifest record.", category="phase2")
 
 
-def verify_manifest(manifest_path: Path, root_dir: Path, deep: bool = False) -> VerificationReport:
+def verify_manifest(
+    manifest_path: Path, root_dir: Path, deep: bool = False, output_only: bool = False
+) -> VerificationReport:
     """
     Verifies the integrity and lineage of an artifact via its manifest.
+
+    Args:
+        manifest_path: Path to the manifest file
+        root_dir: Root directory for resolving relative paths
+        deep: If True, performs deep verification of entire dependency chain
+        output_only: If True, only verifies output files (skips input file hash checks)
     """
     report = VerificationReport(manifest_path=manifest_path.relative_to(root_dir))
 
@@ -156,7 +169,7 @@ def verify_manifest(manifest_path: Path, root_dir: Path, deep: bool = False) -> 
             with open(manifest_path, encoding="utf-8") as f:
                 manifest = Manifest.model_validate_json(f.read())
             # A shallow check is just phase 2 on a single manifest
-            _verify_physical_integrity({report.manifest_path: manifest}, root_dir, report)
+            _verify_physical_integrity({report.manifest_path: manifest}, root_dir, report, output_only=output_only)
         except Exception as e:
             report.add("FAIL", report.manifest_path, f"Failed to load manifest: {e}", category="phase2")
         return report
@@ -187,6 +200,6 @@ def verify_manifest(manifest_path: Path, root_dir: Path, deep: bool = False) -> 
         return report
 
     # 3. Phase 2: Verify the physical integrity of all files in the graph.
-    _verify_physical_integrity(provenance_graph, root_dir, report)
+    _verify_physical_integrity(provenance_graph, root_dir, report, output_only=output_only)
 
     return report

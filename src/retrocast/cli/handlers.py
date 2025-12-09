@@ -374,14 +374,22 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
     root_dir = paths["raw"].parent
 
     manifests_to_check = []
+    output_only_manifests = set()  # Track which manifests should only check outputs
+
     if args.all:
-        logger.info(
-            "Scanning for manifests in 1-benchmarks/definitions, 1-benchmarks/stocks, 2-raw, 3-processed, and 4-results..."
-        )
-        # Only scan specific folders: 2-raw, 3-processed, and 4-results
-        for folder in [paths["benchmarks"], paths["stocks"], paths["raw"], paths["processed"], paths["results"]]:
+        logger.info("Scanning for manifests in 1-benchmarks, 2-raw, 3-processed, and 4-scored...")
+        # Scan workflow folders (check both input and output hashes)
+        for folder in [paths["raw"], paths["processed"], paths["scored"]]:
             if folder.exists():
-                manifests_to_check.extend(folder.glob("**/manifest.json"))
+                manifests_to_check.extend(folder.glob("**/*manifest.json"))
+
+        # Also scan benchmark folders (only check output hashes)
+        for folder in [paths["benchmarks"], paths["stocks"]]:
+            if folder.exists():
+                benchmark_manifests = list(folder.glob("**/*manifest.json"))
+                manifests_to_check.extend(benchmark_manifests)
+                output_only_manifests.update(benchmark_manifests)
+
         manifests_to_check = sorted(manifests_to_check)
     elif args.target:
         manifests_to_check = [Path(args.target)]
@@ -409,7 +417,10 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
 
             for m_path in manifests_to_check:
                 progress.update(task, description=f"[cyan]Verifying {m_path.relative_to(root_dir)}...")
-                report = verify.verify_manifest(m_path, root_dir=root_dir, deep=args.deep)
+
+                # Check if this manifest should only verify output files
+                output_only = m_path in output_only_manifests
+                report = verify.verify_manifest(m_path, root_dir=root_dir, deep=args.deep, output_only=output_only)
 
                 if report.is_valid:
                     passed_manifests.append(m_path.relative_to(root_dir))
