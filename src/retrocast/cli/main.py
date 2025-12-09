@@ -42,6 +42,7 @@ def main() -> None:
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("--config", type=Path, default=Path("retrocast-config.yaml"), help="Path to config file")
+    parser.add_argument("--version", "-V", action="version", version=f"retrocast {__version__}")
 
     subparsers = parser.add_subparsers(dest="command", required=True, help="Command to run")
 
