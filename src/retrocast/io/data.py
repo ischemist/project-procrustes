@@ -3,6 +3,7 @@ import gzip
 import json
 import logging
 from pathlib import Path
+from typing import Literal, overload
 
 from pydantic import TypeAdapter
 
@@ -81,22 +82,32 @@ def load_raw_paroutes_list(path: Path) -> list[dict]:
     return data
 
 
-def load_stock_file(path: Path) -> set[InchiKeyStr]:
+@overload
+def load_stock_file(path: Path, return_as: Literal["inchikey"] = "inchikey") -> set[InchiKeyStr]: ...
+@overload
+def load_stock_file(path: Path, return_as: Literal["smiles"]) -> set[SmilesStr]: ...
+def load_stock_file(
+    path: Path, return_as: Literal["inchikey", "smiles"] = "inchikey"
+) -> set[InchiKeyStr] | set[SmilesStr]:
     """
-    Loads a set of stock InChI keys from a CSV.GZ file.
+    Loads a set of stock molecules from a CSV.GZ file.
 
     Expects gzipped CSV format with header: SMILES,InChIKey
 
     Args:
         path: Path to stock file (.csv.gz)
+        return_as: Format to return stock in - "inchikey" (default) or "smiles"
 
     Returns:
-        Set of InChI keys representing available stock molecules
+        Set of InChI keys or SMILES representing available stock molecules
 
     Raises:
-        RetroCastIOError: If file cannot be read or format is invalid
+        RetroCastIOError: If file cannot be read, format is invalid, or return_as is invalid
     """
     path = Path(path)
+
+    if return_as not in ("inchikey", "smiles"):
+        raise RetroCastIOError(f"Invalid return_as parameter: '{return_as}'. Must be 'inchikey' or 'smiles'.")
 
     if not path.exists():
         raise RetroCastIOError(
@@ -113,23 +124,29 @@ def load_stock_file(path: Path) -> set[InchiKeyStr]:
     logger.debug(f"Loading stock from {path}...")
 
     try:
-        inchi_keys = set()
+        molecules = set()
         with gzip.open(path, "rt", encoding="utf-8") as f:
             reader = csv.DictReader(f)
 
             # Validate header
-            if reader.fieldnames is None or "InChIKey" not in reader.fieldnames:
+            required_col = "InChIKey" if return_as == "inchikey" else "SMILES"
+            if reader.fieldnames is None or required_col not in reader.fieldnames:
                 raise RetroCastIOError(
-                    f"Invalid stock CSV format. Expected header with 'InChIKey' column. Got: {reader.fieldnames}"
+                    f"Invalid stock CSV format. Expected header with '{required_col}' column. Got: {reader.fieldnames}"
                 )
 
             for row in reader:
-                inchi_key = row.get("InChIKey", "").strip()
-                if inchi_key:
-                    inchi_keys.add(InchiKeyStr(inchi_key))
+                if return_as == "inchikey":
+                    value = row.get("InChIKey", "").strip()
+                    if value:
+                        molecules.add(InchiKeyStr(value))
+                elif return_as == "smiles":
+                    value = row.get("SMILES", "").strip()
+                    if value:
+                        molecules.add(SmilesStr(value))
 
-        logger.info(f"Loaded {len(inchi_keys):,} molecules from {path.name}")
-        return inchi_keys
+        logger.info(f"Loaded {len(molecules):,} molecules from {path.name}")
+        return molecules
 
     except OSError as e:
         raise RetroCastIOError(f"Failed to read stock file {path}: {e}") from e

@@ -59,7 +59,7 @@ if __name__ == "__main__":
 
     # 2. Load Stock
     stock_path = STOCKS_DIR / f"{benchmark.stock_name}.csv.gz"
-    building_blocks = load_stock_file(stock_path)
+    building_blocks = load_stock_file(stock_path, return_as="smiles")
 
     # 3. Setup Output
     folder_name = "synplanner-eval" if args.effort == "normal" else f"synplanner-{args.effort}"

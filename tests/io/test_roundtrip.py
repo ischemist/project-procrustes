@@ -7,6 +7,8 @@ Philosophy: Data persistence is not optional. Content hashes must be:
 - Content-sensitive: Any change in data must change the hash
 """
 
+import csv
+import gzip
 import tempfile
 from pathlib import Path
 
@@ -14,6 +16,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from retrocast.exceptions import RetroCastIOError
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.io.data import (
     BenchmarkResultsLoader,
@@ -503,9 +506,6 @@ class TestStockFile:
 
     def test_load_stock_csv_returns_inchi_keys(self, tmp_path):
         """Stock CSV.GZ file should load as set of InChI keys."""
-        import csv
-        import gzip
-
         stock_file = tmp_path / "stock.csv.gz"
         with gzip.open(stock_file, "wt", newline="") as f:
             writer = csv.writer(f)
@@ -524,8 +524,6 @@ class TestStockFile:
 
     def test_load_stock_csv_strips_whitespace(self, tmp_path):
         """Whitespace should be stripped from CSV.GZ entries."""
-        import csv
-        import gzip
 
         stock_file = tmp_path / "stock.csv.gz"
         with gzip.open(stock_file, "wt", newline="") as f:
@@ -543,9 +541,6 @@ class TestStockFile:
 
     def test_load_stock_csv_ignores_empty_inchikeys(self, tmp_path):
         """Empty InChI keys should be ignored."""
-        import csv
-        import gzip
-
         stock_file = tmp_path / "stock.csv.gz"
         with gzip.open(stock_file, "wt", newline="") as f:
             writer = csv.writer(f)
@@ -563,7 +558,6 @@ class TestStockFile:
 
     def test_load_stock_invalid_extension_raises(self, tmp_path):
         """Non-CSV.GZ files should raise RetroCastIOError."""
-        from retrocast.exceptions import RetroCastIOError
 
         stock_file = tmp_path / "stock.txt"
         stock_file.write_text("C\nCC\n")
@@ -573,9 +567,6 @@ class TestStockFile:
 
     def test_load_stock_csv_invalid_header_raises(self, tmp_path):
         """Invalid CSV.GZ header should raise RetroCastIOError."""
-        import gzip
-
-        from retrocast.exceptions import RetroCastIOError
 
         stock_file = tmp_path / "stock.csv.gz"
         with gzip.open(stock_file, "wt") as f:
@@ -586,12 +577,77 @@ class TestStockFile:
 
     def test_load_stock_missing_file_raises(self, tmp_path):
         """Missing file should raise RetroCastIOError."""
-        from retrocast.exceptions import RetroCastIOError
 
         stock_file = tmp_path / "nonexistent.csv.gz"
 
         with pytest.raises(RetroCastIOError, match="Stock file not found"):
             load_stock_file(stock_file)
+
+    def test_load_stock_as_smiles_returns_smiles(self, tmp_path):
+        """Stock CSV.GZ with return_as='smiles' should return SMILES set."""
+
+        stock_file = tmp_path / "stock.csv.gz"
+        with gzip.open(stock_file, "wt", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["SMILES", "InChIKey"])
+            writer.writerow(["C", "VNWKTOKETHGBQD-UHFFFAOYSA-N"])
+            writer.writerow(["CC", "OTMSDBZUPAUEDD-UHFFFAOYSA-N"])
+            writer.writerow(["CCC", "ATUOYWHBWRKTHZ-UHFFFAOYSA-N"])
+
+        stock = load_stock_file(stock_file, return_as="smiles")
+
+        assert stock == {"C", "CC", "CCC"}
+
+    def test_load_stock_as_smiles_strips_whitespace(self, tmp_path):
+        """SMILES loading should strip whitespace."""
+
+        stock_file = tmp_path / "stock.csv.gz"
+        with gzip.open(stock_file, "wt", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["SMILES", "InChIKey"])
+            writer.writerow(["  C  ", "VNWKTOKETHGBQD-UHFFFAOYSA-N"])
+            writer.writerow([" CC\t", "OTMSDBZUPAUEDD-UHFFFAOYSA-N"])
+
+        stock = load_stock_file(stock_file, return_as="smiles")
+
+        assert stock == {"C", "CC"}
+
+    def test_load_stock_as_smiles_ignores_empty_entries(self, tmp_path):
+        """Empty SMILES should be ignored."""
+
+        stock_file = tmp_path / "stock.csv.gz"
+        with gzip.open(stock_file, "wt", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["SMILES", "InChIKey"])
+            writer.writerow(["C", "VNWKTOKETHGBQD-UHFFFAOYSA-N"])
+            writer.writerow(["", ""])
+            writer.writerow(["CC", "OTMSDBZUPAUEDD-UHFFFAOYSA-N"])
+
+        stock = load_stock_file(stock_file, return_as="smiles")
+
+        assert stock == {"C", "CC"}
+
+    def test_load_stock_invalid_return_as_raises(self, tmp_path):
+        """Invalid return_as parameter should raise RetroCastIOError."""
+
+        stock_file = tmp_path / "stock.csv.gz"
+        with gzip.open(stock_file, "wt", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["SMILES", "InChIKey"])
+            writer.writerow(["C", "VNWKTOKETHGBQD-UHFFFAOYSA-N"])
+
+        with pytest.raises(RetroCastIOError, match="Invalid return_as parameter"):
+            load_stock_file(stock_file, return_as="invalid")
+
+    def test_load_stock_as_smiles_missing_smiles_column_raises(self, tmp_path):
+        """Missing SMILES column should raise when return_as='smiles'."""
+
+        stock_file = tmp_path / "stock.csv.gz"
+        with gzip.open(stock_file, "wt") as f:
+            f.write("InChIKey\nVNWKTOKETHGBQD-UHFFFAOYSA-N\n")
+
+        with pytest.raises(RetroCastIOError, match="Expected header with 'SMILES' column"):
+            load_stock_file(stock_file, return_as="smiles")
 
 
 # =============================================================================
@@ -755,8 +811,6 @@ class TestBenchmarkResultsLoader:
         corrupted_file = stats_path / "statistics.json.gz"
 
         # Write invalid JSON
-        import gzip
-
         with gzip.open(corrupted_file, "wt") as f:
             f.write("{ invalid json here }")
 
@@ -833,8 +887,6 @@ class TestBenchmarkResultsLoader:
         eval_path.mkdir(parents=True)
 
         # Write invalid JSON
-        import gzip
-
         with gzip.open(eval_path / "evaluation.json.gz", "wt") as f:
             f.write("{ not valid json }")
 
