@@ -9,7 +9,7 @@ from typing import Any
 
 from tqdm import tqdm
 
-from retrocast.adapters import get_adapter
+from retrocast.adapters import ADAPTER_MAP, get_adapter
 from retrocast.api import score_predictions
 from retrocast.curation.filtering import deduplicate_routes
 from retrocast.io.blob import load_json_gz, save_json_gz
@@ -19,6 +19,32 @@ from retrocast.models.benchmark import create_benchmark, create_benchmark_target
 from retrocast.models.chem import TargetInput
 
 logger = logging.getLogger(__name__)
+
+
+def handle_list_adapters(args: Any) -> None:
+    """
+    List all available adapters that can be used with the 'adapt' command.
+    This command does not require a configuration file.
+    """
+    # Mapping of adapter names to their display names and format descriptions
+    adapter_info = {
+        "aizynth": ("AiZynthFinder", "bipartite graph"),
+        "askcos": ("ASKCOS", "custom format"),
+        "dms": ("DirectMultiStep", "recursive dict"),
+        "dreamretro": ("DreamRetro", "precursor map"),
+        "multistepttl": ("MultiStepTTL", "custom format"),
+        "paroutes": ("PaRoutes", "reference format"),
+        "retrochimera": ("RetroChimera", "precursor map"),
+        "retrostar": ("Retro*", "precursor map"),
+        "synllama": ("SynLlama", "precursor map"),
+        "synplanner": ("SynPlanner", "bipartite graph"),
+        "syntheseus": ("Syntheseus", "bipartite graph"),
+    }
+
+    print("Available adapters:")
+    for name in sorted(ADAPTER_MAP.keys()):
+        display_name, format_type = adapter_info.get(name, (name, "unknown format"))
+        print(f"  - {name}: {display_name} ({format_type})")
 
 
 def _find_column(fieldnames: Sequence[str], candidates: Sequence[str]) -> str | None:

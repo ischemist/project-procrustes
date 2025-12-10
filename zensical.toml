@@ -22,14 +22,12 @@ nav = [
   { "Quick Start" = "quick-start.md" },
   { "Concepts" = "concepts.md" },
   { "Guides" = [
-      "guides/cli.md",
-      "guides/library.md",
-      "guides/benchmarks.md",
-      "guides/workflows.md"
-  ]},
-  { "Developers" = [
-      "developers/adapters.md"
-  ]}
+    "guides/cli.md",
+    "guides/library.md",
+    "guides/benchmarks.md",
+    "guides/workflows.md"
+  ] },
+  { "Developers" = ["developers/adapters.md"] }
 ]
 # With the "extra_css" option you can add your own CSS styling to customize
 # your Zensical project according to your needs. You can add any number of

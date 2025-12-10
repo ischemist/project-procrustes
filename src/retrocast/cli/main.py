@@ -62,6 +62,9 @@ def main() -> None:
     # --- LIST ---
     subparsers.add_parser("list", help="List configured models")
 
+    # --- LIST ADAPTERS ---
+    subparsers.add_parser("list-adapters", help="List all available adapters")
+
     # --- INFO ---
     info_parser = subparsers.add_parser("info", help="Show model details")
     info_parser.add_argument("--model", required=True)
@@ -158,7 +161,7 @@ def main() -> None:
     args = parser.parse_args()
 
     # Commands that don't need config loading
-    if args.command in ["init", "adapt", "score-file", "create-benchmark"]:
+    if args.command in ["init", "adapt", "score-file", "create-benchmark", "list-adapters"]:
         if args.command == "init":
             adhoc.handle_init(args)
         elif args.command == "adapt":
@@ -167,6 +170,8 @@ def main() -> None:
             adhoc.handle_score_file(args)
         elif args.command == "create-benchmark":
             adhoc.handle_create_benchmark(args)
+        elif args.command == "list-adapters":
+            adhoc.handle_list_adapters(args)
         return
 
     # Load config (local or default)
