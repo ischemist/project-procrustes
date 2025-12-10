@@ -173,7 +173,7 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
             logger.error(f"Stock file missing: {stock_path}")
             return
 
-        stock_set = load_stock_file(stock_path)
+        stock_set = load_stock_file(stock_path, return_as="inchikey")
         predictions = load_routes(routes_path)
 
         # Load execution stats if available
