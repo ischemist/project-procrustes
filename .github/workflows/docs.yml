@@ -4,6 +4,11 @@ on:
     branches:
       - master
       - main
+  pull_request:
+    branches:
+      - master
+      - main
+
 permissions:
   contents: read
   pages: write
