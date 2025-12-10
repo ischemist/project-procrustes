@@ -61,6 +61,7 @@ dev = [
   "ty>=0.0.1a24",
   "types-pyyaml>=6.0.12.20250822",
   "types-tqdm>=4.67.0.20241221",
+  "zensical>=0.0.11",
 ]
 
 [build-system]

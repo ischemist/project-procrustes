@@ -93,3 +93,6 @@ data/index.html
 #data/SHA256SUMS
 
 data/tmp
+
+prompts/
+site/

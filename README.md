@@ -12,7 +12,7 @@
 
 The field of retrosynthesis is fragmented. 
 1.  **Incompatible Outputs:** AiZynthFinder outputs bipartite graphs; Retro* outputs precursor maps; DirectMultiStep outputs recursive dictionaries. Comparing them requires writing bespoke parsers for every paper.
-2.  **Ad-Hoc Metrics:** "Solvability" is often calculated differently across publications, with varying definitions of commercial stock (e.g., using eMolecules screening sets vs. actual buyable catalogs).
+2.  **Ad-Hoc Metrics:** "Solvability" is often calculated differently across publications, with varying definitions of commercial stock (e.g., using made-to-order libraries vs. actual off-the-shelf compounds).
 3.  **Flawed Benchmarks:** The standard PaRoutes n5 dataset is heavily skewed (74% of routes are length 3-4), masking performance failures on complex targets. Furthermore, the standard stock definition for PaRoutes creates synthetic "ground truths" that are often physically unobtainable.
 
 **RetroCast solves this.** It provides a canonical schema, adapters for 10+ models, and a rigorous statistical pipeline to turn retrosynthesis from a qualitative art into a quantitative science.
@@ -21,7 +21,7 @@ The field of retrosynthesis is fragmented.
 
 ## Key Features
 
-*   **Universal Adapters:** "Air-gapped" translation layers for **AiZynthFinder**, **Retro***, **DirectMultiStep**, **SynPlanner**, **Syntheseus**, **ASKCOS**, **RetroChimera**, **DreamRetro**, **MultiStepTTL**, **SynLlama**, and **PaRoutes**.
+*   **Universal Adapters:** "Air-gapped" translation layers for *AiZynthFinder*, *Retro\**, *DirectMultiStep*, *SynPlanner*, *Syntheseus*, *ASKCOS*, *RetroChimera*, *DreamRetro*, *MultiStepTTL*, *SynLlama*, and *PaRoutes*.
 *   **Canonical Schema:** All routes are cast into a strict, recursive `Molecule` / `ReactionStep` Pydantic model.
 *   **Curated Benchmarks:** Includes the **Reference Series** (for algorithm comparison) and **Market Series** (for practical utility), stratified by route length and topology to eliminate statistical noise.
 *   **Rigorous Statistics:** Built-in bootstrapping (95% CI), pairwise tournaments, and probabilistic ranking. No more "Model A is 0.1% better than Model B" without significance testing.
@@ -183,11 +183,13 @@ RetroCast powers **[SynthArena](https://syntharena.ischemist.com)**, an open-sou
 
 ## Vision: Structural AI for Chemistry
 
-Applications of ML to Chemistry have mostly centered on **quantitative problems** (predicting toxicity, pKd, yield)—tasks constrained by the scarcity of labeled data. 
+We distinguish between two fundamental classes of problems in scientific machine learning: **quantitative** (predicting scalar targets like toxicity or binding affinity) and **structural** (generating complex objects governed by an underlying grammar). Quantitative problems, analogous to early NLP challenges like sentiment analysis, are often constrained by data scarcity. In contrast, the most transformative AI breakthroughs—from large language models to AlphaFold—have occurred in structural domains.
 
-However, we observe that the most transformative breakthroughs in AI (LLMs, AlphaFold) have occurred in **structural problems**: tasks that require generating complex, structured outputs (like language or protein folding) rather than regression scalars. 
+**Mastery of structure is a prerequisite for solving downstream quantitative tasks.** Foundation models trained on the structure of language, for instance, now excel at sentiment analysis with little to no task-specific fine-tuning. In organic chemistry, the paramount structural challenge is retrosynthesis: designing a valid synthetic pathway to a molecule of interest. This capability is the key to unlocking critical quantitative problems like predicting synthetic accessibility, a significant bottleneck in drug discovery. Current accessibility heuristics, however, bypass the core structural challenge, relying on learned patterns that correlate with accessibility without ever generating the pathway itself.
 
-Retrosynthesis is the premier structural problem of organic chemistry. But effectively solving it requires a fundamental shift: we must move beyond fragmented data formats and inconsistent evaluation methods. We need a unified, rigorous infrastructure to standardize, track, and measure progress in this domain.
+**A model cannot judge the difficulty of a journey it cannot first articulate.**
+
+Achieving structural mastery in retrosynthesis is a long journey—one that requires moving beyond fragmented data formats, inconsistent evaluation methods, and unreliable metrics. Progress demands unified, rigorous infrastructure to standardize outputs, track provenance, and measure improvements with statistical rigor.
 
 **RetroCast is that infrastructure.**
 
