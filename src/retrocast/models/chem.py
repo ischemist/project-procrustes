@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import statistics
 from enum import Enum
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field, computed_field
 
 from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
+
+if TYPE_CHECKING:
+    from retrocast.chem import InchiKeyLevel
 
 # Type alias for a reaction signature: (frozenset of reactant InchiKeys, product InchiKey)
 ReactionSignature = tuple[frozenset[str], str]
@@ -182,28 +185,41 @@ class Route(BaseModel):
         """Computed topology signature for structural comparison."""
         return self.get_signature()
 
-    def get_signature(self) -> str:
+    def get_signature(self, match_level: InchiKeyLevel | None = None) -> str:
         """
         Generates a canonical, order-invariant hash for the entire route,
-        perfect for deduplication. This is your _generate_tree_signature logic.
+        perfect for deduplication.
+
+        Args:
+            match_level: Level of InChI key matching specificity:
+                - None or FULL: Exact matching (default)
+                - NO_STEREO: Ignore stereochemistry
+                - CONNECTIVITY: Match on molecular skeleton only
         """
         import hashlib
+
+        from retrocast.chem import InchiKeyLevel, normalize_inchikey
 
         memo = {}
 
         def _get_node_sig(node: Molecule) -> str:
-            if node.inchikey in memo:
-                return memo[node.inchikey]
+            if match_level is None or match_level == InchiKeyLevel.FULL:
+                key = node.inchikey
+            else:
+                key = normalize_inchikey(node.inchikey, match_level)
+
+            if key in memo:
+                return memo[key]
 
             if node.is_leaf:
-                return node.inchikey
+                return key
 
             assert node.synthesis_step is not None, "Non-leaf node without synthesis_step"
-            reactant_sigs = sorted([_get_node_sig(r) for r in node.synthesis_step.reactants])
+            reactant_sigs = sorted(_get_node_sig(r) for r in node.synthesis_step.reactants)
 
-            sig_str = "".join(reactant_sigs) + ">>" + node.inchikey
+            sig_str = "".join(reactant_sigs) + ">>" + key
             sig_hash = hashlib.sha256(sig_str.encode()).hexdigest()
-            memo[node.inchikey] = sig_hash
+            memo[key] = sig_hash
             return sig_hash
 
         return _get_node_sig(self.target)

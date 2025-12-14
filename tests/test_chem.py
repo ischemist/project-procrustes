@@ -5,11 +5,13 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from retrocast.chem import (
+    InchiKeyLevel,
     canonicalize_smiles,
     get_chiral_center_count,
     get_heavy_atom_count,
     get_inchi_key,
     get_molecular_weight,
+    normalize_inchikey,
 )
 from retrocast.exceptions import InvalidSmilesError, RetroCastException
 
@@ -295,3 +297,104 @@ def test_get_inchi_key_is_deterministic(smiles: str) -> None:
     assert key1 == key2
     assert len(key1) == 27  # InChIKey format: 14-10-X
     assert key1.count("-") == 2
+
+
+# ============================================================================
+# Tests for InChI Key Levels and Normalization
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_get_inchi_key_no_stereo_level() -> None:
+    """Tests that NO_STEREO level produces keys without stereochemistry info."""
+    # Two stereoisomers of the same molecule
+    r_lactic = "C[C@H](O)C(=O)O"  # R-lactic acid
+    s_lactic = "C[C@@H](O)C(=O)O"  # S-lactic acid
+
+    # Full keys should be different (stereochemistry encoded)
+    full_r = get_inchi_key(r_lactic, level=InchiKeyLevel.FULL)
+    full_s = get_inchi_key(s_lactic, level=InchiKeyLevel.FULL)
+    assert full_r != full_s
+
+    # NO_STEREO keys should be identical (stereochemistry ignored at generation)
+    no_stereo_r = get_inchi_key(r_lactic, level=InchiKeyLevel.NO_STEREO)
+    no_stereo_s = get_inchi_key(s_lactic, level=InchiKeyLevel.NO_STEREO)
+    assert no_stereo_r == no_stereo_s
+
+    # NO_STEREO should still produce a valid 27-char InChI key
+    assert len(no_stereo_r) == 27
+    assert no_stereo_r.count("-") == 2
+
+
+@pytest.mark.unit
+def test_get_inchi_key_connectivity_level() -> None:
+    """Tests that CONNECTIVITY level returns only the first 14 characters."""
+    smiles = "C[C@H](O)C(=O)O"  # Lactic acid
+    conn_key = get_inchi_key(smiles, level=InchiKeyLevel.CONNECTIVITY)
+
+    # Should be exactly 14 characters (connectivity block only)
+    assert len(conn_key) == 14
+    assert "-" not in conn_key
+
+    # Should match the first block of the full key
+    full_key = get_inchi_key(smiles, level=InchiKeyLevel.FULL)
+    assert full_key.startswith(conn_key)
+
+
+@pytest.mark.unit
+def test_normalize_inchikey_no_stereo() -> None:
+    """Tests that normalize_inchikey with NO_STEREO removes the middle block."""
+    full_key = "JVTAAEKCZFNVCJ-REOHCLBHSA-N"  # Example InChI key
+
+    normalized = normalize_inchikey(full_key, InchiKeyLevel.NO_STEREO)
+
+    # Should have only 2 blocks now (connectivity + suffix)
+    parts = normalized.split("-")
+    assert len(parts) == 2
+    assert parts[0] == "JVTAAEKCZFNVCJ"  # Connectivity preserved
+    assert parts[1] == "N"  # Protonation suffix preserved
+    assert len(normalized) == 16  # 14 + 1 (dash) + 1 (suffix)
+
+
+@pytest.mark.unit
+def test_normalize_inchikey_connectivity() -> None:
+    """Tests that normalize_inchikey with CONNECTIVITY returns only first block."""
+    full_key = "JVTAAEKCZFNVCJ-REOHCLBHSA-N"
+
+    normalized = normalize_inchikey(full_key, InchiKeyLevel.CONNECTIVITY)
+
+    assert normalized == "JVTAAEKCZFNVCJ"
+    assert len(normalized) == 14
+
+
+@pytest.mark.unit
+def test_normalize_inchikey_full() -> None:
+    """Tests that normalize_inchikey with FULL returns key unchanged."""
+    full_key = "JVTAAEKCZFNVCJ-REOHCLBHSA-N"
+
+    normalized = normalize_inchikey(full_key, InchiKeyLevel.FULL)
+
+    assert normalized == full_key
+
+
+@pytest.mark.unit
+def test_stereoisomers_match_with_normalize() -> None:
+    """Integration test: stereoisomers should match when using NO_STEREO normalization."""
+    r_alanine = "C[C@@H](C(=O)O)N"  # D-alanine
+    s_alanine = "C[C@H](C(=O)O)N"  # L-alanine
+
+    # Get full keys (should be different)
+    key_r = get_inchi_key(r_alanine)
+    key_s = get_inchi_key(s_alanine)
+    assert key_r != key_s
+
+    # Normalize to NO_STEREO (should match)
+    assert normalize_inchikey(key_r, InchiKeyLevel.NO_STEREO) == normalize_inchikey(key_s, InchiKeyLevel.NO_STEREO)
+
+
+@pytest.mark.unit
+def test_inchikey_level_enum_values() -> None:
+    """Tests that InchiKeyLevel enum has expected string values."""
+    assert InchiKeyLevel.FULL.value == "full"
+    assert InchiKeyLevel.NO_STEREO.value == "no_stereo"
+    assert InchiKeyLevel.CONNECTIVITY.value == "connectivity"
