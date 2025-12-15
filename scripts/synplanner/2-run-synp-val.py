@@ -1,12 +1,13 @@
 """
-Run Synplanner MCTS retrosynthesis predictions on a batch of targets.
+Run Synplanner MCTS retrosynthesis predictions on a batch of targets using value-network evaluation.
 
 This script processes targets from a benchmark using Synplanner's MCTS algorithm
-and saves results in a structured format matching other prediction scripts.
+with evaluation-first search guided by a value network and saves results in a structured
+format matching other prediction scripts.
 
 Example usage:
-    uv run --extra synplanner scripts/synplanner/2-run-synp-eval.py --benchmark uspto-190
-    uv run --extra synplanner scripts/synplanner/2-run-synp-eval.py --benchmark random-n5-2-seed=20251030 --effort high
+    uv run --extra synplanner scripts/synplanner/2-run-synp-val.py --benchmark uspto-190
+    uv run --extra synplanner scripts/synplanner/2-run-synp-val.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
 Results are saved to: data/2-raw/synplanner-{stock}[-{effort}]/{benchmark_name}/
@@ -21,14 +22,17 @@ import yaml
 from synplan.chem.reaction_routes.io import make_json
 from synplan.chem.reaction_routes.route_cgr import extract_reactions
 from synplan.chem.utils import mol_from_smiles
-from synplan.mcts.evaluation import ValueNetworkFunction
-from synplan.mcts.expansion import PolicyNetworkFunction
 from synplan.mcts.tree import Tree, TreeConfig
-from synplan.utils.config import PolicyNetworkConfig
-from synplan.utils.loading import load_reaction_rules
+from synplan.utils.config import CombinedPolicyConfig, ValueNetworkEvaluationConfig
+from synplan.utils.loading import (
+    load_building_blocks,
+    load_combined_policy_function,
+    load_evaluation_function,
+    load_reaction_rules,
+)
 from tqdm import tqdm
 
-from retrocast.io import create_manifest, load_benchmark, load_stock_file, save_execution_stats, save_json_gz
+from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
 from retrocast.models.benchmark import ExecutionStats
 from retrocast.utils.logging import logger
 
@@ -59,10 +63,10 @@ if __name__ == "__main__":
 
     # 2. Load Stock
     stock_path = STOCKS_DIR / f"{benchmark.stock_name}.csv.gz"
-    building_blocks = load_stock_file(stock_path, return_as="smiles")
+    building_blocks = load_building_blocks(stock_path, standardize=True, silent=True)
 
     # 3. Setup Output
-    folder_name = "synplanner-eval" if args.effort == "normal" else f"synplanner-{args.effort}"
+    folder_name = "synplanner-mcts-val" if args.effort == "normal" else f"synplanner-mcts-val-{args.effort}"
     save_dir = BASE_DIR / "data" / "2-raw" / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -70,29 +74,42 @@ if __name__ == "__main__":
     logger.info(f"effort: {args.effort}")
 
     # 4. Load Model Configuration
-    config_filename = "search-eval-config-high.yaml" if args.effort == "high" else "search-eval-config.yaml"
+    config_filename = "mcts-val-config-high.yaml" if args.effort == "high" else "mcts-val-config.yaml"
     logger.info(f"using config: {config_filename}")
     config_path = SYNPLANNER_DIR / config_filename
     value_network_path = SYNPLANNER_DIR / "uspto" / "weights" / "value_network.ckpt"
-    rank_weights = SYNPLANNER_DIR / "uspto" / "weights" / "ranking_policy_network.ckpt"
+    filtering_weights = SYNPLANNER_DIR / "uspto" / "weights" / "filtering_policy_network.ckpt"
+    ranking_weights = SYNPLANNER_DIR / "uspto" / "weights" / "ranking_policy_network.ckpt"
     reaction_rules_path = SYNPLANNER_DIR / "uspto" / "uspto_reaction_rules.pickle"
 
     with open(config_path, encoding="utf-8") as file:
         config = yaml.safe_load(file)
 
-    search_config = {**config["tree"], **config["node_evaluation"]}
-    policy_config = PolicyNetworkConfig.from_dict({**config["node_expansion"], **{"weights_path": rank_weights}})
+    tree_config = TreeConfig.from_dict(config["tree"])
+    tree_config.search_strategy = "evaluation_first"
+    tree_config.evaluation_agg = config["node_evaluation"].get("evaluation_agg", tree_config.evaluation_agg)
+
+    policy_params = config.get("node_expansion", {})
+    combined_policy_config = CombinedPolicyConfig(
+        filtering_weights_path=str(filtering_weights),
+        ranking_weights_path=str(ranking_weights),
+        top_rules=policy_params.get("top_rules", 50),
+        rule_prob_threshold=policy_params.get("rule_prob_threshold", 0.0),
+    )
 
     # 5. Load Resources
-    policy_function = PolicyNetworkFunction(policy_config=policy_config)
+    policy_function = load_combined_policy_function(combined_config=combined_policy_config)
     reaction_rules = load_reaction_rules(reaction_rules_path)
 
-    if search_config["evaluation_type"] == "gcn" and value_network_path.exists():
-        value_function = ValueNetworkFunction(weights_path=str(value_network_path))
-    else:
-        value_function = None
+    evaluation_type = str(config["node_evaluation"].get("evaluation_type", "")).lower()
+    if evaluation_type and evaluation_type != "gcn":
+        logger.warning(f"Config evaluation_type={evaluation_type!r} ignored; using value network evaluation.")
 
-    tree_config = TreeConfig.from_dict(search_config)
+    if not value_network_path.exists():
+        raise FileNotFoundError(f"Value network weights not found at {value_network_path}")
+
+    eval_config = ValueNetworkEvaluationConfig(weights_path=str(value_network_path))
+    evaluation_function = load_evaluation_function(eval_config)
 
     # 6. Run Predictions
     logger.info("Retrosynthesis starting")
@@ -106,7 +123,7 @@ if __name__ == "__main__":
         t_start_cpu = time.process_time()
 
         try:
-            target_mol = mol_from_smiles(target.smiles)
+            target_mol = mol_from_smiles(target.smiles, standardize=True)
             if not target_mol:
                 logger.warning(f"Could not create molecule for target {target.id} ({target.smiles}). Skipping.")
                 results[target.id] = []
@@ -117,7 +134,7 @@ if __name__ == "__main__":
                     reaction_rules=reaction_rules,
                     building_blocks=building_blocks,
                     expansion_function=policy_function,
-                    evaluation_function=value_function,
+                    evaluation_function=evaluation_function,
                 )
 
                 # run the search
@@ -150,7 +167,7 @@ if __name__ == "__main__":
     save_json_gz(results, save_dir / "results.json.gz")
     save_execution_stats(runtime, save_dir / "execution_stats.json.gz")
     manifest = create_manifest(
-        action="scripts/synplanner/2-run-synp-eval.py",
+        action="scripts/synplanner/2-run-synp-val.py",
         sources=[bench_path, stock_path],
         root_dir=BASE_DIR / "data",
         outputs=[(save_dir / "results.json.gz", results, "unknown")],

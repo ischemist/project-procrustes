@@ -1,15 +1,15 @@
 """
-Run Synplanner MCTS retrosynthesis predictions on a batch of targets.
+Run Synplanner NMCS retrosynthesis predictions on a batch of targets.
 
-This script processes targets from a benchmark using Synplanner's MCTS algorithm
-and saves results in a structured format matching other prediction scripts.
+This script processes targets from a benchmark using Synplanner's Nested Monte Carlo Search
+algorithm and saves results in a structured format matching other prediction scripts.
 
 Example usage:
-    uv run --extra synplanner scripts/synplanner/3-run-synp-rollout.py --benchmark uspto-190
-    uv run --extra synplanner scripts/synplanner/3-run-synp-rollout.py --benchmark random-n5-2-seed=20251030 --effort high
+    uv run --extra synplanner scripts/synplanner/4-run-synp-nmcs.py --benchmark uspto-190
+    uv run --extra synplanner scripts/synplanner/4-run-synp-nmcs.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
-Results are saved to: data/2-raw/synplanner-{stock}[-{effort}]/{benchmark_name}/
+Results are saved to: data/2-raw/synplanner-nmcs[-{effort}]/{benchmark_name}/
 """
 
 import argparse
@@ -22,7 +22,8 @@ from synplan.chem.reaction_routes.io import make_json
 from synplan.chem.reaction_routes.route_cgr import extract_reactions
 from synplan.chem.utils import mol_from_smiles
 from synplan.mcts.tree import Tree, TreeConfig
-from synplan.utils.config import CombinedPolicyConfig, RolloutEvaluationConfig
+from synplan.utils.config import CombinedPolicyConfig
+from synplan.utils.config import RolloutEvaluationConfig, CombinedPolicyConfig
 from synplan.utils.loading import (
     load_building_blocks,
     load_combined_policy_function,
@@ -65,7 +66,7 @@ if __name__ == "__main__":
     building_blocks = load_building_blocks(stock_path, standardize=True, silent=True)
 
     # 3. Setup Output
-    folder_name = "synplanner-mcts-rollout" if args.effort == "normal" else f"synplanner-mcts-rollout-{args.effort}"
+    folder_name = "synplanner-nmcs" if args.effort == "normal" else f"synplanner-nmcs-{args.effort}"
     save_dir = BASE_DIR / "data" / "2-raw" / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -73,7 +74,7 @@ if __name__ == "__main__":
     logger.info(f"effort: {args.effort}")
 
     # 4. Load Model Configuration
-    config_filename = "mcts-rollout-config-high.yaml" if args.effort == "high" else "mcts-rollout-config.yaml"
+    config_filename = "nmcs-config-high.yaml" if args.effort == "high" else "nmcs-config.yaml"
     logger.info(f"using config: {config_filename}")
     config_path = SYNPLANNER_DIR / config_filename
     filtering_weights = SYNPLANNER_DIR / "uspto" / "weights" / "filtering_policy_network.ckpt"
@@ -84,8 +85,6 @@ if __name__ == "__main__":
         config = yaml.safe_load(file)
 
     tree_config = TreeConfig.from_dict(config["tree"])
-    tree_config.search_strategy = "expansion_first"
-    tree_config.evaluation_agg = config["node_evaluation"].get("evaluation_agg", tree_config.evaluation_agg)
 
     policy_params = config.get("node_expansion", {})
     combined_policy_config = CombinedPolicyConfig(
@@ -99,18 +98,20 @@ if __name__ == "__main__":
     policy_function = load_combined_policy_function(combined_config=combined_policy_config)
     reaction_rules = load_reaction_rules(reaction_rules_path)
 
+    # Create evaluation function for NMCS
     eval_config = RolloutEvaluationConfig(
         policy_network=policy_function,
         reaction_rules=reaction_rules,
         building_blocks=building_blocks,
         min_mol_size=tree_config.min_mol_size,
         max_depth=tree_config.max_depth,
-        normalize=tree_config.normalize_scores,
+        normalize=False,
     )
     evaluation_function = load_evaluation_function(eval_config)
 
     # 6. Run Predictions
-    logger.info("Retrosynthesis starting")
+    # Note: NMCS uses an internal evaluation mechanism, no separate evaluation function needed
+    logger.info("Retrosynthesis starting with NMCS algorithm")
 
     results: dict[str, list[dict[str, Any]]] = {}
     solved_count = 0
@@ -165,7 +166,7 @@ if __name__ == "__main__":
     save_json_gz(results, save_dir / "results.json.gz")
     save_execution_stats(runtime, save_dir / "execution_stats.json.gz")
     manifest = create_manifest(
-        action="scripts/synplanner/3-run-synp-rollout.py",
+        action="scripts/synplanner/4-run-synp-nmcs.py",
         sources=[bench_path, stock_path],
         root_dir=BASE_DIR / "data",
         outputs=[(save_dir / "results.json.gz", results, "unknown")],
@@ -177,3 +178,4 @@ if __name__ == "__main__":
 
     logger.info(f"Completed processing {len(benchmark.targets)} targets")
     logger.info(f"Solved: {solved_count}")
+
