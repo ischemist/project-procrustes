@@ -343,17 +343,18 @@ def test_get_inchi_key_connectivity_level() -> None:
 
 @pytest.mark.unit
 def test_normalize_inchikey_no_stereo() -> None:
-    """Tests that normalize_inchikey with NO_STEREO removes the middle block."""
+    """Tests that normalize_inchikey with NO_STEREO replaces stereo with standard placeholder."""
     full_key = "JVTAAEKCZFNVCJ-REOHCLBHSA-N"  # Example InChI key
 
     normalized = normalize_inchikey(full_key, InchiKeyLevel.NO_STEREO)
 
-    # Should have only 2 blocks now (connectivity + suffix)
+    # Should still have 3 blocks with standard no-stereo placeholder
     parts = normalized.split("-")
-    assert len(parts) == 2
+    assert len(parts) == 3
     assert parts[0] == "JVTAAEKCZFNVCJ"  # Connectivity preserved
-    assert parts[1] == "N"  # Protonation suffix preserved
-    assert len(normalized) == 16  # 14 + 1 (dash) + 1 (suffix)
+    assert parts[1] == "UHFFFAOYSA"  # Standard no-stereo placeholder
+    assert parts[2] == "N"  # Protonation suffix preserved
+    assert len(normalized) == 27  # Standard InChI key length
 
 
 @pytest.mark.unit

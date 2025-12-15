@@ -151,7 +151,7 @@ def handle_ingest(args: Any, config: dict[str, Any]) -> None:
 # --- SCORING ---
 
 
-def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any, config: dict[str, Any]) -> None:
+def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) -> None:
     bench_path = paths["benchmarks"] / f"{benchmark_name}.json.gz"
     routes_path = paths["processed"] / benchmark_name / model_name / "routes.json.gz"
 
@@ -238,7 +238,7 @@ def handle_score(args: Any, config: dict[str, Any]) -> None:
 
     for model in models:
         for bench in benchmarks:
-            _score_single(model, bench, paths, args, config)
+            _score_single(model, bench, paths, args)
 
 
 # --- ANALYSIS ---

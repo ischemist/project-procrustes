@@ -166,7 +166,9 @@ def normalize_inchikey(inchikey: str, level: InchiKeyLevel) -> str:
         inchikey: A standard 27-character InChI key.
         level: Target level of specificity:
             - FULL: Returns the key unchanged
-            - NO_STEREO: Drops the stereo block (middle 8 chars), returns 20-char key
+            - NO_STEREO: Replaces the stereo block with the standard no-stereo
+              placeholder "UHFFFAOYSA", returning a valid 27-char InChI key.
+              This matches the output of `get_inchi_key(smiles, level=InchiKeyLevel.NO_STEREO)`.
             - CONNECTIVITY: Returns first 14 chars only (molecular skeleton)
 
     Returns:
@@ -174,16 +176,19 @@ def normalize_inchikey(inchikey: str, level: InchiKeyLevel) -> str:
 
     Example:
         >>> normalize_inchikey("BQJCRHHNABKAKU-KBQPJGBKSA-N", InchiKeyLevel.NO_STEREO)
-        'BQJCRHHNABKAKU-N'
+        'BQJCRHHNABKAKU-UHFFFAOYSA-N'
         >>> normalize_inchikey("BQJCRHHNABKAKU-KBQPJGBKSA-N", InchiKeyLevel.CONNECTIVITY)
         'BQJCRHHNABKAKU'
     """
+    # Standard no-stereo placeholder used by InChI when stereo is not encoded
+    NO_STEREO_PLACEHOLDER = "UHFFFAOYSA"
+
     if level == InchiKeyLevel.FULL:
         return inchikey
     elif level == InchiKeyLevel.NO_STEREO:
         parts = inchikey.split("-")
         if len(parts) == 3:
-            return f"{parts[0]}-{parts[2]}"
+            return f"{parts[0]}-{NO_STEREO_PLACEHOLDER}-{parts[2]}"
         return inchikey
     elif level == InchiKeyLevel.CONNECTIVITY:
         return inchikey.split("-")[0]
