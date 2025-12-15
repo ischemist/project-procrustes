@@ -127,123 +127,6 @@ def test_get_inchi_key_raises_retrocast_exception_on_empty_result(mock_moltoinch
 
 
 # ============================================================================
-# Tests for get_heavy_atom_count
-# ============================================================================
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    "smiles,expected_count",
-    [
-        ("C", 1),  # methane
-        ("CCO", 3),  # ethanol
-        ("c1ccccc1", 6),  # benzene
-        ("C[C@H](O)C(=O)O", 6),  # lactic acid
-    ],
-)
-def test_get_heavy_atom_count(smiles: str, expected_count: int) -> None:
-    """Tests that heavy atom count is correctly computed."""
-    result = get_heavy_atom_count(smiles)
-    assert result == expected_count
-
-
-@pytest.mark.unit
-def test_get_heavy_atom_count_invalid_smiles_raises_error() -> None:
-    """Tests that invalid SMILES raises InvalidSmilesError."""
-    invalid_smiles = "C(C)C)C"
-    with pytest.raises(InvalidSmilesError):
-        get_heavy_atom_count(invalid_smiles)
-
-
-@pytest.mark.unit
-@patch("retrocast.chem.Chem.MolFromSmiles")
-def test_get_heavy_atom_count_raises_exception_on_generic_error(mock_molfromsmiles) -> None:
-    """Tests that generic errors are wrapped in RetroCastException."""
-    mock_molfromsmiles.side_effect = RuntimeError("unexpected rdkit error")
-    with pytest.raises(RetroCastException) as exc_info:
-        get_heavy_atom_count("CCO")
-    assert "An unexpected error occurred during HAC calculation" in str(exc_info.value)
-
-
-# ============================================================================
-# Tests for get_molecular_weight
-# ============================================================================
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    "smiles,expected_mw",
-    [
-        ("C", 16.031),  # methane
-        ("CCO", 46.042),  # ethanol
-        ("c1ccccc1", 78.047),  # benzene
-        ("C[C@H](O)C(=O)O", 90.032),  # lactic acid
-    ],
-)
-def test_get_molecular_weight(smiles: str, expected_mw: float) -> None:
-    """Tests that molecular weight is correctly computed."""
-    result = get_molecular_weight(smiles)
-    assert result == pytest.approx(expected_mw, rel=1e-3)
-
-
-@pytest.mark.unit
-def test_get_molecular_weight_invalid_smiles_raises_error() -> None:
-    """Tests that invalid SMILES raises InvalidSmilesError."""
-    invalid_smiles = "C(C)C)C"
-    with pytest.raises(InvalidSmilesError):
-        get_molecular_weight(invalid_smiles)
-
-
-@pytest.mark.unit
-@patch("retrocast.chem.rdMolDescriptors.CalcExactMolWt")
-def test_get_molecular_weight_raises_exception_on_generic_error(mock_calc) -> None:
-    """Tests that generic errors are wrapped in RetroCastException."""
-    mock_calc.side_effect = RuntimeError("unexpected rdkit error")
-    with pytest.raises(RetroCastException) as exc_info:
-        get_molecular_weight("CCO")
-    assert "An unexpected error occurred during MW calculation" in str(exc_info.value)
-
-
-# ============================================================================
-# Tests for get_chiral_center_count
-# ============================================================================
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize(
-    "smiles,expected_count",
-    [
-        ("C", 0),  # methane - no chiral centers
-        ("CCO", 0),  # ethanol - no chiral centers
-        ("C[C@H](O)C(=O)O", 1),  # lactic acid - 1 chiral center
-        ("C[C@H](O)[C@H](O)C", 2),  # 2,3-butanediol - 2 chiral centers
-    ],
-)
-def test_get_chiral_center_count(smiles: str, expected_count: int) -> None:
-    """Tests that chiral center count is correctly computed."""
-    result = get_chiral_center_count(smiles)
-    assert result == expected_count
-
-
-@pytest.mark.unit
-def test_get_chiral_center_count_invalid_smiles_raises_error() -> None:
-    """Tests that invalid SMILES raises InvalidSmilesError."""
-    invalid_smiles = "C(C)C)C"
-    with pytest.raises(InvalidSmilesError):
-        get_chiral_center_count(invalid_smiles)
-
-
-@pytest.mark.unit
-@patch("retrocast.chem.Chem.FindMolChiralCenters")
-def test_get_chiral_center_count_raises_exception_on_generic_error(mock_find) -> None:
-    """Tests that generic errors are wrapped in RetroCastException."""
-    mock_find.side_effect = RuntimeError("unexpected rdkit error")
-    with pytest.raises(RetroCastException) as exc_info:
-        get_chiral_center_count("CCO")
-    assert "An unexpected error occurred during chiral center count" in str(exc_info.value)
-
-
-# ============================================================================
 # Shared exception tests (covers all functions with one parametrized test)
 # ============================================================================
 
@@ -300,7 +183,7 @@ def test_get_inchi_key_is_deterministic(smiles: str) -> None:
 
 
 # ============================================================================
-# Tests for InChI Key Levels and Normalization
+# Tests for InChI Key Levels and Reduction
 # ============================================================================
 
 
@@ -399,3 +282,47 @@ def test_inchikey_level_enum_values() -> None:
     assert InchiKeyLevel.FULL.value == "full"
     assert InchiKeyLevel.NO_STEREO.value == "no_stereo"
     assert InchiKeyLevel.CONNECTIVITY.value == "connectivity"
+
+
+# ============================================================================
+# consistency & guard tests
+# ============================================================================
+
+
+@pytest.mark.unit
+def test_reduce_inchikey_prevent_upscaling() -> None:
+    """verifies we can't magically hallucinate stereo info from a skeleton."""
+    # benzene connectivity key
+    conn_key = "UHOVQNZJYSORNB"
+
+    with pytest.raises(RetroCastException) as exc:
+        reduce_inchikey(conn_key, InchiKeyLevel.FULL)
+    assert "cannot upscale" in str(exc.value).lower()
+
+    with pytest.raises(RetroCastException) as exc:
+        reduce_inchikey(conn_key, InchiKeyLevel.NO_STEREO)
+    assert "cannot upscale" in str(exc.value).lower()
+
+
+@pytest.mark.unit
+@given(
+    st.sampled_from(
+        [
+            "C[C@H](O)C(=O)O",  # lactic
+            "C[C@@H](C(=O)O)N",  # alanine
+            "O[C@H](F)Cl",  # synthetic halogenated chaos
+        ]
+    )
+)
+def test_generation_reduction_consistency(smiles: str) -> None:
+    """
+    invariant: get_inchi(s, NO_STEREO) == reduce(get_inchi(s, FULL), NO_STEREO)
+
+    if this fails, your 'snon' flag logic in rdkit does not match your
+    string manipulation logic.
+    """
+    direct_no_stereo = get_inchi_key(smiles, level=InchiKeyLevel.NO_STEREO)
+    full_key = get_inchi_key(smiles, level=InchiKeyLevel.FULL)
+    reduced_no_stereo = reduce_inchikey(full_key, level=InchiKeyLevel.NO_STEREO)
+
+    assert direct_no_stereo == reduced_no_stereo
