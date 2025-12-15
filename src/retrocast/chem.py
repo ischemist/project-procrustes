@@ -185,6 +185,10 @@ def reduce_inchikey(inchikey: str, level: InchiKeyLevel) -> InchiKeyStr:
     if len(parts) not in (1, 3):
         raise ValueError(f"malformed inchikey structure: {inchikey}")
 
+    # validate connectivity block is exactly 14 chars
+    if len(parts[0]) != 14:
+        raise ValueError(f"invalid connectivity block length (expected 14, got {len(parts[0])}): {inchikey}")
+
     current_is_partial = len(parts) == 1
     target_is_full = level in (InchiKeyLevel.FULL, InchiKeyLevel.NO_STEREO)
 
