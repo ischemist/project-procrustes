@@ -80,8 +80,8 @@ class SynPlannerAdapter(BaseAdapter):
         target_molecule = self._build_molecule_from_synplanner_node(synplanner_root)
 
         # canonicalize both synplanner output and benchmark target with RDKit to align formats
-        produced = canonicalize_smiles(target_molecule.smiles, remove_mapping=True, isomeric=False)
-        expected = canonicalize_smiles(target.smiles, remove_mapping=True, isomeric=False)
+        produced = canonicalize_smiles(target_molecule.smiles, remove_mapping=True)
+        expected = canonicalize_smiles(target.smiles, remove_mapping=True)
 
         if produced != expected:
             msg = (
