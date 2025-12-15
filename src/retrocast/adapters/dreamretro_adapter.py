@@ -17,32 +17,30 @@ logger = logging.getLogger(__name__)
 class DreamRetroAdapter(BaseAdapter):
     """adapter for converting dreamretro-style outputs to the route schema."""
 
-    def cast(self, raw_target_data: Any, target_input: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
         """
         validates raw dreamretro data, transforms its single route string, and yields a route.
         """
         if not isinstance(raw_target_data, dict):
             logger.warning(
-                f"  - raw data for target '{target_input.id}' failed validation: expected a dict, got {type(raw_target_data).__name__}."
+                f"  - raw data for target '{target.id}' failed validation: expected a dict, got {type(raw_target_data).__name__}."
             )
             return
 
         if not raw_target_data.get("succ"):
-            logger.debug(f"skipping raw data for '{target_input.id}': 'succ' is not true.")
+            logger.debug(f"skipping raw data for '{target.id}': 'succ' is not true.")
             return
 
         route_str = raw_target_data.get("routes")
         if not isinstance(route_str, str) or not route_str:
-            logger.warning(
-                f"  - raw data for target '{target_input.id}' failed validation: no valid 'routes' string found."
-            )
+            logger.warning(f"  - raw data for target '{target.id}' failed validation: no valid 'routes' string found.")
             return
 
         try:
-            route = self._transform(route_str, target_input, raw_target_data)
+            route = self._transform(route_str, target, raw_target_data)
             yield route
         except RetroCastException as e:
-            logger.warning(f"  - route for '{target_input.id}' failed transformation: {e}")
+            logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
             return
 
     def _parse_route_string(self, route_str: str) -> tuple[SmilesStr, PrecursorMap]:
