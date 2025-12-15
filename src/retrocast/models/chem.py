@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import statistics
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field, computed_field
 
+from retrocast.chem import InchiKeyLevel, reduce_inchikey
 from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
 
 if TYPE_CHECKING:
@@ -196,9 +198,6 @@ class Route(BaseModel):
                 - NO_STEREO: Ignore stereochemistry
                 - CONNECTIVITY: Match on molecular skeleton only
         """
-        import hashlib
-
-        from retrocast.chem import InchiKeyLevel, normalize_inchikey
 
         memo = {}
 
@@ -206,7 +205,7 @@ class Route(BaseModel):
             if match_level is None or match_level == InchiKeyLevel.FULL:
                 key = node.inchikey
             else:
-                key = normalize_inchikey(node.inchikey, match_level)
+                key = reduce_inchikey(node.inchikey, match_level)
 
             if key in memo:
                 return memo[key]

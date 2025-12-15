@@ -1,6 +1,6 @@
 import logging
 
-from retrocast.chem import InchiKeyLevel, normalize_inchikey
+from retrocast.chem import InchiKeyLevel, reduce_inchikey
 from retrocast.io.data import RoutesDict
 from retrocast.metrics.similarity import find_acceptable_match
 from retrocast.metrics.solvability import is_route_solved
@@ -62,7 +62,7 @@ def score_model(
 
     # Pre-normalize stock if using a non-default match level
     if match_level is not None and match_level != InchiKeyLevel.FULL:
-        normalized_stock = {normalize_inchikey(k, match_level) for k in stock}
+        normalized_stock = {reduce_inchikey(k, match_level) for k in stock}
     else:
         normalized_stock = stock
 

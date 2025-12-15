@@ -11,7 +11,7 @@ from retrocast.chem import (
     get_heavy_atom_count,
     get_inchi_key,
     get_molecular_weight,
-    normalize_inchikey,
+    reduce_inchikey,
 )
 from retrocast.exceptions import InvalidSmilesError, RetroCastException
 
@@ -73,7 +73,7 @@ def test_canonicalize_smiles_raises_retrocast_exception_on_generic_error(mock_mo
     mock_moltosmiles.side_effect = RuntimeError("some esoteric rdkit failure")
     with pytest.raises(RetroCastException) as exc_info:
         canonicalize_smiles("CCO")
-    assert "An unexpected error occurred during SMILES processing" in str(exc_info.value)
+    assert "Unexpected RDKit error canonicalizing" in str(exc_info.value)
 
 
 # ============================================================================
@@ -123,7 +123,7 @@ def test_get_inchi_key_raises_retrocast_exception_on_empty_result(mock_moltoinch
     mock_moltoinchikey.return_value = ""
     with pytest.raises(RetroCastException) as exc_info:
         get_inchi_key("CCO")
-    assert "produced an empty InChIKey" in str(exc_info.value)
+    assert "Empty InchiKey generated for" in str(exc_info.value)
 
 
 # ============================================================================
@@ -342,11 +342,11 @@ def test_get_inchi_key_connectivity_level() -> None:
 
 
 @pytest.mark.unit
-def test_normalize_inchikey_no_stereo() -> None:
-    """Tests that normalize_inchikey with NO_STEREO replaces stereo with standard placeholder."""
+def test_reduce_inchikey_no_stereo() -> None:
+    """Tests that reduce_inchikey with NO_STEREO replaces stereo with standard placeholder."""
     full_key = "JVTAAEKCZFNVCJ-REOHCLBHSA-N"  # Example InChI key
 
-    normalized = normalize_inchikey(full_key, InchiKeyLevel.NO_STEREO)
+    normalized = reduce_inchikey(full_key, InchiKeyLevel.NO_STEREO)
 
     # Should still have 3 blocks with standard no-stereo placeholder
     parts = normalized.split("-")
@@ -358,22 +358,22 @@ def test_normalize_inchikey_no_stereo() -> None:
 
 
 @pytest.mark.unit
-def test_normalize_inchikey_connectivity() -> None:
-    """Tests that normalize_inchikey with CONNECTIVITY returns only first block."""
+def test_reduce_inchikey_connectivity() -> None:
+    """Tests that reduce_inchikey with CONNECTIVITY returns only first block."""
     full_key = "JVTAAEKCZFNVCJ-REOHCLBHSA-N"
 
-    normalized = normalize_inchikey(full_key, InchiKeyLevel.CONNECTIVITY)
+    normalized = reduce_inchikey(full_key, InchiKeyLevel.CONNECTIVITY)
 
     assert normalized == "JVTAAEKCZFNVCJ"
     assert len(normalized) == 14
 
 
 @pytest.mark.unit
-def test_normalize_inchikey_full() -> None:
-    """Tests that normalize_inchikey with FULL returns key unchanged."""
+def test_reduce_inchikey_full() -> None:
+    """Tests that reduce_inchikey with FULL returns key unchanged."""
     full_key = "JVTAAEKCZFNVCJ-REOHCLBHSA-N"
 
-    normalized = normalize_inchikey(full_key, InchiKeyLevel.FULL)
+    normalized = reduce_inchikey(full_key, InchiKeyLevel.FULL)
 
     assert normalized == full_key
 
@@ -390,7 +390,7 @@ def test_stereoisomers_match_with_normalize() -> None:
     assert key_r != key_s
 
     # Normalize to NO_STEREO (should match)
-    assert normalize_inchikey(key_r, InchiKeyLevel.NO_STEREO) == normalize_inchikey(key_s, InchiKeyLevel.NO_STEREO)
+    assert reduce_inchikey(key_r, InchiKeyLevel.NO_STEREO) == reduce_inchikey(key_s, InchiKeyLevel.NO_STEREO)
 
 
 @pytest.mark.unit

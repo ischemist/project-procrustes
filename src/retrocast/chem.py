@@ -11,18 +11,21 @@ logger = logging.getLogger(__name__)
 
 rdBase.DisableLog("rdApp.*")
 
+# standard "no stereo" hash block for the second segment of an InChiKey, includes the standard flags (SA)
+NO_STEREO_PLACEHOLDER = "UHFFFAOYSA"
+
 
 class InchiKeyLevel(str, Enum):
     """
     Levels of InChI key specificity for chemical comparison.
 
-    InChI keys have three blocks (27 chars total):
+    InChI keys have three blocks (25 hash chars, 2 hyphens, 27 chars total):
     - First 14 chars: Molecular connectivity (skeleton, hydrogens, charge)
     - Next 8 chars: Stereochemistry and isotopes
-    - Last 5 chars: Standard/non-standard flag, version, protonation
+    - Last 3 chars: Standard/non-standard flag (S/N), version (A for v1), protonation (N)
 
     Example: BQJCRHHNABKAKU-KBQPJGBKSA-N
-             └── 14 ────┘ └─ 8 ─┘ └5┘
+             └── 14 ────┘   └── 8 ─┘└─3┘
     """
 
     # Full 27-char InChI key with all stereochemistry (default)
@@ -39,6 +42,29 @@ class InchiKeyLevel(str, Enum):
     CONNECTIVITY = "connectivity"
 
 
+def _get_mol(smiles: str, func_name: str) -> Chem.Mol:
+    """
+    internal helper. parses smiles, handles None checks, sanitizes inputs.
+    single point of failure for parsing logic.
+    """
+    if not isinstance(smiles, str) or not smiles:
+        msg = f"SMILES input must be a non-empty string in {func_name}"
+        logger.error(msg)
+        raise InvalidSmilesError(msg)
+
+    # rdkit handles exceptions poorly, usually just returns None or segfaults (rarely now)
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+    except Exception as e:
+        # rare edge case where rdkit raises instead of returning None
+        raise RetroCastException(f"RDKit raised error parsing '{smiles}': {e}") from e
+
+    if mol is None:
+        raise InvalidSmilesError(f"Invalid SMILES string: {smiles}")
+
+    return mol
+
+
 def canonicalize_smiles(smiles: str, remove_mapping: bool = False, isomeric: bool = True) -> SmilesStr:
     """
     Converts a SMILES string to its canonical form using RDKit.
@@ -53,33 +79,19 @@ def canonicalize_smiles(smiles: str, remove_mapping: bool = False, isomeric: boo
         InvalidSmilesError: If the input SMILES is malformed or cannot be parsed by RDKit.
         RetroCastException: For any other unexpected errors during processing.
     """
-    if not isinstance(smiles, str) or not smiles:
-        logger.error("Provided SMILES is not a valid string or is empty.")
-        raise InvalidSmilesError("SMILES input must be a non-empty string.")
-
     try:
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            # this is rdkit's sad, C-style way of saying "parse failed"
-            logger.debug(f"RDKit failed to parse SMILES: '{smiles}'")
-            raise InvalidSmilesError(f"Invalid SMILES string: {smiles}")
+        mol = _get_mol(smiles, "canonicalize_smiles")
         if remove_mapping:
-            for atom in mol.GetAtoms():  # type: ignore
+            for atom in mol.GetAtoms():
                 atom.SetAtomMapNum(0)
 
-        # we do a round trip to sanitize and be EXTRA sure.
-        # some things parse but don't write. kekw.
-        canonical_smiles = Chem.MolToSmiles(mol, canonical=True, isomericSmiles=isomeric)
-        return SmilesStr(canonical_smiles)
-
-    except InvalidSmilesError:
-        # This is our own specific, expected exception. Let it pass through untouched.
+        # round trip ensures sanitization
+        canon = Chem.MolToSmiles(mol, canonical=True, isomericSmiles=isomeric)
+        return SmilesStr(canon)
+    except (InvalidSmilesError, RetroCastException):
         raise
-
     except Exception as e:
-        logger.error(f"An unexpected RDKit error occurred for SMILES '{smiles}': {e}")
-        # wrap the unknown error so the rest of the app doesn't need to know about rdkit specifics
-        raise RetroCastException(f"An unexpected error occurred during SMILES processing: {e}") from e
+        raise RetroCastException(f"Unexpected RDKit error canonicalizing '{smiles}': {e}") from e
 
 
 def get_inchi_key(smiles: str, level: InchiKeyLevel = InchiKeyLevel.FULL) -> InchiKeyStr:
@@ -106,58 +118,44 @@ def get_inchi_key(smiles: str, level: InchiKeyLevel = InchiKeyLevel.FULL) -> Inc
 
     Examples:
         >>> get_inchi_key("C[C@H](O)CC")  # Full key with stereo
-        'BQJCRHHNABKAKU-KBQPJGBKSA-N'
+        'BTANRVKWQNVYAZ-BYPYZUCNSA-N'
         >>> get_inchi_key("C[C@H](O)CC", level=InchiKeyLevel.NO_STEREO)  # No stereo
-        'BQJCRHHNABKAKU-UHFFFAOYSA-N'
+        'BTANRVKWQNVYAZ-UHFFFAOYSA-N'
         >>> get_inchi_key("C[C@H](O)CC", level=InchiKeyLevel.CONNECTIVITY)
-        'BQJCRHHNABKAKU'
+        'BTANRVKWQNVYAZ'
     """
-    if not isinstance(smiles, str) or not smiles:
-        logger.error("Provided SMILES for InChIKey generation is not a valid string or is empty.")
-        raise InvalidSmilesError("SMILES input must be a non-empty string.")
-
     try:
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            logger.debug(f"RDKit failed to parse SMILES for InChIKey generation: '{smiles}'")
-            raise InvalidSmilesError(f"Invalid SMILES string: {smiles}")
+        mol = _get_mol(smiles, "get_inchi_key")
 
-        # Generate InChI with appropriate options based on level
         if level == InchiKeyLevel.NO_STEREO:
             # Use -SNon to generate InChI without stereochemistry
             # MolToInchi returns (inchi, ret_code, message, log, aux_info)
-            result = rdinchi.MolToInchi(mol, options="-SNon")
-            inchi, ret_code = result[0], result[1]
-            if ret_code != 0 or not inchi:
-                msg = f"RDKit failed to generate InChI for SMILES: '{smiles}'"
-                logger.error(msg)
-                raise RetroCastException(msg)
-            inchi_key = rdinchi.InchiToInchiKey(inchi)
+            inchi, ret_code, _, _, _ = rdinchi.MolToInchi(mol, options="-SNon")
+            if ret_code != 0:
+                raise RetroCastException(f"rdkit failed to generate inchi (code {ret_code})")
+            key = rdinchi.InchiToInchiKey(inchi)
         else:
-            # Standard InChI generation (includes all stereo info)
-            inchi_key = Chem.MolToInchiKey(mol)  # type: ignore
+            key = Chem.MolToInchiKey(mol)
 
-        if not inchi_key:
-            msg = f"RDKit produced an empty InChIKey for SMILES: '{smiles}'"
-            logger.error(msg)
-            raise RetroCastException(msg)
+        if not key:
+            raise RetroCastException(f"Empty InchiKey generated for '{smiles}'")
 
-        # For CONNECTIVITY level, return only the first 14 characters
         if level == InchiKeyLevel.CONNECTIVITY:
-            inchi_key = inchi_key.split("-")[0]
+            return InchiKeyStr(key.split("-")[0])
 
-        return InchiKeyStr(inchi_key)
+        return InchiKeyStr(key)
 
-    except InvalidSmilesError:
+    except (InvalidSmilesError, RetroCastException):
         raise
     except Exception as e:
-        logger.error(f"An unexpected RDKit error occurred during InChIKey generation for SMILES '{smiles}': {e}")
-        raise RetroCastException(f"An unexpected error occurred during InChIKey generation: {e}") from e
+        raise RetroCastException(f"unexpected error generating inchikey: {e}") from e
 
 
-def normalize_inchikey(inchikey: str, level: InchiKeyLevel) -> InchiKeyStr:
+def reduce_inchikey(inchikey: str, level: InchiKeyLevel) -> InchiKeyStr:
     """
-    Normalizes an existing InChI key to the specified level.
+    Reduces an existing InChI key to a lower specificity level (destructive).
+
+    Raises error if attempting to restore lost information.
 
     Use this when you have a full InChI key and need to reduce it for comparison.
     For generating keys directly at a specific level, use `get_inchi_key(smiles, level=...)`.
@@ -175,25 +173,39 @@ def normalize_inchikey(inchikey: str, level: InchiKeyLevel) -> InchiKeyStr:
         The normalized InChI key at the specified level.
 
     Example:
-        >>> normalize_inchikey("BQJCRHHNABKAKU-KBQPJGBKSA-N", InchiKeyLevel.NO_STEREO)
+        >>> reduce_inchikey("BQJCRHHNABKAKU-KBQPJGBKSA-N", InchiKeyLevel.NO_STEREO)
         'BQJCRHHNABKAKU-UHFFFAOYSA-N'
-        >>> normalize_inchikey("BQJCRHHNABKAKU-KBQPJGBKSA-N", InchiKeyLevel.CONNECTIVITY)
+        >>> reduce_inchikey("BQJCRHHNABKAKU-KBQPJGBKSA-N", InchiKeyLevel.CONNECTIVITY)
         'BQJCRHHNABKAKU'
     """
     # Standard no-stereo placeholder used by InChI when stereo is not encoded
-    NO_STEREO_PLACEHOLDER = "UHFFFAOYSA"
+    parts = inchikey.split("-")
+
+    # basic validation: 14 chars (1 part) or 27 chars (3 parts)
+    if len(parts) not in (1, 3):
+        raise ValueError(f"malformed inchikey structure: {inchikey}")
+
+    current_is_partial = len(parts) == 1
+    target_is_full = level in (InchiKeyLevel.FULL, InchiKeyLevel.NO_STEREO)
+
+    # prevent upscaling (14 -> 25)
+    if current_is_partial and target_is_full:
+        raise RetroCastException(
+            f"cannot upscale connectivity key '{inchikey}' to level '{level}'. information has been lost."
+        )
 
     if level == InchiKeyLevel.FULL:
+        # note: it is chemically impossible to detect if a 27-char key is "no_stereo" or just "a molecule with no stereo centers" just by looking at the string. so NO_STEREO -> FULL is allowed to pass through as an identity operation, which is pragmatically fine.
         return InchiKeyStr(inchikey)
-    elif level == InchiKeyLevel.NO_STEREO:
-        parts = inchikey.split("-")
-        if len(parts) == 3:
-            return InchiKeyStr(f"{parts[0]}-{NO_STEREO_PLACEHOLDER}-{parts[2]}")
-        return InchiKeyStr(inchikey)
-    elif level == InchiKeyLevel.CONNECTIVITY:
-        return InchiKeyStr(inchikey.split("-")[0])
-    else:
-        raise ValueError(f"Unknown InchiKeyLevel: {level}")
+
+    if level == InchiKeyLevel.CONNECTIVITY:
+        return InchiKeyStr(parts[0])
+
+    if level == InchiKeyLevel.NO_STEREO:
+        # we already checked we have 3 parts above
+        return InchiKeyStr(f"{parts[0]}-{NO_STEREO_PLACEHOLDER}-{parts[2]}")
+
+    raise ValueError(f"unknown inchikey level: {level}")
 
 
 def get_heavy_atom_count(smiles: str) -> int:

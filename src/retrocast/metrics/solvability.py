@@ -1,4 +1,4 @@
-from retrocast.chem import InchiKeyLevel, normalize_inchikey
+from retrocast.chem import InchiKeyLevel, reduce_inchikey
 from retrocast.models.chem import Route
 from retrocast.typing import InchiKeyStr
 
@@ -32,4 +32,4 @@ def is_route_solved(
     """
     if match_level is None or match_level == InchiKeyLevel.FULL:
         return all(leaf.inchikey in stock for leaf in route.leaves)
-    return all(normalize_inchikey(leaf.inchikey, match_level) in stock for leaf in route.leaves)
+    return all(reduce_inchikey(leaf.inchikey, match_level) in stock for leaf in route.leaves)
