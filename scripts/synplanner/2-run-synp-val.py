@@ -74,9 +74,7 @@ if __name__ == "__main__":
     logger.info(f"effort: {args.effort}")
 
     # 4. Load Model Configuration
-    config_filename = "mcts-val-config-high.yaml" if args.effort == "high" else "mcts-val-config.yaml"
-    logger.info(f"using config: {config_filename}")
-    config_path = SYNPLANNER_DIR / config_filename
+    config_path = SYNPLANNER_DIR / "mcts-val-config.yaml"
     value_network_path = SYNPLANNER_DIR / "uspto" / "weights" / "value_network.ckpt"
     filtering_weights = SYNPLANNER_DIR / "uspto" / "weights" / "filtering_policy_network.ckpt"
     ranking_weights = SYNPLANNER_DIR / "uspto" / "weights" / "ranking_policy_network.ckpt"
@@ -84,6 +82,9 @@ if __name__ == "__main__":
 
     with open(config_path, encoding="utf-8") as file:
         config = yaml.safe_load(file)
+
+    if args.effort == "high":
+        config["tree"]["max_iterations"] = 500
 
     tree_config = TreeConfig.from_dict(config["tree"])
     tree_config.search_strategy = "evaluation_first"
@@ -168,7 +169,7 @@ if __name__ == "__main__":
     save_execution_stats(runtime, save_dir / "execution_stats.json.gz")
     manifest = create_manifest(
         action="scripts/synplanner/2-run-synp-val.py",
-        sources=[bench_path, stock_path],
+        sources=[bench_path, stock_path, config_path],
         root_dir=BASE_DIR / "data",
         outputs=[(save_dir / "results.json.gz", results, "unknown")],
         statistics=summary,

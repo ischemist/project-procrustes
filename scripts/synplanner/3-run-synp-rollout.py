@@ -73,15 +73,16 @@ if __name__ == "__main__":
     logger.info(f"effort: {args.effort}")
 
     # 4. Load Model Configuration
-    config_filename = "mcts-rollout-config-high.yaml" if args.effort == "high" else "mcts-rollout-config.yaml"
-    logger.info(f"using config: {config_filename}")
-    config_path = SYNPLANNER_DIR / config_filename
+    config_path = SYNPLANNER_DIR / "mcts-rollout-config.yaml"
     filtering_weights = SYNPLANNER_DIR / "uspto" / "weights" / "filtering_policy_network.ckpt"
     ranking_weights = SYNPLANNER_DIR / "uspto" / "weights" / "ranking_policy_network.ckpt"
     reaction_rules_path = SYNPLANNER_DIR / "uspto" / "uspto_reaction_rules.pickle"
 
     with open(config_path, encoding="utf-8") as file:
         config = yaml.safe_load(file)
+
+    if args.effort == "high":
+        config["tree"]["max_iterations"] = 500
 
     tree_config = TreeConfig.from_dict(config["tree"])
     tree_config.search_strategy = "expansion_first"
@@ -166,7 +167,7 @@ if __name__ == "__main__":
     save_execution_stats(runtime, save_dir / "execution_stats.json.gz")
     manifest = create_manifest(
         action="scripts/synplanner/3-run-synp-rollout.py",
-        sources=[bench_path, stock_path],
+        sources=[bench_path, stock_path, config_path],
         root_dir=BASE_DIR / "data",
         outputs=[(save_dir / "results.json.gz", results, "unknown")],
         statistics=summary,
