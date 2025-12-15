@@ -18,7 +18,7 @@ def score_model(
     stock_name: str,
     model_name: str,
     execution_stats: ExecutionStats | None = None,
-    match_level: InchiKeyLevel | None = None,
+    match_level: InchiKeyLevel = InchiKeyLevel.FULL,
 ) -> EvaluationResults:
     """
     Scores model predictions against a benchmark.
@@ -61,10 +61,10 @@ def score_model(
     )
 
     # Pre-normalize stock if using a non-default match level
-    if match_level is not None and match_level != InchiKeyLevel.FULL:
-        normalized_stock = {reduce_inchikey(k, match_level) for k in stock}
+    if match_level != InchiKeyLevel.FULL:
+        stock_inchikeys = {reduce_inchikey(k, match_level) for k in stock}
     else:
-        normalized_stock = stock
+        stock_inchikeys = stock
 
     # Iterate Targets (The Denominator)
     for target_id, target in benchmark.targets.items():
@@ -80,7 +80,7 @@ def score_model(
 
         for route in predicted_routes:
             # 1. Metric: Solvability
-            solved = is_route_solved(route, normalized_stock, match_level=match_level)
+            solved = is_route_solved(route, stock_inchikeys, match_level=match_level)
 
             # 2. Metric: Acceptability (matches any acceptable route?)
             matched_idx = find_acceptable_match(route, acceptable_sigs, match_level=match_level)

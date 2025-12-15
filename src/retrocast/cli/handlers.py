@@ -160,7 +160,7 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
         return
 
     ignore_stereo = getattr(args, "ignore_stereo", False)
-    match_level = InchiKeyLevel.NO_STEREO if ignore_stereo else None
+    match_level = InchiKeyLevel.NO_STEREO if ignore_stereo else InchiKeyLevel.FULL
 
     try:
         benchmark = load_benchmark(bench_path)

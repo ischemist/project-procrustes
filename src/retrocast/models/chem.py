@@ -187,7 +187,7 @@ class Route(BaseModel):
         """Computed topology signature for structural comparison."""
         return self.get_signature()
 
-    def get_signature(self, match_level: InchiKeyLevel | None = None) -> str:
+    def get_signature(self, match_level: InchiKeyLevel = InchiKeyLevel.FULL) -> str:
         """
         Generates a canonical, order-invariant hash for the entire route,
         perfect for deduplication.
@@ -202,7 +202,7 @@ class Route(BaseModel):
         memo = {}
 
         def _get_node_sig(node: Molecule) -> str:
-            if match_level is None or match_level == InchiKeyLevel.FULL:
+            if match_level == InchiKeyLevel.FULL:
                 key = node.inchikey
             else:
                 key = reduce_inchikey(node.inchikey, match_level)

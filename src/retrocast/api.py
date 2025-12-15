@@ -37,7 +37,7 @@ def score_predictions(
     stock: set[InchiKeyStr] | Path | str,
     model_name: str = "custom-model",
     stock_name: str | None = None,
-    match_level: InchiKeyLevel | None = None,
+    match_level: InchiKeyLevel = InchiKeyLevel.FULL,
 ) -> EvaluationResults:
     """
     Score a set of predictions against a benchmark and stock.

@@ -3,7 +3,7 @@ from retrocast.models.chem import Route
 
 
 def find_acceptable_match(
-    route: Route, acceptable_signatures: list[str], match_level: InchiKeyLevel | None = None
+    route: Route, acceptable_signatures: list[str], match_level: InchiKeyLevel = InchiKeyLevel.FULL
 ) -> int | None:
     """
     Finds the index of the first matching acceptable route.
