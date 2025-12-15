@@ -22,8 +22,7 @@ from synplan.chem.reaction_routes.io import make_json
 from synplan.chem.reaction_routes.route_cgr import extract_reactions
 from synplan.chem.utils import mol_from_smiles
 from synplan.mcts.tree import Tree, TreeConfig
-from synplan.utils.config import CombinedPolicyConfig
-from synplan.utils.config import RolloutEvaluationConfig, CombinedPolicyConfig
+from synplan.utils.config import CombinedPolicyConfig, RolloutEvaluationConfig
 from synplan.utils.loading import (
     load_building_blocks,
     load_combined_policy_function,

@@ -155,7 +155,7 @@ def get_inchi_key(smiles: str, level: InchiKeyLevel = InchiKeyLevel.FULL) -> Inc
         raise RetroCastException(f"An unexpected error occurred during InChIKey generation: {e}") from e
 
 
-def normalize_inchikey(inchikey: str, level: InchiKeyLevel) -> str:
+def normalize_inchikey(inchikey: str, level: InchiKeyLevel) -> InchiKeyStr:
     """
     Normalizes an existing InChI key to the specified level.
 
@@ -184,14 +184,14 @@ def normalize_inchikey(inchikey: str, level: InchiKeyLevel) -> str:
     NO_STEREO_PLACEHOLDER = "UHFFFAOYSA"
 
     if level == InchiKeyLevel.FULL:
-        return inchikey
+        return InchiKeyStr(inchikey)
     elif level == InchiKeyLevel.NO_STEREO:
         parts = inchikey.split("-")
         if len(parts) == 3:
-            return f"{parts[0]}-{NO_STEREO_PLACEHOLDER}-{parts[2]}"
-        return inchikey
+            return InchiKeyStr(f"{parts[0]}-{NO_STEREO_PLACEHOLDER}-{parts[2]}")
+        return InchiKeyStr(inchikey)
     elif level == InchiKeyLevel.CONNECTIVITY:
-        return inchikey.split("-")[0]
+        return InchiKeyStr(inchikey.split("-")[0])
     else:
         raise ValueError(f"Unknown InchiKeyLevel: {level}")
 
