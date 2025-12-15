@@ -29,7 +29,7 @@ aizyn = [
 ]
 dms = ["directmultistep"]
 retro-star = ["retro-star>=0.1.0", "torch"]
-synplanner = ["synplanner==1.2.0"]
+synplanner = ["synplanner==1.3.2"]
 syntheseus = [
   "syntheseus[local-retro]>=0.5.0",
   "numpy<2",

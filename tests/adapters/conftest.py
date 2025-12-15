@@ -81,7 +81,7 @@ def raw_dreamretro_data(raw_data_factory) -> dict[str, Any]:
 @pytest.fixture(scope="session")
 def raw_synplanner_data(raw_data_factory) -> dict[str, Any]:
     """loads the raw synplanner prediction data from the test file."""
-    return raw_data_factory("model-predictions/synplanner-mcts/results.json.gz")
+    return raw_data_factory("model-predictions/synplanner-mcts-rollout/results.json.gz")
 
 
 @pytest.fixture(scope="session")

@@ -79,13 +79,25 @@ class SynPlannerAdapter(BaseAdapter):
         # use the custom recursive builder for synplanner (has mapped_smiles on reaction nodes)
         target_molecule = self._build_molecule_from_synplanner_node(synplanner_root)
 
-        if target_molecule.smiles != target.smiles:
+        # canonicalize both synplanner output and benchmark target with RDKit to align formats
+        produced = canonicalize_smiles(target_molecule.smiles, remove_mapping=True)
+        expected = canonicalize_smiles(target.smiles, remove_mapping=True)
+
+        if produced != expected:
             msg = (
                 f"mismatched smiles for target {target.id}. "
-                f"expected canonical: {target.smiles}, but adapter produced: {target_molecule.smiles}"
+                f"expected canonical: {expected}, but adapter produced: {produced}"
             )
             logger.error(msg)
             raise AdapterLogicError(msg)
+
+        # ensure target molecule uses the rdkit-canonicalized form
+        target_molecule = Molecule(
+            smiles=target.smiles,
+            inchikey=get_inchi_key(target.smiles),
+            synthesis_step=target_molecule.synthesis_step,
+            metadata=target_molecule.metadata,
+        )
 
         return Route(target=target_molecule, rank=rank, metadata={})
 
@@ -97,7 +109,7 @@ class SynPlannerAdapter(BaseAdapter):
         if raw_mol_node.type != "mol":
             raise AdapterLogicError(f"Expected node type 'mol' but got '{raw_mol_node.type}'")
 
-        canon_smiles = canonicalize_smiles(raw_mol_node.smiles)
+        canon_smiles = canonicalize_smiles(raw_mol_node.smiles, remove_mapping=True, isomeric=False)
         is_leaf = raw_mol_node.in_stock or not bool(raw_mol_node.children)
 
         if is_leaf:

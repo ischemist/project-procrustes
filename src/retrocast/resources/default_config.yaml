@@ -37,10 +37,10 @@ models:
   dms-explorer-xl:
     adapter: dms
     raw_results_filename: valid_results.json.gz
-  synplanner-mcts:
+  synplanner-mcts-rollout:
     adapter: synplanner
     raw_results_filename: results.json.gz
-  synplanner-eval:
+  synplanner-mcts-val:
     adapter: synplanner
     raw_results_filename: results.json.gz
   syntheseus-bfs-local-retro:

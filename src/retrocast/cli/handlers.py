@@ -8,6 +8,7 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
 from retrocast.adapters.factory import get_adapter
+from retrocast.chem import InchiKeyLevel
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.io.data import load_benchmark, load_execution_stats, load_routes, load_stock_file
@@ -158,6 +159,9 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
         logger.warning(f"Skipping score for {model_name}/{benchmark_name}: Routes not found. Run ingest first.")
         return
 
+    ignore_stereo = getattr(args, "ignore_stereo", False)
+    match_level = InchiKeyLevel.NO_STEREO if ignore_stereo else InchiKeyLevel.FULL
+
     try:
         benchmark = load_benchmark(bench_path)
 
@@ -193,6 +197,7 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
             stock_name=stock_name,
             model_name=model_name,
             execution_stats=execution_stats,
+            match_level=match_level,
         )
 
         # Save Output: data/4-scored/{benchmark}/{model}/{stock}/evaluation.json.gz

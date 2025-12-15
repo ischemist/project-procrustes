@@ -102,6 +102,11 @@ def main() -> None:
     d_group_s.add_argument("--all-datasets", action="store_true", help="Process all benchmarks")
 
     score_parser.add_argument("--stock", help="Override stock file name")
+    score_parser.add_argument(
+        "--ignore-stereo",
+        action="store_true",
+        help="Perform stereo-agnostic matching (drops stereochemistry from InChIKeys during scoring)",
+    )
 
     # --- SCORE FILE (Ad-Hoc) ---
     # CHANGE: Add this new subparser block
