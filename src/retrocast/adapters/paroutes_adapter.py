@@ -166,10 +166,11 @@ class PaRoutesAdapter(BaseAdapter):
         # build the molecule tree recursively with cycle detection
         target_molecule = self._build_molecule(paroutes_root, visited=set(), ignore_stereo=ignore_stereo)
 
-        if target_molecule.smiles != target.smiles:
+        expected_smiles = canonicalize_smiles(target.smiles, isomeric=not ignore_stereo)
+        if target_molecule.smiles != expected_smiles:
             msg = (
                 f"mismatched smiles for target {target.id}. "
-                f"expected canonical: {target.smiles}, but adapter produced: {target_molecule.smiles}"
+                f"expected canonical: {expected_smiles}, but adapter produced: {target_molecule.smiles}"
             )
             logger.error(msg)
             raise AdapterLogicError(msg)

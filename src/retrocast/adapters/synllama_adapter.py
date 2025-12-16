@@ -58,10 +58,11 @@ class SynLlaMaAdapter(BaseAdapter):
 
         # the final product is always the last element. this is the most reliable way to identify it.
         parsed_target_smiles = canonicalize_smiles(synthesis_parts[-1], isomeric=not ignore_stereo)
-        if parsed_target_smiles != target.smiles:
+        expected_smiles = canonicalize_smiles(target.smiles, isomeric=not ignore_stereo)
+        if parsed_target_smiles != expected_smiles:
             msg = (
                 f"mismatched smiles for target {target.id}. "
-                f"expected canonical: {target.smiles}, but adapter produced: {parsed_target_smiles}"
+                f"expected canonical: {expected_smiles}, but adapter produced: {parsed_target_smiles}"
             )
             raise AdapterLogicError(msg)
 

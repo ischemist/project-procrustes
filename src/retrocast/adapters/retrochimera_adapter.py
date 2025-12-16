@@ -77,9 +77,10 @@ class RetrochimeraAdapter(BaseAdapter):
             logger.warning(f"  - retrochimera reported an error for target '{target.id}': {error_type} - {error_msg}")
             return
 
-        if canonicalize_smiles(validated_data.smiles, isomeric=not ignore_stereo) != target.smiles:
+        expected_smiles = canonicalize_smiles(target.smiles, isomeric=not ignore_stereo)
+        if canonicalize_smiles(validated_data.smiles, isomeric=not ignore_stereo) != expected_smiles:
             logger.warning(
-                f"  - mismatched smiles for target '{target.id}': expected {target.smiles}, got {canonicalize_smiles(validated_data.smiles, isomeric=not ignore_stereo)}"
+                f"  - mismatched smiles for target '{target.id}': expected {expected_smiles}, got {canonicalize_smiles(validated_data.smiles, isomeric=not ignore_stereo)}"
             )
             return
 

@@ -98,10 +98,11 @@ class RetroStarAdapter(BaseAdapter):
         """
         parsed_target_smiles, precursor_map = self._parse_route_string(route_str, ignore_stereo=ignore_stereo)
 
-        if parsed_target_smiles != target.smiles:
+        expected_smiles = canonicalize_smiles(target.smiles, isomeric=not ignore_stereo)
+        if parsed_target_smiles != expected_smiles:
             msg = (
                 f"Mismatched SMILES for target {target.id}. "
-                f"Expected canonical: {target.smiles}, but adapter produced: {parsed_target_smiles}"
+                f"Expected canonical: {expected_smiles}, but adapter produced: {parsed_target_smiles}"
             )
             raise AdapterLogicError(msg)
 

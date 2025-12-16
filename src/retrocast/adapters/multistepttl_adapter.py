@@ -68,9 +68,10 @@ class TtlRetroAdapter(BaseAdapter):
             return Route(target=target_molecule, rank=rank, metadata={})
 
         root_smiles = canonicalize_smiles(route.reactions[0].product, isomeric=not ignore_stereo)
-        if root_smiles != target.smiles:
+        expected_smiles = canonicalize_smiles(target.smiles, isomeric=not ignore_stereo)
+        if root_smiles != expected_smiles:
             raise AdapterLogicError(
-                f"route's final product '{root_smiles}' does not match expected target '{target.smiles}'."
+                f"route's final product '{root_smiles}' does not match expected target '{expected_smiles}'."
             )
 
         # build precursor map for recursive traversal

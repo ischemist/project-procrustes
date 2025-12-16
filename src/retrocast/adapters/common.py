@@ -71,6 +71,8 @@ def build_molecule_from_precursor_map(
         smiles: The SMILES string of the current molecule.
         precursor_map: A dict mapping product SMILES to list of reactant SMILES.
         visited: Set of SMILES already visited (for cycle detection).
+        ignore_stereo: If True, stereochemistry is stripped during SMILES canonicalization
+            (passes isomeric=False to canonicalize_smiles). Defaults to False.
 
     Returns:
         A Molecule object representing this node and its synthesis tree.
@@ -138,6 +140,8 @@ def build_molecule_from_bipartite_node(raw_mol_node: BipartiteMolNode, ignore_st
 
     Args:
         raw_mol_node: A raw molecule node following the BipartiteMolNode protocol.
+        ignore_stereo: If True, stereochemistry is stripped during SMILES canonicalization
+            (passes isomeric=False to canonicalize_smiles). Defaults to False.
 
     Returns:
         A Molecule object representing this node and its synthesis tree.

@@ -69,11 +69,12 @@ class DMSAdapter(BaseAdapter):
         target_molecule = self._build_molecule(dms_node=raw_data, ignore_stereo=ignore_stereo)
 
         # Final validation: does the transformed tree root match the canonical target smiles?
-        if target_molecule.smiles != target.smiles:
+        expected_smiles = canonicalize_smiles(target.smiles, isomeric=not ignore_stereo)
+        if target_molecule.smiles != expected_smiles:
             # This is a logic error, not a parse error
             msg = (
                 f"Mismatched SMILES for target {target.id}. "
-                f"Expected canonical: {target.smiles}, but adapter produced: {target_molecule.smiles}"
+                f"Expected canonical: {expected_smiles}, but adapter produced: {target_molecule.smiles}"
             )
             logger.error(msg)
             raise AdapterLogicError(msg)
