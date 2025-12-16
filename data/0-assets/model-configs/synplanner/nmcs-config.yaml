@@ -16,12 +16,12 @@ tree:
   beam_width: 10
   enable_pruning: False
   silent: True
-  nmcs_level: 2
-  nmcs_playout_mode: greedy
+  nmcs_level: 2                # Sweet spot: good exploration, manageable complexity
+  nmcs_playout_mode: greedy    # Uses evaluation values (more informed)
 node_evaluation:
   evaluation_type: rollout
   evaluation_agg: max
 node_expansion:
-  top_rules: 100     
+  top_rules: 100     # More rules since level is low
   rule_prob_threshold: 0.0
   mode: ranking
