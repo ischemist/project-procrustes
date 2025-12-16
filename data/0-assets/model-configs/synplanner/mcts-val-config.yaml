@@ -22,3 +22,4 @@ node_evaluation:
 node_expansion:
   top_rules: 50
   rule_prob_threshold: 0.0
+  mode: ranking

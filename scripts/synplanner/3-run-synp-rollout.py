@@ -22,11 +22,12 @@ from synplan.chem.reaction_routes.io import make_json
 from synplan.chem.reaction_routes.route_cgr import extract_reactions
 from synplan.chem.utils import mol_from_smiles
 from synplan.mcts.tree import Tree, TreeConfig
-from synplan.utils.config import CombinedPolicyConfig, RolloutEvaluationConfig
+from synplan.utils.config import CombinedPolicyConfig, PolicyNetworkConfig, RolloutEvaluationConfig
 from synplan.utils.loading import (
     load_building_blocks,
     load_combined_policy_function,
     load_evaluation_function,
+    load_policy_function,
     load_reaction_rules,
 )
 from tqdm import tqdm
@@ -89,15 +90,19 @@ if __name__ == "__main__":
     tree_config.evaluation_agg = config["node_evaluation"].get("evaluation_agg", tree_config.evaluation_agg)
 
     policy_params = config.get("node_expansion", {})
-    combined_policy_config = CombinedPolicyConfig(
-        filtering_weights_path=str(filtering_weights),
-        ranking_weights_path=str(ranking_weights),
-        top_rules=policy_params.get("top_rules", 50),
-        rule_prob_threshold=policy_params.get("rule_prob_threshold", 0.0),
-    )
+    mode = policy_params.get("mode", "ranking")
+    if mode == "combined":
+        combined_policy_config = CombinedPolicyConfig(
+            filtering_weights_path=str(filtering_weights),
+            ranking_weights_path=str(ranking_weights),
+            top_rules=policy_params.get("top_rules", 50),
+            rule_prob_threshold=policy_params.get("rule_prob_threshold", 0.0),
+        )
+        policy_function = load_combined_policy_function(combined_config=combined_policy_config)
+    else:
+        policy_function = load_policy_function(policy_config=PolicyNetworkConfig(weights_path=str(ranking_weights)))
 
     # 5. Load Resources
-    policy_function = load_combined_policy_function(combined_config=combined_policy_config)
     reaction_rules = load_reaction_rules(reaction_rules_path)
 
     eval_config = RolloutEvaluationConfig(
