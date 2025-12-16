@@ -31,7 +31,9 @@ class SyntheticAdapter(BaseAdapter):
     Expects raw_target_data to be a list of Route dicts or Route objects.
     """
 
-    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
         if not isinstance(raw_target_data, list):
             return
 

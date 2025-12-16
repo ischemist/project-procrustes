@@ -52,7 +52,9 @@ class SyntheseusRouteList(RootModel[list[SyntheseusMoleculeInput]]):
 class SyntheseusAdapter(BaseAdapter):
     """adapter for converting serialized syntheseus outputs to the route schema."""
 
-    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
         """
         validates raw syntheseus data, transforms it, and yields route objects.
         """
@@ -64,19 +66,21 @@ class SyntheseusAdapter(BaseAdapter):
 
         for rank, syntheseus_tree_root in enumerate(validated_routes.root, start=1):
             try:
-                route = self._transform(syntheseus_tree_root, target, rank)
+                route = self._transform(syntheseus_tree_root, target, rank, ignore_stereo=ignore_stereo)
                 yield route
             except RetroCastException as e:
                 logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, syntheseus_root: SyntheseusMoleculeInput, target: TargetIdentity, rank: int) -> Route:
+    def _transform(
+        self, syntheseus_root: SyntheseusMoleculeInput, target: TargetIdentity, rank: int, ignore_stereo: bool = False
+    ) -> Route:
         """
         orchestrates the transformation of a single serialized syntheseus output tree.
         raises RetroCastException on failure.
         """
         # use the common recursive builder with new schema
-        target_molecule = build_molecule_from_bipartite_node(raw_mol_node=syntheseus_root)
+        target_molecule = build_molecule_from_bipartite_node(raw_mol_node=syntheseus_root, ignore_stereo=ignore_stereo)
 
         if target_molecule.smiles != target.smiles:
             msg = (

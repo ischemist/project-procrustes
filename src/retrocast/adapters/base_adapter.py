@@ -14,7 +14,9 @@ class BaseAdapter(ABC):
     """
 
     @abstractmethod
-    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
         """
         Validates, transforms, and yields Routes from raw model data.
 
@@ -36,6 +38,7 @@ class BaseAdapter(ABC):
 
                 The adapter is responsible for handling the specific structure of its model.
             target: The identity of the target molecule (id and canonical SMILES).
+            ignore_stereo: If True, stereochemistry is stripped during SMILES canonicalization.
 
         Yields:
             Successfully transformed Route objects.

@@ -28,7 +28,9 @@ class SynLlamaRouteList(RootModel[list[SynLlamaRouteInput]]):
 class SynLlaMaAdapter(BaseAdapter):
     """adapter for converting pre-processed synllama outputs to the Route schema."""
 
-    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
         """validates the pre-processed json data for synllama and yields Route objects."""
         try:
             validated_routes = SynLlamaRouteList.model_validate(raw_target_data)
@@ -38,13 +40,13 @@ class SynLlaMaAdapter(BaseAdapter):
 
         for rank, route in enumerate(validated_routes.root, start=1):
             try:
-                route_obj = self._transform(route, target, rank=rank)
+                route_obj = self._transform(route, target, rank=rank, ignore_stereo=ignore_stereo)
                 yield route_obj
             except RetroCastException as e:
                 logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, route: SynLlamaRouteInput, target: TargetIdentity, rank: int) -> Route:
+    def _transform(self, route: SynLlamaRouteInput, target: TargetIdentity, rank: int, ignore_stereo: bool = False) -> Route:
         """orchestrates the transformation of a single synllama route string."""
         # the final product is always the last element in the semicolon-delimited string.
         # this is the most reliable way to identify it.
@@ -53,7 +55,7 @@ class SynLlaMaAdapter(BaseAdapter):
             raise AdapterLogicError("synthesis string is empty.")
 
         # the final product is always the last element. this is the most reliable way to identify it.
-        parsed_target_smiles = canonicalize_smiles(synthesis_parts[-1])
+        parsed_target_smiles = canonicalize_smiles(synthesis_parts[-1], isomeric=not ignore_stereo)
         if parsed_target_smiles != target.smiles:
             msg = (
                 f"mismatched smiles for target {target.id}. "
@@ -61,9 +63,9 @@ class SynLlaMaAdapter(BaseAdapter):
             )
             raise AdapterLogicError(msg)
 
-        precursor_map = self._parse_synthesis_string(route.synthesis_string)
+        precursor_map = self._parse_synthesis_string(route.synthesis_string, ignore_stereo=ignore_stereo)
         target_molecule = self._build_molecule_from_precursor_map(
-            smiles=SmilesStr(target.smiles), precursor_map=precursor_map
+            smiles=SmilesStr(target.smiles), precursor_map=precursor_map, ignore_stereo=ignore_stereo
         )
         return Route(target=target_molecule, rank=rank, metadata={})
 
@@ -72,6 +74,7 @@ class SynLlaMaAdapter(BaseAdapter):
         smiles: SmilesStr,
         precursor_map: dict[SmilesStr, list[SmilesStr]],
         visited: set[SmilesStr] | None = None,
+        ignore_stereo: bool = False,
     ) -> Molecule:
         """Recursively build a Molecule tree from a precursor map."""
         if visited is None:
@@ -102,7 +105,7 @@ class SynLlaMaAdapter(BaseAdapter):
         reactant_molecules = []
         for reactant_smiles in precursor_map[smiles]:
             reactant_mol = self._build_molecule_from_precursor_map(
-                smiles=reactant_smiles, precursor_map=precursor_map, visited=new_visited
+                smiles=reactant_smiles, precursor_map=precursor_map, visited=new_visited, ignore_stereo=ignore_stereo
             )
             reactant_molecules.append(reactant_mol)
 
@@ -120,7 +123,7 @@ class SynLlaMaAdapter(BaseAdapter):
             metadata={},
         )
 
-    def _parse_synthesis_string(self, synthesis_str: str) -> dict[SmilesStr, list[SmilesStr]]:
+    def _parse_synthesis_string(self, synthesis_str: str, ignore_stereo: bool = False) -> dict[SmilesStr, list[SmilesStr]]:
         """
         parses a multi-step synllama route string into a precursor map.
         the format is a sequence of `reactants;template;product` chunks, chained together.
@@ -146,9 +149,9 @@ class SynLlaMaAdapter(BaseAdapter):
             if product_idx >= len(parts):
                 raise AdapterLogicError(f"malformed route: template '{parts[template_idx]}' has no product.")
 
-            product_smiles = canonicalize_smiles(parts[product_idx])
+            product_smiles = canonicalize_smiles(parts[product_idx], isomeric=not ignore_stereo)
             explicit_reactant_parts = parts[reactant_start_idx:template_idx]
-            all_reactants = [canonicalize_smiles(r) for r in explicit_reactant_parts]
+            all_reactants = [canonicalize_smiles(r, isomeric=not ignore_stereo) for r in explicit_reactant_parts]
             if last_product_smi:
                 all_reactants.append(last_product_smi)
 

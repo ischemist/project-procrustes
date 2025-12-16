@@ -17,7 +17,9 @@ logger = logging.getLogger(__name__)
 class RetroStarAdapter(BaseAdapter):
     """Adapter for converting RetroStar-style outputs to the Route schema."""
 
-    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
         """
         Validates raw RetroStar data, transforms its single route string, and yields a Route.
         """
@@ -40,13 +42,13 @@ class RetroStarAdapter(BaseAdapter):
         route_cost = raw_target_data.get("route_cost")
 
         try:
-            route = self._transform(route_str, target, route_cost=route_cost)
+            route = self._transform(route_str, target, route_cost=route_cost, ignore_stereo=ignore_stereo)
             yield route
         except RetroCastException as e:
             logger.warning(f"  - Route for '{target.id}' failed transformation: {e}")
             return
 
-    def _parse_route_string(self, route_str: str) -> tuple[SmilesStr, PrecursorMap]:
+    def _parse_route_string(self, route_str: str, ignore_stereo: bool = False) -> tuple[SmilesStr, PrecursorMap]:
         """
         Parses the RetroStar route string into a target SMILES and a precursor map.
 
@@ -59,7 +61,7 @@ class RetroStarAdapter(BaseAdapter):
             raise AdapterLogicError("Route string is empty or invalid.")
 
         if len(steps) == 1 and ">" not in steps[0]:
-            target_smiles = canonicalize_smiles(steps[0])
+            target_smiles = canonicalize_smiles(steps[0], isomeric=not ignore_stereo)
             return target_smiles, {}
 
         current_step_for_error_reporting = ""
@@ -68,7 +70,7 @@ class RetroStarAdapter(BaseAdapter):
             if len(current_step_for_error_reporting.split(">")) != 3:
                 raise ValueError("Invalid step format")
             first_product_smiles, _, _ = current_step_for_error_reporting.split(">")
-            target_smiles = canonicalize_smiles(first_product_smiles)
+            target_smiles = canonicalize_smiles(first_product_smiles, isomeric=not ignore_stereo)
 
             for step in steps:
                 current_step_for_error_reporting = step
@@ -77,8 +79,8 @@ class RetroStarAdapter(BaseAdapter):
                     raise ValueError("Invalid step format")
                 product_smi, _, reactants_smi = parts
 
-                full_canonical_reactants = canonicalize_smiles(reactants_smi)
-                canon_product = canonicalize_smiles(product_smi)
+                full_canonical_reactants = canonicalize_smiles(reactants_smi, isomeric=not ignore_stereo)
+                canon_product = canonicalize_smiles(product_smi, isomeric=not ignore_stereo)
                 precursor_map[canon_product] = [SmilesStr(s) for s in str(full_canonical_reactants).split(".")]
 
             return target_smiles, precursor_map
@@ -87,12 +89,14 @@ class RetroStarAdapter(BaseAdapter):
                 f"Failed to parse route string step. Invalid format near '{current_step_for_error_reporting[:70]}...'."
             ) from e
 
-    def _transform(self, route_str: str, target: TargetIdentity, route_cost: float | None = None) -> Route:
+    def _transform(
+        self, route_str: str, target: TargetIdentity, route_cost: float | None = None, ignore_stereo: bool = False
+    ) -> Route:
         """
         Orchestrates the transformation of a single RetroStar route string.
         Raises RetroCastException on failure.
         """
-        parsed_target_smiles, precursor_map = self._parse_route_string(route_str)
+        parsed_target_smiles, precursor_map = self._parse_route_string(route_str, ignore_stereo=ignore_stereo)
 
         if parsed_target_smiles != target.smiles:
             msg = (
@@ -103,7 +107,7 @@ class RetroStarAdapter(BaseAdapter):
 
         # Build the molecule tree using the new schema helper
         target_molecule = build_molecule_from_precursor_map(
-            smiles=SmilesStr(target.smiles), precursor_map=precursor_map
+            smiles=SmilesStr(target.smiles), precursor_map=precursor_map, ignore_stereo=ignore_stereo
         )
 
         # Build metadata

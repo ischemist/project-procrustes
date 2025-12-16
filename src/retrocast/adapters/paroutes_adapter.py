@@ -119,7 +119,9 @@ class PaRoutesAdapter(BaseAdapter):
         self.unparsed_categories["unknown_format"] += 1
         return None
 
-    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
         """
         validates a single paroutes route, checks for patent consistency, and transforms it.
         """
@@ -147,18 +149,20 @@ class PaRoutesAdapter(BaseAdapter):
             return
 
         try:
-            route = self._transform(validated_route_root, target, patent_id=list(patent_ids)[0])
+            route = self._transform(validated_route_root, target, patent_id=list(patent_ids)[0], ignore_stereo=ignore_stereo)
             yield route
         except RetroCastException as e:
             logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
             return
 
-    def _transform(self, paroutes_root: PaRoutesMoleculeInput, target: TargetIdentity, patent_id: str) -> Route:
+    def _transform(
+        self, paroutes_root: PaRoutesMoleculeInput, target: TargetIdentity, patent_id: str, ignore_stereo: bool = False
+    ) -> Route:
         """
         orchestrates the transformation of a single validated paroutes tree.
         """
         # build the molecule tree recursively with cycle detection
-        target_molecule = self._build_molecule(paroutes_root, visited=set())
+        target_molecule = self._build_molecule(paroutes_root, visited=set(), ignore_stereo=ignore_stereo)
 
         if target_molecule.smiles != target.smiles:
             msg = (
@@ -173,13 +177,16 @@ class PaRoutesAdapter(BaseAdapter):
 
         return Route(target=target_molecule, rank=1, metadata=route_metadata)
 
-    def _build_molecule(self, raw_mol_node: PaRoutesMoleculeInput, visited: set[SmilesStr] | None = None) -> Molecule:
+    def _build_molecule(
+        self, raw_mol_node: PaRoutesMoleculeInput, visited: set[SmilesStr] | None = None, ignore_stereo: bool = False
+    ) -> Molecule:
         """
         recursively builds a molecule from a paroutes bipartite graph node.
 
         Args:
             raw_mol_node: The raw molecule node from paroutes data
             visited: Set of canonical SMILES already visited (for cycle detection)
+            ignore_stereo: If True, stereochemistry is stripped during SMILES canonicalization.
 
         Raises:
             AdapterLogicError: If a cycle is detected in the route graph
@@ -190,7 +197,7 @@ class PaRoutesAdapter(BaseAdapter):
         if visited is None:
             visited = set()
 
-        canon_smiles = canonicalize_smiles(raw_mol_node.smiles)
+        canon_smiles = canonicalize_smiles(raw_mol_node.smiles, isomeric=not ignore_stereo)
 
         # Cycle detection: check if we've seen this molecule before in the current path
         if canon_smiles in visited:
@@ -223,7 +230,7 @@ class PaRoutesAdapter(BaseAdapter):
         # build reactants recursively with updated visited set
         reactant_molecules: list[Molecule] = []
         for reactant_mol_input in raw_reaction_node.children:
-            reactant_mol = self._build_molecule(reactant_mol_input, visited=new_visited)
+            reactant_mol = self._build_molecule(reactant_mol_input, visited=new_visited, ignore_stereo=ignore_stereo)
             reactant_molecules.append(reactant_mol)
 
         # extract mapped smiles (rsmi) from metadata

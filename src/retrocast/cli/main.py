@@ -88,6 +88,11 @@ def main() -> None:
     ingest_parser.add_argument(
         "--anonymize", action="store_true", help="Hash the model name in the output folder (useful for blind review)"
     )
+    ingest_parser.add_argument(
+        "--ignore-stereo",
+        action="store_true",
+        help="Strip stereochemistry during SMILES canonicalization",
+    )
 
     # --- SCORE ---
     score_parser = subparsers.add_parser("score", help="Run evaluation")

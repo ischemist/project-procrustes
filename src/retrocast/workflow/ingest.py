@@ -30,6 +30,7 @@ def ingest_model_predictions(
     anonymize: bool = False,
     sampling_strategy: str | None = None,
     sample_k: int | None = None,
+    ignore_stereo: bool = False,
 ) -> tuple[dict[str, list[Route]], Path, RunStatistics]:
     """
     Converts raw model outputs into standard format.
@@ -75,7 +76,7 @@ def ingest_model_predictions(
         # --- Adaptation ---
         try:
             # Adapter returns an iterator of Routes
-            routes = list(adapter.cast(raw_payload, target=target))
+            routes = list(adapter.cast(raw_payload, target=target, ignore_stereo=ignore_stereo))
         except Exception as e:
             logger.warning(f"Adapter failed for {target_id}: {e}")
             routes = []

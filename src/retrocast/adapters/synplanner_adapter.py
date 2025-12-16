@@ -53,7 +53,9 @@ class SynPlannerRouteList(RootModel[list[SynPlannerMoleculeInput]]):
 class SynPlannerAdapter(BaseAdapter):
     """adapter for converting synplanner-style outputs to the route schema."""
 
-    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
         """
         validates raw synplanner data, transforms it, and yields route objects.
         """
@@ -65,23 +67,25 @@ class SynPlannerAdapter(BaseAdapter):
 
         for rank, synplanner_tree_root in enumerate(validated_routes.root, start=1):
             try:
-                route = self._transform(synplanner_tree_root, target, rank)
+                route = self._transform(synplanner_tree_root, target, rank, ignore_stereo=ignore_stereo)
                 yield route
             except RetroCastException as e:
                 logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, synplanner_root: SynPlannerMoleculeInput, target: TargetIdentity, rank: int) -> Route:
+    def _transform(
+        self, synplanner_root: SynPlannerMoleculeInput, target: TargetIdentity, rank: int, ignore_stereo: bool = False
+    ) -> Route:
         """
         orchestrates the transformation of a single synplanner output tree.
         raises RetroCastException on failure.
         """
         # use the custom recursive builder for synplanner (has mapped_smiles on reaction nodes)
-        target_molecule = self._build_molecule_from_synplanner_node(synplanner_root)
+        target_molecule = self._build_molecule_from_synplanner_node(synplanner_root, ignore_stereo=ignore_stereo)
 
         # canonicalize both synplanner output and benchmark target with RDKit to align formats
-        produced = canonicalize_smiles(target_molecule.smiles, remove_mapping=True)
-        expected = canonicalize_smiles(target.smiles, remove_mapping=True)
+        produced = canonicalize_smiles(target_molecule.smiles, remove_mapping=True, isomeric=not ignore_stereo)
+        expected = canonicalize_smiles(target.smiles, remove_mapping=True, isomeric=not ignore_stereo)
 
         if produced != expected:
             msg = (
@@ -101,7 +105,9 @@ class SynPlannerAdapter(BaseAdapter):
 
         return Route(target=target_molecule, rank=rank, metadata={})
 
-    def _build_molecule_from_synplanner_node(self, raw_mol_node: SynPlannerMoleculeInput) -> Molecule:
+    def _build_molecule_from_synplanner_node(
+        self, raw_mol_node: SynPlannerMoleculeInput, ignore_stereo: bool = False
+    ) -> Molecule:
         """
         recursively builds a `Molecule` from a raw synplanner bipartite graph node.
         synplanner has mapped_smiles in the 'smiles' field of reaction nodes.
@@ -109,7 +115,7 @@ class SynPlannerAdapter(BaseAdapter):
         if raw_mol_node.type != "mol":
             raise AdapterLogicError(f"Expected node type 'mol' but got '{raw_mol_node.type}'")
 
-        canon_smiles = canonicalize_smiles(raw_mol_node.smiles, remove_mapping=True, isomeric=False)
+        canon_smiles = canonicalize_smiles(raw_mol_node.smiles, remove_mapping=True, isomeric=not ignore_stereo)
         is_leaf = raw_mol_node.in_stock or not bool(raw_mol_node.children)
 
         if is_leaf:
@@ -137,7 +143,7 @@ class SynPlannerAdapter(BaseAdapter):
             # Type guard: children of reaction nodes should be molecule nodes
             if not isinstance(reactant_mol_input, SynPlannerMoleculeInput):
                 raise AdapterLogicError("Child of reaction node was not a molecule node")
-            reactant_mol = self._build_molecule_from_synplanner_node(reactant_mol_input)
+            reactant_mol = self._build_molecule_from_synplanner_node(reactant_mol_input, ignore_stereo=ignore_stereo)
             reactant_molecules.append(reactant_mol)
 
         # Extract mapped_smiles from the 'smiles' field of the reaction node
