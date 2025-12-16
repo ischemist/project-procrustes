@@ -149,7 +149,9 @@ class PaRoutesAdapter(BaseAdapter):
             return
 
         try:
-            route = self._transform(validated_route_root, target, patent_id=list(patent_ids)[0], ignore_stereo=ignore_stereo)
+            route = self._transform(
+                validated_route_root, target, patent_id=list(patent_ids)[0], ignore_stereo=ignore_stereo
+            )
             yield route
         except RetroCastException as e:
             logger.warning(f"  - route for '{target.id}' failed transformation: {e}")

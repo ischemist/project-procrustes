@@ -98,7 +98,9 @@ class RetrochimeraAdapter(BaseAdapter):
                     logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
                     continue
 
-    def _transform(self, route: RetrochimeraRoute, target: TargetIdentity, rank: int, ignore_stereo: bool = False) -> Route:
+    def _transform(
+        self, route: RetrochimeraRoute, target: TargetIdentity, rank: int, ignore_stereo: bool = False
+    ) -> Route:
         """
         orchestrates the transformation of a single retrochimera route.
         raises RetroCastException on failure.
@@ -112,7 +114,9 @@ class RetrochimeraAdapter(BaseAdapter):
 
         return Route(target=target_molecule, rank=rank, metadata={})
 
-    def _build_precursor_map(self, route: RetrochimeraRoute, ignore_stereo: bool = False) -> dict[SmilesStr, list[SmilesStr]]:
+    def _build_precursor_map(
+        self, route: RetrochimeraRoute, ignore_stereo: bool = False
+    ) -> dict[SmilesStr, list[SmilesStr]]:
         """
         builds a precursor map from the route's reactions.
         each product maps to its list of reactant smiles.

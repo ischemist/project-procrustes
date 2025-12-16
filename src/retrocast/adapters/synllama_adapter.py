@@ -46,7 +46,9 @@ class SynLlaMaAdapter(BaseAdapter):
                 logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
                 continue
 
-    def _transform(self, route: SynLlamaRouteInput, target: TargetIdentity, rank: int, ignore_stereo: bool = False) -> Route:
+    def _transform(
+        self, route: SynLlamaRouteInput, target: TargetIdentity, rank: int, ignore_stereo: bool = False
+    ) -> Route:
         """orchestrates the transformation of a single synllama route string."""
         # the final product is always the last element in the semicolon-delimited string.
         # this is the most reliable way to identify it.
@@ -123,7 +125,9 @@ class SynLlaMaAdapter(BaseAdapter):
             metadata={},
         )
 
-    def _parse_synthesis_string(self, synthesis_str: str, ignore_stereo: bool = False) -> dict[SmilesStr, list[SmilesStr]]:
+    def _parse_synthesis_string(
+        self, synthesis_str: str, ignore_stereo: bool = False
+    ) -> dict[SmilesStr, list[SmilesStr]]:
         """
         parses a multi-step synllama route string into a precursor map.
         the format is a sequence of `reactants;template;product` chunks, chained together.
