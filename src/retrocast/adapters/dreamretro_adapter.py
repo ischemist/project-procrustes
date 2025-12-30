@@ -58,7 +58,7 @@ class DreamRetroAdapter(BaseAdapter):
             raise AdapterLogicError("route string is empty or invalid.")
 
         if len(steps) == 1 and ">" not in steps[0]:
-            target_smiles = canonicalize_smiles(steps[0], isomeric=not ignore_stereo)
+            target_smiles = canonicalize_smiles(steps[0], ignore_stereo=ignore_stereo)
             return target_smiles, {}
 
         current_step_for_error_reporting = ""
@@ -67,7 +67,7 @@ class DreamRetroAdapter(BaseAdapter):
             if len(current_step_for_error_reporting.split(">")) != 3:
                 raise ValueError("invalid step format")
             first_product_smiles, _, _ = current_step_for_error_reporting.split(">")
-            target_smiles = canonicalize_smiles(first_product_smiles, isomeric=not ignore_stereo)
+            target_smiles = canonicalize_smiles(first_product_smiles, ignore_stereo=ignore_stereo)
 
             for step in steps:
                 current_step_for_error_reporting = step
@@ -76,8 +76,8 @@ class DreamRetroAdapter(BaseAdapter):
                     raise ValueError("invalid step format")
                 product_smi, _, reactants_smi = parts
 
-                full_canonical_reactants = canonicalize_smiles(reactants_smi, isomeric=not ignore_stereo)
-                canon_product = canonicalize_smiles(product_smi, isomeric=not ignore_stereo)
+                full_canonical_reactants = canonicalize_smiles(reactants_smi, ignore_stereo=ignore_stereo)
+                canon_product = canonicalize_smiles(product_smi, ignore_stereo=ignore_stereo)
                 precursor_map[canon_product] = [SmilesStr(s) for s in str(full_canonical_reactants).split(".")]
 
             return target_smiles, precursor_map

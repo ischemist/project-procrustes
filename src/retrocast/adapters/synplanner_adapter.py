@@ -84,8 +84,8 @@ class SynPlannerAdapter(BaseAdapter):
         target_molecule = self._build_molecule_from_synplanner_node(synplanner_root, ignore_stereo=ignore_stereo)
 
         # canonicalize both synplanner output and benchmark target with RDKit to align formats
-        produced = canonicalize_smiles(target_molecule.smiles, remove_mapping=True, isomeric=not ignore_stereo)
-        expected = canonicalize_smiles(target.smiles, remove_mapping=True, isomeric=not ignore_stereo)
+        produced = canonicalize_smiles(target_molecule.smiles, remove_mapping=True, ignore_stereo=ignore_stereo)
+        expected = canonicalize_smiles(target.smiles, remove_mapping=True, ignore_stereo=ignore_stereo)
 
         if produced != expected:
             msg = (
@@ -115,7 +115,7 @@ class SynPlannerAdapter(BaseAdapter):
         if raw_mol_node.type != "mol":
             raise AdapterLogicError(f"Expected node type 'mol' but got '{raw_mol_node.type}'")
 
-        canon_smiles = canonicalize_smiles(raw_mol_node.smiles, remove_mapping=True, isomeric=not ignore_stereo)
+        canon_smiles = canonicalize_smiles(raw_mol_node.smiles, remove_mapping=True, ignore_stereo=ignore_stereo)
         is_leaf = raw_mol_node.in_stock or not bool(raw_mol_node.children)
 
         if is_leaf:

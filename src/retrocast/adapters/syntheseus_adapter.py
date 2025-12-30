@@ -83,7 +83,7 @@ class SyntheseusAdapter(BaseAdapter):
         # use the common recursive builder with new schema
         target_molecule = build_molecule_from_bipartite_node(raw_mol_node=syntheseus_root, ignore_stereo=ignore_stereo)
 
-        expected_smiles = canonicalize_smiles(target.smiles, isomeric=not ignore_stereo)
+        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if target_molecule.smiles != expected_smiles:
             msg = (
                 f"mismatched smiles for target {target.id}. "

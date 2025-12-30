@@ -77,10 +77,10 @@ class RetrochimeraAdapter(BaseAdapter):
             logger.warning(f"  - retrochimera reported an error for target '{target.id}': {error_type} - {error_msg}")
             return
 
-        expected_smiles = canonicalize_smiles(target.smiles, isomeric=not ignore_stereo)
-        if canonicalize_smiles(validated_data.smiles, isomeric=not ignore_stereo) != expected_smiles:
+        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
+        if canonicalize_smiles(validated_data.smiles, ignore_stereo=ignore_stereo) != expected_smiles:
             logger.warning(
-                f"  - mismatched smiles for target '{target.id}': expected {expected_smiles}, got {canonicalize_smiles(validated_data.smiles, isomeric=not ignore_stereo)}"
+                f"  - mismatched smiles for target '{target.id}': expected {expected_smiles}, got {canonicalize_smiles(validated_data.smiles, ignore_stereo=ignore_stereo)}"
             )
             return
 
@@ -124,8 +124,8 @@ class RetrochimeraAdapter(BaseAdapter):
         """
         precursor_map: dict[SmilesStr, list[SmilesStr]] = {}
         for reaction in route.reactions:
-            canon_product = canonicalize_smiles(reaction.product, isomeric=not ignore_stereo)
-            canon_reactants = [canonicalize_smiles(r, isomeric=not ignore_stereo) for r in reaction.reactants]
+            canon_product = canonicalize_smiles(reaction.product, ignore_stereo=ignore_stereo)
+            canon_reactants = [canonicalize_smiles(r, ignore_stereo=ignore_stereo) for r in reaction.reactants]
             precursor_map[canon_product] = canon_reactants
         return precursor_map
 

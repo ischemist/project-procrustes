@@ -100,10 +100,10 @@ def test_remove_mapping_equivalence(smiles_pair: tuple[str, str]) -> None:
 )
 def test_canonicalize_isomeric_false_strips_stereo(smiles: str) -> None:
     """
-    invariant: canonicalize(s, isomeric=False) should produce SMILES
+    invariant: canonicalize(s, ignore_stereo=True) should produce SMILES
     without @/@@ markers. InChI key of result should match NO_STEREO.
     """
-    non_isomeric = canonicalize_smiles(smiles, isomeric=False)
+    non_isomeric = canonicalize_smiles(smiles, ignore_stereo=True)
 
     # no stereo markers in output
     assert "@" not in non_isomeric
@@ -326,7 +326,7 @@ def test_connectivity_divergence_implies_chirality() -> None:
 @pytest.mark.unit
 def test_stereo_round_trip_invariant() -> None:
     """
-    integration: stereoisomers that are canonicalized with isomeric=False
+    integration: stereoisomers that are canonicalized with ignore_stereo=True
     should produce molecules indistinguishable at the InChI NO_STEREO level.
     """
     isomers = [
@@ -335,7 +335,7 @@ def test_stereo_round_trip_invariant() -> None:
     ]
 
     # strip stereo via canonicalization
-    stripped = [canonicalize_smiles(s, isomeric=False) for s in isomers]
+    stripped = [canonicalize_smiles(s, ignore_stereo=True) for s in isomers]
 
     # should be identical SMILES
     assert stripped[0] == stripped[1]

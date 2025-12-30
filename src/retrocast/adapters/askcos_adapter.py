@@ -187,7 +187,7 @@ class AskcosAdapter(BaseAdapter):
         if not node_data or not isinstance(node_data, AskcosChemicalNode):
             raise AdapterLogicError(f"node data for smiles '{raw_smiles}' not found or not a chemical node.")
 
-        canon_smiles = canonicalize_smiles(node_data.smiles, isomeric=not ignore_stereo)
+        canon_smiles = canonicalize_smiles(node_data.smiles, ignore_stereo=ignore_stereo)
         is_leaf = node_data.terminal
         synthesis_step = None
 

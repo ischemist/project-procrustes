@@ -65,12 +65,15 @@ def _get_mol(smiles: str, func_name: str) -> Chem.Mol:
     return mol
 
 
-def canonicalize_smiles(smiles: str, remove_mapping: bool = False, isomeric: bool = True) -> SmilesStr:
+def canonicalize_smiles(smiles: str, remove_mapping: bool = False, ignore_stereo: bool = False) -> SmilesStr:
     """
     Converts a SMILES string to its canonical form using RDKit.
 
     Args:
         smiles: The input SMILES string.
+        remove_mapping: If True, removes atom mapping numbers from the SMILES. Defaults to False.
+        ignore_stereo: If True, strips stereochemistry information (dangerous - loses information).
+            Defaults to False (stereochemistry is preserved).
 
     Returns:
         The canonical SMILES string.
@@ -86,7 +89,7 @@ def canonicalize_smiles(smiles: str, remove_mapping: bool = False, isomeric: boo
                 atom.SetAtomMapNum(0)
 
         # round trip ensures sanitization
-        canon = Chem.MolToSmiles(mol, canonical=True, isomericSmiles=isomeric)
+        canon = Chem.MolToSmiles(mol, canonical=True, isomericSmiles=not ignore_stereo)
         return SmilesStr(canon)
     except (InvalidSmilesError, RetroCastException):
         raise

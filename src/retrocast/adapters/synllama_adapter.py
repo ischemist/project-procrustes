@@ -57,8 +57,8 @@ class SynLlaMaAdapter(BaseAdapter):
             raise AdapterLogicError("synthesis string is empty.")
 
         # the final product is always the last element. this is the most reliable way to identify it.
-        parsed_target_smiles = canonicalize_smiles(synthesis_parts[-1], isomeric=not ignore_stereo)
-        expected_smiles = canonicalize_smiles(target.smiles, isomeric=not ignore_stereo)
+        parsed_target_smiles = canonicalize_smiles(synthesis_parts[-1], ignore_stereo=ignore_stereo)
+        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if parsed_target_smiles != expected_smiles:
             msg = (
                 f"mismatched smiles for target {target.id}. "
@@ -154,9 +154,9 @@ class SynLlaMaAdapter(BaseAdapter):
             if product_idx >= len(parts):
                 raise AdapterLogicError(f"malformed route: template '{parts[template_idx]}' has no product.")
 
-            product_smiles = canonicalize_smiles(parts[product_idx], isomeric=not ignore_stereo)
+            product_smiles = canonicalize_smiles(parts[product_idx], ignore_stereo=ignore_stereo)
             explicit_reactant_parts = parts[reactant_start_idx:template_idx]
-            all_reactants = [canonicalize_smiles(r, isomeric=not ignore_stereo) for r in explicit_reactant_parts]
+            all_reactants = [canonicalize_smiles(r, ignore_stereo=ignore_stereo) for r in explicit_reactant_parts]
             if last_product_smi:
                 all_reactants.append(last_product_smi)
 

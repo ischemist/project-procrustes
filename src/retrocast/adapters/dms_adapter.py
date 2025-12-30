@@ -69,7 +69,7 @@ class DMSAdapter(BaseAdapter):
         target_molecule = self._build_molecule(dms_node=raw_data, ignore_stereo=ignore_stereo)
 
         # Final validation: does the transformed tree root match the canonical target smiles?
-        expected_smiles = canonicalize_smiles(target.smiles, isomeric=not ignore_stereo)
+        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if target_molecule.smiles != expected_smiles:
             # This is a logic error, not a parse error
             msg = (
@@ -91,7 +91,7 @@ class DMSAdapter(BaseAdapter):
         if visited is None:
             visited = set()
 
-        canon_smiles = canonicalize_smiles(dms_node.smiles, isomeric=not ignore_stereo)
+        canon_smiles = canonicalize_smiles(dms_node.smiles, ignore_stereo=ignore_stereo)
 
         if canon_smiles in visited:
             raise AdapterLogicError(f"cycle detected in route graph involving smiles: {canon_smiles}")

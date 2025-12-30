@@ -67,8 +67,8 @@ class TtlRetroAdapter(BaseAdapter):
             )
             return Route(target=target_molecule, rank=rank, metadata={})
 
-        root_smiles = canonicalize_smiles(route.reactions[0].product, isomeric=not ignore_stereo)
-        expected_smiles = canonicalize_smiles(target.smiles, isomeric=not ignore_stereo)
+        root_smiles = canonicalize_smiles(route.reactions[0].product, ignore_stereo=ignore_stereo)
+        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if root_smiles != expected_smiles:
             raise AdapterLogicError(
                 f"route's final product '{root_smiles}' does not match expected target '{expected_smiles}'."
@@ -87,8 +87,8 @@ class TtlRetroAdapter(BaseAdapter):
         """
         precursor_map: dict[str, list[str]] = {}
         for reaction in route.reactions:
-            canon_product = canonicalize_smiles(reaction.product, isomeric=not ignore_stereo)
-            canon_reactants = [canonicalize_smiles(r, isomeric=not ignore_stereo) for r in reaction.reactants]
+            canon_product = canonicalize_smiles(reaction.product, ignore_stereo=ignore_stereo)
+            canon_reactants = [canonicalize_smiles(r, ignore_stereo=ignore_stereo) for r in reaction.reactants]
             precursor_map[canon_product] = canon_reactants
         return precursor_map
 
@@ -99,7 +99,7 @@ class TtlRetroAdapter(BaseAdapter):
         recursively builds a molecule object from the precursor map.
         raises AdapterLogicError if a cycle is detected.
         """
-        canon_smiles = canonicalize_smiles(smiles, isomeric=not ignore_stereo)
+        canon_smiles = canonicalize_smiles(smiles, ignore_stereo=ignore_stereo)
 
         if canon_smiles in visited:
             raise AdapterLogicError(f"cycle detected: molecule '{canon_smiles}' appears multiple times in route.")

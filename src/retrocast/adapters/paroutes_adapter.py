@@ -166,7 +166,7 @@ class PaRoutesAdapter(BaseAdapter):
         # build the molecule tree recursively with cycle detection
         target_molecule = self._build_molecule(paroutes_root, visited=set(), ignore_stereo=ignore_stereo)
 
-        expected_smiles = canonicalize_smiles(target.smiles, isomeric=not ignore_stereo)
+        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if target_molecule.smiles != expected_smiles:
             msg = (
                 f"mismatched smiles for target {target.id}. "
@@ -200,7 +200,7 @@ class PaRoutesAdapter(BaseAdapter):
         if visited is None:
             visited = set()
 
-        canon_smiles = canonicalize_smiles(raw_mol_node.smiles, isomeric=not ignore_stereo)
+        canon_smiles = canonicalize_smiles(raw_mol_node.smiles, ignore_stereo=ignore_stereo)
 
         # Cycle detection: check if we've seen this molecule before in the current path
         if canon_smiles in visited:
