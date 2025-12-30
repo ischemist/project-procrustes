@@ -1,7 +1,7 @@
 tree:
-  max_iterations: 1            # NMCS only needs 1
+  max_iterations: 1  
   max_tree_size: 1000000
-  max_time: 60                 # 1 minute timeout
+  max_time: 60                 
   max_depth: 10
   algorithm: nmcs
   search_strategy: expansion_first
@@ -16,12 +16,12 @@ tree:
   beam_width: 10
   enable_pruning: False
   silent: True
-  # NMCS-specific
   nmcs_level: 2                # Sweet spot: good exploration, manageable complexity
   nmcs_playout_mode: greedy    # Uses evaluation values (more informed)
 node_evaluation:
   evaluation_type: rollout
   evaluation_agg: max
 node_expansion:
-  top_rules: 100               # More rules since level is low
+  top_rules: 100     # More rules since level is low
   rule_prob_threshold: 0.0
+  mode: ranking

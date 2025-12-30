@@ -17,7 +17,9 @@ logger = logging.getLogger(__name__)
 class DreamRetroAdapter(BaseAdapter):
     """adapter for converting dreamretro-style outputs to the route schema."""
 
-    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
         """
         validates raw dreamretro data, transforms its single route string, and yields a route.
         """
@@ -37,13 +39,13 @@ class DreamRetroAdapter(BaseAdapter):
             return
 
         try:
-            route = self._transform(route_str, target, raw_target_data)
+            route = self._transform(route_str, target, raw_target_data, ignore_stereo=ignore_stereo)
             yield route
         except RetroCastException as e:
             logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
             return
 
-    def _parse_route_string(self, route_str: str) -> tuple[SmilesStr, PrecursorMap]:
+    def _parse_route_string(self, route_str: str, ignore_stereo: bool = False) -> tuple[SmilesStr, PrecursorMap]:
         """
         parses the dreamretro route string into a target smiles and a precursor map.
 
@@ -56,7 +58,7 @@ class DreamRetroAdapter(BaseAdapter):
             raise AdapterLogicError("route string is empty or invalid.")
 
         if len(steps) == 1 and ">" not in steps[0]:
-            target_smiles = canonicalize_smiles(steps[0])
+            target_smiles = canonicalize_smiles(steps[0], ignore_stereo=ignore_stereo)
             return target_smiles, {}
 
         current_step_for_error_reporting = ""
@@ -65,7 +67,7 @@ class DreamRetroAdapter(BaseAdapter):
             if len(current_step_for_error_reporting.split(">")) != 3:
                 raise ValueError("invalid step format")
             first_product_smiles, _, _ = current_step_for_error_reporting.split(">")
-            target_smiles = canonicalize_smiles(first_product_smiles)
+            target_smiles = canonicalize_smiles(first_product_smiles, ignore_stereo=ignore_stereo)
 
             for step in steps:
                 current_step_for_error_reporting = step
@@ -74,8 +76,8 @@ class DreamRetroAdapter(BaseAdapter):
                     raise ValueError("invalid step format")
                 product_smi, _, reactants_smi = parts
 
-                full_canonical_reactants = canonicalize_smiles(reactants_smi)
-                canon_product = canonicalize_smiles(product_smi)
+                full_canonical_reactants = canonicalize_smiles(reactants_smi, ignore_stereo=ignore_stereo)
+                canon_product = canonicalize_smiles(product_smi, ignore_stereo=ignore_stereo)
                 precursor_map[canon_product] = [SmilesStr(s) for s in str(full_canonical_reactants).split(".")]
 
             return target_smiles, precursor_map
@@ -84,11 +86,13 @@ class DreamRetroAdapter(BaseAdapter):
                 f"failed to parse route string step. invalid format near '{current_step_for_error_reporting[:70]}...'."
             ) from e
 
-    def _transform(self, route_str: str, target_input: TargetIdentity, raw_data: dict[str, Any]) -> Route:
+    def _transform(
+        self, route_str: str, target_input: TargetIdentity, raw_data: dict[str, Any], ignore_stereo: bool = False
+    ) -> Route:
         """
         orchestrates the transformation of a single dreamretro route string.
         """
-        parsed_target_smiles, precursor_map = self._parse_route_string(route_str)
+        parsed_target_smiles, precursor_map = self._parse_route_string(route_str, ignore_stereo=ignore_stereo)
 
         if parsed_target_smiles != target_input.smiles:
             msg = (
@@ -98,7 +102,9 @@ class DreamRetroAdapter(BaseAdapter):
             raise AdapterLogicError(msg)
 
         # build molecule tree from precursor map
-        molecule = build_molecule_from_precursor_map(smiles=SmilesStr(target_input.smiles), precursor_map=precursor_map)
+        molecule = build_molecule_from_precursor_map(
+            smiles=SmilesStr(target_input.smiles), precursor_map=precursor_map, ignore_stereo=ignore_stereo
+        )
 
         # extract metadata
         metadata = {

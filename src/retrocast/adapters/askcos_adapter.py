@@ -91,7 +91,9 @@ class AskcosAdapter(BaseAdapter):
         """
         self.use_full_graph = use_full_graph
 
-    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
         """validates raw askcos data, transforms its pathways, and yields route objects."""
         if self.use_full_graph:
             raise NotImplementedError("extracting routes from the full askcos search graph is not yet implemented.")
@@ -123,6 +125,7 @@ class AskcosAdapter(BaseAdapter):
                     target_input=target,
                     rank=i + 1,
                     metadata=metadata,
+                    ignore_stereo=ignore_stereo,
                 )
                 yield route
             except RetroCastException as e:
@@ -137,6 +140,7 @@ class AskcosAdapter(BaseAdapter):
         target_input: TargetIdentity,
         rank: int,
         metadata: dict[str, Any],
+        ignore_stereo: bool = False,
     ) -> Route:
         """transforms a single askcos pathway (represented by its edges) into a route."""
         adj_list = defaultdict(list)
@@ -153,6 +157,7 @@ class AskcosAdapter(BaseAdapter):
             adj_list=adj_list,
             uuid2smiles=uuid2smiles,
             node_dict=node_dict,
+            ignore_stereo=ignore_stereo,
         )
 
         if target_molecule.smiles != target_input.smiles:
@@ -171,6 +176,7 @@ class AskcosAdapter(BaseAdapter):
         adj_list: dict[str, list[str]],
         uuid2smiles: dict[str, str],
         node_dict: dict[str, AskcosNode],
+        ignore_stereo: bool = False,
     ) -> Molecule:
         """recursively builds a canonical molecule from a chemical uuid."""
         raw_smiles = uuid2smiles.get(chem_uuid)
@@ -181,7 +187,7 @@ class AskcosAdapter(BaseAdapter):
         if not node_data or not isinstance(node_data, AskcosChemicalNode):
             raise AdapterLogicError(f"node data for smiles '{raw_smiles}' not found or not a chemical node.")
 
-        canon_smiles = canonicalize_smiles(node_data.smiles)
+        canon_smiles = canonicalize_smiles(node_data.smiles, ignore_stereo=ignore_stereo)
         is_leaf = node_data.terminal
         synthesis_step = None
 
@@ -198,6 +204,7 @@ class AskcosAdapter(BaseAdapter):
                 adj_list=adj_list,
                 uuid2smiles=uuid2smiles,
                 node_dict=node_dict,
+                ignore_stereo=ignore_stereo,
             )
 
         return Molecule(
@@ -214,6 +221,7 @@ class AskcosAdapter(BaseAdapter):
         adj_list: dict[str, list[str]],
         uuid2smiles: dict[str, str],
         node_dict: dict[str, AskcosNode],
+        ignore_stereo: bool = False,
     ) -> ReactionStep:
         """builds a canonical reaction step from a reaction uuid."""
         raw_smiles = uuid2smiles.get(rxn_uuid)
@@ -235,6 +243,7 @@ class AskcosAdapter(BaseAdapter):
                 adj_list=adj_list,
                 uuid2smiles=uuid2smiles,
                 node_dict=node_dict,
+                ignore_stereo=ignore_stereo,
             )
             reactants.append(reactant_molecule)
             reactant_smiles_list.append(reactant_molecule.smiles)

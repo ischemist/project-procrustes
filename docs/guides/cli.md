@@ -186,10 +186,12 @@ Transforms raw model outputs into standardized `Route` objects.
 retrocast ingest \
   --model dms-explorer \
   --dataset paroutes-n1 \
-  --anonymize  # (1)!
+  --anonymize \  # (1)!
+  --ignore-stereo  # (2)!
 ```
 
 1. Optional: Hashes the model name for blind review
+2. Optional: Strip stereochemistry during SMILES canonicalization
 
 **Input:** `data/2-raw/<model>/<dataset>/<raw_results_filename>`  
 **Output:** `data/3-processed/<model>/<dataset>/routes.json.gz`
@@ -197,9 +199,15 @@ retrocast ingest \
 **Operations:**
 
 - Parse raw format via adapter
-- Canonicalize SMILES
+- Canonicalize SMILES (optionally ignoring stereochemistry with `--ignore-stereo`)
 - Deduplicate routes
 - Apply sampling strategy (if configured)
+
+!!! warning "Stereochemistry-agnostic processing"
+
+    The `--ignore-stereo` flag removes stereochemical information during canonicalization. This is useful for model developers who want to isolate whether their model struggles specifically with stereochemistry or has broader issues with reaction prediction and stock termination.
+    
+    **Not recommended for production evaluation** - stereochemistry is critical for experimental chemistry.
 
 ### `score` - Evaluate Routes
 
@@ -209,10 +217,12 @@ Evaluates processed routes against benchmark stock.
 retrocast score \
   --model dms-explorer \
   --dataset paroutes-n1 \
-  --stock-override zinc-stock  # (1)!
+  --stock-override zinc-stock \  # (1)!
+  --ignore-stereo  # (2)!
 ```
 
 1. Optional: Override default benchmark stock
+2. Optional: Perform stereochemistry-agnostic matching by dropping stereochemistry from InChIKeys
 
 **Input:** `data/3-processed/<model>/<dataset>/routes.json.gz`  
 **Output:** `data/4-scored/<model>/<dataset>/<stock>/scores.json.gz`
@@ -220,9 +230,17 @@ retrocast score \
 **Annotations added:**
 
 - `is_solved` - All leaves in stock
-- `matches_ground_truth` - Route matches reference
+- `matches_ground_truth` - Route matches reference (with optional stereochemistry-agnostic matching via `--ignore-stereo`)
 - `length` - Number of steps
 - `is_convergent` - Contains convergent reactions
+
+!!! warning "Stereochemistry-agnostic evaluation"
+
+    The `--ignore-stereo` flag enables stereochemistry-agnostic evaluation. When enabled, molecules that differ only in stereochemistry are treated as identical during scoring. This allows model developers to calculate Top-K accuracy metrics focused on molecular connectivity rather than stereochemical correctness.
+    
+    **Use case:** Helps distinguish between stereochemistry-specific issues and fundamental retrosynthesis planning problems.
+    
+    **Not recommended for production evaluation** - stereochemistry is critical for experimental chemistry.
 
 ### `analyze` - Generate Reports
 
@@ -392,3 +410,20 @@ Model: dms-explorer
 | `list` | Show models | `retrocast-config.yaml` | Model list |
 | `list-adapters` | Show adapters | - | Adapter list |
 | `info` | Show model config | Model name | Config details |
+
+### Advanced Options
+
+#### Stereochemistry Control
+
+Both `ingest` and `score` commands support the `--ignore-stereo` flag for stereochemistry-agnostic processing:
+
+| Command | Flag | Purpose | Use Case |
+|:--------|:-----|:--------|:---------|
+| `ingest` | `--ignore-stereo` | Strip stereochemistry during canonicalization | Analyze stock termination rate/solvability without stereochemical constraints |
+| `score` | `--ignore-stereo` | Perform stereochemistry-agnostic matching | Calculate Top-K accuracy independent of stereochemistry |
+
+!!! note "For model developers"
+
+    The `--ignore-stereo` flag is primarily useful for model development and diagnostic purposes. It allows you to determine whether prediction errors stem from stereochemical confusion or more fundamental retrosynthetic planning issues.
+    
+    **Not recommended for evaluating production models** - stereochemistry is critical for experimental chemistry.

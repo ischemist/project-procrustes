@@ -99,6 +99,8 @@ def _ingest_single(model_name: str, benchmark_name: str, config: dict, paths: di
         logger.error(f"Invalid sampling strategy: {strategy}")
         return
 
+    ignore_stereo = getattr(args, "ignore_stereo", False)
+
     try:
         benchmark = load_benchmark(paths["benchmarks"] / f"{benchmark_name}.json.gz")
         adapter = get_adapter(model_conf["adapter"])
@@ -117,6 +119,7 @@ def _ingest_single(model_name: str, benchmark_name: str, config: dict, paths: di
             anonymize=args.anonymize,
             sampling_strategy=strategy,
             sample_k=k,
+            ignore_stereo=ignore_stereo,
         )
 
         manifest = create_manifest(

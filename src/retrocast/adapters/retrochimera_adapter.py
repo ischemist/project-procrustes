@@ -59,7 +59,9 @@ class RetrochimeraData(BaseModel):
 class RetrochimeraAdapter(BaseAdapter):
     """adapter for converting retrochimera-style outputs to the Route schema."""
 
-    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
         """
         validates raw retrochimera data, transforms it, and yields Route objects.
         """
@@ -75,9 +77,10 @@ class RetrochimeraAdapter(BaseAdapter):
             logger.warning(f"  - retrochimera reported an error for target '{target.id}': {error_type} - {error_msg}")
             return
 
-        if canonicalize_smiles(validated_data.smiles) != target.smiles:
+        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
+        if canonicalize_smiles(validated_data.smiles, ignore_stereo=ignore_stereo) != expected_smiles:
             logger.warning(
-                f"  - mismatched smiles for target '{target.id}': expected {target.smiles}, got {canonicalize_smiles(validated_data.smiles)}"
+                f"  - mismatched smiles for target '{target.id}': expected {expected_smiles}, got {canonicalize_smiles(validated_data.smiles, ignore_stereo=ignore_stereo)}"
             )
             return
 
@@ -89,35 +92,40 @@ class RetrochimeraAdapter(BaseAdapter):
         for output in validated_data.result.outputs:
             for route in output.routes:
                 try:
-                    route_obj = self._transform(route, target, rank=rank)
+                    route_obj = self._transform(route, target, rank=rank, ignore_stereo=ignore_stereo)
                     yield route_obj
                     rank += 1
                 except RetroCastException as e:
                     logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
                     continue
 
-    def _transform(self, route: RetrochimeraRoute, target: TargetIdentity, rank: int) -> Route:
+    def _transform(
+        self, route: RetrochimeraRoute, target: TargetIdentity, rank: int, ignore_stereo: bool = False
+    ) -> Route:
         """
         orchestrates the transformation of a single retrochimera route.
         raises RetroCastException on failure.
         """
-        precursor_map = self._build_precursor_map(route)
+        precursor_map = self._build_precursor_map(route, ignore_stereo=ignore_stereo)
         target_molecule = self._build_molecule_from_precursor_map(
             smiles=SmilesStr(target.smiles),
             precursor_map=precursor_map,
+            ignore_stereo=ignore_stereo,
         )
 
         return Route(target=target_molecule, rank=rank, metadata={})
 
-    def _build_precursor_map(self, route: RetrochimeraRoute) -> dict[SmilesStr, list[SmilesStr]]:
+    def _build_precursor_map(
+        self, route: RetrochimeraRoute, ignore_stereo: bool = False
+    ) -> dict[SmilesStr, list[SmilesStr]]:
         """
         builds a precursor map from the route's reactions.
         each product maps to its list of reactant smiles.
         """
         precursor_map: dict[SmilesStr, list[SmilesStr]] = {}
         for reaction in route.reactions:
-            canon_product = canonicalize_smiles(reaction.product)
-            canon_reactants = [canonicalize_smiles(r) for r in reaction.reactants]
+            canon_product = canonicalize_smiles(reaction.product, ignore_stereo=ignore_stereo)
+            canon_reactants = [canonicalize_smiles(r, ignore_stereo=ignore_stereo) for r in reaction.reactants]
             precursor_map[canon_product] = canon_reactants
         return precursor_map
 
@@ -126,6 +134,7 @@ class RetrochimeraAdapter(BaseAdapter):
         smiles: SmilesStr,
         precursor_map: dict[SmilesStr, list[SmilesStr]],
         visited: set[SmilesStr] | None = None,
+        ignore_stereo: bool = False,
     ) -> Molecule:
         """
         recursively builds a Molecule from a precursor map, with cycle detection.
@@ -164,6 +173,7 @@ class RetrochimeraAdapter(BaseAdapter):
                 smiles=reactant_smi,
                 precursor_map=precursor_map,
                 visited=new_visited,
+                ignore_stereo=ignore_stereo,
             )
             reactant_molecules.append(reactant_mol)
 

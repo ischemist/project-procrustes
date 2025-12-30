@@ -61,6 +61,7 @@ def build_molecule_from_precursor_map(
     smiles: SmilesStr,
     precursor_map: PrecursorMap,
     visited: set[SmilesStr] | None = None,
+    ignore_stereo: bool = False,
 ) -> Molecule:
     """
     Recursively builds a `Molecule` from a precursor map, with cycle detection.
@@ -70,6 +71,8 @@ def build_molecule_from_precursor_map(
         smiles: The SMILES string of the current molecule.
         precursor_map: A dict mapping product SMILES to list of reactant SMILES.
         visited: Set of SMILES already visited (for cycle detection).
+        ignore_stereo: If True, stereochemistry is stripped during SMILES canonicalization.
+            Defaults to False.
 
     Returns:
         A Molecule object representing this node and its synthesis tree.
@@ -108,6 +111,7 @@ def build_molecule_from_precursor_map(
             smiles=reactant_smi,
             precursor_map=precursor_map,
             visited=new_visited,
+            ignore_stereo=ignore_stereo,
         )
         reactant_molecules.append(reactant_mol)
 
@@ -129,13 +133,15 @@ def build_molecule_from_precursor_map(
     )
 
 
-def build_molecule_from_bipartite_node(raw_mol_node: BipartiteMolNode) -> Molecule:
+def build_molecule_from_bipartite_node(raw_mol_node: BipartiteMolNode, ignore_stereo: bool = False) -> Molecule:
     """
     Recursively builds a `Molecule` from a raw, validated bipartite graph node.
     This is the new schema version for models like aizynthfinder, synplanner, etc.
 
     Args:
         raw_mol_node: A raw molecule node following the BipartiteMolNode protocol.
+        ignore_stereo: If True, stereochemistry is stripped during SMILES canonicalization.
+            Defaults to False.
 
     Returns:
         A Molecule object representing this node and its synthesis tree.
@@ -143,7 +149,7 @@ def build_molecule_from_bipartite_node(raw_mol_node: BipartiteMolNode) -> Molecu
     if raw_mol_node.type != "mol":
         raise AdapterLogicError(f"Expected node type 'mol' but got '{raw_mol_node.type}'")
 
-    canon_smiles = canonicalize_smiles(raw_mol_node.smiles)
+    canon_smiles = canonicalize_smiles(raw_mol_node.smiles, ignore_stereo=ignore_stereo)
     is_leaf = raw_mol_node.in_stock or not bool(raw_mol_node.children)
 
     if is_leaf:
@@ -167,7 +173,7 @@ def build_molecule_from_bipartite_node(raw_mol_node: BipartiteMolNode) -> Molecu
     # Build reactants recursively
     reactant_molecules: list[Molecule] = []
     for reactant_mol_input in raw_reaction_node.children:
-        reactant_mol = build_molecule_from_bipartite_node(raw_mol_node=reactant_mol_input)
+        reactant_mol = build_molecule_from_bipartite_node(raw_mol_node=reactant_mol_input, ignore_stereo=ignore_stereo)
         reactant_molecules.append(reactant_mol)
 
     # Extract template and mapped_smiles from metadata if available
