@@ -12,6 +12,7 @@ from retrocast.curation.sampling import sample_k_by_length, sample_random_k, sam
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetInput
 from retrocast.models.evaluation import EvaluationResults
+from retrocast.models.provenance import FileInfo, Manifest
 from retrocast.models.stats import ModelStatistics
 
 
@@ -50,6 +51,8 @@ __all__ = [
     "BenchmarkSet",
     "EvaluationResults",
     "ModelStatistics",
+    "FileInfo",
+    "Manifest",
     # Adapter functions
     "adapt_single_route",
     "adapt_routes",
