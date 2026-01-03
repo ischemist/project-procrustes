@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from retrocast import __version__
+from retrocast._version import __version__
 
 
 class FileInfo(BaseModel):
