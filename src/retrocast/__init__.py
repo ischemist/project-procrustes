@@ -9,7 +9,10 @@ from packaging.version import Version
 from retrocast.adapters import ADAPTER_MAP, adapt_routes, adapt_single_route, get_adapter
 from retrocast.curation.filtering import deduplicate_routes
 from retrocast.curation.sampling import sample_k_by_length, sample_random_k, sample_top_k
+from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetInput
+from retrocast.models.evaluation import EvaluationResults
+from retrocast.models.stats import ModelStatistics
 
 
 def _normalize_version_with_patch(version_str: str) -> str:
@@ -43,6 +46,10 @@ __all__ = [
     "Molecule",
     "ReactionStep",
     "TargetInput",
+    # Workflow Schemas
+    "BenchmarkSet",
+    "EvaluationResults",
+    "ModelStatistics",
     # Adapter functions
     "adapt_single_route",
     "adapt_routes",
