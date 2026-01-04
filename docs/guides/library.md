@@ -110,7 +110,7 @@ Run the full scoring pipeline in memory without creating intermediate files.
 RetroCast provides a context manager to track wall and cpu time per target. These metrics are automatically aggregated into the final report.
 
 ```python title="Measure inference time"
-from retrocast.utils.timing import ExecutionTimer
+from retrocast.utils import ExecutionTimer
 
 timer = ExecutionTimer()
 
@@ -356,6 +356,7 @@ Putting it all together in a Jupyter notebook workflow:
 
 ```python title="End-to-end evaluation pipeline"
 from retrocast import adapt_routes, deduplicate_routes, TargetInput
+from retrocast.utils import ExecutionTimer
 from retrocast.api import score_predictions, compute_model_statistics
 from retrocast.api import load_benchmark, load_stock_file
 from retrocast.visualization import plot_diagnostics
@@ -402,7 +403,6 @@ fig = plot_diagnostics(stats)
 fig.write_html("diagnostics.html")
 ```
 
-1. New import for timing utilities
 2. Initialize the timer before the loop
 3. Wrap the expensive model call in the context manager
 4. Pass the collected stats to the scorer
