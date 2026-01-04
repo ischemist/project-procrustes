@@ -14,7 +14,6 @@ Results are saved to: data/2-raw/synplanner-{stock}[-{effort}]/{benchmark_name}/
 """
 
 import argparse
-import time
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +28,7 @@ from tqdm import tqdm
 from utils import load_policy_from_config
 
 from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
-from retrocast.models.benchmark import ExecutionStats
+from retrocast.utils import ExecutionTimer
 from retrocast.utils.logging import logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -111,48 +110,43 @@ if __name__ == "__main__":
 
     results: dict[str, list[dict[str, Any]]] = {}
     solved_count = 0
-    runtime = ExecutionStats()
+    timer = ExecutionTimer()
 
     for target in tqdm(benchmark.targets.values(), desc="Finding retrosynthetic paths"):
-        t_start_wall = time.perf_counter()
-        t_start_cpu = time.process_time()
-
-        try:
-            target_mol = mol_from_smiles(target.smiles, standardize=True)
-            if not target_mol:
-                logger.warning(f"Could not create molecule for target {target.id} ({target.smiles}). Skipping.")
-                results[target.id] = []
-            else:
-                search_tree = Tree(
-                    target=target_mol,
-                    config=tree_config,
-                    reaction_rules=reaction_rules,
-                    building_blocks=building_blocks,
-                    expansion_function=policy_function,
-                    evaluation_function=evaluation_function,
-                )
-
-                # run the search
-                _ = list(search_tree)
-
-                if bool(search_tree.winning_nodes):
-                    # the format synplanner returns is a bit weird. it's a dict where keys are internal ids.
-                    # these routes are already json-serializable dicts.
-                    raw_routes = make_json(extract_reactions(search_tree))
-                    # we wrap this in a list to match the format of other models.
-                    results[target.id] = list(raw_routes.values())
-                    solved_count += 1
-                else:
+        with timer.measure(target.id):
+            try:
+                target_mol = mol_from_smiles(target.smiles, standardize=True)
+                if not target_mol:
+                    logger.warning(f"Could not create molecule for target {target.id} ({target.smiles}). Skipping.")
                     results[target.id] = []
+                else:
+                    search_tree = Tree(
+                        target=target_mol,
+                        config=tree_config,
+                        reaction_rules=reaction_rules,
+                        building_blocks=building_blocks,
+                        expansion_function=policy_function,
+                        evaluation_function=evaluation_function,
+                    )
 
-        except Exception as e:
-            logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
-            results[target.id] = []
-        finally:
-            t_end_wall = time.perf_counter()
-            t_end_cpu = time.process_time()
-            runtime.wall_time[target.id] = t_end_wall - t_start_wall
-            runtime.cpu_time[target.id] = t_end_cpu - t_start_cpu
+                    # run the search
+                    _ = list(search_tree)
+
+                    if bool(search_tree.winning_nodes):
+                        # the format synplanner returns is a bit weird. it's a dict where keys are internal ids.
+                        # these routes are already json-serializable dicts.
+                        raw_routes = make_json(extract_reactions(search_tree))
+                        # we wrap this in a list to match the format of other models.
+                        results[target.id] = list(raw_routes.values())
+                        solved_count += 1
+                    else:
+                        results[target.id] = []
+
+            except Exception as e:
+                logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
+                results[target.id] = []
+
+    runtime = timer.to_model()
 
     summary = {
         "solved_count": solved_count,

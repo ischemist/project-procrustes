@@ -18,7 +18,6 @@ Results are saved to: data/2-raw/askcos/{benchmark_name}/
 
 import argparse
 import logging
-import time
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +25,7 @@ import requests
 from tqdm import tqdm
 
 from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
-from retrocast.models.benchmark import ExecutionStats
+from retrocast.utils import ExecutionTimer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -101,7 +100,7 @@ if __name__ == "__main__":
 
     # Initialize results storage
     results: dict[str, dict[str, Any] | None] = {}
-    runtime = ExecutionStats()
+    timer = ExecutionTimer()
     success_count = 0
     failure_count = 0
 
@@ -110,29 +109,23 @@ if __name__ == "__main__":
 
     # Process each target
     for target in tqdm(benchmark.targets.values(), desc="Processing targets"):
-        t_start_wall = time.perf_counter()
-        t_start_cpu = time.process_time()
+        with timer.measure(target.id):
+            try:
+                # Call ASKCOS API
+                result = call_askcos_api(target.smiles, args.askcos_url, timeout=args.timeout)
+                results[target.id] = result
 
-        try:
-            # Call ASKCOS API
-            result = call_askcos_api(target.smiles, args.askcos_url, timeout=args.timeout)
-            results[target.id] = result
+                if result is not None:
+                    success_count += 1
+                else:
+                    failure_count += 1
 
-            if result is not None:
-                success_count += 1
-            else:
+            except Exception as e:
+                logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
+                results[target.id] = None
                 failure_count += 1
 
-        except Exception as e:
-            logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
-            results[target.id] = None
-            failure_count += 1
-
-        finally:
-            t_end_wall = time.perf_counter()
-            t_end_cpu = time.process_time()
-            runtime.wall_time[target.id] = t_end_wall - t_start_wall
-            runtime.cpu_time[target.id] = t_end_cpu - t_start_cpu
+    runtime = timer.to_model()
 
     # Save results
     logger.info("Saving results...")

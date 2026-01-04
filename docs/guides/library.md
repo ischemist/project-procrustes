@@ -105,6 +105,26 @@ print(f"Total unique routes: {len(all_routes)}")
 
 Run the full scoring pipeline in memory without creating intermediate files.
 
+### Tracking runtime performance
+
+RetroCast provides a context manager to track wall and cpu time per target. These metrics are automatically aggregated into the final report.
+
+```python title="Measure inference time"
+from retrocast.utils import ExecutionTimer
+
+timer = ExecutionTimer()
+
+for target in benchmark.targets.values():
+    # context manager captures time for this specific block
+    with timer.measure(target.id):
+        raw_output = model.predict(target.smiles)
+    
+    # ... process/store results ...
+
+# convert to a portable stats object
+exec_stats = timer.to_model()
+```
+
 ### Score Predictions
 
 ```python title="Evaluate routes against stock" hl_lines="4 5 8 13"
@@ -122,15 +142,16 @@ results = score_predictions(
     benchmark=benchmark,
     predictions=predictions, # (4)!
     stock=stock,
-    model_name="Experimental-Model-V1"
+    model_name="Experimental-Model-V1",
+    execution_stats=exec_stats # (5)!
 )
 
 # 4. Access granular results
 for target_id, evaluation in results.results.items():
     print(f"\nTarget: {target_id}")
-    print(f"  Is solvable: {evaluation.is_solvable}") # (5)!
+    print(f"  Is solvable: {evaluation.is_solvable}") # (6)!
     print(f"  Top-1 solved: {evaluation.top_1_is_solved}")
-    print(f"  GT rank: {evaluation.gt_rank}") # (6)!
+    print(f"  GT rank: {evaluation.gt_rank}") # (7)!
     print(f"  Best route length: {evaluation.best_route_length}")
 ```
 
@@ -138,8 +159,9 @@ for target_id, evaluation in results.results.items():
 2. Load stock (one canonical SMILES per line)
 3. Predictions must be a dict mapping target IDs to lists of Route objects
 4. Each route is evaluated: are all leaves in stock?
-5. `is_solvable = True` if at least one route is solved
-6. Rank of ground truth route in predictions (None if not found)
+5. Optional: Pass the `ExecutionStats` object here to include timing data in the final analysis.
+6. `is_solvable = True` if at least one route is solved
+7. Rank of ground truth route in predictions (None if not found)
 
 ### Compute Statistics
 
@@ -334,30 +356,39 @@ Putting it all together in a Jupyter notebook workflow:
 
 ```python title="End-to-end evaluation pipeline"
 from retrocast import adapt_routes, deduplicate_routes, TargetInput
+from retrocast.utils import ExecutionTimer
 from retrocast.api import score_predictions, compute_model_statistics
 from retrocast.api import load_benchmark, load_stock_file
 from retrocast.visualization import plot_diagnostics
+
 
 # 1. Load benchmark and stock
 benchmark = load_benchmark("data/1-benchmarks/definitions/mkt-cnv-160.json.gz")
 stock = load_stock_file("data/1-benchmarks/stocks/buyables-stock.txt")
 
-# 2. Adapt raw predictions
+# 2. Inference Loop with Timing
 predictions = {}
-for target in benchmark.targets:
+timer = ExecutionTimer() # (2)!
+
+for target in benchmark.targets.values():
     target_input = TargetInput(id=target.id, smiles=target.smiles)
-    raw_output = get_model_predictions(target.smiles)  # Your model here
     
+    # Measure inference time
+    with timer.measure(target.id): # (3)!
+        raw_output = get_model_predictions(target.smiles)
+    
+    # Adapt and store
     routes = adapt_routes(raw_output, target_input, adapter_name="aizynth")
     unique_routes = deduplicate_routes(routes)
-    predictions[target.id] = list(unique_routes)[:10]  # Top-10 only
+    predictions[target.id] = list(unique_routes)[:10]
 
-# 3. Score predictions
+# 3. Score predictions (including runtime stats)
 results = score_predictions(
     benchmark=benchmark,
     predictions=predictions,
     stock=stock,
-    model_name="MyModel-v1.0"
+    model_name="MyModel-v1.0",
+    execution_stats=timer.to_model() # (4)!
 )
 
 # 4. Compute statistics
@@ -365,14 +396,17 @@ stats = compute_model_statistics(results, n_boot=10000, seed=42)
 
 # 5. Print summary
 print(f"Overall Solvability: {stats.solvability.overall.value:.1%}")
-print(f"Top-1 Accuracy: {stats.top_k[1].overall.value:.1%}")
-print(f"Top-5 Accuracy: {stats.top_k[5].overall.value:.1%}")
+print(f"Mean Wall Time: {stats.mean_wall_time:.2f}s") # (5)!
 
 # 6. Generate visualizations
 fig = plot_diagnostics(stats)
 fig.write_html("diagnostics.html")
-print("Saved diagnostics.html")
 ```
+
+2. Initialize the timer before the loop
+3. Wrap the expensive model call in the context manager
+4. Pass the collected stats to the scorer
+5. Access aggregated timing metrics in the final statistics object
 
 ---
 

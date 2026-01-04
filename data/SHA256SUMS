@@ -1,7 +1,6 @@
 ddd087377551e106e8b39954459988d2ee40261150d4d5b3c802da4c6c4dfb99  1-benchmarks/definitions/paroutes-n5-full-pruned.json.gz
 7b67929ffc1fbfa9b5055acbf47057e6befa3d221c713645f51e1b253e6d073a  1-benchmarks/definitions/random-n5-100.manifest.json
 3ed74bbf10bc1142aba4c17163b867a105c6f78eb3f97692245e30534183d0af  1-benchmarks/definitions/ref-lng-84.json.gz
-3acac50099140770961c24efb874f747a7b5b8630337d8089871666ac64e5b67  1-benchmarks/definitions/mkt-lin-500-single-gt.manifest.json
 797e2733961b9f714e07edcd67da0ea33e6412d6506cc6492632fa8e61b6f8d1  1-benchmarks/definitions/uspto-83.manifest.json
 9f4d422b2834e6a6c46b17e029bcd3d84bccc9df058d846934a2017f0bf7fd7c  1-benchmarks/definitions/paroutes-n1-full-buyables-pruned.json.gz
 fa87eb86f9089417f46314479a40c4c6efbf097f6ac01b7bedf7b806b252ab19  1-benchmarks/definitions/random-n5-50.json.gz
@@ -12,14 +11,12 @@ da47f77da552a6f071dc03c96a3bfcf92ed602d6a7e6162090e3618f24ccc650  1-benchmarks/d
 10aedb788717206977a72b64f1b3eb0779727dedd536aba90db28c564017490d  1-benchmarks/definitions/mkt-lin-500.json.gz
 cc74fc4d0a936101e8d4d7ecc44b6fa2ff09f330247cc806e505867d90bb8546  1-benchmarks/definitions/paroutes-n1-full-pruned.manifest.json
 f763f6592ad9743e8f9ce3d5cfb8e5d030604c9165266eee93bc336d3d43dc7f  1-benchmarks/definitions/paroutes-n1-full-buyables-pruned.manifest.json
-e1476ee21b4e92077e78d7ed2b2c269e5394b8b39e509e7d3de6c3c47d0a74f1  1-benchmarks/definitions/mkt-lin-500-single-gt.json.gz
 68a6d1b10764d0e0c592008c73e10cc2647182d3a8619196e260d2ac7de46694  1-benchmarks/definitions/mkt-cnv-160.manifest.json
 c54e88c8327427ce16958c630d412f8f9a5f9c0de335a15c7792cee396a60519  1-benchmarks/definitions/random-n5-500.json.gz
 bd266c9e53d2a7e9da3d5aedfdba52f78a7b6b662e0e327241fde36afc86f50c  1-benchmarks/definitions/random-n5-1000.json.gz
 992bfc723f5fbdb615de7a1d1070d2e7c87bdd156aae459c4a638940c1cd83ed  1-benchmarks/definitions/ref-lng-84.manifest.json
 0da9027211ee22e527a07f7a7d57700daf4ec9072139ec8aa2947ee243d05556  1-benchmarks/definitions/ref-cnv-400.json.gz
 b516b1e979e21e6210922e3da0793ff63a87707c9649d3a5827d8200a15a88be  1-benchmarks/definitions/mkt-lin-500.manifest.json
-b70fb6ed87aea2f8440eb4022671bf35ce95679cf2d7c3ab9db324f1878f28db  1-benchmarks/definitions/mkt-cnv-160-single-gt.json.gz
 3685a4fdc06930f4648a0fd248f0adb10ef6529a1699e809a439abbbc0403365  1-benchmarks/definitions/random-n5-2000.json.gz
 4b20459d44ad209e3ac2789969892c3882ec8fcf31fb6edf2404b1a2307326a0  1-benchmarks/definitions/ref-lin-600.json.gz
 824655ae1e0dd30b683259f0ffab0dc7b9f1c6f86cfe20dbef92a322772e28f5  1-benchmarks/definitions/paroutes-n5-full-buyables-pruned.json.gz
@@ -35,7 +32,6 @@ c0898c4b936c5610275ccacbe6774c165aafe0d33d05154e60ed4076bea8e8e0  1-benchmarks/d
 b93f667ff9884ad35bd2624084f540f8f8fa739e2dca7b4876e5167e9402cdf1  1-benchmarks/definitions/random-n5-50.manifest.json
 7ac127ff2b3c53c4585106b515336bd4b693288e1d550ab9ab700dc227026ab2  1-benchmarks/definitions/random-n5-100.json.gz
 d2d42b7e43dc6d1464c3ee277d35dbec514c9e1f0aca66e92228dcbe83eef551  1-benchmarks/definitions/random-n5-1000.manifest.json
-108d7c5070c969f3bb0a1381863b956e9689bdce9c14a6a8cc43e6a204d06b1f  1-benchmarks/definitions/mkt-cnv-160-single-gt.manifest.json
 58ae3fa5d37fc3a6002b2f20a985273d2c1ad2da06fcba5f0453f22cc6ce1a7b  1-benchmarks/stocks/n1-stock.hdf5
 a3a7f1d58d91d03b9a5134c98e61a2bb9b7300955c4f709879fdc996219384fc  1-benchmarks/stocks/n5-stock.manifest.json
 ee04329e5c0a8423a92a967b1405772c728d1cde9eadc0223a8b2d7dd1893c0f  1-benchmarks/stocks/buyables-meta.manifest.json

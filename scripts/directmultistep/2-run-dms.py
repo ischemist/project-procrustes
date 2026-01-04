@@ -17,7 +17,6 @@ Results are saved to: data/2-raw/dms-{model_name}/{benchmark_name}/
 
 import argparse
 import logging
-import time
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +34,7 @@ from directmultistep.utils.pre_process import canonicalize_smiles
 from tqdm import tqdm
 
 from retrocast.io import create_manifest, load_benchmark, load_stock_file, save_execution_stats, save_json_gz
-from retrocast.models.benchmark import ExecutionStats
+from retrocast.utils import ExecutionTimer
 
 logger.setLevel(logging.WARNING)
 
@@ -83,7 +82,7 @@ if __name__ == "__main__":
     n1n5_results: dict[str, dict[str, Any]] = {}
     raw_solved_count = 0
     solved_counts = {stock_name: 0 for stock_name in stocks}
-    runtime = ExecutionStats()
+    timer = ExecutionTimer()
 
     device = ModelFactory.determine_device(args.device)
     rds = RoutesProcessing(metadata_path=DMS_DIR / "dms_dictionary.yaml")
@@ -92,72 +91,67 @@ if __name__ == "__main__":
     beam_obj = create_beam_search(model, 50, rds)
 
     for target in tqdm(benchmark.targets.values(), desc="Finding retrosynthetic paths"):
-        t_start_wall = time.perf_counter()
-        t_start_cpu = time.process_time()
+        with timer.measure(target.id):
+            try:
+                target_smiles = canonicalize_smiles(target.smiles)
 
-        try:
-            target_smiles = canonicalize_smiles(target.smiles)
+                # this holds all beam search outputs for a SINGLE target, across multiple step calls
+                all_beam_results_for_target_NS2: list[list[tuple[str, float]]] = []
 
-            # this holds all beam search outputs for a SINGLE target, across multiple step calls
-            all_beam_results_for_target_NS2: list[list[tuple[str, float]]] = []
-
-            if args.model_name == "explorer XL" or args.model_name == "explorer":
-                encoder_inp, steps_tens, path_tens = prepare_input_tensors(
-                    target_smiles, None, None, rds, rds.product_max_length, rds.sm_max_length, args.use_fp16
-                )
-                beam_result_bs2 = beam_obj.decode(
-                    src_BC=encoder_inp.to(device),
-                    steps_B1=steps_tens.to(device) if steps_tens is not None else None,
-                    path_start_BL=path_tens.to(device),
-                    progress_bar=False,
-                )  # list[list[tuple[str, float]]]
-                all_beam_results_for_target_NS2.extend(beam_result_bs2)
-            else:
-                for step in range(1, 11):
+                if args.model_name == "explorer XL" or args.model_name == "explorer":
                     encoder_inp, steps_tens, path_tens = prepare_input_tensors(
-                        target_smiles, step, None, rds, rds.product_max_length, rds.sm_max_length, args.use_fp16
+                        target_smiles, None, None, rds, rds.product_max_length, rds.sm_max_length, args.use_fp16
                     )
                     beam_result_bs2 = beam_obj.decode(
                         src_BC=encoder_inp.to(device),
                         steps_B1=steps_tens.to(device) if steps_tens is not None else None,
                         path_start_BL=path_tens.to(device),
                         progress_bar=False,
-                    )  #  list[list[tuple[str, float]]]
-
+                    )  # list[list[tuple[str, float]]]
                     all_beam_results_for_target_NS2.extend(beam_result_bs2)
+                else:
+                    for step in range(1, 11):
+                        encoder_inp, steps_tens, path_tens = prepare_input_tensors(
+                            target_smiles, step, None, rds, rds.product_max_length, rds.sm_max_length, args.use_fp16
+                        )
+                        beam_result_bs2 = beam_obj.decode(
+                            src_BC=encoder_inp.to(device),
+                            steps_B1=steps_tens.to(device) if steps_tens is not None else None,
+                            path_start_BL=path_tens.to(device),
+                            progress_bar=False,
+                        )  #  list[list[tuple[str, float]]]
 
-            valid_paths_per_batch = find_valid_paths(all_beam_results_for_target_NS2)
+                        all_beam_results_for_target_NS2.extend(beam_result_bs2)
 
-            # flatten the list of path-lists into one big list of paths for this target
-            all_valid_paths_for_target = [path for batch in valid_paths_per_batch for path in batch]
+                valid_paths_per_batch = find_valid_paths(all_beam_results_for_target_NS2)
 
-            # the processing function expects a list of batches. wrap our flat list to look like a single batch.
-            canon_paths_NS2n = canonicalize_paths([all_valid_paths_for_target])
-            unique_paths_NS2n = remove_repetitions_within_beam_result(canon_paths_NS2n)
+                # flatten the list of path-lists into one big list of paths for this target
+                all_valid_paths_for_target = [path for batch in valid_paths_per_batch for path in batch]
 
-            # unwrap the single batch from the result
-            raw_paths = [beam_result[0] for beam_result in unique_paths_NS2n[0]]
+                # the processing function expects a list of batches. wrap our flat list to look like a single batch.
+                canon_paths_NS2n = canonicalize_paths([all_valid_paths_for_target])
+                unique_paths_NS2n = remove_repetitions_within_beam_result(canon_paths_NS2n)
 
-            raw_solved_count += bool(raw_paths)
+                # unwrap the single batch from the result
+                raw_paths = [beam_result[0] for beam_result in unique_paths_NS2n[0]]
 
-            valid_results[target.id] = [eval(p) for p in raw_paths]
-            buyables_paths = find_path_strings_with_commercial_sm(raw_paths, commercial_stock=stocks["buyables"])
-            buyables_results[target.id] = [eval(p) for p in buyables_paths]
-            solved_counts["buyables"] += bool(buyables_paths)
-            n1n5_paths = find_path_strings_with_commercial_sm(raw_paths, commercial_stock=stocks["n1-n5"])
-            n1n5_results[target.id] = [eval(p) for p in n1n5_paths]
-            solved_counts["n1-n5"] += bool(n1n5_paths)
+                raw_solved_count += bool(raw_paths)
 
-        except Exception as e:
-            logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
-            valid_results[target.id] = []
-            buyables_results[target.id] = []
-            n1n5_results[target.id] = []
-        finally:
-            t_end_wall = time.perf_counter()
-            t_end_cpu = time.process_time()
-            runtime.wall_time[target.id] = t_end_wall - t_start_wall
-            runtime.cpu_time[target.id] = t_end_cpu - t_start_cpu
+                valid_results[target.id] = [eval(p) for p in raw_paths]
+                buyables_paths = find_path_strings_with_commercial_sm(raw_paths, commercial_stock=stocks["buyables"])
+                buyables_results[target.id] = [eval(p) for p in buyables_paths]
+                solved_counts["buyables"] += bool(buyables_paths)
+                n1n5_paths = find_path_strings_with_commercial_sm(raw_paths, commercial_stock=stocks["n1-n5"])
+                n1n5_results[target.id] = [eval(p) for p in n1n5_paths]
+                solved_counts["n1-n5"] += bool(n1n5_paths)
+
+            except Exception as e:
+                logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
+                valid_results[target.id] = []
+                buyables_results[target.id] = []
+                n1n5_results[target.id] = []
+
+    runtime = timer.to_model()
 
     summary = {
         "raw_solved_count": raw_solved_count,

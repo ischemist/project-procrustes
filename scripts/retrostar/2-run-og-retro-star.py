@@ -13,7 +13,6 @@ Results are saved to: data/2-raw/retro-star-{stock}[-{effort}]/{benchmark_name}/
 """
 
 import argparse
-import time
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +21,7 @@ from retro_star.api import RSPlanner
 from tqdm import tqdm
 
 from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
-from retrocast.models.benchmark import ExecutionStats
+from retrocast.utils import ExecutionTimer
 from retrocast.utils.logging import logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -94,29 +93,24 @@ if __name__ == "__main__":
 
     results: dict[str, dict[str, Any]] = {}
     solved_count = 0
-    runtime = ExecutionStats()
+    timer = ExecutionTimer()
 
     for target in tqdm(benchmark.targets.values(), desc="Finding retrosynthetic paths"):
-        t_start_wall = time.perf_counter()
-        t_start_cpu = time.process_time()
+        with timer.measure(target.id):
+            try:
+                result = planner.plan(target.smiles)
 
-        try:
-            result = planner.plan(target.smiles)
-
-            if result and result["succ"]:
-                # Convert numpy types to native python types for JSON serialization
-                results[target.id] = convert_numpy(result)
-                solved_count += 1
-            else:
+                if result and result["succ"]:
+                    # Convert numpy types to native python types for JSON serialization
+                    results[target.id] = convert_numpy(result)
+                    solved_count += 1
+                else:
+                    results[target.id] = {}
+            except Exception as e:
+                logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
                 results[target.id] = {}
-        except Exception as e:
-            logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
-            results[target.id] = {}
-        finally:
-            t_end_wall = time.perf_counter()
-            t_end_cpu = time.process_time()
-            runtime.wall_time[target.id] = t_end_wall - t_start_wall
-            runtime.cpu_time[target.id] = t_end_cpu - t_start_cpu
+
+    runtime = timer.to_model()
 
     summary = {
         "solved_count": solved_count,
