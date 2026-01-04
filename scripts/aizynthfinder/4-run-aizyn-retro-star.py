@@ -13,7 +13,6 @@ Results are saved to: data/2-raw/aizynthfinder-retro-star[-{effort}]/{benchmark_
 """
 
 import argparse
-import time
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +20,7 @@ from aizynthfinder.aizynthfinder import AiZynthFinder
 from tqdm import tqdm
 
 from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
-from retrocast.models.benchmark import ExecutionStats
+from retrocast.utils import ExecutionTimer
 from retrocast.utils.logging import logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -59,36 +58,31 @@ if __name__ == "__main__":
 
     results: dict[str, dict[str, Any]] = {}
     solved_count = 0
-    runtime = ExecutionStats()
+    timer = ExecutionTimer()
 
     for target in tqdm(benchmark.targets.values()):
-        t_start_wall = time.perf_counter()
-        t_start_cpu = time.process_time()
+        with timer.measure(target.id):
+            try:
+                finder = AiZynthFinder(configfile=str(config_path))
+                finder.stock.select(benchmark.stock_name)
+                finder.expansion_policy.select("uspto")
+                finder.filter_policy.select("uspto")
 
-        finder = AiZynthFinder(configfile=str(config_path))
-        finder.stock.select(benchmark.stock_name)
-        finder.expansion_policy.select("uspto")
-        finder.filter_policy.select("uspto")
+                finder.target_smiles = target.smiles
+                finder.tree_search()
+                finder.build_routes()
 
-        try:
-            finder.target_smiles = target.smiles
-            finder.tree_search()
-            finder.build_routes()
-
-            if finder.routes:
-                routes_dict = finder.routes.dict_with_extra(include_metadata=False, include_scores=True)
-                results[target.id] = routes_dict
-                solved_count += 1
-            else:
+                if finder.routes:
+                    routes_dict = finder.routes.dict_with_extra(include_metadata=False, include_scores=True)
+                    results[target.id] = routes_dict
+                    solved_count += 1
+                else:
+                    results[target.id] = {}
+            except Exception as e:
+                logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
                 results[target.id] = {}
-        except Exception as e:
-            logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
-            results[target.id] = {}
-        finally:
-            t_end_wall = time.perf_counter()
-            t_end_cpu = time.process_time()
-            runtime.wall_time[target.id] = t_end_wall - t_start_wall
-            runtime.cpu_time[target.id] = t_end_cpu - t_start_cpu
+
+    runtime = timer.to_model()
 
     summary = {
         "solved_count": solved_count,

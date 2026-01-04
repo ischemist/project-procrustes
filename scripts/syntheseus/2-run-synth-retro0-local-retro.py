@@ -14,7 +14,6 @@ Results are saved to: data/2-raw/syntheseus-retro0-local-retro[-{effort}]/{bench
 
 import argparse
 import gzip
-import time
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +26,7 @@ from syntheseus.search.node_evaluation.common import ConstantNodeEvaluator, Reac
 from tqdm import tqdm
 
 from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
-from retrocast.models.benchmark import ExecutionStats
+from retrocast.utils import ExecutionTimer
 from retrocast.utils.logging import logger
 from retrocast.utils.serializers import serialize_route
 
@@ -87,58 +86,53 @@ if __name__ == "__main__":
 
     results: dict[str, list[dict[str, Any]]] = {}
     solved_count = 0
-    runtime = ExecutionStats()
+    timer = ExecutionTimer()
 
     for target in tqdm(benchmark.targets.values(), desc="Finding retrosynthetic paths"):
-        t_start_wall = time.perf_counter()
-        t_start_cpu = time.process_time()
+        with timer.measure(target.id):
+            try:
+                # Set up RetroStar search algorithm for each target
+                search_algorithm = retro_star.RetroStarSearch(
+                    reaction_model=model,
+                    mol_inventory=inventory,
+                    or_node_cost_fn=or_node_cost_fn,
+                    and_node_cost_fn=and_node_cost_fn,
+                    value_function=retro_star_value_function,
+                    limit_reaction_model_calls=iterations,  # max number of model calls
+                    time_limit_s=300.0,  # max runtime in seconds (increased for RetroStar)
+                )
 
-        try:
-            # Set up RetroStar search algorithm for each target
-            search_algorithm = retro_star.RetroStarSearch(
-                reaction_model=model,
-                mol_inventory=inventory,
-                or_node_cost_fn=or_node_cost_fn,
-                and_node_cost_fn=and_node_cost_fn,
-                value_function=retro_star_value_function,
-                limit_reaction_model_calls=iterations,  # max number of model calls
-                time_limit_s=300.0,  # max runtime in seconds (increased for RetroStar)
-            )
+                # Run search
+                test_mol = Molecule(target.smiles)
+                search_algorithm.reset()
+                output_graph, _ = search_algorithm.run_from_mol(test_mol)
 
-            # Run search
-            test_mol = Molecule(target.smiles)
-            search_algorithm.reset()
-            output_graph, _ = search_algorithm.run_from_mol(test_mol)
+                # Extract routes using cost order (better for RetroStar)
+                routes = list(iter_routes_cost_order(output_graph, max_routes=10))
 
-            # Extract routes using cost order (better for RetroStar)
-            routes = list(iter_routes_cost_order(output_graph, max_routes=10))
+                if routes:
+                    # Serialize all routes for this target
+                    serialized_routes = []
+                    for route in routes:
+                        try:
+                            serialized_route = serialize_route(route, target.smiles)
+                            serialized_routes.append(serialized_route)
+                        except Exception as e:
+                            logger.warning(f"Could not serialize route for target {target.id}: {e}")
 
-            if routes:
-                # Serialize all routes for this target
-                serialized_routes = []
-                for route in routes:
-                    try:
-                        serialized_route = serialize_route(route, target.smiles)
-                        serialized_routes.append(serialized_route)
-                    except Exception as e:
-                        logger.warning(f"Could not serialize route for target {target.id}: {e}")
-
-                if serialized_routes:
-                    results[target.id] = serialized_routes
-                    solved_count += 1
+                    if serialized_routes:
+                        results[target.id] = serialized_routes
+                        solved_count += 1
+                    else:
+                        results[target.id] = []
                 else:
                     results[target.id] = []
-            else:
+
+            except Exception as e:
+                logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
                 results[target.id] = []
 
-        except Exception as e:
-            logger.error(f"Failed to process target {target.id} ({target.smiles}): {e}", exc_info=True)
-            results[target.id] = []
-        finally:
-            t_end_wall = time.perf_counter()
-            t_end_cpu = time.process_time()
-            runtime.wall_time[target.id] = t_end_wall - t_start_wall
-            runtime.cpu_time[target.id] = t_end_cpu - t_start_cpu
+    runtime = timer.to_model()
 
     summary = {
         "solved_count": solved_count,
