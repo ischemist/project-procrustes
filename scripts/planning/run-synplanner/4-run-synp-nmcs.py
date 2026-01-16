@@ -22,9 +22,9 @@ from synplan.chem.reaction_routes.route_cgr import extract_reactions
 from synplan.chem.utils import mol_from_smiles
 from synplan.mcts.tree import Tree, TreeConfig
 from synplan.utils.config import RolloutEvaluationConfig
-from synplan.utils.loading import load_building_blocks, load_evaluation_function, load_reaction_rules
+from synplan.utils.loading import load_evaluation_function, load_reaction_rules
 from tqdm import tqdm
-from utils import load_policy_from_config
+from utils import load_building_blocks_cached, load_policy_from_config
 
 from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
 from retrocast.utils import ExecutionTimer
@@ -33,7 +33,7 @@ from retrocast.utils.logging import logger
 BASE_DIR = Path(__file__).resolve().parents[3]
 
 SYNPLANNER_DIR = BASE_DIR / "data" / "0-assets" / "model-configs" / "synplanner"
-STOCKS_DIR = BASE_DIR / "data" / "1-benchmarks" / "stocks"
+STOCKS_DIR = BASE_DIR / "data" / "retrocast" / "1-benchmarks" / "stocks"
 
 
 if __name__ == "__main__":
@@ -51,13 +51,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # 1. Load Benchmark
-    bench_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
+    bench_path = BASE_DIR / "data" / "retrocast" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
     benchmark = load_benchmark(bench_path)
     assert benchmark.stock_name is not None, f"Stock name not found in benchmark {args.benchmark}"
 
     # 2. Load Stock
     stock_path = STOCKS_DIR / f"{benchmark.stock_name}.csv.gz"
-    building_blocks = load_building_blocks(stock_path, standardize=True, silent=True)
+    building_blocks = load_building_blocks_cached(stock_path)
 
     # 3. Setup Output
     folder_name = "synplanner-nmcs" if args.effort == "normal" else f"synplanner-nmcs-{args.effort}"
