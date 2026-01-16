@@ -6,7 +6,7 @@ with evaluation-first search guided by a value network and saves results in a st
 format matching other prediction scripts.
 
 Example usage:
-    uv run --extra synplanner scripts/synplanner/2-run-synp-val.py --benchmark uspto-190
+    uv run --extra synplanner scripts/synplanner/2-run-synp-val.py --benchmark mkt-cnv-160
     uv run --extra synplanner scripts/synplanner/2-run-synp-val.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
@@ -29,14 +29,14 @@ from utils import load_policy_from_config
 
 from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
 from retrocast.utils import ExecutionTimer
-from retrocast.utils.logging import logger
+from retrocast.utils.logging import configure_script_logging, logger
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 
 SYNPLANNER_DIR = BASE_DIR / "data" / "0-assets" / "model-configs" / "synplanner"
-STOCKS_DIR = BASE_DIR / "data" / "1-benchmarks" / "stocks"
+STOCKS_DIR = BASE_DIR / "data" / "retrocast" / "1-benchmarks" / "stocks"
 
-
+configure_script_logging()
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -52,7 +52,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # 1. Load Benchmark
-    bench_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
+    bench_path = BASE_DIR / "data" / "retrocast" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
     benchmark = load_benchmark(bench_path)
     assert benchmark.stock_name is not None, f"Stock name not found in benchmark {args.benchmark}"
 
