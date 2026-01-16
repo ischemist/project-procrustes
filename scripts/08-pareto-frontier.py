@@ -123,6 +123,11 @@ def main():
         default=10,
         help="Which top-k accuracy to plot on Y-axis (default: 10)",
     )
+    parser.add_argument(
+        "--time-based",
+        action="store_true",
+        help="Use wall time (minutes) instead of cost (USD) for X-axis",
+    )
     args = parser.parse_args()
 
     loader = BenchmarkResultsLoader(DATA_DIR)
@@ -158,11 +163,13 @@ def main():
             model_config=MODEL_CONFIG,
             hourly_costs=HOURLY_COSTS,
             k=args.top_k,
+            time_based=args.time_based,
         )
 
-        out_path = output_dir / "pareto_frontier.html"
+        suffix = "_time" if args.time_based else ""
+        out_path = output_dir / f"pareto_frontier{suffix}.html"
         fig.write_html(out_path, include_plotlyjs="cdn", auto_open=True)
-        fig.write_image(output_dir / f"{args.benchmark}.pdf")
+        fig.write_image(output_dir / f"{args.benchmark}{suffix}.pdf")
         logger.info(f"[bold green]Done![/] Plot saved to: [underline]{out_path}[/]")
 
     except Exception as e:
