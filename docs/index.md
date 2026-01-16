@@ -88,23 +88,40 @@ RetroCast introduces two benchmark series derived from PaRoutes:
 
 See **[Benchmarks Guide](guides/benchmarks.md)** for details.
 
-## Get Publication Data
+## Get Data
 
-!!! info "Reproducible Artifacts"
+=== "Latest (recommended)"
 
-    The complete `data/` folder with benchmarks, stocks, raw predictions, processed routes, scores, and results is available at [files.ischemist.com/retrocast/publication-data](https://files.ischemist.com/retrocast/publication-data).
-
-    Download all benchmark definitions:
+    For the most up-to-date benchmarks and stocks, use `get-data.sh`:
 
     ```bash
+    # Show available targets and their sizes
+    curl -fsSL https://files.ischemist.com/retrocast/get-data.sh | bash -s
+
+    # Check version and last update
+    curl -fsSL https://files.ischemist.com/retrocast/get-data.sh | bash -s -- -V
+
+    # Download a specific benchmark (includes definition + required stock)
+    curl -fsSL https://files.ischemist.com/retrocast/get-data.sh | bash -s -- mkt-cnv-160
+    ```
+
+=== "Publication (frozen)"
+
+    The complete `data/` folder as used in the preprint is available at [files.ischemist.com/retrocast/publication-data](https://files.ischemist.com/retrocast/publication-data):
+
+    ```bash
+    # Show available folders and their sizes
+    curl -fsSL https://files.ischemist.com/retrocast/get-pub-data.sh | bash -s
+
+    # Download all benchmark definitions
     curl -fsSL https://files.ischemist.com/retrocast/get-pub-data.sh | bash -s -- definitions
     ```
 
-    Verify integrity against manifests:
+Verify integrity against manifests:
 
-    ```bash
-    retrocast verify --all
-    ```
+```bash
+retrocast verify --all
+```
 
 ## Visualization: SynthArena
 
