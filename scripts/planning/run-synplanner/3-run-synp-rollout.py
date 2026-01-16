@@ -30,7 +30,7 @@ from retrocast.io import create_manifest, load_benchmark, save_execution_stats, 
 from retrocast.utils import ExecutionTimer
 from retrocast.utils.logging import logger
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+BASE_DIR = Path(__file__).resolve().parents[3]
 
 SYNPLANNER_DIR = BASE_DIR / "data" / "0-assets" / "model-configs" / "synplanner"
 STOCKS_DIR = BASE_DIR / "data" / "1-benchmarks" / "stocks"
