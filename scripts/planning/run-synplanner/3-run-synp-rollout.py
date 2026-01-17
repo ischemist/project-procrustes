@@ -5,8 +5,8 @@ This script processes targets from a benchmark using Synplanner's MCTS algorithm
 and saves results in a structured format matching other prediction scripts.
 
 Example usage:
-    uv run --extra synplanner scripts/synplanner/3-run-synp-rollout.py --benchmark uspto-190
-    uv run --extra synplanner scripts/synplanner/3-run-synp-rollout.py --benchmark random-n5-2-seed=20251030 --effort high
+    uv run --directory scripts/planning/run-synplanner 3-run-synp-rollout.py --benchmark uspto-190
+    uv run --directory scripts/planning/run-synplanner 3-run-synp-rollout.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
 Results are saved to: data/2-raw/synplanner-{stock}[-{effort}]/{benchmark_name}/
@@ -25,7 +25,10 @@ from utils import (
     save_synplanner_results,
 )
 
-from retrocast.utils.logging import logger
+from retrocast.utils.logging import configure_script_logging, logger
+
+configure_script_logging()
+
 
 if __name__ == "__main__":
     parser = create_benchmark_parser("Run Synplanner MCTS with rollout evaluation")
