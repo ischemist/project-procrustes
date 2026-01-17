@@ -1949,8 +1949,8 @@ wheels = [
 
 [[package]]
 name = "retrocast"
-version = "0.5.2"
-source = { registry = "https://pypi.org/simple" }
+version = "0.5.3.dev9"
+source = { git = "https://github.com/ischemist/project-procrustes?branch=idk%2Freally#ee70bc66741bc85c46fcd08666c9b5a0c6d656db" }
 dependencies = [
     { name = "packaging" },
     { name = "pydantic" },
@@ -1958,10 +1958,6 @@ dependencies = [
     { name = "rdkit" },
     { name = "rich" },
     { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c2/cf/7f04da69610776b815f23b4a008250ff6528c8fc3050f993705a5bbbdb13/retrocast-0.5.2.tar.gz", hash = "sha256:307b80c520a634247b18bca32ac926d48339d493ed24d9eafe6c88aa153c3cae", size = 723829, upload-time = "2026-01-04T20:48:52.946Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/49/c0/8901dbc13c273425c2e560fd7877ad3e1208a7c7359796961fba786031d4/retrocast-0.5.2-py3-none-any.whl", hash = "sha256:0792f79e8ec60477edd94ec06cfa767b92d21c0c9a8b9eb1838a87ad470817c7", size = 120005, upload-time = "2026-01-04T20:48:54.027Z" },
 ]
 
 [[package]]
@@ -2202,7 +2198,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "retrocast", specifier = ">=0.5.2" },
+    { name = "retrocast", git = "https://github.com/ischemist/project-procrustes?branch=idk%2Freally" },
     { name = "synplanner", specifier = ">=1.3.2" },
 ]
 

@@ -97,9 +97,11 @@ site/
 
 one-off-black-hole/
 
+data/retrocast/0-assets/
 data/retrocast/**/*.gz
 data/retrocast/**/*.hdf5
 data/retrocast/2-raw/
 data/retrocast/3-processed/
 data/retrocast/4-scored/
 data/retrocast/5-results/
+data/retrocast/6-comparisons/

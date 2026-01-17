@@ -18,9 +18,9 @@ from synplan.utils.loading import load_building_blocks, load_combined_policy_fun
 from tqdm import tqdm
 
 from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
-from retrocast.models.benchmark import BenchmarkSet
+from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
 from retrocast.paths import get_paths, resolve_data_dir
-from retrocast.utils import ExecutionRuntime, ExecutionTimer
+from retrocast.utils import ExecutionTimer
 from retrocast.utils.logging import logger
 
 
@@ -155,7 +155,7 @@ def run_synplanner_predictions(
     building_blocks: set[str],
     expansion_function: Callable,
     evaluation_function: Callable,
-) -> tuple[dict[str, list[dict[str, Any]]], int, ExecutionRuntime]:
+) -> tuple[dict[str, list[dict[str, Any]]], int, ExecutionStats]:
     """Run Synplanner search over all benchmark targets.
 
     Args:
@@ -209,7 +209,7 @@ def run_synplanner_predictions(
 
 def save_synplanner_results(
     results: dict[str, list[dict[str, Any]]],
-    runtime: ExecutionRuntime,
+    runtime: ExecutionStats,
     save_dir: Path,
     bench_path: Path,
     stock_path: Path,
