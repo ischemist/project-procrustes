@@ -94,6 +94,6 @@ if __name__ == "__main__":
         bench_path=bench_path,
         stock_path=stock_path,
         config_path=config_path,
-        script_name="scripts/synplanner/4-run-synp-nmcs.py",
+        script_name="scripts/planning/run-synplanner/4-run-synp-nmcs.py",
         benchmark=benchmark,
     )

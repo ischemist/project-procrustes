@@ -127,7 +127,6 @@ conflicts = [
     { extra = "dms" },
     { extra = "aizyn" },
     { extra = "retro-star" },
-    { extra = "synplanner" },
     { extra = "syntheseus" },
   ]
 ]

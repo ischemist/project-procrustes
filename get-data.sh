@@ -60,19 +60,24 @@ main() {
     TARGET=""
     DRY_RUN=0
 
-    for arg in "$@"; do
-        case $arg in
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
             -h|--help) usage ;;
             -V|--version) show_version ;;
-            --dry-run) DRY_RUN=1 ;;
-            --dir=*) DATA_DIR="${arg#*=}" ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            --dir=*) DATA_DIR="${1#*=}"; shift ;;
+            -*)
+                echo -e "${R}error: unknown option: $1${NC}" >&2
+                usage
+                ;;
             *)
                 if [ -z "$TARGET" ]; then
-                    TARGET="$arg"
+                    TARGET="$1"
                 else
-                    echo -e "${R}error: multiple targets specified ($TARGET, $arg)${NC}"
+                    echo -e "${R}error: multiple targets specified ('$TARGET' and '$1')${NC}" >&2
                     usage
                 fi
+                shift
                 ;;
         esac
     done
@@ -170,7 +175,7 @@ main() {
             printf "${B}%s${NC} checking %-40s" "$PFX" "$(basename "$FILEPATH")"
             CALCULATED_HASH=$($SHACMD "$FILEPATH" | awk '{print $1}')
 
-            if [ "$CALCULATED_HASH" == "$EXPECTED_HASH" ]; then
+            if [ "$CALCULATED_HASH" = "$EXPECTED_HASH" ]; then
                 printf "\r${B}%s${NC} %-50s ${G}[VERIFIED - LOCAL]${NC}\n" "$PFX" "$FILEPATH"
                 continue
             else
@@ -181,7 +186,7 @@ main() {
         printf "${B}%s${NC} downloading %-40s" "$PFX" "$FILEPATH"
         if curl -f# -sL -o "$FILEPATH" "$BASE_URL/$FILEPATH"; then
             CALCULATED_HASH=$($SHACMD "$FILEPATH" | awk '{print $1}')
-            if [ "$CALCULATED_HASH" == "$EXPECTED_HASH" ]; then
+            if [ "$CALCULATED_HASH" = "$EXPECTED_HASH" ]; then
                 printf "\r${B}%s${NC} %-50s ${G}[VERIFIED]${NC}          \n" "$PFX" "$FILEPATH"
             else
                 printf "\r${B}%s${NC} %-50s ${R}[CORRUPT]${NC}           \n" "$PFX" "$FILEPATH"
