@@ -17,7 +17,8 @@ from synplan.utils.config import CombinedPolicyConfig, PolicyNetworkConfig
 from synplan.utils.loading import load_building_blocks, load_combined_policy_function, load_policy_function
 from tqdm import tqdm
 
-from retrocast.io import Benchmark, create_manifest, load_benchmark, save_execution_stats, save_json_gz
+from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
+from retrocast.models.benchmark import BenchmarkSet
 from retrocast.paths import get_paths, resolve_data_dir
 from retrocast.utils import ExecutionRuntime, ExecutionTimer
 from retrocast.utils.logging import logger
@@ -95,7 +96,7 @@ def create_benchmark_parser(description: str) -> argparse.ArgumentParser:
 def load_benchmark_and_stock(
     benchmark_name: str,
     paths: SynplannerPaths,
-) -> tuple[Benchmark, set[str], Path, Path]:
+) -> tuple[BenchmarkSet, set[str], Path, Path]:
     """Load benchmark definition and corresponding building blocks.
 
     Args:
@@ -148,7 +149,7 @@ def load_policy_from_config(
 
 
 def run_synplanner_predictions(
-    benchmark: Benchmark,
+    benchmark: BenchmarkSet,
     tree_config: TreeConfig,
     reaction_rules: Any,
     building_blocks: set[str],
@@ -214,7 +215,7 @@ def save_synplanner_results(
     stock_path: Path,
     config_path: Path,
     script_name: str,
-    benchmark: Benchmark,
+    benchmark: BenchmarkSet,
 ) -> None:
     """Save Synplanner results, execution stats, and manifest.
 

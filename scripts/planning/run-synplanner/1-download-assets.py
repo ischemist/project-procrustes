@@ -3,13 +3,10 @@ Usage:
     uv run --directory scripts/planning/run-synplanner 1-download-assets.py
 """
 
-from pathlib import Path
-
 from synplan.utils.loading import download_selected_files
+from utils import get_synplanner_paths
 
-# download SynPlanner data
-base_dir = Path(__file__).resolve().parents[3]
-data_folder = base_dir / "data" / "0-assets" / "model-configs" / "synplanner"
+paths = get_synplanner_paths(__file__)
 
 assets = [
     ("uspto", "uspto_reaction_rules.pickle"),
@@ -18,4 +15,4 @@ assets = [
     ("uspto/weights", "value_network.ckpt"),
 ]
 
-download_selected_files(files_to_get=assets, save_to=data_folder, extract_zips=True)
+download_selected_files(files_to_get=assets, save_to=paths.synplanner_dir, extract_zips=True)
