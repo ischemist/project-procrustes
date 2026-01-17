@@ -253,7 +253,7 @@ def save_synplanner_results(
 def load_building_blocks_cached(
     stock_path: Path,
     *,
-    silent: bool = True,
+    silent: bool = False,
 ) -> set[str]:
     """Load building blocks with caching for SynPlanner's standardization.
 

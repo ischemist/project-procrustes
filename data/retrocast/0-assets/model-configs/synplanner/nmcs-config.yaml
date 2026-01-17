@@ -1,0 +1,27 @@
+tree:
+  max_iterations: 1  
+  max_tree_size: 1000000
+  max_time: 60                 
+  max_depth: 10
+  algorithm: nmcs
+  search_strategy: expansion_first
+  ucb_type: uct
+  c_ucb: 0.1
+  backprop_type: muzero
+  normalize_scores: False
+  exclude_small: True
+  init_node_value: 0.5
+  min_mol_size: 0
+  epsilon: 0.0
+  beam_width: 10
+  enable_pruning: False
+  silent: True
+  nmcs_level: 2                # Sweet spot: good exploration, manageable complexity
+  nmcs_playout_mode: greedy    # Uses evaluation values (more informed)
+node_evaluation:
+  evaluation_type: rollout
+  evaluation_agg: max
+node_expansion:
+  top_rules: 100     # More rules since level is low
+  rule_prob_threshold: 0.0
+  mode: ranking

@@ -1,0 +1,24 @@
+expansion:
+  uspto:
+    - data/0-assets/model-configs/aizynthfinder/uspto_model.onnx
+    - data/0-assets/model-configs/aizynthfinder/uspto_templates.csv.gz
+  ringbreaker:
+    - data/0-assets/model-configs/aizynthfinder/uspto_ringbreaker_model.onnx
+    - data/0-assets/model-configs/aizynthfinder/uspto_ringbreaker_templates.csv.gz
+filter:
+  uspto: data/0-assets/model-configs/aizynthfinder/uspto_filter_model.onnx
+stock:
+  buyables-stock: data/1-benchmarks/stocks/buyables-stock.hdf5
+  n1-n5-stock: data/1-benchmarks/stocks/n1-n5-stock.hdf5
+  n5-stock: data/1-benchmarks/stocks/n5-stock.hdf5
+search:
+  iteration_limit: 500
+  algorithm: aizynthfinder.search.retrostar.search_tree.SearchTree
+  algorithm_config:
+    molecule_cost:
+      cost: aizynthfinder.search.retrostar.cost.RetroStarCost
+      model_path: data/0-assets/model-configs/aizynthfinder/retrostar_value_model.pickle
+      fingerprint_length: 2048
+      fingerprint_radius: 2
+      dropout_rate: 0.1
+
