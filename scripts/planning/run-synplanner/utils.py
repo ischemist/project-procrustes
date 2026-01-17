@@ -59,7 +59,7 @@ def get_synplanner_paths() -> SynplannerPaths:
         raw_dir=paths["raw"],
         filtering_weights=synplanner_dir / "uspto" / "weights" / "filtering_policy_network.ckpt",
         ranking_weights=synplanner_dir / "uspto" / "weights" / "ranking_policy_network.ckpt",
-        reaction_rules=synplanner_dir / "uspto" / "reaction_rules.pickle",
+        reaction_rules=synplanner_dir / "uspto" / "uspto_reaction_rules.pickle",
     )
 
 
