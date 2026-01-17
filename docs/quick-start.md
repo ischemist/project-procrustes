@@ -52,7 +52,17 @@ retrocast init
 This creates:
 
 - `retrocast-config.yaml` - Configuration file
-- `data/` - Structured data directories (1-benchmarks, 2-raw, 3-processed, 4-scored, 5-results)
+- `data/retrocast/` - Structured data directories (1-benchmarks, 2-raw, 3-processed, 4-scored, 5-results)
+
+!!! tip "Custom data directory"
+
+    You can customize the data directory location via:
+    
+    - CLI flag: `retrocast --data-dir ./my-data <command>`
+    - Environment variable: `export RETROCAST_DATA_DIR=./my-data`
+    - Config file: Add `data_dir: ./my-data` to `retrocast-config.yaml`
+    
+    Run `retrocast config` to see the resolved paths.
 
 ### Configure Your Model
 
@@ -64,7 +74,7 @@ models:
   my-new-model: # (1)!
     # The parser logic (see docs/developers/adapters.md)
     adapter: aizynth # (2)!
-    # The filename RetroCast looks for in data/2-raw/
+    # The filename RetroCast looks for in 2-raw/
     raw_results_filename: predictions.json # (3)!
     sampling: # (4)!
       strategy: top-k
@@ -73,7 +83,7 @@ models:
 
 1. Choose a descriptive name (lowercase with hyphens)
 2. See [supported adapters](concepts.md#the-core-philosophy-adapters-as-an-air-gap) - includes AiZynthFinder, Retro\*, DMS, SynPlanner, Syntheseus, ASKCOS, and more
-3. Must match the filename you'll place in `data/2-raw/`
+3. Must match the filename you'll place in `2-raw/` within your data directory
 4. Optional: Limit routes per target (omit to keep all routes)
 
 ## 3. The Workflow (Ingest → Score → Analyze)
@@ -82,29 +92,31 @@ RetroCast enforces a structured workflow to ensure reproducibility:
 
 ```mermaid
 graph LR
-    A[Place Raw Data<br/>data/2-raw/] --> B[Ingest<br/>Standardize]
+    A[Place Raw Data<br/>2-raw/] --> B[Ingest<br/>Standardize]
     B --> C[Score<br/>Evaluate]
     C --> D[Analyze<br/>Statistics]
     
-    B -.-> E[data/3-processed/]
-    C -.-> F[data/4-scored/]
-    D -.-> G[data/5-results/]
+    B -.-> E[3-processed/]
+    C -.-> F[4-scored/]
+    D -.-> G[5-results/]
 
 ```
+
+All paths are relative to your data directory (default: `data/retrocast/`).
 
 ### Step A: Place Raw Data
 
-Put your model's raw output file in the `data/2-raw/` directory following this structure:
+Put your model's raw output file in the `2-raw/` directory (within your data directory) following this structure:
 
 ```
-data/2-raw/<model-name>/<benchmark-name>/<filename>
+<data-dir>/2-raw/<model-name>/<benchmark-name>/<filename>
 ```
 
 **Example:**
 
 ```bash
-mkdir -p data/2-raw/my-new-model/mkt-cnv-160
-cp predictions.json data/2-raw/my-new-model/mkt-cnv-160/
+mkdir -p data/retrocast/2-raw/my-new-model/mkt-cnv-160
+cp predictions.json data/retrocast/2-raw/my-new-model/mkt-cnv-160/
 ```
 
 !!! info "Available benchmarks"
@@ -122,7 +134,7 @@ Convert raw output into the canonical RetroCast `Route` format. This standardize
 retrocast ingest --model my-new-model --dataset mkt-cnv-160
 ```
 
-**Output:** `data/3-processed/my-new-model/mkt-cnv-160/routes.json.gz`
+**Output:** `data/retrocast/3-processed/my-new-model/mkt-cnv-160/routes.json.gz`
 
 ### Step C: Score
 
@@ -132,7 +144,7 @@ Evaluate routes against the benchmark's defined stock.
 retrocast score --model my-new-model --dataset mkt-cnv-160
 ```
 
-**Output:** `data/4-scored/my-new-model/mkt-cnv-160/scores.json.gz`
+**Output:** `data/retrocast/4-scored/my-new-model/mkt-cnv-160/scores.json.gz`
 
 ### Step D: Analyze
 
@@ -142,14 +154,14 @@ Generate final report with bootstrapped confidence intervals and visualization p
 retrocast analyze --model my-new-model --dataset mkt-cnv-160
 ```
 
-**Output:** `data/5-results/mkt-cnv-160/my-new-model/`
+**Output:** `data/retrocast/5-results/mkt-cnv-160/my-new-model/`
 
 - `report.md` - Statistical summary
 - `*.html` - Interactive plots (add `--make-plots` arg and make sure to install `viz` dep group, i.e. `uv tool install "retrocast[viz]"`)
 
 !!! success "You're done!"
 
-    Check `data/5-results/mkt-cnv-160/my-new-model/report.md` for your results!
+    Check `data/retrocast/5-results/mkt-cnv-160/my-new-model/report.md` for your results!
 
 ## Alternative: Quick Evaluation
 
@@ -159,9 +171,9 @@ retrocast analyze --model my-new-model --dataset mkt-cnv-160
 
     ```bash
     retrocast score-file \
-      --benchmark data/1-benchmarks/definitions/mkt-cnv-160.json.gz \
+      --benchmark data/retrocast/1-benchmarks/definitions/mkt-cnv-160.json.gz \
       --routes my_predictions.json.gz \
-      --stock data/1-benchmarks/stocks/buyables-stock.txt \
+      --stock data/retrocast/1-benchmarks/stocks/buyables-stock.txt \
       --output scores.json.gz \
       --model-name "Quick-Check"
     ```

@@ -332,6 +332,7 @@ def plot_pareto_frontier(
     model_config: dict[str, dict[str, str]],
     hourly_costs: dict[str, float],
     k: int = 10,
+    time_based: bool = False,
 ) -> go.Figure:
     """
     Creates a Pareto frontier plot showing cost vs accuracy trade-offs.
@@ -341,6 +342,7 @@ def plot_pareto_frontier(
         model_config: Dict mapping model_name -> {legend, short, color}
         hourly_costs: Dict mapping model_name -> hourly compute cost (USD)
         k: Which top-k accuracy to plot (default: 10)
+        time_based: If True, use wall time (minutes) instead of cost (USD) for X-axis
 
     Returns:
         Plotly figure object
@@ -361,17 +363,22 @@ def plot_pareto_frontier(
         if stats.total_wall_time is None:
             continue
 
-        # Skip if no cost data
-        if model_name not in hourly_costs:
+        # Skip if no cost data (only required in cost mode)
+        if not time_based and model_name not in hourly_costs:
             continue
 
         # Skip if no top-k data
         if k not in stats.top_k_accuracy:
             continue
 
-        # Calculate cost: wall_time (minutes) / 3600 * hourly_cost
+        # Calculate X-axis value: wall time (minutes) or cost (USD)
+        wall_time_minutes = stats.total_wall_time / 60
         wall_time_hours = stats.total_wall_time / 3600
-        cost = wall_time_hours * hourly_costs[model_name]
+
+        if time_based:
+            x_value = wall_time_minutes
+        else:
+            x_value = wall_time_hours * hourly_costs[model_name]
 
         # Get accuracy metrics
         metric = stats.top_k_accuracy[k].overall
@@ -394,12 +401,35 @@ def plot_pareto_frontier(
         )
 
         # Store point for Pareto frontier
-        pareto_points.append((cost, accuracy, model_name))
+        pareto_points.append((x_value, accuracy, model_name))
+
+        # Build hover template based on mode
+        if time_based:
+            hover_template = (
+                "<b>%{customdata[0]}</b><br>"
+                "Wall Time: %{customdata[1]:.1f} min<br>"
+                f"Top-{k} Accuracy: %{{y:.1f}}%<br>"
+                "CI: [%{customdata[4]:.1f}%, %{customdata[5]:.1f}%]<br>"
+                "N=%{customdata[3]}<br>"
+                "Status: %{customdata[6]}"
+                "<extra></extra>"
+            )
+        else:
+            hover_template = (
+                "<b>%{customdata[0]}</b><br>"
+                "Cost: $%{customdata[1]:.2f}<br>"
+                "Wall Time: %{customdata[2]:.1f} min<br>"
+                f"Top-{k} Accuracy: %{{y:.1f}}%<br>"
+                "CI: [%{customdata[4]:.1f}%, %{customdata[5]:.1f}%]<br>"
+                "N=%{customdata[3]}<br>"
+                "Status: %{customdata[6]}"
+                "<extra></extra>"
+            )
 
         # Add scatter point with error bars
         fig.add_trace(
             go.Scatter(
-                x=[cost],
+                x=[x_value],
                 y=[accuracy],
                 name=config["legend"],
                 mode="markers+text",
@@ -424,24 +454,15 @@ def plot_pareto_frontier(
                 customdata=[
                     [
                         model_name,
-                        cost,
-                        wall_time_hours,
+                        x_value,
+                        wall_time_minutes,
                         metric.n_samples,
                         ci_lower,
                         ci_upper,
                         metric.reliability.code,
                     ]
                 ],
-                hovertemplate=(
-                    "<b>%{customdata[0]}</b><br>"
-                    "Cost: $%{customdata[1]:.2f}<br>"
-                    "Wall Time: %{customdata[2]:.2f} hours<br>"
-                    f"Top-{k} Accuracy: %{{y:.1f}}%<br>"
-                    "CI: [%{customdata[4]:.1f}%, %{customdata[5]:.1f}%]<br>"
-                    "N=%{customdata[3]}<br>"
-                    "Status: %{customdata[6]}"
-                    "<extra></extra>"
-                ),
+                hovertemplate=hover_template,
             )
         )
 
@@ -478,10 +499,11 @@ def plot_pareto_frontier(
 
     # Apply layout
     # title = f"<b>Pareto Frontier: Cost vs Accuracy</b><br><span style='font-size: 12px;'>Benchmark: {benchmark} | Stock: {stock}</span>"
+    x_title = "Wall Time (minutes)" if time_based else "Total Cost (USD)"
     theme.apply_layout(
         fig,
         # title=title,
-        x_title="Total Cost (USD)",
+        x_title=x_title,
         y_title=f"Top-{k} Accuracy (%)",
         height=600,
         width=1200,

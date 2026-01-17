@@ -8,6 +8,7 @@ import yaml
 
 from retrocast import __version__
 from retrocast.cli import adhoc, handlers
+from retrocast.paths import ENV_VAR_NAME, check_migration_needed, get_data_dir_source, resolve_data_dir
 from retrocast.utils.logging import configure_script_logging, logger
 
 
@@ -42,9 +43,17 @@ def main() -> None:
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("--config", type=Path, default=Path("retrocast-config.yaml"), help="Path to config file")
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        help=f"Override data directory (default: data/retrocast/, or {ENV_VAR_NAME} env var)",
+    )
     parser.add_argument("--version", "-V", action="version", version=f"retrocast {__version__}")
 
     subparsers = parser.add_subparsers(dest="command", required=True, help="Command to run")
+
+    # --- CONFIG ---
+    subparsers.add_parser("config", help="Show resolved configuration and paths")
 
     # --- INIT ---
     init_parser = subparsers.add_parser("init", help="Initialize a local configuration file")
@@ -186,6 +195,25 @@ def main() -> None:
 
     # Load config (local or default)
     config = load_config(args.config)
+
+    # Resolve data directory with priority: CLI > env > config > default
+    cli_data_dir = getattr(args, "data_dir", None)
+    config_data_dir = config.get("data_dir")
+    resolved_data_dir = resolve_data_dir(cli_arg=cli_data_dir, config_value=config_data_dir)
+
+    # Inject resolved data_dir into config for handlers
+    config["data_dir"] = str(resolved_data_dir)
+    config["_data_dir_source"] = get_data_dir_source(cli_arg=cli_data_dir, config_value=config_data_dir)
+
+    # Check for migration and warn if needed
+    migration_warning = check_migration_needed(resolved_data_dir)
+    if migration_warning:
+        logger.warning(f"Migration Notice: {migration_warning}")
+
+    # Handle config command (needs resolved paths but not full config validation)
+    if args.command == "config":
+        handlers.handle_config(args, config)
+        return
 
     try:
         if args.command == "list":

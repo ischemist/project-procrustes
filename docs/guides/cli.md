@@ -46,6 +46,48 @@ Verify installation:
 retrocast --version
 ```
 
+## Global Options
+
+These options apply to all commands:
+
+```bash
+retrocast [--config CONFIG] [--data-dir DATA_DIR] <command>
+```
+
+| Option | Description | Default |
+|:-------|:------------|:--------|
+| `--config` | Path to config file | `retrocast-config.yaml` |
+| `--data-dir` | Override data directory | `data/retrocast/` |
+
+### Data Directory Resolution
+
+The data directory is resolved with the following priority:
+
+1. **CLI flag:** `--data-dir /custom/path`
+2. **Environment variable:** `RETROCAST_DATA_DIR=/custom/path`
+3. **Config file:** `data_dir: /custom/path` in `retrocast-config.yaml`
+4. **Default:** `data/retrocast/`
+
+!!! example "Examples"
+
+    ```bash
+    # Use CLI flag (highest priority)
+    retrocast --data-dir ./my-data ingest --model my-model --dataset mkt-cnv-160
+    
+    # Use environment variable
+    RETROCAST_DATA_DIR=./my-data retrocast ingest --model my-model --dataset mkt-cnv-160
+    
+    # Check current configuration
+    retrocast config
+    ```
+
+!!! warning "Migration from older versions"
+
+    The default data directory changed from `data/` to `data/retrocast/` in version 0.6. If you have existing data at `data/`, either:
+    
+    - Move it: `mv data/1-benchmarks data/retrocast/`
+    - Or set the environment variable: `export RETROCAST_DATA_DIR=data`
+
 ## Ad-Hoc Workflow
 
 !!! tip "When to use ad-hoc mode"
@@ -146,7 +188,7 @@ models:
 
 1. Model identifier (used in CLI commands)
 2. Adapter type (see `retrocast list-adapters`)
-3. Expected filename in `data/2-raw/<model>/<benchmark>/`
+3. Expected filename in `2-raw/<model>/<benchmark>/`
 4. Optional: Limit routes per target
 
 ??? example "Advanced configuration"
@@ -169,14 +211,16 @@ models:
 
 ```mermaid
 graph LR
-    A[data/2-raw/] --> B[ingest]
-    B --> C[data/3-processed/]
+    A[2-raw/] --> B[ingest]
+    B --> C[3-processed/]
     C --> D[score]
-    D --> E[data/4-scored/]
+    D --> E[4-scored/]
     E --> F[analyze]
-    F --> G[data/5-results/]
+    F --> G[5-results/]
     
 ```
+
+All paths are relative to your data directory (default: `data/retrocast/`).
 
 ### `ingest` - Standardize Routes
 
@@ -193,8 +237,8 @@ retrocast ingest \
 1. Optional: Hashes the model name for blind review
 2. Optional: Strip stereochemistry during SMILES canonicalization
 
-**Input:** `data/2-raw/<model>/<dataset>/<raw_results_filename>`  
-**Output:** `data/3-processed/<model>/<dataset>/routes.json.gz`
+**Input:** `<data-dir>/2-raw/<model>/<dataset>/<raw_results_filename>`  
+**Output:** `<data-dir>/3-processed/<model>/<dataset>/routes.json.gz`
 
 **Operations:**
 
@@ -224,8 +268,8 @@ retrocast score \
 1. Optional: Override default benchmark stock
 2. Optional: Perform stereochemistry-agnostic matching by dropping stereochemistry from InChIKeys
 
-**Input:** `data/3-processed/<model>/<dataset>/routes.json.gz`  
-**Output:** `data/4-scored/<model>/<dataset>/<stock>/scores.json.gz`
+**Input:** `<data-dir>/3-processed/<model>/<dataset>/routes.json.gz`  
+**Output:** `<data-dir>/4-scored/<model>/<dataset>/<stock>/scores.json.gz`
 
 **Annotations added:**
 
@@ -257,8 +301,8 @@ retrocast analyze \
 1. Generates interactive HTML visualizations
 2. Customizes K values (default: 1, 3, 5, 10, 20, 50, 100)
 
-**Input:** `data/4-scored/<model>/<dataset>/<stock>/scores.json.gz`  
-**Output:** `data/5-results/<dataset>/<model>/`
+**Input:** `<data-dir>/4-scored/<model>/<dataset>/<stock>/scores.json.gz`  
+**Output:** `<data-dir>/5-results/<dataset>/<model>/`
 
 - `report.md` - Statistical summary
 - `*.html` - Interactive plots (if `--make-plots`)
@@ -302,7 +346,7 @@ retrocast verify \
     Verifies that the file on disk matches the SHA256 hash in its manifest.
     
     ```bash
-    retrocast verify --target data/4-scored/model/dataset/
+    retrocast verify --target 4-scored/model/dataset/
     ```
 
 === "Deep Check"
@@ -316,7 +360,7 @@ retrocast verify \
     Ensures logical consistency across the pipeline.
     
     ```bash
-    retrocast verify --target data/5-results/model/dataset/ --deep
+    retrocast verify --target 5-results/model/dataset/ --deep
     ```
 
 **What it detects:**
@@ -325,6 +369,43 @@ retrocast verify \
 - :warning: Manual file tampering
 - :warning: Out-of-order execution
 - :warning: Hash mismatches
+
+---
+
+## Configuration & Debugging
+
+### `config` - Show Resolved Configuration
+
+Display the resolved data directory and paths, useful for debugging path issues:
+
+```bash
+retrocast config
+```
+
+**Output:**
+
+```
+RetroCast Configuration
+========================================
+
+Data directory: /path/to/project/data/retrocast
+  Source: default
+
+Environment:
+  RETROCAST_DATA_DIR: not set
+
+Resolved paths:
+  benchmarks: data/retrocast/1-benchmarks/definitions (exists)
+  stocks    : data/retrocast/1-benchmarks/stocks (exists)
+  raw       : data/retrocast/2-raw (missing)
+  processed : data/retrocast/3-processed (missing)
+  scored    : data/retrocast/4-scored (missing)
+  results   : data/retrocast/5-results (missing)
+```
+
+!!! tip "Debugging path issues"
+
+    If commands can't find your data, run `retrocast config` to see where RetroCast is looking and which paths exist.
 
 ---
 
@@ -399,13 +480,14 @@ Model: dms-explorer
 
 | Command | Purpose | Input | Output |
 |:--------|:--------|:------|:-------|
+| `config` | Show resolved paths | - | Configuration display |
 | `init` | Initialize project | - | `retrocast-config.yaml` |
 | `adapt` | Convert raw → standardized | Raw predictions | Route objects |
 | `score-file` | Evaluate routes | Routes + stock | Scored routes |
 | `create-benchmark` | Generate benchmark | SMILES list | Benchmark JSON |
-| `ingest` | Standardize (project mode) | `data/2-raw/` | `data/3-processed/` |
-| `score` | Evaluate (project mode) | `data/3-processed/` | `data/4-scored/` |
-| `analyze` | Generate report | `data/4-scored/` | `data/5-results/` |
+| `ingest` | Standardize (project mode) | `2-raw/` | `3-processed/` |
+| `score` | Evaluate (project mode) | `3-processed/` | `4-scored/` |
+| `analyze` | Generate report | `4-scored/` | `5-results/` |
 | `verify` | Audit integrity | Manifest files | Validation report |
 | `list` | Show models | `retrocast-config.yaml` | Model list |
 | `list-adapters` | Show adapters | - | Adapter list |

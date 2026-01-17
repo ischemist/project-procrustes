@@ -1,14 +1,12 @@
 """
 Usage:
-    uv run --extra synplanner scripts/synplanner/1-download-assets.py
+    uv run --directory scripts/planning/run-synplanner 1-download-assets.py
 """
 
-from pathlib import Path
-
 from synplan.utils.loading import download_selected_files
+from utils import get_synplanner_paths
 
-# download SynPlanner data
-data_folder = Path("data/0-assets/model-configs/synplanner").resolve()
+paths = get_synplanner_paths()
 
 assets = [
     ("uspto", "uspto_reaction_rules.pickle"),
@@ -17,4 +15,4 @@ assets = [
     ("uspto/weights", "value_network.ckpt"),
 ]
 
-download_selected_files(files_to_get=assets, save_to=data_folder, extract_zips=True)
+download_selected_files(files_to_get=assets, save_to=paths.synplanner_dir, extract_zips=True)

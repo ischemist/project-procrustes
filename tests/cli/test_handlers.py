@@ -307,7 +307,8 @@ class TestResolveHelpers:
         config = {}
         paths = handlers._get_paths(config)
 
-        assert paths["benchmarks"] == Path("data/1-benchmarks/definitions")
+        # New default is data/retrocast/
+        assert paths["benchmarks"] == Path("data/retrocast/1-benchmarks/definitions")
 
 
 @pytest.mark.integration

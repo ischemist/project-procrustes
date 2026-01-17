@@ -23,21 +23,6 @@ data/transfers/
 data/**/*.json.gz
 data/**/*.csv
 data/**/*.txt
-data/0-assets/*.pkl
-data/0-assets/model-configs/**/*.pickle
-data/0-assets/model-configs/**/*.pkl
-data/0-assets/model-configs/**/*.onnx
-data/0-assets/model-configs/**/*.csv*
-data/0-assets/model-configs/**/*.ckpt*
-data/0-assets/model-configs/**/*.pt*
-data/0-assets/model-configs/**/*.smi*
-data/0-assets/model-configs/**/*.sdf*
-data/0-assets/model-configs/**/*.zip*
-data/0-assets/model-configs/**/*.hdf5*
-data/0-assets/model-configs/**/*.txt*
-data/0-assets/model-configs/**/*.dat*
-data/0-assets/model-configs/**/.*
-data/0-assets/model-configs/**/*.md
 data/analysis/**/*.html
 data/analysis/**/*.json
 data/analysis/**/*.txt
@@ -71,17 +56,6 @@ docs/coding-style.md
 data/statistics
 data/seed-stability-archive
 
-!data/1-benchmarks/definitions/*.json.gz
-data/1-benchmarks/definitions/re-export
-data/1-benchmarks/**/*.gz
-data/1-benchmarks/**/*.hdf5
-data/2-raw
-data/3-processed/
-data/4-scored/
-data/5-results/
-data/5-results/**/*.html
-data/5-results/**/*.jpg
-data/6-comparisons
 data/7-meta-analysis
 
 docs/testing-framework.md
@@ -96,3 +70,27 @@ data/tmp
 
 prompts/
 site/
+
+one-off-black-hole/
+
+data/retrocast/0-assets/**/*.pickle
+data/retrocast/0-assets/**/*.pkl
+data/retrocast/0-assets/model-configs/**/*.onnx
+data/retrocast/0-assets/model-configs/**/*.csv*
+data/retrocast/0-assets/model-configs/**/*.ckpt*
+data/retrocast/0-assets/model-configs/**/*.pt*
+data/retrocast/0-assets/model-configs/**/*.smi*
+data/retrocast/0-assets/model-configs/**/*.sdf*
+data/retrocast/0-assets/model-configs/**/*.zip*
+data/retrocast/0-assets/model-configs/**/*.hdf5*
+data/retrocast/0-assets/model-configs/**/*.txt*
+data/retrocast/0-assets/model-configs/**/*.dat*
+data/retrocast/0-assets/model-configs/**/.*
+data/retrocast/0-assets/model-configs/**/*.md
+data/retrocast/**/*.gz
+data/retrocast/**/*.hdf5
+data/retrocast/2-raw/
+data/retrocast/3-processed/
+data/retrocast/4-scored/
+data/retrocast/5-results/
+data/retrocast/6-comparisons/
