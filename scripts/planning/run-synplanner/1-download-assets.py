@@ -6,7 +6,7 @@ Usage:
 from synplan.utils.loading import download_selected_files
 from utils import get_synplanner_paths
 
-paths = get_synplanner_paths(__file__)
+paths = get_synplanner_paths()
 
 assets = [
     ("uspto", "uspto_reaction_rules.pickle"),

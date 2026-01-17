@@ -28,39 +28,33 @@ from retrocast.utils.logging import logger
 class SynplannerPaths:
     """Standard paths for Synplanner resources."""
 
-    base_dir: Path
     synplanner_dir: Path
     stocks_dir: Path
     benchmarks_dir: Path
+    raw_dir: Path
     filtering_weights: Path
     ranking_weights: Path
     reaction_rules: Path
 
 
-def get_synplanner_paths(script_file: Path | str) -> SynplannerPaths:
-    """Get standard Synplanner paths relative to script location.
+def get_synplanner_paths() -> SynplannerPaths:
+    """Get standard Synplanner paths using retrocast's path resolution.
 
     Uses retrocast's path resolution system to determine the data directory.
     This respects RETROCAST_DATA_DIR environment variable.
 
-    Args:
-        script_file: Path to the calling script (typically __file__).
-
     Returns:
         SynplannerPaths with all standard resource paths.
     """
-    base_dir = Path(script_file).resolve().parents[3]
-    synplanner_dir = base_dir / "data" / "0-assets" / "model-configs" / "synplanner"
-
-    # Use retrocast's path resolution (respects RETROCAST_DATA_DIR env var)
     data_dir = resolve_data_dir()
     paths = get_paths(data_dir)
+    synplanner_dir = data_dir / "0-assets" / "model-configs" / "synplanner"
 
     return SynplannerPaths(
-        base_dir=base_dir,
         synplanner_dir=synplanner_dir,
         stocks_dir=paths["stocks"],
         benchmarks_dir=paths["benchmarks"],
+        raw_dir=paths["raw"],
         filtering_weights=synplanner_dir / "uspto" / "weights" / "filtering_policy_network.ckpt",
         ranking_weights=synplanner_dir / "uspto" / "weights" / "ranking_policy_network.ckpt",
         reaction_rules=synplanner_dir / "uspto" / "reaction_rules.pickle",

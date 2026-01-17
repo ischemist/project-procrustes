@@ -34,12 +34,12 @@ if __name__ == "__main__":
     parser = create_benchmark_parser("Run Synplanner MCTS with value-network evaluation")
     args = parser.parse_args()
 
-    paths = get_synplanner_paths(__file__)
+    paths = get_synplanner_paths()
     benchmark, building_blocks, bench_path, stock_path = load_benchmark_and_stock(args.benchmark, paths)
 
     # Setup output directory
     folder_name = "synplanner-mcts-val" if args.effort == "normal" else f"synplanner-mcts-val-{args.effort}"
-    save_dir = paths.base_dir / "data" / "2-raw" / folder_name / benchmark.name
+    save_dir = paths.raw_dir / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"stock: {benchmark.stock_name}")
