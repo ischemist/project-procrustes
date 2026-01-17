@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ from retrocast.io.data import load_benchmark, load_execution_stats, load_routes,
 from retrocast.io.provenance import create_manifest
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.provenance import VerificationReport
+from retrocast.paths import DEFAULT_DATA_DIR, ENV_VAR_NAME, get_paths
 from retrocast.visualization.report import create_single_model_summary_table, generate_markdown_report
 from retrocast.workflow import analyze, ingest, score, verify
 
@@ -24,15 +26,8 @@ logger = logging.getLogger(__name__)
 
 def _get_paths(config: dict) -> dict[str, Path]:
     """Resolve standard directory layout."""
-    base = Path(config.get("data_dir", "data"))
-    return {
-        "benchmarks": base / "1-benchmarks" / "definitions",
-        "stocks": base / "1-benchmarks" / "stocks",
-        "raw": base / "2-raw",
-        "processed": base / "3-processed",
-        "scored": base / "4-scored",
-        "results": base / "5-results",
-    }
+    base = Path(config.get("data_dir", DEFAULT_DATA_DIR))
+    return get_paths(base)
 
 
 def _resolve_models(args: Any, config: dict) -> list[str]:
@@ -518,3 +513,33 @@ def handle_info(config: dict[str, Any], model_name: str) -> None:
     import yaml
 
     print(yaml.dump({model_name: conf}))
+
+
+def handle_config(args: Any, config: dict[str, Any]) -> None:
+    """Show resolved configuration and paths."""
+    paths = _get_paths(config)
+    data_dir = Path(config.get("data_dir", DEFAULT_DATA_DIR))
+    source = config.get("_data_dir_source", "unknown")
+
+    console.print()
+    console.print("[bold]RetroCast Configuration[/bold]")
+    console.print("=" * 40)
+
+    # Data directory info
+    console.print(f"\n[bold]Data directory:[/bold] {data_dir.resolve()}")
+    console.print(f"  Source: {source}")
+
+    # Environment variable
+    env_value = os.environ.get(ENV_VAR_NAME)
+    env_status = env_value if env_value else "[dim]not set[/dim]"
+    console.print("\n[bold]Environment:[/bold]")
+    console.print(f"  {ENV_VAR_NAME}: {env_status}")
+
+    # Resolved paths
+    console.print("\n[bold]Resolved paths:[/bold]")
+    max_key_len = max(len(k) for k in paths)
+    for name, path in paths.items():
+        exists_marker = "[green]exists[/green]" if path.exists() else "[dim]missing[/dim]"
+        console.print(f"  {name:<{max_key_len}}: {path} ({exists_marker})")
+
+    console.print()

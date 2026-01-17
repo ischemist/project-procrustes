@@ -18,6 +18,7 @@ from synplan.utils.loading import load_building_blocks, load_combined_policy_fun
 from tqdm import tqdm
 
 from retrocast.io import Benchmark, create_manifest, load_benchmark, save_execution_stats, save_json_gz
+from retrocast.paths import get_paths, resolve_data_dir
 from retrocast.utils import ExecutionRuntime, ExecutionTimer
 from retrocast.utils.logging import logger
 
@@ -38,6 +39,9 @@ class SynplannerPaths:
 def get_synplanner_paths(script_file: Path | str) -> SynplannerPaths:
     """Get standard Synplanner paths relative to script location.
 
+    Uses retrocast's path resolution system to determine the data directory.
+    This respects RETROCAST_DATA_DIR environment variable.
+
     Args:
         script_file: Path to the calling script (typically __file__).
 
@@ -47,14 +51,18 @@ def get_synplanner_paths(script_file: Path | str) -> SynplannerPaths:
     base_dir = Path(script_file).resolve().parents[3]
     synplanner_dir = base_dir / "data" / "0-assets" / "model-configs" / "synplanner"
 
+    # Use retrocast's path resolution (respects RETROCAST_DATA_DIR env var)
+    data_dir = resolve_data_dir()
+    paths = get_paths(data_dir)
+
     return SynplannerPaths(
         base_dir=base_dir,
         synplanner_dir=synplanner_dir,
-        stocks_dir=base_dir / "data" / "retrocast" / "1-benchmarks" / "stocks",
-        benchmarks_dir=base_dir / "data" / "retrocast" / "1-benchmarks" / "definitions",
+        stocks_dir=paths["stocks"],
+        benchmarks_dir=paths["benchmarks"],
         filtering_weights=synplanner_dir / "uspto" / "weights" / "filtering_policy_network.ckpt",
         ranking_weights=synplanner_dir / "uspto" / "weights" / "ranking_policy_network.ckpt",
-        reaction_rules=synplanner_dir / "uspto" / "uspto_reaction_rules.pickle",
+        reaction_rules=synplanner_dir / "uspto" / "reaction_rules.pickle",
     )
 
 

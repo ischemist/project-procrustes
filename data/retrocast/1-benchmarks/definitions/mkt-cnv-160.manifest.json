@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.5.0",
+  "created_at": "2025-12-01T19:38:05.800051Z",
+  "action": "scripts/paroutes/02-create-subsets",
+  "parameters": {
+    "seed": 20180329,
+    "name": "mkt-cnv-160"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/definitions/paroutes-n5-full-buyables-pruned.json.gz",
+      "file_hash": "824655ae1e0dd30b683259f0ffab0dc7b9f1c6f86cfe20dbef92a322772e28f5",
+      "content_hash": null
+    },
+    {
+      "path": "1-benchmarks/stocks/buyables-stock.csv.gz",
+      "file_hash": "b144cd96adf19694dcf35f6ccd28432062682ea43a47f4c2203fd3f813ea1bac",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/mkt-cnv-160.json.gz",
+      "file_hash": "b7f960fb5c97d18a1776881423f3569e804b89dcd7f38fcec912749d86522084",
+      "content_hash": "adff7df0895b9171f6e33a2cd21f5bcd2f83ef6d91186d22ed5b20bcfb3d11b9"
+    }
+  ],
+  "statistics": {
+    "n_targets": 160
+  }
+}

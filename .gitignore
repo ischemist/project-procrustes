@@ -79,8 +79,6 @@ data/2-raw
 data/3-processed/
 data/4-scored/
 data/5-results/
-data/5-results/**/*.html
-data/5-results/**/*.jpg
 data/6-comparisons
 data/7-meta-analysis
 
@@ -98,3 +96,10 @@ prompts/
 site/
 
 one-off-black-hole/
+
+data/retrocast/**/*.gz
+data/retrocast/**/*.hdf5
+data/retrocast/2-raw/
+data/retrocast/3-processed/
+data/retrocast/4-scored/
+data/retrocast/5-results/

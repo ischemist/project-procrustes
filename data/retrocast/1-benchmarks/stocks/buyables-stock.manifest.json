@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "retrocast_version": "0.5.0",
+  "created_at": "2025-12-01T19:39:31.606017Z",
+  "action": "canonicalize-stock",
+  "parameters": {
+    "stock_name": "buyables-stock"
+  },
+  "source_files": [
+    {
+      "path": "1-benchmarks/raw-stocks/buyables-stock.txt",
+      "file_hash": "c160639793528966ced3f31344d4b4fe480b6c79ecbd6a49bb5f46e8df9d420e",
+      "content_hash": null
+    }
+  ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/stocks/buyables-stock.csv.gz",
+      "file_hash": "aee42d44c9a96279dd13732d8a298bcfcad34a3ac0ba6b4b2715ec36ad18ec0b",
+      "content_hash": "83798603df79f1c0dcae5513edc5bd3396c8dd329a4c792b5961b3889d423465"
+    },
+    {
+      "path": "1-benchmarks/stocks/buyables-stock.txt.gz",
+      "file_hash": "397b94a4ad90b93ae8b0c3d97a1cc8cfb6e69b4b350ba48b1320d5d6605f8a90",
+      "content_hash": "83798603df79f1c0dcae5513edc5bd3396c8dd329a4c792b5961b3889d423465"
+    }
+  ],
+  "statistics": {
+    "raw_input_lines": 329384,
+    "empty_lines": 0,
+    "invalid_smiles": 82,
+    "inchi_generation_failed": 31,
+    "duplicate_smiles": 0,
+    "duplicate_inchikeys": 15813,
+    "unique_molecules": 313458,
+    "total_filtered": 15926
+  }
+}
