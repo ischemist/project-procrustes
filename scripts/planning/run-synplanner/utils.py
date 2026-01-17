@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
-from retrocast.paths import get_paths, resolve_data_dir
+from retrocast.paths import get_paths
 from retrocast.utils import ExecutionTimer
 from retrocast.utils.logging import logger
 
@@ -38,15 +38,17 @@ class SynplannerPaths:
 
 
 def get_synplanner_paths() -> SynplannerPaths:
-    """Get standard Synplanner paths using retrocast's path resolution.
+    """Get standard Synplanner paths using project root resolution.
 
-    Uses retrocast's path resolution system to determine the data directory.
-    This respects RETROCAST_DATA_DIR environment variable.
+    Computes the project root from this file's location to ensure paths
+    resolve correctly regardless of working directory (needed when running
+    with `uv run --directory` to use the local lockfile).
 
     Returns:
         SynplannerPaths with all standard resource paths.
     """
-    data_dir = resolve_data_dir()
+    project_root = Path(__file__).resolve().parents[3]
+    data_dir = project_root / "data" / "retrocast"
     paths = get_paths(data_dir)
     synplanner_dir = data_dir / "0-assets" / "model-configs" / "synplanner"
 
