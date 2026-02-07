@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import sys
@@ -16,7 +17,14 @@ from retrocast.io.data import load_benchmark, load_execution_stats, load_routes,
 from retrocast.io.provenance import create_manifest
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.provenance import VerificationReport
-from retrocast.paths import DEFAULT_DATA_DIR, ENV_VAR_NAME, get_paths
+from retrocast.paths import (
+    DEFAULT_DATA_DIR,
+    ENV_VAR_NAME,
+    ensure_path_within_root,
+    get_paths,
+    validate_directory_name,
+    validate_filename,
+)
 from retrocast.visualization.report import create_single_model_summary_table, generate_markdown_report
 from retrocast.workflow import analyze, ingest, score, verify
 
@@ -43,7 +51,9 @@ def _resolve_models(args: Any, paths: dict, stage: str) -> list[str]:
     """
     # Single model specified
     if hasattr(args, "model") and args.model:
-        return [args.model]
+        # Security: Validate model name to prevent path traversal
+        safe_model = validate_directory_name(args.model, param_name="model")
+        return [safe_model]
 
     # All models discovery
     if hasattr(args, "all_models") and args.all_models:
@@ -54,9 +64,9 @@ def _resolve_models(args: Any, paths: dict, stage: str) -> list[str]:
             for manifest_path in raw_dir.glob("*/*/manifest.json"):
                 # manifest_path is data/2-raw/{model}/{benchmark}/manifest.json
                 model_name = manifest_path.parent.parent.name
+                # Security: Validate discovered model name
                 try:
-                    import json
-
+                    model_name = validate_directory_name(model_name, param_name="discovered model")
                     with open(manifest_path) as f:
                         manifest = json.load(f)
                     if manifest.get("directives", {}).get("adapter"):
@@ -105,16 +115,25 @@ def _resolve_models(args: Any, paths: dict, stage: str) -> list[str]:
 def _resolve_benchmarks(args: Any, paths: dict[str, Path]) -> list[str]:
     """Determine which benchmarks to process by looking at files."""
     avail_files = list(paths["benchmarks"].glob("*.json.gz"))
-    avail_names = [p.name.replace(".json.gz", "") for p in avail_files]
+    # Security: Validate benchmark filenames
+    avail_names = []
+    for p in avail_files:
+        name = p.name.replace(".json.gz", "")
+        try:
+            avail_names.append(validate_filename(name, param_name="benchmark"))
+        except Exception as e:
+            logger.debug(f"Skipping invalid benchmark name {name!r}: {e}")
 
     if hasattr(args, "all_datasets") and args.all_datasets:
         return avail_names
 
     if hasattr(args, "dataset") and args.dataset:
-        if args.dataset not in avail_names:
-            logger.error(f"Benchmark '{args.dataset}' not found in {paths['benchmarks']}")
+        # Security: Validate user-provided benchmark name
+        safe_dataset = validate_filename(args.dataset, param_name="dataset")
+        if safe_dataset not in avail_names:
+            logger.error(f"Benchmark '{safe_dataset}' not found in {paths['benchmarks']}")
             sys.exit(1)
-        return [args.dataset]
+        return [safe_dataset]
 
     logger.error("Must specify --dataset or --all-datasets")
     sys.exit(1)
@@ -126,6 +145,13 @@ def _resolve_benchmarks(args: Any, paths: dict[str, Path]) -> list[str]:
 def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any) -> None:
     """The core logic for ingestion with dynamic adapter resolution."""
     raw_dir = paths["raw"] / model_name / benchmark_name
+
+    # Security: Ensure raw_dir is within the raw directory bounds
+    try:
+        raw_dir = ensure_path_within_root(raw_dir, paths["raw"], "raw data directory")
+    except Exception as e:
+        logger.error(f"Security violation for {model_name}/{benchmark_name}: {e}")
+        return
 
     if not raw_dir.exists():
         logger.warning(f"Skipping {model_name}/{benchmark_name}: Directory not found at {raw_dir}")
@@ -217,6 +243,13 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
     bench_path = paths["benchmarks"] / f"{benchmark_name}.json.gz"
     routes_path = paths["processed"] / benchmark_name / model_name / "routes.json.gz"
 
+    # Security: Ensure paths are within bounds
+    try:
+        routes_path = ensure_path_within_root(routes_path, paths["processed"], "routes path")
+    except Exception as e:
+        logger.error(f"Security violation for {model_name}/{benchmark_name}: {e}")
+        return
+
     if not routes_path.exists():
         logger.warning(f"Skipping score for {model_name}/{benchmark_name}: Routes not found. Run ingest first.")
         return
@@ -245,7 +278,14 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
         # Load execution stats if available
         execution_stats = None
         exec_stats_path = paths["raw"] / model_name / benchmark_name / "execution_stats.json.gz"
-        if exec_stats_path.exists():
+        # Security: Ensure exec_stats_path is within bounds
+        try:
+            exec_stats_path = ensure_path_within_root(exec_stats_path, paths["raw"], "execution stats path")
+        except Exception as e:
+            logger.warning(f"Security violation for execution stats: {e}")
+            exec_stats_path = None
+
+        if exec_stats_path and exec_stats_path.exists():
             try:
                 execution_stats = load_execution_stats(exec_stats_path)
                 logger.info(f"Loaded execution stats from {exec_stats_path}")
@@ -312,6 +352,13 @@ def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any
     stock_arg = getattr(args, "stock", None)
     scored_base = paths["scored"] / benchmark_name / model_name
 
+    # Security: Ensure scored_base is within the scored directory bounds
+    try:
+        scored_base = ensure_path_within_root(scored_base, paths["scored"], "scored base directory")
+    except Exception as e:
+        logger.error(f"Security violation for {model_name}/{benchmark_name}: {e}")
+        return
+
     if not scored_base.exists():
         logger.warning(f"Skipping analysis for {model_name}/{benchmark_name}: No scored data found.")
         return
@@ -327,6 +374,12 @@ def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any
 
     for stock_name in stocks_to_process:
         score_path = scored_base / stock_name / "evaluation.json.gz"
+        # Security: Ensure score_path is within bounds
+        try:
+            score_path = ensure_path_within_root(score_path, paths["scored"], "score file path")
+        except Exception as e:
+            logger.error(f"Security violation for {model_name}/{benchmark_name}/{stock_name}: {e}")
+            continue
         if not score_path.exists():
             logger.warning(f"Missing evaluation file: {score_path}")
             continue
@@ -514,8 +567,9 @@ def handle_list(config: dict[str, Any]) -> None:
         model_name = manifest_path.parent.parent.name
         benchmark_name = manifest_path.parent.name
         try:
-            import json
-
+            # Security: Validate model and benchmark names
+            model_name = validate_directory_name(model_name, param_name="discovered model")
+            benchmark_name = validate_directory_name(benchmark_name, param_name="discovered benchmark")
             with open(manifest_path) as f:
                 manifest = json.load(f)
             adapter = manifest.get("directives", {}).get("adapter")

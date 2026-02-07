@@ -4,6 +4,12 @@ class RetroCastException(Exception):
     pass
 
 
+class SecurityError(RetroCastException):
+    """Raised when security validation fails (path traversal, unsafe filenames, etc.)."""
+
+    pass
+
+
 class InvalidSmilesError(RetroCastException):
     """Raised when a SMILES string is malformed or cannot be processed."""
 

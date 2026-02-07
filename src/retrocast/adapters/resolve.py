@@ -15,6 +15,7 @@ from typing import Any
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.exceptions import AdapterResolutionError
+from retrocast.paths import validate_filename
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +113,16 @@ def resolve_raw_results_filename(*, raw_dir: Path) -> str:
 
     Returns:
         The filename string (e.g., "results.json.gz" or "valid_results.json.gz").
+
+    Raises:
+        SecurityError: If the filename contains path traversal sequences.
     """
     directives = _read_manifest_directives(raw_dir)
     filename = directives.get("raw_results_filename", DEFAULT_RAW_RESULTS_FILENAME)
+
+    # Security: Validate filename to prevent path traversal attacks
+    filename = validate_filename(filename, param_name="raw_results_filename")
+
     if filename != DEFAULT_RAW_RESULTS_FILENAME:
         logger.debug(f"Using raw_results_filename '{filename}' from manifest directives")
     return filename
