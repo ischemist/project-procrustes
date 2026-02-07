@@ -32,6 +32,7 @@ configure_script_logging()
 
 # Synplanner version - update when upgrading the library
 PLANNER_VERSION = "1.3.2"
+
 if __name__ == "__main__":
     parser = create_benchmark_parser("Run Synplanner MCTS with value-network evaluation")
     args = parser.parse_args()

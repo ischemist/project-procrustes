@@ -12,6 +12,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn
 from retrocast.adapters.resolve import resolve_adapter, resolve_raw_results_filename
 from retrocast.chem import InchiKeyLevel
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
+from retrocast.exceptions import SecurityError
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.io.data import load_benchmark, load_execution_stats, load_routes, load_stock_file
 from retrocast.io.provenance import create_manifest
@@ -71,7 +72,7 @@ def _resolve_models(args: Any, paths: dict, stage: str) -> list[str]:
                         manifest = json.load(f)
                     if manifest.get("directives", {}).get("adapter"):
                         discovered.add(model_name)
-                except Exception as e:
+                except (SecurityError, json.JSONDecodeError, OSError) as e:
                     logger.debug(f"Skipping malformed manifest {manifest_path}: {e}")
                     continue
             if not discovered:
@@ -121,7 +122,7 @@ def _resolve_benchmarks(args: Any, paths: dict[str, Path]) -> list[str]:
         name = p.name.replace(".json.gz", "")
         try:
             avail_names.append(validate_filename(name, param_name="benchmark"))
-        except Exception as e:
+        except SecurityError as e:
             logger.debug(f"Skipping invalid benchmark name {name!r}: {e}")
 
     if hasattr(args, "all_datasets") and args.all_datasets:
@@ -172,6 +173,13 @@ def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any)
     # Resolve raw results filename from manifest directives
     raw_filename = resolve_raw_results_filename(raw_dir=raw_dir)
     raw_path = raw_dir / raw_filename
+
+    # Security: Ensure raw_path is within the raw directory bounds
+    try:
+        raw_path = ensure_path_within_root(raw_path, paths["raw"], "raw results file")
+    except SecurityError as e:
+        logger.error(f"Security violation for {model_name}/{benchmark_name}: {e}")
+        return
 
     if not raw_path.exists():
         logger.warning(f"Skipping {model_name}/{benchmark_name}: File not found at {raw_path}")
@@ -577,7 +585,7 @@ def handle_list(config: dict[str, Any]) -> None:
                 if model_name not in discovered:
                     discovered[model_name] = []
                 discovered[model_name].append((benchmark_name, adapter))
-        except Exception as e:
+        except (SecurityError, json.JSONDecodeError, OSError) as e:
             logger.debug(f"Skipping malformed manifest {manifest_path}: {e}")
             continue
 
