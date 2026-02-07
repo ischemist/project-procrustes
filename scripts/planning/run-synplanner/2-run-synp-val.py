@@ -6,7 +6,7 @@ with evaluation-first search guided by a value network and saves results in a st
 format matching other prediction scripts.
 
 Example usage:
-    uv run --directory scripts/planning/run-synplanner 2-run-synp-val.py --benchmark mkt-cnv-160
+    uv run --directory scripts/planning/run-synplanner 2-run-synp-val.py --benchmark mkt-lin-500
     uv run --directory scripts/planning/run-synplanner 2-run-synp-val.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz

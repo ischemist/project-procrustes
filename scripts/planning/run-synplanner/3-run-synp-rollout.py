@@ -5,7 +5,7 @@ This script processes targets from a benchmark using Synplanner's MCTS algorithm
 and saves results in a structured format matching other prediction scripts.
 
 Example usage:
-    uv run --directory scripts/planning/run-synplanner 3-run-synp-rollout.py --benchmark uspto-190
+    uv run --directory scripts/planning/run-synplanner 3-run-synp-rollout.py --benchmark mkt-lin-500
     uv run --directory scripts/planning/run-synplanner 3-run-synp-rollout.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz

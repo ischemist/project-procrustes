@@ -5,7 +5,7 @@ This script processes targets from a benchmark using Retro* algorithm
 and saves results in a structured format matching other prediction scripts.
 
 Example usage:
-    uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark uspto-190
+    uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark mkt-cnv-160 --max-routes 2
     uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
@@ -56,6 +56,13 @@ if __name__ == "__main__":
         choices=["normal", "high"],
         help="Search effort level: normal (100 iterations) or high (500 iterations)",
     )
+    parser.add_argument(
+        "--max-routes",
+        type=int,
+        default=1,
+        help="Maximum number of routes to extract per target (default: 1). "
+        "Values >1 will continue search after first route is found.",
+    )
     args = parser.parse_args()
 
     # Set iterations based on effort level
@@ -76,6 +83,7 @@ if __name__ == "__main__":
     logger.info(f"stock: {benchmark.stock_name}")
 
     logger.info(f"effort: {args.effort} (iterations={iterations})")
+    logger.info(f"max_routes: {args.max_routes}")
 
     # Initialize planner with the specified stock and iterations
     planner = RSPlanner(
@@ -87,6 +95,7 @@ if __name__ == "__main__":
         mlp_templates=str(RETROSTAR_DIR / "one_step_model" / "template_rules_1.dat"),
         mlp_model_dump=str(RETROSTAR_DIR / "one_step_model" / "saved_rollout_state_1_2048.ckpt"),
         save_folder=str(RETROSTAR_DIR / "saved_models"),
+        max_routes=args.max_routes,
     )
 
     logger.info("Retrosynthesis starting")
