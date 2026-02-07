@@ -22,13 +22,19 @@ class Manifest(BaseModel):
     Provenance record for any data artifact produced by retrocast.
     """
 
-    schema_version: str = "1.0"
+    schema_version: str = "1.1"
     retrocast_version: str = Field(default_factory=lambda: __version__)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # What was this run?
     action: str = Field(..., description="Name of the script or action (e.g., 'cast-paroutes')")
     parameters: dict[str, Any] = Field(default_factory=dict, description="Arguments/config used for this run")
+
+    # Directives for retrocast consumption (e.g., which adapter to use, what filename to read)
+    directives: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Directives for retrocast data consumption (e.g., adapter, raw_results_filename)",
+    )
 
     # Inputs
     source_files: list[FileInfo] = Field(default_factory=list)

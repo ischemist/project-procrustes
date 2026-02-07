@@ -225,16 +225,42 @@ class TestHandleScoreFile:
 
 @pytest.mark.unit
 class TestHandleList:
-    """Unit tests for the handlers.handle_list handler."""
+    """Unit tests for the handlers.handle_list handler (manifest-based discovery)."""
 
-    def test_handle_list_basic(self, capsys):
-        """Test list handler with models."""
-        config = {
-            "models": {
-                "model-a": {"adapter": "aizynth"},
-                "model-b": {"adapter": "dms"},
-            }
+    def test_handle_list_with_manifests(self, tmp_path, capsys):
+        """Test list handler discovers models from raw data manifests."""
+        # Setup fake raw data structure
+        raw_dir = tmp_path / "2-raw"
+        (raw_dir / "model-a" / "bench-1").mkdir(parents=True)
+        (raw_dir / "model-b" / "bench-1").mkdir(parents=True)
+
+        # Create manifests with directives
+        manifest_a = {
+            "schema_version": "1.1",
+            "directives": {"adapter": "aizynth", "raw_results_filename": "results.json.gz"},
+            "action": "test",
+            "parameters": {},
+            "source_files": [],
+            "output_files": [],
+            "statistics": {},
         }
+        manifest_b = {
+            "schema_version": "1.1",
+            "directives": {"adapter": "dms", "raw_results_filename": "results.json.gz"},
+            "action": "test",
+            "parameters": {},
+            "source_files": [],
+            "output_files": [],
+            "statistics": {},
+        }
+        import json
+
+        with open(raw_dir / "model-a" / "bench-1" / "manifest.json", "w") as f:
+            json.dump(manifest_a, f)
+        with open(raw_dir / "model-b" / "bench-1" / "manifest.json", "w") as f:
+            json.dump(manifest_b, f)
+
+        config = {"data_dir": str(tmp_path)}
 
         handlers.handle_list(config)
 
@@ -245,45 +271,17 @@ class TestHandleList:
         assert "aizynth" in captured.out
         assert "dms" in captured.out
 
-    def test_handle_list_empty(self, capsys):
-        """Test list handler with no models."""
-        config = {"models": {}}
+    def test_handle_list_no_manifests(self, tmp_path, capsys):
+        """Test list handler with no manifests."""
+        raw_dir = tmp_path / "2-raw"
+        raw_dir.mkdir(parents=True)
+
+        config = {"data_dir": str(tmp_path)}
 
         handlers.handle_list(config)
 
         captured = capsys.readouterr()
-        assert "0 models" in captured.out
-
-
-@pytest.mark.unit
-class TestHandleInfo:
-    """Unit tests for the handlers.handle_info handler."""
-
-    def test_handle_info_existing_model(self, capsys):
-        """Test info handler with existing model."""
-        config = {
-            "models": {
-                "test-model": {
-                    "adapter": "aizynth",
-                    "description": "A test model",
-                    "sampling": {"strategy": "top_k", "k": 5},
-                }
-            }
-        }
-
-        handlers.handle_info(config, "test-model")
-
-        captured = capsys.readouterr()
-        assert "aizynth" in captured.out
-
-    def test_handle_info_missing_model(self, caplog):
-        """Test info handler with missing model logs error."""
-        config = {"models": {}}
-
-        handlers.handle_info(config, "nonexistent")
-
-        # Should complete without exception (logs error)
-        assert "not found" in caplog.text
+        assert "No models with manifests found" in captured.out
 
 
 @pytest.mark.unit

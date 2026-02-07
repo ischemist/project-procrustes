@@ -1,7 +1,7 @@
 import pytest
 
+from retrocast.adapters import ADAPTER_MAP, get_adapter
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.factory import ADAPTER_MAP, get_adapter
 from retrocast.exceptions import RetroCastException
 
 

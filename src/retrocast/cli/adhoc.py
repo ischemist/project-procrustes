@@ -1,7 +1,5 @@
 import csv
-import importlib.resources
 import logging
-import shutil
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -243,32 +241,6 @@ def handle_score_file(args: Any) -> None:
 
     except Exception as e:
         logger.critical(f"Scoring failed: {e}", exc_info=True)
-        sys.exit(1)
-
-
-def handle_init(args: Any) -> None:
-    """
-    Copies the internal default configuration to the current working directory.
-    """
-    target_path = Path("retrocast-config.yaml")
-
-    if target_path.exists() and not args.force:
-        logger.error(f"Configuration file '{target_path}' already exists. Use --force to overwrite.")
-        sys.exit(1)
-
-    try:
-        # Load from package resources
-        # 'retrocast.resources' must be a python package (have __init__.py)
-        source = importlib.resources.files("retrocast.resources").joinpath("default_config.yaml")
-
-        with importlib.resources.as_file(source) as src_path:
-            shutil.copy(src_path, target_path)
-
-        logger.info(f"Initialized configuration at [bold]{target_path.absolute()}[/]")
-        logger.info("You can now edit this file to register custom models.")
-
-    except Exception as e:
-        logger.critical(f"Failed to initialize config: {e}")
         sys.exit(1)
 
 

@@ -241,6 +241,7 @@ def save_synplanner_results(
         root_dir=save_dir.parents[2],  # data/ directory
         outputs=[(save_dir / "results.json.gz", results, "unknown")],
         statistics=summary,
+        directives={"adapter": "synplanner", "raw_results_filename": "results.json.gz"},
     )
 
     with open(save_dir / "manifest.json", "w") as f:

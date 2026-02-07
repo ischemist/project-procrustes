@@ -28,6 +28,12 @@ class AdapterLogicError(RetroCastException):
     pass
 
 
+class AdapterResolutionError(RetroCastException):
+    """Raised when no adapter can be resolved from any source in the resolution hierarchy."""
+
+    pass
+
+
 class RetroCastIOError(RetroCastException):
     """Raised for file system or I/O related errors during processing."""
 
