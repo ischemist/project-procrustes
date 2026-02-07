@@ -9,7 +9,7 @@ Example usage:
     uv run --directory scripts/planning/run-synplanner 4-run-synp-nmcs.py --benchmark random-n5-2-seed=20251030 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
-Results are saved to: data/2-raw/synplanner-nmcs[-{effort}]/{benchmark_name}/
+Results are saved to: data/2-raw/synplanner-{version}-nmcs[-{effort}]/{benchmark_name}/
 """
 
 import yaml
@@ -28,7 +28,8 @@ from utils import (
 from retrocast.utils.logging import configure_script_logging, logger
 
 configure_script_logging()
-
+# Synplanner version - update when upgrading the library
+PLANNER_VERSION = "1.3.2"
 if __name__ == "__main__":
     parser = create_benchmark_parser("Run Synplanner NMCS (Nested Monte Carlo Search)")
     args = parser.parse_args()
@@ -37,7 +38,11 @@ if __name__ == "__main__":
     benchmark, building_blocks, bench_path, stock_path = load_benchmark_and_stock(args.benchmark, paths)
 
     # Setup output directory
-    folder_name = "synplanner-nmcs" if args.effort == "normal" else f"synplanner-nmcs-{args.effort}"
+    folder_name = (
+        f"synplanner-{PLANNER_VERSION}-nmcs"
+        if args.effort == "normal"
+        else f"synplanner-{PLANNER_VERSION}-nmcs-{args.effort}"
+    )
     save_dir = paths.raw_dir / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
@@ -96,4 +101,5 @@ if __name__ == "__main__":
         config_path=config_path,
         script_name="scripts/planning/run-synplanner/4-run-synp-nmcs.py",
         benchmark=benchmark,
+        planner_version=PLANNER_VERSION,
     )

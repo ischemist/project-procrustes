@@ -6,13 +6,17 @@ from pathlib import Path
 
 import pytest
 
+from retrocast.exceptions import SecurityError
 from retrocast.paths import (
     DEFAULT_DATA_DIR,
     ENV_VAR_NAME,
     check_migration_needed,
+    ensure_path_within_root,
     get_data_dir_source,
     get_paths,
     resolve_data_dir,
+    validate_directory_name,
+    validate_filename,
 )
 
 
@@ -194,3 +198,168 @@ class TestGetDataDirSource:
         result = get_data_dir_source(cli_arg=None, config_value=None)
 
         assert result == "default"
+
+
+@pytest.mark.unit
+class TestValidateFilename:
+    """Tests for validate_filename function."""
+
+    def test_valid_filename_returns_unchanged(self):
+        """Valid filenames should be returned unchanged."""
+        assert validate_filename("results.json.gz") == "results.json.gz"
+        assert validate_filename("model_v1.json") == "model_v1.json"
+        assert validate_filename("data-file.txt") == "data-file.txt"
+
+    def test_valid_unicode_filename(self):
+        """Unicode filenames without separators should be valid."""
+        assert validate_filename("файл.json") == "файл.json"
+        assert validate_filename("文件.gz") == "文件.gz"
+
+    def test_rejects_forward_slash(self):
+        """Should reject forward slashes."""
+        with pytest.raises(SecurityError, match="path separator"):
+            validate_filename("path/to/file.json")
+
+    def test_rejects_backslash(self):
+        """Should reject backslashes."""
+        with pytest.raises(SecurityError, match="path separator"):
+            validate_filename("path\\to\\file.json")
+
+    def test_rejects_parent_directory_traversal(self):
+        """Should reject .. (parent directory)."""
+        with pytest.raises(SecurityError, match="path separator"):
+            validate_filename("../../../etc/passwd")
+
+    def test_rejects_standalone_dotdot(self):
+        """Should reject standalone .."""
+        with pytest.raises(SecurityError, match="parent directory"):
+            validate_filename("..")
+
+    def test_rejects_standalone_dot(self):
+        """Should reject standalone ."""
+        with pytest.raises(SecurityError, match="current directory"):
+            validate_filename(".")
+
+    def test_rejects_dot_prefix(self):
+        """Should reject ./ prefix."""
+        with pytest.raises(SecurityError, match="path separator"):
+            validate_filename("./file.json")
+
+    def test_rejects_dot_suffix(self):
+        """Should reject /. suffix."""
+        with pytest.raises(SecurityError, match="path separator"):
+            validate_filename("path/.")
+
+    def test_rejects_dotdot_prefix(self):
+        """Should reject ../ prefix."""
+        with pytest.raises(SecurityError, match="path separator"):
+            validate_filename("../file.json")
+
+    def test_rejects_dotdot_suffix(self):
+        """Should reject /.. suffix."""
+        with pytest.raises(SecurityError, match="path separator"):
+            validate_filename("path/..")
+
+    def test_rejects_null_bytes(self):
+        """Should reject null bytes."""
+        with pytest.raises(SecurityError, match="null bytes"):
+            validate_filename("file\x00.txt")
+
+    def test_includes_param_name_in_error(self):
+        """Error message should include parameter name."""
+        with pytest.raises(SecurityError, match="raw_results_filename"):
+            validate_filename("../file.json", param_name="raw_results_filename")
+
+    def test_includes_filename_in_error(self):
+        """Error message should include the problematic filename."""
+        with pytest.raises(SecurityError, match="../../../etc/passwd"):
+            validate_filename("../../../etc/passwd")
+
+
+@pytest.mark.unit
+class TestValidateDirectoryName:
+    """Tests for validate_directory_name function."""
+
+    def test_valid_directory_name(self):
+        """Valid directory names should be accepted."""
+        assert validate_directory_name("model_v1") == "model_v1"
+        assert validate_directory_name("test-data") == "test-data"
+
+    def test_rejects_traversal(self):
+        """Should reject path traversal."""
+        with pytest.raises(SecurityError):
+            validate_directory_name("../../etc")
+
+    def test_uses_param_name_in_error(self):
+        """Should use the provided param_name in error."""
+        with pytest.raises(SecurityError, match="model"):
+            validate_directory_name("../etc", param_name="model")
+
+
+@pytest.mark.unit
+class TestEnsurePathWithinRoot:
+    """Tests for ensure_path_within_root function."""
+
+    def test_path_within_root_returns_resolved(self, tmp_path):
+        """Valid paths should return resolved path."""
+        root = tmp_path / "data"
+        root.mkdir()
+        path = root / "subdir" / "file.txt"
+
+        result = ensure_path_within_root(path, root)
+
+        assert result == path.resolve()
+
+    def test_relative_path_within_root(self, tmp_path):
+        """Relative paths within root should be valid."""
+        root = tmp_path / "data"
+        root.mkdir()
+        subdir = root / "subdir"
+        subdir.mkdir()
+
+        # Change to subdirectory and use relative path
+        import os
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(subdir)
+            path = Path("..") / "other" / "file.txt"
+            (root / "other").mkdir()
+            (root / "other" / "file.txt").write_text("test")
+
+            result = ensure_path_within_root(path, root)
+
+            assert result == (root / "other" / "file.txt").resolve()
+        finally:
+            os.chdir(original_cwd)
+
+    def test_rejects_traversal_outside_root(self, tmp_path):
+        """Should reject paths that escape root."""
+        root = tmp_path / "data"
+        root.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "secret.txt").write_text("secret")
+
+        path = root / ".." / "outside" / "secret.txt"
+
+        with pytest.raises(SecurityError, match="escapes root directory"):
+            ensure_path_within_root(path, root)
+
+    def test_rejects_absolute_path_outside_root(self, tmp_path):
+        """Should reject absolute paths outside root."""
+        root = tmp_path / "data"
+        root.mkdir()
+
+        with pytest.raises(SecurityError, match="escapes root directory"):
+            ensure_path_within_root(Path("/etc/passwd"), root)
+
+    def test_description_in_error_message(self, tmp_path):
+        """Error message should include path description."""
+        root = tmp_path / "data"
+        root.mkdir()
+
+        path = root / ".." / "etc"
+
+        with pytest.raises(SecurityError, match="raw data directory"):
+            ensure_path_within_root(path, root, description="raw data directory")

@@ -7,6 +7,7 @@ For actual CLI integration tests (subprocess), see test_cli.py.
 
 import csv
 import gzip
+import json
 from argparse import Namespace
 from pathlib import Path
 
@@ -225,16 +226,42 @@ class TestHandleScoreFile:
 
 @pytest.mark.unit
 class TestHandleList:
-    """Unit tests for the handlers.handle_list handler."""
+    """Unit tests for the handlers.handle_list handler (manifest-based discovery)."""
 
-    def test_handle_list_basic(self, capsys):
-        """Test list handler with models."""
-        config = {
-            "models": {
-                "model-a": {"adapter": "aizynth"},
-                "model-b": {"adapter": "dms"},
-            }
+    def test_handle_list_with_manifests(self, tmp_path, capsys):
+        """Test list handler discovers models from raw data manifests."""
+        # Setup fake raw data structure
+        raw_dir = tmp_path / "2-raw"
+        (raw_dir / "model-a" / "bench-1").mkdir(parents=True)
+        (raw_dir / "model-b" / "bench-1").mkdir(parents=True)
+
+        # Create manifests with directives
+        manifest_a = {
+            "schema_version": "1.1",
+            "directives": {"adapter": "aizynth", "raw_results_filename": "results.json.gz"},
+            "action": "test",
+            "parameters": {},
+            "source_files": [],
+            "output_files": [],
+            "statistics": {},
         }
+        manifest_b = {
+            "schema_version": "1.1",
+            "directives": {"adapter": "dms", "raw_results_filename": "results.json.gz"},
+            "action": "test",
+            "parameters": {},
+            "source_files": [],
+            "output_files": [],
+            "statistics": {},
+        }
+        import json
+
+        with open(raw_dir / "model-a" / "bench-1" / "manifest.json", "w") as f:
+            json.dump(manifest_a, f)
+        with open(raw_dir / "model-b" / "bench-1" / "manifest.json", "w") as f:
+            json.dump(manifest_b, f)
+
+        config = {"data_dir": str(tmp_path)}
 
         handlers.handle_list(config)
 
@@ -245,45 +272,17 @@ class TestHandleList:
         assert "aizynth" in captured.out
         assert "dms" in captured.out
 
-    def test_handle_list_empty(self, capsys):
-        """Test list handler with no models."""
-        config = {"models": {}}
+    def test_handle_list_no_manifests(self, tmp_path, capsys):
+        """Test list handler with no manifests."""
+        raw_dir = tmp_path / "2-raw"
+        raw_dir.mkdir(parents=True)
+
+        config = {"data_dir": str(tmp_path)}
 
         handlers.handle_list(config)
 
         captured = capsys.readouterr()
-        assert "0 models" in captured.out
-
-
-@pytest.mark.unit
-class TestHandleInfo:
-    """Unit tests for the handlers.handle_info handler."""
-
-    def test_handle_info_existing_model(self, capsys):
-        """Test info handler with existing model."""
-        config = {
-            "models": {
-                "test-model": {
-                    "adapter": "aizynth",
-                    "description": "A test model",
-                    "sampling": {"strategy": "top_k", "k": 5},
-                }
-            }
-        }
-
-        handlers.handle_info(config, "test-model")
-
-        captured = capsys.readouterr()
-        assert "aizynth" in captured.out
-
-    def test_handle_info_missing_model(self, caplog):
-        """Test info handler with missing model logs error."""
-        config = {"models": {}}
-
-        handlers.handle_info(config, "nonexistent")
-
-        # Should complete without exception (logs error)
-        assert "not found" in caplog.text
+        assert "No models with manifests found" in captured.out
 
 
 @pytest.mark.unit
@@ -519,6 +518,264 @@ class TestHandleVerify:
 
         # Should complete successfully with deep=True
         handlers.handle_verify(args, config)
+
+
+@pytest.mark.unit
+class TestSecurityAndErrorHandling:
+    """Tests for security validation and specific exception handling in handlers.
+
+    These tests verify:
+    1. Path traversal protection via symlinks (_ingest_single)
+    2. Specific exception handling (not broad Exception catching)
+    3. Proper handling of SecurityError, JSONDecodeError, and OSError
+    """
+
+    def test_ingest_single_rejects_symlink_escape_logs_error(self, tmp_path, caplog):
+        """Test that _ingest_single logs security error for symlink escape."""
+        # Setup: Create directory structure
+        data_dir = tmp_path / "data"
+        raw_dir = data_dir / "2-raw" / "test-model" / "test-benchmark"
+        raw_dir.mkdir(parents=True)
+
+        # Create an external directory outside raw
+        external_dir = tmp_path / "external"
+        external_dir.mkdir()
+        external_file = external_dir / "malicious.json.gz"
+        external_file.write_text('{"test": "data"}')
+
+        # Create a symlink inside raw_dir pointing to external file
+        symlink_file = raw_dir / "results.json.gz"
+        symlink_file.symlink_to(external_file)
+
+        # Create a manifest with default filename (which is the symlink)
+        manifest = {"directives": {"adapter": "syntheseus", "raw_results_filename": "results.json.gz"}}
+        with open(raw_dir / "manifest.json", "w") as f:
+            json.dump(manifest, f)
+
+        # Create paths dict
+        from retrocast.paths import get_paths
+
+        paths = get_paths(data_dir)
+
+        # Create minimal args
+        args = Namespace(
+            adapter=None,
+            sampling_strategy=None,
+            k=None,
+            ignore_stereo=False,
+            anonymize=False,
+        )
+
+        # Execute
+        from retrocast.cli.handlers import _ingest_single
+
+        with caplog.at_level("ERROR"):
+            _ingest_single("test-model", "test-benchmark", paths, args)
+
+        # Verify security error was logged
+        assert "Security violation" in caplog.text
+
+    def test_resolve_models_handles_security_error(self, tmp_path):
+        """Test that _resolve_models catches SecurityError from malformed model names."""
+        # Setup: Create a directory with path traversal attempt
+        data_dir = tmp_path / "data"
+        raw_dir = data_dir / "2-raw"
+        raw_dir.mkdir(parents=True)
+
+        # Create a malicious directory name (will be caught by filesystem, but test the handler)
+        # Use a simple name that will pass filesystem but could be caught by validation
+        malicious_model_dir = raw_dir / "../malicious"
+        malicious_model_dir.mkdir(parents=True)
+        benchmark_dir = malicious_model_dir / "test-bench"
+        benchmark_dir.mkdir()
+
+        # Create a valid manifest
+        manifest = {"directives": {"adapter": "syntheseus"}}
+        with open(benchmark_dir / "manifest.json", "w") as f:
+            json.dump(manifest, f)
+
+        # Execute: _resolve_models should skip the malicious entry
+        from retrocast.cli.handlers import _resolve_models
+        from retrocast.paths import get_paths
+
+        paths = get_paths(data_dir)
+        args = Namespace(all_models=True)
+
+        models = _resolve_models(args, paths, stage="ingest")
+
+        # Should not include the malicious model (filtered out)
+        assert "../malicious" not in models
+
+    def test_resolve_models_handles_json_decode_error(self, tmp_path):
+        """Test that _resolve_models catches JSONDecodeError from corrupted manifests."""
+        # Setup: Create directory with corrupted manifest
+        data_dir = tmp_path / "data"
+        raw_dir = data_dir / "2-raw"
+        model_dir = raw_dir / "test-model"
+        benchmark_dir = model_dir / "test-benchmark"
+        benchmark_dir.mkdir(parents=True)
+
+        # Create a corrupted manifest (invalid JSON)
+        with open(benchmark_dir / "manifest.json", "w") as f:
+            f.write("{invalid json content")
+
+        # Execute: _resolve_models should skip the corrupted manifest
+        from retrocast.cli.handlers import _resolve_models
+        from retrocast.paths import get_paths
+
+        paths = get_paths(data_dir)
+        args = Namespace(all_models=True)
+
+        models = _resolve_models(args, paths, stage="ingest")
+
+        # Should return empty list (no valid models found)
+        assert models == []
+
+    def test_resolve_models_handles_os_error(self, tmp_path, monkeypatch):
+        """Test that _resolve_models catches OSError from file operations."""
+        # Setup: Create directory with manifest that will cause OSError on open
+        data_dir = tmp_path / "data"
+        raw_dir = data_dir / "2-raw"
+        model_dir = raw_dir / "test-model"
+        benchmark_dir = model_dir / "test-benchmark"
+        benchmark_dir.mkdir(parents=True)
+
+        manifest_path = benchmark_dir / "manifest.json"
+        manifest = {"directives": {"adapter": "syntheseus"}}
+        with open(manifest_path, "w") as f:
+            json.dump(manifest, f)
+
+        # Make the file unreadable (simulates permission error)
+        manifest_path.chmod(0o000)
+
+        # Execute: _resolve_models should skip the unreadable manifest
+        from retrocast.cli.handlers import _resolve_models
+        from retrocast.paths import get_paths
+
+        paths = get_paths(data_dir)
+        args = Namespace(all_models=True)
+
+        try:
+            models = _resolve_models(args, paths, stage="ingest")
+            # Should return empty list (no accessible models found)
+            assert models == []
+        finally:
+            # Restore permissions for cleanup
+            manifest_path.chmod(0o644)
+
+    def test_resolve_benchmarks_handles_security_error(self, tmp_path):
+        """Test that _resolve_benchmarks catches SecurityError from malformed filenames."""
+        # Setup: Create benchmarks directory with malicious filename
+        data_dir = tmp_path / "data"
+        bench_dir = data_dir / "1-benchmarks" / "definitions"
+        bench_dir.mkdir(parents=True)
+
+        # Create a file with path traversal in name (filesystem may prevent this)
+        # We'll test the validation logic instead
+        valid_file = bench_dir / "valid.json.gz"
+        valid_file.write_text("{}")
+
+        # Create a file with suspicious name (though filesystem may sanitize)
+        try:
+            # Most filesystems won't allow this, but test the handler logic
+            suspicious_file = bench_dir / "..%2Fmalicious.json.gz"
+            suspicious_file.write_text("{}")
+        except (OSError, ValueError):
+            # Expected on most filesystems
+            pass
+
+        # Execute: _resolve_benchmarks should only return valid filenames
+        from retrocast.cli.handlers import _resolve_benchmarks
+        from retrocast.paths import get_paths
+
+        paths = get_paths(data_dir)
+        args = Namespace(all_datasets=True)
+
+        benchmarks = _resolve_benchmarks(args, paths)
+
+        # Should only include valid benchmark
+        assert "valid" in benchmarks
+        assert "../malicious" not in benchmarks
+
+    def test_handle_list_handles_security_error(self, tmp_path):
+        """Test that handle_list catches SecurityError from malformed directory names."""
+        # Setup: Create directory structure with potentially malicious names
+        data_dir = tmp_path / "data"
+        raw_dir = data_dir / "2-raw"
+        raw_dir.mkdir(parents=True)
+
+        # Create a valid model directory
+        valid_model_dir = raw_dir / "valid-model"
+        valid_benchmark_dir = valid_model_dir / "test-benchmark"
+        valid_benchmark_dir.mkdir(parents=True)
+
+        manifest = {"directives": {"adapter": "syntheseus"}}
+        with open(valid_benchmark_dir / "manifest.json", "w") as f:
+            json.dump(manifest, f)
+
+        # Execute: handle_list should process without errors
+        from retrocast.cli.handlers import handle_list
+
+        config = {"data_dir": str(data_dir)}
+
+        # Should not raise exception
+        handle_list(config)
+
+    def test_handle_list_handles_json_decode_error(self, tmp_path, caplog):
+        """Test that handle_list catches JSONDecodeError from corrupted manifests."""
+        # Setup: Create directory with corrupted manifest
+        data_dir = tmp_path / "data"
+        raw_dir = data_dir / "2-raw"
+        model_dir = raw_dir / "test-model"
+        benchmark_dir = model_dir / "test-benchmark"
+        benchmark_dir.mkdir(parents=True)
+
+        # Create a corrupted manifest
+        with open(benchmark_dir / "manifest.json", "w") as f:
+            f.write("{invalid json")
+
+        # Execute: handle_list should skip corrupted manifests
+        from retrocast.cli.handlers import handle_list
+
+        config = {"data_dir": str(data_dir)}
+
+        with caplog.at_level("DEBUG"):
+            handle_list(config)
+
+        # Should log that it's skipping the malformed manifest
+        assert "Skipping malformed manifest" in caplog.text
+
+    def test_handle_list_handles_os_error(self, tmp_path, caplog):
+        """Test that handle_list catches OSError from file operations."""
+        # Setup: Create directory with unreadable manifest
+        data_dir = tmp_path / "data"
+        raw_dir = data_dir / "2-raw"
+        model_dir = raw_dir / "test-model"
+        benchmark_dir = model_dir / "test-benchmark"
+        benchmark_dir.mkdir(parents=True)
+
+        manifest_path = benchmark_dir / "manifest.json"
+        manifest = {"directives": {"adapter": "syntheseus"}}
+        with open(manifest_path, "w") as f:
+            json.dump(manifest, f)
+
+        # Make the file unreadable
+        manifest_path.chmod(0o000)
+
+        # Execute: handle_list should skip unreadable manifests
+        from retrocast.cli.handlers import handle_list
+
+        config = {"data_dir": str(data_dir)}
+
+        try:
+            with caplog.at_level("DEBUG"):
+                handle_list(config)
+
+            # Should log that it's skipping the malformed manifest
+            assert "Skipping malformed manifest" in caplog.text
+        finally:
+            # Restore permissions for cleanup
+            manifest_path.chmod(0o644)
 
 
 if __name__ == "__main__":

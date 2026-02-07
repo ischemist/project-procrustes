@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import sys
@@ -8,15 +9,23 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
-from retrocast.adapters.factory import get_adapter
+from retrocast.adapters.resolve import resolve_adapter, resolve_raw_results_filename
 from retrocast.chem import InchiKeyLevel
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
+from retrocast.exceptions import SecurityError
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.io.data import load_benchmark, load_execution_stats, load_routes, load_stock_file
 from retrocast.io.provenance import create_manifest
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.provenance import VerificationReport
-from retrocast.paths import DEFAULT_DATA_DIR, ENV_VAR_NAME, get_paths
+from retrocast.paths import (
+    DEFAULT_DATA_DIR,
+    ENV_VAR_NAME,
+    ensure_path_within_root,
+    get_paths,
+    validate_directory_name,
+    validate_filename,
+)
 from retrocast.visualization.report import create_single_model_summary_table, generate_markdown_report
 from retrocast.workflow import analyze, ingest, score, verify
 
@@ -30,18 +39,75 @@ def _get_paths(config: dict) -> dict[str, Path]:
     return get_paths(base)
 
 
-def _resolve_models(args: Any, config: dict) -> list[str]:
-    """Determine which models to process."""
-    defined_models = list(config.get("models", {}).keys())
+def _resolve_models(args: Any, paths: dict, stage: str) -> list[str]:
+    """Determine which models to process via filesystem discovery.
 
-    if args.all_models:
-        return defined_models
+    Args:
+        args: CLI arguments with --model or --all-models
+        paths: Resolved paths dict from _get_paths
+        stage: One of "ingest", "score", or "analyze" — controls where to scan
 
-    if args.model:
-        if args.model not in defined_models:
-            logger.error(f"Model '{args.model}' not defined in config.")
-            sys.exit(1)
-        return [args.model]
+    Returns:
+        List of model names (folder names)
+    """
+    # Single model specified
+    if hasattr(args, "model") and args.model:
+        # Security: Validate model name to prevent path traversal
+        safe_model = validate_directory_name(args.model, param_name="model")
+        return [safe_model]
+
+    # All models discovery
+    if hasattr(args, "all_models") and args.all_models:
+        if stage == "ingest":
+            # Scan raw/*/*/manifest.json for models with directives.adapter
+            raw_dir = paths["raw"]
+            discovered = set()
+            for manifest_path in raw_dir.glob("*/*/manifest.json"):
+                # manifest_path is data/2-raw/{model}/{benchmark}/manifest.json
+                model_name = manifest_path.parent.parent.name
+                # Security: Validate discovered model name
+                try:
+                    model_name = validate_directory_name(model_name, param_name="discovered model")
+                    with open(manifest_path) as f:
+                        manifest = json.load(f)
+                    if manifest.get("directives", {}).get("adapter"):
+                        discovered.add(model_name)
+                except (SecurityError, json.JSONDecodeError, OSError) as e:
+                    logger.debug(f"Skipping malformed manifest {manifest_path}: {e}")
+                    continue
+            if not discovered:
+                logger.warning(f"No models with manifests found in {raw_dir}")
+            return sorted(discovered)
+
+        elif stage == "score":
+            # Scan processed/*/ for model directories
+            processed_dir = paths["processed"]
+            if not processed_dir.exists():
+                logger.warning(f"Processed directory does not exist: {processed_dir}")
+                return []
+            # Get unique model names from processed/{benchmark}/{model}/
+            discovered = set()
+            for benchmark_dir in processed_dir.iterdir():
+                if benchmark_dir.is_dir():
+                    for model_dir in benchmark_dir.iterdir():
+                        if model_dir.is_dir():
+                            discovered.add(model_dir.name)
+            return sorted(discovered)
+
+        elif stage == "analyze":
+            # Scan scored/*/ for model directories
+            scored_dir = paths["scored"]
+            if not scored_dir.exists():
+                logger.warning(f"Scored directory does not exist: {scored_dir}")
+                return []
+            # Get unique model names from scored/{benchmark}/{model}/
+            discovered = set()
+            for benchmark_dir in scored_dir.iterdir():
+                if benchmark_dir.is_dir():
+                    for model_dir in benchmark_dir.iterdir():
+                        if model_dir.is_dir():
+                            discovered.add(model_dir.name)
+            return sorted(discovered)
 
     logger.error("Must specify --model or --all-models")
     sys.exit(1)
@@ -50,16 +116,25 @@ def _resolve_models(args: Any, config: dict) -> list[str]:
 def _resolve_benchmarks(args: Any, paths: dict[str, Path]) -> list[str]:
     """Determine which benchmarks to process by looking at files."""
     avail_files = list(paths["benchmarks"].glob("*.json.gz"))
-    avail_names = [p.name.replace(".json.gz", "") for p in avail_files]
+    # Security: Validate benchmark filenames
+    avail_names = []
+    for p in avail_files:
+        name = p.name.replace(".json.gz", "")
+        try:
+            avail_names.append(validate_filename(name, param_name="benchmark"))
+        except SecurityError as e:
+            logger.debug(f"Skipping invalid benchmark name {name!r}: {e}")
 
     if hasattr(args, "all_datasets") and args.all_datasets:
         return avail_names
 
     if hasattr(args, "dataset") and args.dataset:
-        if args.dataset not in avail_names:
-            logger.error(f"Benchmark '{args.dataset}' not found in {paths['benchmarks']}")
+        # Security: Validate user-provided benchmark name
+        safe_dataset = validate_filename(args.dataset, param_name="dataset")
+        if safe_dataset not in avail_names:
+            logger.error(f"Benchmark '{safe_dataset}' not found in {paths['benchmarks']}")
             sys.exit(1)
-        return [args.dataset]
+        return [safe_dataset]
 
     logger.error("Must specify --dataset or --all-datasets")
     sys.exit(1)
@@ -68,27 +143,51 @@ def _resolve_benchmarks(args: Any, paths: dict[str, Path]) -> list[str]:
 # --- INGESTION ---
 
 
-def _ingest_single(model_name: str, benchmark_name: str, config: dict, paths: dict, args: Any) -> None:
-    """The core logic for ingestion."""
-    model_conf = config["models"][model_name]
+def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any) -> None:
+    """The core logic for ingestion with dynamic adapter resolution."""
+    raw_dir = paths["raw"] / model_name / benchmark_name
 
-    # Convention: data/raw/{model}/{benchmark}/{filename}
-    raw_filename = model_conf.get("raw_results_filename", "results.json.gz")
-    raw_path = paths["raw"] / model_name / benchmark_name / raw_filename
+    # Security: Ensure raw_dir is within the raw directory bounds
+    try:
+        raw_dir = ensure_path_within_root(raw_dir, paths["raw"], "raw data directory")
+    except Exception as e:
+        logger.error(f"Security violation for {model_name}/{benchmark_name}: {e}")
+        return
+
+    if not raw_dir.exists():
+        logger.warning(f"Skipping {model_name}/{benchmark_name}: Directory not found at {raw_dir}")
+        return
+
+    # Resolve adapter via new hierarchy (CLI > manifest > fail)
+    try:
+        adapter, source = resolve_adapter(
+            cli_adapter=getattr(args, "adapter", None),
+            raw_dir=raw_dir,
+            model_name=model_name,
+        )
+        logger.info(f"Resolved adapter from {source} for {model_name}/{benchmark_name}")
+    except Exception as e:
+        logger.error(f"Skipping {model_name}/{benchmark_name}: {e}")
+        return
+
+    # Resolve raw results filename from manifest directives
+    raw_filename = resolve_raw_results_filename(raw_dir=raw_dir)
+    raw_path = raw_dir / raw_filename
+
+    # Security: Ensure raw_path is within the raw directory bounds
+    try:
+        raw_path = ensure_path_within_root(raw_path, paths["raw"], "raw results file")
+    except SecurityError as e:
+        logger.error(f"Security violation for {model_name}/{benchmark_name}: {e}")
+        return
 
     if not raw_path.exists():
         logger.warning(f"Skipping {model_name}/{benchmark_name}: File not found at {raw_path}")
         return
 
-    # Resolve Sampling
+    # Resolve Sampling (CLI only, no config fallback)
     strategy = getattr(args, "sampling_strategy", None)
     k = getattr(args, "k", None)
-
-    if not strategy:
-        samp_conf = model_conf.get("sampling")
-        if samp_conf:
-            strategy = samp_conf.get("strategy")
-            k = samp_conf.get("k")
 
     if strategy and strategy not in SAMPLING_STRATEGIES:
         logger.error(f"Invalid sampling strategy: {strategy}")
@@ -98,7 +197,6 @@ def _ingest_single(model_name: str, benchmark_name: str, config: dict, paths: di
 
     try:
         benchmark = load_benchmark(paths["benchmarks"] / f"{benchmark_name}.json.gz")
-        adapter = get_adapter(model_conf["adapter"])
 
         if raw_path.suffix == ".gz":
             raw_data = load_json_gz(raw_path)
@@ -136,14 +234,14 @@ def _ingest_single(model_name: str, benchmark_name: str, config: dict, paths: di
 
 def handle_ingest(args: Any, config: dict[str, Any]) -> None:
     paths = _get_paths(config)
-    models = _resolve_models(args, config)
+    models = _resolve_models(args, paths, stage="ingest")
     benchmarks = _resolve_benchmarks(args, paths)
 
     logger.info(f"Queued ingestion: {len(models)} models x {len(benchmarks)} benchmarks.")
 
     for model in models:
         for bench in benchmarks:
-            _ingest_single(model, bench, config, paths, args)
+            _ingest_single(model, bench, paths, args)
 
 
 # --- SCORING ---
@@ -152,6 +250,13 @@ def handle_ingest(args: Any, config: dict[str, Any]) -> None:
 def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) -> None:
     bench_path = paths["benchmarks"] / f"{benchmark_name}.json.gz"
     routes_path = paths["processed"] / benchmark_name / model_name / "routes.json.gz"
+
+    # Security: Ensure paths are within bounds
+    try:
+        routes_path = ensure_path_within_root(routes_path, paths["processed"], "routes path")
+    except Exception as e:
+        logger.error(f"Security violation for {model_name}/{benchmark_name}: {e}")
+        return
 
     if not routes_path.exists():
         logger.warning(f"Skipping score for {model_name}/{benchmark_name}: Routes not found. Run ingest first.")
@@ -181,7 +286,14 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
         # Load execution stats if available
         execution_stats = None
         exec_stats_path = paths["raw"] / model_name / benchmark_name / "execution_stats.json.gz"
-        if exec_stats_path.exists():
+        # Security: Ensure exec_stats_path is within bounds
+        try:
+            exec_stats_path = ensure_path_within_root(exec_stats_path, paths["raw"], "execution stats path")
+        except Exception as e:
+            logger.warning(f"Security violation for execution stats: {e}")
+            exec_stats_path = None
+
+        if exec_stats_path and exec_stats_path.exists():
             try:
                 execution_stats = load_execution_stats(exec_stats_path)
                 logger.info(f"Loaded execution stats from {exec_stats_path}")
@@ -229,7 +341,7 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
 
 def handle_score(args: Any, config: dict[str, Any]) -> None:
     paths = _get_paths(config)
-    models = _resolve_models(args, config)
+    models = _resolve_models(args, paths, stage="score")
     benchmarks = _resolve_benchmarks(args, paths)
 
     logger.info(f"Queued scoring: {len(models)} models x {len(benchmarks)} benchmarks.")
@@ -248,6 +360,13 @@ def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any
     stock_arg = getattr(args, "stock", None)
     scored_base = paths["scored"] / benchmark_name / model_name
 
+    # Security: Ensure scored_base is within the scored directory bounds
+    try:
+        scored_base = ensure_path_within_root(scored_base, paths["scored"], "scored base directory")
+    except Exception as e:
+        logger.error(f"Security violation for {model_name}/{benchmark_name}: {e}")
+        return
+
     if not scored_base.exists():
         logger.warning(f"Skipping analysis for {model_name}/{benchmark_name}: No scored data found.")
         return
@@ -263,6 +382,12 @@ def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any
 
     for stock_name in stocks_to_process:
         score_path = scored_base / stock_name / "evaluation.json.gz"
+        # Security: Ensure score_path is within bounds
+        try:
+            score_path = ensure_path_within_root(score_path, paths["scored"], "score file path")
+        except Exception as e:
+            logger.error(f"Security violation for {model_name}/{benchmark_name}/{stock_name}: {e}")
+            continue
         if not score_path.exists():
             logger.warning(f"Missing evaluation file: {score_path}")
             continue
@@ -304,7 +429,7 @@ def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any
 
 def handle_analyze(args: Any, config: dict[str, Any]) -> None:
     paths = _get_paths(config)
-    models = _resolve_models(args, config)
+    models = _resolve_models(args, paths, stage="analyze")
     benchmarks = _resolve_benchmarks(args, paths)
 
     logger.info(f"Queued analysis: {len(models)} models x {len(benchmarks)} benchmarks.")
@@ -345,174 +470,140 @@ def _render_report(report: VerificationReport) -> None:
             lines.append(EXPLANATORY_SECTIONS["Phase 1"])
         if "phase2" in categories_present:
             lines.append(EXPLANATORY_SECTIONS["Phase 2"])
+        lines.append("")  # spacer
 
-    # --- Render the report ---
-    icons = {"PASS": "[green]✓[/]", "FAIL": "[red]✗[/]", "WARN": "[yellow]![/]", "INFO": "[cyan]i[/]"}
+    # Show issues
+    if report.issues:
+        lines.append("[bold]Issues Found:[/bold]\n")
+        for issue in report.issues:
+            level_display = {
+                "PASS": "[green]✓ PASS[/green]",
+                "INFO": "[blue]ℹ INFO[/blue]",
+                "WARN": "[yellow]⚠ WARN[/yellow]",
+                "FAIL": "[red]✗ FAIL[/red]",
+            }.get(issue.level, issue.level)
 
-    for issue in report.issues:
-        # 1. Check if it's a main header
-        if issue.category == "header":
-            if lines and lines[-1] != "":  # Add a blank line for spacing if needed
-                lines.append("")
-            lines.append(f"[bold cyan][{issue.message}][/]")
-            continue  # CRITICAL: Do not process this line further
+            category_str = f" [{issue.category}]" if issue.category else ""
+            lines.append(f"{level_display}{category_str}: {issue.message}")
+            lines.append(f"  Path: [dim]{issue.path}[/dim]\n")
+    else:
+        lines.append("[green]✓ No issues found[/green]")
 
-        # 2. Check if it's a sub-header (context for a group of checks)
-        if issue.category == "context":
-            lines.append(f"[dim]{issue.message}[/dim]")
-            continue  # CRITICAL: Do not process this line further
-
-        # 3. If it's none of the above, it's a standard check result line
-        icon = icons.get(issue.level, "[dim]?[/]")
-        lines.append(f"  {icon} [dim]{issue.path}[/]: {issue.message}")
-
-    content = "\n".join(lines).strip()
-    panel = Panel(content, title=title, border_style=color, expand=False, padding=(1, 2))
-    console.print(panel)
+    console.print(Panel("\n".join(lines), title=title, border_style=color))
 
 
 def handle_verify(args: Any, config: dict[str, Any]) -> None:
-    """Handler for the 'verify' command."""
-    paths = _get_paths(config)
-    root_dir = paths["raw"].parent
-
-    # Determine lenient mode: default is True (lenient), --strict sets it to False
-    lenient = not getattr(args, "strict", False)
-
-    manifests_to_check = []
-    output_only_manifests = set()  # Track which manifests should only check outputs
+    """Verify data integrity and lineage."""
+    data_dir = Path(config.get("data_dir", DEFAULT_DATA_DIR))
 
     if args.all:
-        mode_desc = "strict" if not lenient else "lenient"
-        logger.info(f"Scanning for manifests in 1-benchmarks, 2-raw, 3-processed, and 4-scored... (mode: {mode_desc})")
-        # Scan workflow folders (check both input and output hashes)
-        for folder in [paths["raw"], paths["processed"], paths["scored"]]:
-            if folder.exists():
-                manifests_to_check.extend(folder.glob("**/*manifest.json"))
-
-        # Also scan benchmark folders (only check output hashes)
-        for folder in [paths["benchmarks"], paths["stocks"]]:
-            if folder.exists():
-                benchmark_manifests = list(folder.glob("**/*manifest.json"))
-                manifests_to_check.extend(benchmark_manifests)
-                output_only_manifests.update(benchmark_manifests)
-
-        manifests_to_check = sorted(manifests_to_check)
-    elif args.target:
-        manifests_to_check = [Path(args.target)]
-
-    if not manifests_to_check:
-        logger.warning("No manifests found to verify.")
-        return
-
-    # Different behavior for --all vs single manifest
-    if args.all:
-        # Batch mode: single progress bar and summary at the end
-        logger.info(f"Verifying {len(manifests_to_check)} manifest(s)...")
-
-        passed_manifests = []
-        failed_manifests = []
-        warnings_count = 0
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            console=console,
-        ) as progress:
-            task = progress.add_task("[cyan]Verifying manifests...", total=len(manifests_to_check))
-
-            for m_path in manifests_to_check:
-                progress.update(task, description=f"[cyan]Verifying {m_path.relative_to(root_dir)}...")
-
-                # Check if this manifest should only verify output files
-                output_only = m_path in output_only_manifests
-                report = verify.verify_manifest(
-                    m_path, root_dir=root_dir, deep=args.deep, output_only=output_only, lenient=lenient
-                )
-
-                if report.is_valid:
-                    passed_manifests.append(m_path.relative_to(root_dir))
-                    # Count warnings even in passed manifests
-                    warnings_count += sum(1 for issue in report.issues if issue.level == "WARN")
-                else:
-                    failed_manifests.append((m_path.relative_to(root_dir), report))
-
-                progress.advance(task)
-
-        # Print summary
-        console.print()
-        console.print("[bold]Verification Summary[/bold]")
-        console.print(f"  [green]✓[/] Passed: {len(passed_manifests)} manifest(s)")
-        console.print(f"  [red]✗[/] Failed: {len(failed_manifests)} manifest(s)")
-        if warnings_count > 0:
-            console.print(
-                f"  [yellow]![/] Warnings: {warnings_count} missing file(s) (use --strict to require all files)"
-            )
-
-        if failed_manifests:
-            console.print()
-            console.print("[bold red]Failed Manifests:[/bold red]")
-            for failed_path, report in failed_manifests:
-                console.print(f"\n[bold]→ {failed_path}[/bold]")
-                # Show only FAIL-level issues in summary
-                fail_issues = [issue for issue in report.issues if issue.level == "FAIL"]
-                for issue in fail_issues[:5]:  # Show first 5 failures per manifest
-                    console.print(f"  [red]✗[/] {issue.path}: {issue.message}")
-                if len(fail_issues) > 5:
-                    console.print(f"  [dim]... and {len(fail_issues) - 5} more failure(s)[/dim]")
-
-            console.print("\n[bold red]❌ Overall verification failed.[/]")
-            sys.exit(1)
+        # Discover all manifests in data directory
+        manifest_paths = list(data_dir.glob("**/manifest.json"))
+        if len(manifest_paths) == 0:
+            logger.warning("No manifests found in data directory")
         else:
-            console.print("\n[bold green]✅ All manifests verified successfully![/]")
+            logger.info(f"Discovered {len(manifest_paths)} manifests for verification")
     else:
-        # Single manifest mode: show detailed report
-        mode_desc = "strict" if not lenient else "lenient"
-        logger.info(f"Verifying manifest... (mode: {mode_desc})")
-        overall_valid = True
-        has_warnings = False
-        for m_path in manifests_to_check:
-            report = verify.verify_manifest(m_path, root_dir=root_dir, deep=args.deep, lenient=lenient)
-            _render_report(report)
-            if not report.is_valid:
-                overall_valid = False
-            if any(issue.level == "WARN" for issue in report.issues):
-                has_warnings = True
-
-        if overall_valid:
-            if has_warnings and lenient:
-                console.print("\n[bold green]✅ Overall verification successful![/]")
-                console.print("[dim]Note: Some files are missing but all present files have valid hashes.[/]")
-                console.print("[dim]Use --strict to require all referenced files to be present.[/]")
-            else:
-                console.print("\n[bold green]✅ Overall verification successful![/]")
+        target = Path(args.target)
+        if target.is_dir():
+            manifest_path = target / "manifest.json"
+            if not manifest_path.exists():
+                logger.error(f"No manifest.json found in {target}")
+                sys.exit(1)
+            manifest_paths = [manifest_path]
+        elif target.name == "manifest.json":
+            manifest_paths = [target]
         else:
-            console.print("\n[bold red]❌ Verification failed for one or more manifests.[/]")
+            logger.error(f"Target must be a directory or manifest.json file: {target}")
             sys.exit(1)
+
+    all_reports = []
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Verifying manifests...", total=len(manifest_paths))
+
+        for manifest_path in manifest_paths:
+            try:
+                report = verify.verify_manifest(
+                    manifest_path=manifest_path,
+                    root_dir=data_dir,
+                    deep=args.deep,
+                    lenient=not args.strict,
+                )
+                all_reports.append(report)
+                _render_report(report)
+            except Exception as e:
+                console.print(f"[red]Failed to verify {manifest_path}: {e}[/]")
+                logger.error(f"Verification error for {manifest_path}", exc_info=True)
+
+            progress.advance(task)
+
+    # Summary
+    console.print()
+    total = len(all_reports)
+    valid_count = sum(1 for r in all_reports if r.is_valid)
+    if valid_count == total:
+        console.print(f"[bold green]✓ All {total} manifests verified successfully.[/]")
+    else:
+        console.print(f"[bold yellow]⚠ {total - valid_count} of {total} manifests failed verification.[/]")
+        console.print("\n[bold red]❌ Verification failed for one or more manifests.[/]")
+        sys.exit(1)
 
 
 # --- UTILS ---
 
 
 def handle_list(config: dict[str, Any]) -> None:
-    """List available models."""
-    models = config.get("models", {})
-    print(f"Found {len(models)} models in config:")
-    for name, conf in models.items():
-        print(f"  - {name} (adapter: {conf.get('adapter')})")
+    """List discovered models from raw data manifests."""
+    paths = _get_paths(config)
+    raw_dir = paths["raw"]
 
-
-def handle_info(config: dict[str, Any], model_name: str) -> None:
-    """Show details for a model."""
-    conf = config.get("models", {}).get(model_name)
-    if not conf:
-        logger.error(f"Model {model_name} not found.")
+    if not raw_dir.exists():
+        console.print(f"[yellow]Raw data directory does not exist: {raw_dir}[/]")
         return
-    import yaml
 
-    print(yaml.dump({model_name: conf}))
+    # Discover models with manifests
+    discovered = {}  # model -> [(benchmark, adapter)]
+    for manifest_path in raw_dir.glob("*/*/manifest.json"):
+        # manifest_path is data/2-raw/{model}/{benchmark}/manifest.json
+        model_name = manifest_path.parent.parent.name
+        benchmark_name = manifest_path.parent.name
+        try:
+            # Security: Validate model and benchmark names
+            model_name = validate_directory_name(model_name, param_name="discovered model")
+            benchmark_name = validate_directory_name(benchmark_name, param_name="discovered benchmark")
+            with open(manifest_path) as f:
+                manifest = json.load(f)
+            adapter = manifest.get("directives", {}).get("adapter")
+            if adapter:
+                if model_name not in discovered:
+                    discovered[model_name] = []
+                discovered[model_name].append((benchmark_name, adapter))
+        except (SecurityError, json.JSONDecodeError, OSError) as e:
+            logger.debug(f"Skipping malformed manifest {manifest_path}: {e}")
+            continue
+
+    if not discovered:
+        console.print(f"\n[yellow]No models with manifests found in {raw_dir}[/]")
+        console.print("\nModels must have a manifest.json with directives.adapter in their raw data directories.")
+        return
+
+    console.print(f"\n[bold]Discovered {len(discovered)} models in {raw_dir}:[/bold]\n")
+    for model_name in sorted(discovered.keys()):
+        benchmarks_info = discovered[model_name]
+        adapters = set(a for _, a in benchmarks_info)
+        adapter_str = ", ".join(sorted(adapters))
+        console.print(f"  [cyan]{model_name}[/cyan]")
+        console.print(f"    Adapter(s): {adapter_str}")
+        console.print(f"    Benchmarks: {len(benchmarks_info)}")
+
+    console.print()
 
 
 def handle_config(args: Any, config: dict[str, Any]) -> None:

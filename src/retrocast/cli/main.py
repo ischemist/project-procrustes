@@ -1,5 +1,4 @@
 import argparse
-import importlib.resources
 import sys
 from pathlib import Path
 from typing import Any
@@ -13,27 +12,18 @@ from retrocast.utils.logging import configure_script_logging, logger
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
-    """
-    Loads configuration.
-    Priority:
-    1. Local file (config_path)
-    2. Package default (src/retrocast/resources/default_config.yaml)
-    """
-    # 1. Try Local
-    if config_path.exists():
-        logger.debug(f"Loading local config from {config_path}")
-        with open(config_path) as f:
-            return yaml.safe_load(f)
+    """Load configuration from a YAML file.
 
-    # 2. Try Package Default
-    try:
-        logger.debug("Local config not found. Falling back to package defaults.")
-        resource = importlib.resources.files("retrocast.resources").joinpath("default_config.yaml")
-        with resource.open(encoding="utf-8") as f:
-            return yaml.safe_load(f)
-    except Exception as e:
-        logger.error(f"Could not load default configuration: {e}")
-        sys.exit(1)
+    The config file is optional. It is only used for data_dir resolution.
+    If no file is found, returns an empty dict (all settings come from CLI/env).
+    """
+    if config_path.exists():
+        logger.debug(f"Loading config from {config_path}")
+        with open(config_path) as f:
+            return yaml.safe_load(f) or {}
+
+    logger.debug("No config file found. Using defaults.")
+    return {}
 
 
 def main() -> None:
@@ -55,10 +45,6 @@ def main() -> None:
     # --- CONFIG ---
     subparsers.add_parser("config", help="Show resolved configuration and paths")
 
-    # --- INIT ---
-    init_parser = subparsers.add_parser("init", help="Initialize a local configuration file")
-    init_parser.add_argument("--force", action="store_true", help="Overwrite existing config file")
-
     # --- ADAPT (Ad-Hoc) ---
     adapt_parser = subparsers.add_parser(
         "adapt", help="Convert raw predictions file to RetroCast schema (No config needed)"
@@ -69,31 +55,37 @@ def main() -> None:
     adapt_parser.add_argument("--benchmark", help="Optional: Path to benchmark definition to ensure correct IDs")
 
     # --- LIST ---
-    subparsers.add_parser("list", help="List configured models")
+    subparsers.add_parser("list", help="List discovered models from raw data manifests")
 
     # --- LIST ADAPTERS ---
     subparsers.add_parser("list-adapters", help="List all available adapters")
-
-    # --- INFO ---
-    info_parser = subparsers.add_parser("info", help="Show model details")
-    info_parser.add_argument("--model", required=True)
 
     # --- INGEST ---
     ingest_parser = subparsers.add_parser("ingest", help="Process raw outputs")
 
     # Model selection
     m_group = ingest_parser.add_mutually_exclusive_group(required=True)
-    m_group.add_argument("--model", help="Single model name")
-    m_group.add_argument("--all-models", action="store_true", help="Process all models in config")
+    m_group.add_argument("--model", help="Single model name (folder name under data/2-raw/)")
+    m_group.add_argument(
+        "--all-models",
+        action="store_true",
+        help="Discover and process all models with manifest.json in raw data",
+    )
 
-    # Dataset selection (Renamed to 'dataset' to match your old script habits, maps to 'benchmark')
+    # Dataset selection
     d_group = ingest_parser.add_mutually_exclusive_group(required=True)
     d_group.add_argument("--dataset", help="Single benchmark name")
     d_group.add_argument("--all-datasets", action="store_true", help="Process all available benchmarks")
 
+    # Adapter override
+    ingest_parser.add_argument(
+        "--adapter",
+        help="Override adapter (bypasses manifest). Use 'retrocast list-adapters' for available adapters.",
+    )
+
     # Options
-    ingest_parser.add_argument("--sampling-strategy", help="Override config sampling")
-    ingest_parser.add_argument("--k", type=int, help="Override config k")
+    ingest_parser.add_argument("--sampling-strategy", help="Sampling strategy (e.g., top-k, random-k, by-length)")
+    ingest_parser.add_argument("--k", type=int, help="Sample k value (required with --sampling-strategy)")
     ingest_parser.add_argument(
         "--anonymize", action="store_true", help="Hash the model name in the output folder (useful for blind review)"
     )
@@ -123,7 +115,6 @@ def main() -> None:
     )
 
     # --- SCORE FILE (Ad-Hoc) ---
-    # CHANGE: Add this new subparser block
     sf_parser = subparsers.add_parser("score-file", help="Run evaluation on specific files (adhoc mode)")
     sf_parser.add_argument("--benchmark", required=True, help="Path to benchmark .json.gz")
     sf_parser.add_argument("--routes", required=True, help="Path to predictions .json.gz")
@@ -179,11 +170,9 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    # Commands that don't need config loading
-    if args.command in ["init", "adapt", "score-file", "create-benchmark", "list-adapters"]:
-        if args.command == "init":
-            adhoc.handle_init(args)
-        elif args.command == "adapt":
+    # Commands that don't need config/data-dir resolution
+    if args.command in ["adapt", "score-file", "create-benchmark", "list-adapters"]:
+        if args.command == "adapt":
             adhoc.handle_adapt(args)
         elif args.command == "score-file":
             adhoc.handle_score_file(args)
@@ -193,7 +182,7 @@ def main() -> None:
             adhoc.handle_list_adapters(args)
         return
 
-    # Load config (local or default)
+    # Load config (optional — only used for data_dir)
     config = load_config(args.config)
 
     # Resolve data directory with priority: CLI > env > config > default
@@ -218,8 +207,6 @@ def main() -> None:
     try:
         if args.command == "list":
             handlers.handle_list(config)
-        elif args.command == "info":
-            handlers.handle_info(config, args.model)
         elif args.command == "ingest":
             handlers.handle_ingest(args, config)
         elif args.command == "score":

@@ -212,6 +212,7 @@ def save_synplanner_results(
     config_path: Path,
     script_name: str,
     benchmark: BenchmarkSet,
+    planner_version: str,
 ) -> None:
     """Save Synplanner results, execution stats, and manifest.
 
@@ -224,6 +225,7 @@ def save_synplanner_results(
         config_path: Path to config file used.
         script_name: Name of the calling script (for manifest).
         benchmark: Benchmark object (for statistics).
+        planner_version: Version of the Synplanner library used.
     """
     solved_count = sum(1 for routes in results.values() if routes)
 
@@ -241,6 +243,11 @@ def save_synplanner_results(
         root_dir=save_dir.parents[2],  # data/ directory
         outputs=[(save_dir / "results.json.gz", results, "unknown")],
         statistics=summary,
+        directives={
+            "adapter": "synplanner",
+            "planner_version": planner_version,
+            "raw_results_filename": "results.json.gz",
+        },
     )
 
     with open(save_dir / "manifest.json", "w") as f:

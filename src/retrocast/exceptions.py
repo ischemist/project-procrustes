@@ -4,6 +4,12 @@ class RetroCastException(Exception):
     pass
 
 
+class SecurityError(RetroCastException):
+    """Raised when security validation fails (path traversal, unsafe filenames, etc.)."""
+
+    pass
+
+
 class InvalidSmilesError(RetroCastException):
     """Raised when a SMILES string is malformed or cannot be processed."""
 
@@ -24,6 +30,12 @@ class BenchmarkValidationError(RetroCastException, ValueError):
 
 class AdapterLogicError(RetroCastException):
     """Raised when an adapter fails to correctly fulfill its transformation contract."""
+
+    pass
+
+
+class AdapterResolutionError(RetroCastException):
+    """Raised when no adapter can be resolved from any source in the resolution hierarchy."""
 
     pass
 

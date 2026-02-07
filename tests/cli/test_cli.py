@@ -26,6 +26,8 @@ def synthetic_config(tmp_path) -> dict[str, Any]:
     """
     Creates a full directory structure in tmp_path and returns a valid config dict.
     """
+    import json
+
     base = tmp_path / "data"
 
     # Create structure
@@ -36,9 +38,22 @@ def synthetic_config(tmp_path) -> dict[str, Any]:
     (base / "4-scored").mkdir(parents=True)
     (base / "5-results").mkdir(parents=True)
 
+    # Create manifest with directives for adapter resolution
+    manifest = {
+        "schema_version": "1.1",
+        "directives": {"adapter": "paroutes", "raw_results_filename": "results.json.gz"},
+        "action": "test-setup",
+        "parameters": {},
+        "source_files": [],
+        "output_files": [],
+        "statistics": {},
+    }
+    manifest_path = base / "2-raw" / "test-model" / "test-bench" / "manifest.json"
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f)
+
     return {
         "data_dir": str(base),
-        "models": {"test-model": {"adapter": "paroutes", "raw_results_filename": "results.json.gz"}},
     }
 
 
@@ -120,6 +135,8 @@ class TestCLIHandlerIntegration:
             sampling_strategy=None,
             k=None,
             anonymize=False,
+            adapter=None,  # Will be resolved from manifest
+            ignore_stereo=False,
         )
 
         # RUN
@@ -202,6 +219,8 @@ class TestCLIHandlerIntegration:
             sampling_strategy=None,
             k=None,
             anonymize=False,
+            adapter=None,
+            ignore_stereo=False,
         )
 
         # Should simply return/log warning, not raise FileNotFoundError
