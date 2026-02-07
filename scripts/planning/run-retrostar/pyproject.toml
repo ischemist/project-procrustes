@@ -1,0 +1,13 @@
+[project]
+name = "retrostar"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "retro-star>=0.1.0",
+    "retrocast>=0.5.3",
+]
+
+[tool.uv.sources]
+retro_star = { git = "https://github.com/anmorgunov/retro_star", branch = "feat/many-routes" }

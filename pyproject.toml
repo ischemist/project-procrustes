@@ -25,10 +25,9 @@ retrocast = "retrocast.cli.main:main"
 [project.optional-dependencies]
 aizyn = [
   "aizynthfinder==4.4.0",
-  "numpy<=2.2",  # Numba needs NumPy 2.2 or less. Got NumPy 2.3.
+  "numpy<=2.2", # Numba needs NumPy 2.2 or less. Got NumPy 2.3.
 ]
 dms = ["directmultistep"]
-retro-star = ["retro-star>=0.1.0", "torch"]
 syntheseus = [
   "syntheseus[local-retro]>=0.5.0",
   "numpy<2",
@@ -37,13 +36,9 @@ syntheseus = [
   "torch<=2.1",
   "torchdata<=0.7.0",
   "faiss-cpu",
-  "torch-scatter"
+  "torch-scatter",
 ]
-viz = [
-  "ischemist>=0.2.0",
-  "kaleido>=1.1.0",
-  "plotly>=6.3.0",
-]
+viz = ["ischemist>=0.2.0", "kaleido>=1.1.0", "plotly>=6.3.0"]
 
 [dependency-groups]
 dev = [
@@ -76,7 +71,7 @@ omit = [
   "*/retrocast/utils/logging.py",
   "*/retrocast/exceptions.py",
   "*/retrocast/visualization/*.py",
-  "*/retrocast/cli/main.py"
+  "*/retrocast/cli/main.py",
 ]
 
 [tool.coverage.report]
@@ -88,7 +83,7 @@ exclude_lines = [
   "if __name__ == .__main__.:",
   "if TYPE_CHECKING:",
   "pass",
-  "logger\\."
+  "logger\\.",
 ]
 
 [tool.pytest.ini_options]
@@ -102,12 +97,12 @@ markers = [
 [tool.ruff]
 line-length = 120
 lint.select = [
-  "E",  # pycodestyle
-  "F",  # Pyflakes
-  "UP",  # pyupgrade
-  "B",  # flake8-bugbear
-  "SIM",  # flake8-simplify
-  "I",  # isort
+  "E", # pycodestyle
+  "F", # Pyflakes
+  "UP", # pyupgrade
+  "B", # flake8-bugbear
+  "SIM", # flake8-simplify
+  "I", # isort
 ]
 lint.ignore = ["E501", "SIM108"]
 
@@ -122,14 +117,7 @@ local_scheme = "no-local-version"
 exclude = ["tests", "scripts"]
 
 [tool.uv]
-conflicts = [
-  [
-    { extra = "dms" },
-    { extra = "aizyn" },
-    { extra = "retro-star" },
-    { extra = "syntheseus" },
-  ]
-]
+conflicts = [[{ extra = "dms" }, { extra = "aizyn" }, { extra = "syntheseus" }]]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
@@ -145,10 +133,7 @@ explicit = true
 dgl = [
   { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin'" },
 ]
-retro_star = { git = "https://github.com/anmorgunov/retro_star", branch = "master" }
-torch = [
-  { index = "pytorch-cpu", extra = "retro-star" },
-]
+
 
 [tool.uv.extra-build-dependencies]
 torch-scatter = ["torch"]

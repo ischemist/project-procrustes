@@ -5,8 +5,8 @@ This script processes targets from a benchmark using Retro* algorithm
 and saves results in a structured format matching other prediction scripts.
 
 Example usage:
-    uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark mkt-cnv-160 --max-routes 2
-    uv run --extra retro-star scripts/retrostar/2-run-og-retro-star.py --benchmark random-n5-2-seed=20251030 --effort high
+    uv run --directory scripts/planning/run-retrostar 2-run-og-retro-star.py --benchmark mkt-cnv-160 --max-routes 2
+    uv run --directory scripts/planning/run-retrostar 2-run-og-retro-star.py --benchmark mkt-cnv-160 --effort high
 
 The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
 Results are saved to: data/2-raw/retro-star-{stock}[-{effort}]/{benchmark_name}/
