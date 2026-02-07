@@ -165,6 +165,7 @@ def create_manifest(
     root_dir: Path,
     parameters: dict[str, Any] | None = None,
     statistics: dict[str, Any] | None = None,
+    directives: dict[str, Any] | None = None,
 ) -> Manifest:
     """
     Generates a Manifest object with explicit content type specification.
@@ -176,6 +177,7 @@ def create_manifest(
         root_dir: Root directory for relative path calculation
         parameters: Action parameters to record
         statistics: Action statistics to record
+        directives: Directives for retrocast data consumption (e.g., adapter, raw_results_filename)
 
     Returns:
         Manifest object with file hashes and content hashes
@@ -227,6 +229,7 @@ def create_manifest(
         created_at=datetime.now(UTC),
         action=action,
         parameters=parameters or {},
+        directives=directives or {},
         source_files=source_infos,
         output_files=output_infos,
         statistics=statistics or {},

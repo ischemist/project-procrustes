@@ -5,9 +5,97 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from retrocast.exceptions import SecurityError
+
 DEFAULT_DATA_DIR = Path("data/retrocast")
 LEGACY_DATA_DIR = Path("data")  # Old default for migration detection
 ENV_VAR_NAME = "RETROCAST_DATA_DIR"
+
+
+# --- Security: Path validation utilities ---
+
+
+def validate_filename(filename: str, param_name: str = "filename") -> str:
+    """Validate that a filename is safe (no path separators, no .. or .).
+
+    Args:
+        filename: The filename to validate
+        param_name: Parameter name for error messages
+
+    Returns:
+        The validated filename (unchanged if valid)
+
+    Raises:
+        SecurityError: If filename contains path separators or traversal sequences
+    """
+    # Check for null bytes
+    if "\x00" in filename:
+        raise SecurityError(f"{param_name} contains null bytes: {filename!r}")
+
+    # Check for path separators (both Unix and Windows)
+    if "/" in filename or "\\" in filename:
+        raise SecurityError(
+            f"{param_name} contains path separator: {filename!r}. Filenames cannot contain '/' or '\\'."
+        )
+
+    # Check for parent directory traversal
+    if filename == ".." or filename.startswith("../") or filename.endswith("/.."):
+        raise SecurityError(f"{param_name} contains parent directory reference: {filename!r}")
+
+    # Check for current directory reference at problematic positions
+    if filename == "." or filename.startswith("./") or filename.endswith("/."):
+        raise SecurityError(f"{param_name} contains current directory reference: {filename!r}")
+
+    return filename
+
+
+def validate_directory_name(dirname: str, param_name: str = "directory") -> str:
+    """Validate that a directory name is safe (no path separators, no .. or .).
+
+    Args:
+        dirname: The directory name to validate
+        param_name: Parameter name for error messages
+
+    Returns:
+        The validated directory name (unchanged if valid)
+
+    Raises:
+        SecurityError: If dirname contains path separators or traversal sequences
+    """
+    return validate_filename(dirname, param_name)
+
+
+def ensure_path_within_root(path: Path, root: Path, description: str = "path") -> Path:
+    """Ensure a resolved path stays within root directory bounds.
+
+    Uses Path.resolve() to normalize paths and checks that the resolved path
+    starts with the resolved root. This prevents path traversal attacks via
+    symlinks or relative paths.
+
+    Args:
+        path: The path to validate
+        root: The root directory that path must be within
+        description: Description of the path for error messages
+
+    Returns:
+        The resolved path (if valid)
+
+    Raises:
+        SecurityError: If path resolves to a location outside root
+    """
+    # Resolve both paths to absolute paths with symlinks resolved
+    resolved_path = path.resolve()
+    resolved_root = root.resolve()
+
+    # Check if the resolved path is within the root
+    try:
+        resolved_path.relative_to(resolved_root)
+    except ValueError as exc:
+        raise SecurityError(
+            f"{description} escapes root directory: {path} (resolved: {resolved_path}, root: {resolved_root})"
+        ) from exc
+
+    return resolved_path
 
 
 def resolve_data_dir(
