@@ -25,7 +25,7 @@ models:
   retro-star:
     adapter: retrostar
     raw_results_filename: results.json.gz
-  retro-star-high:
+  retro-star-max=2:
     adapter: retrostar
     raw_results_filename: results.json.gz
   multistep-ttl:

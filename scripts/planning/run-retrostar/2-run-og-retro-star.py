@@ -8,8 +8,8 @@ Example usage:
     uv run --directory scripts/planning/run-retrostar 2-run-og-retro-star.py --benchmark mkt-cnv-160 --max-routes 2
     uv run --directory scripts/planning/run-retrostar 2-run-og-retro-star.py --benchmark mkt-cnv-160 --effort high
 
-The benchmark definition should be located at: data/1-benchmarks/definitions/{benchmark_name}.json.gz
-Results are saved to: data/2-raw/retro-star-{stock}[-{effort}]/{benchmark_name}/
+The benchmark definition should be located at: data/retrocast/1-benchmarks/definitions/{benchmark_name}.json.gz
+Results are saved to: data/retrocast/2-raw/retro-star[-{effort}][-max={N}]/{benchmark_name}/
 """
 
 import argparse
@@ -21,13 +21,15 @@ from retro_star.api import RSPlanner
 from tqdm import tqdm
 
 from retrocast.io import create_manifest, load_benchmark, save_execution_stats, save_json_gz
+from retrocast.paths import get_paths
 from retrocast.utils import ExecutionTimer
 from retrocast.utils.logging import logger
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DATA_DIR = PROJECT_ROOT / "data" / "retrocast"
+paths = get_paths(DATA_DIR)
 
-RETROSTAR_DIR = BASE_DIR / "data" / "0-assets" / "model-configs" / "retro-star"
-STOCKS_DIR = BASE_DIR / "data" / "1-benchmarks" / "stocks"
+RETROSTAR_DIR = DATA_DIR / "0-assets" / "model-configs" / "retro-star"
 
 
 def convert_numpy(obj: Any) -> Any:
@@ -69,15 +71,20 @@ if __name__ == "__main__":
     iterations = 500 if args.effort == "high" else 100
 
     # 1. Load Benchmark
-    bench_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
+    bench_path = paths["benchmarks"] / f"{args.benchmark}.json.gz"
     benchmark = load_benchmark(bench_path)
     assert benchmark.stock_name is not None, f"Stock name not found in benchmark {args.benchmark}"
 
-    stock_path = STOCKS_DIR / f"{benchmark.stock_name}.txt.gz"
+    stock_path = paths["stocks"] / f"{benchmark.stock_name}.txt.gz"
 
     # 3. Setup Output
-    folder_name = "retro-star" if args.effort == "normal" else f"retro-star-{args.effort}"
-    save_dir = BASE_DIR / "data" / "2-raw" / folder_name / benchmark.name
+    folder_parts = ["retro-star"]
+    if args.effort != "normal":
+        folder_parts.append(args.effort)
+    if args.max_routes > 1:
+        folder_parts.append(f"max={args.max_routes}")
+    folder_name = "-".join(folder_parts)
+    save_dir = paths["raw"] / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"stock: {benchmark.stock_name}")
@@ -103,7 +110,6 @@ if __name__ == "__main__":
     results: dict[str, dict[str, Any]] = {}
     solved_count = 0
     timer = ExecutionTimer()
-
     for target in tqdm(benchmark.targets.values(), desc="Finding retrosynthetic paths"):
         with timer.measure(target.id):
             try:
@@ -129,9 +135,9 @@ if __name__ == "__main__":
     save_json_gz(results, save_dir / "results.json.gz")
     save_execution_stats(runtime, save_dir / "execution_stats.json.gz")
     manifest = create_manifest(
-        action="scripts/retrostar/2-run-og-retro-star.py",
+        action="scripts/planning/run-retrostar/2-run-og-retro-star.py",
         sources=[bench_path, stock_path],
-        root_dir=BASE_DIR / "data",
+        root_dir=DATA_DIR,
         outputs=[(save_dir / "results.json.gz", results, "unknown")],
         statistics=summary,
     )
