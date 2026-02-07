@@ -34,8 +34,8 @@ class Manifest(BaseModel):
     directives: dict[str, Any] = Field(
         default_factory=dict,
         description=(
-            "Directives for retrocast data consumption. "
-            "Common directives: 'adapter' (required), 'planner_version' (required), 'raw_results_filename'"
+            "Optional directives for retrocast data consumption. "
+            "Common directives: 'adapter', 'planner_version', 'raw_results_filename'"
         ),
     )
 
