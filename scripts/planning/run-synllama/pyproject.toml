@@ -1,11 +1,14 @@
 [project]
-name = "retrostar"
+name = "run-synllama"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["retro-star>=0.1.0", "retrocast>=0.5.3"]
+dependencies = [
+    "retrocast>=0.5.4.dev1",
+    "synllama>=0.1.0",
+]
 
 [tool.uv.sources]
-retro_star = { git = "https://github.com/anmorgunov/retro_star", branch = "feat/many-routes" }
+synllama = { git = "https://github.com/anmorgunov/synllama", branch = "main" }
 retrocast = { git = "https://github.com/ischemist/project-procrustes", branch = "master" }
