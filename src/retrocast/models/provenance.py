@@ -33,7 +33,10 @@ class Manifest(BaseModel):
     # Directives for retrocast consumption (e.g., which adapter to use, what filename to read)
     directives: dict[str, Any] = Field(
         default_factory=dict,
-        description="Directives for retrocast data consumption (e.g., adapter, raw_results_filename)",
+        description=(
+            "Directives for retrocast data consumption. "
+            "Common directives: 'adapter' (required), 'planner_version' (required), 'raw_results_filename'"
+        ),
     )
 
     # Inputs
