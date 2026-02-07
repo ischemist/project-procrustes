@@ -111,7 +111,7 @@ def run_synllama_raw_predictions(
                 if result["success"]:
                     # Wrap single result in a list to match multi-pathway format
                     pathway = {
-                        "synthesis": result["synthesis"],
+                        "synthesis_string": result["synthesis"],
                         "num_steps": result["num_steps"],
                     }
                     results[target.id] = [pathway]
