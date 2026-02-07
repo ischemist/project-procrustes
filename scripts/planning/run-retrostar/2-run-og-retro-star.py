@@ -31,6 +31,9 @@ paths = get_paths(DATA_DIR)
 
 RETROSTAR_DIR = DATA_DIR / "0-assets" / "model-configs" / "retro-star"
 
+# Retro* version - update when upgrading the library
+PLANNER_VERSION = "1.1.0-dev"
+
 
 def convert_numpy(obj: Any) -> Any:
     if isinstance(obj, np.integer):
@@ -132,6 +135,14 @@ if __name__ == "__main__":
         "total_targets": len(benchmark.targets),
     }
 
+    parameters = {
+        "effort": args.effort,
+        "max_routes": args.max_routes,
+        "iterations": iterations,
+        "expansion_topk": 50,
+        "use_value_fn": True,
+    }
+
     save_json_gz(results, save_dir / "results.json.gz")
     save_execution_stats(runtime, save_dir / "execution_stats.json.gz")
     manifest = create_manifest(
@@ -139,7 +150,13 @@ if __name__ == "__main__":
         sources=[bench_path, stock_path],
         root_dir=DATA_DIR,
         outputs=[(save_dir / "results.json.gz", results, "unknown")],
+        parameters=parameters,
         statistics=summary,
+        directives={
+            "adapter": "retrostar",
+            "planner_version": PLANNER_VERSION,
+            "raw_results_filename": "results.json.gz",
+        },
     )
 
     with open(save_dir / "manifest.json", "w") as f:
