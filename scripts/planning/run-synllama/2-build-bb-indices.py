@@ -16,12 +16,12 @@ Indices are saved to: synllama-data/inference/reconstruction/{rxn_set}/custom_bb
 from __future__ import annotations
 
 import argparse
-import gzip
 from dataclasses import dataclass
 from pathlib import Path
 
 from synllama.llm.build_custom_indices import build_custom_bb_indices
 
+from retrocast.io import load_stock_file
 from retrocast.paths import get_paths
 from retrocast.utils.logging import configure_script_logging, logger
 
@@ -74,37 +74,6 @@ def get_synllama_paths(rxn_set: str) -> SynLlamaPaths:
     )
 
 
-def load_building_blocks(stock_path: Path) -> list[str]:
-    """Load building blocks from a stock CSV file.
-
-    Args:
-        stock_path: Path to stock CSV file (e.g., buyables-stock.csv.gz).
-
-    Returns:
-        List of SMILES strings representing building blocks.
-
-    Raises:
-        FileNotFoundError: If stock file doesn't exist.
-    """
-    if not stock_path.exists():
-        raise FileNotFoundError(f"Stock file not found: {stock_path}")
-
-    building_blocks = []
-
-    with gzip.open(stock_path, "rt", encoding="utf-8") as f:
-        header = f.readline().strip()
-        if not header.lower().startswith("smiles"):
-            raise ValueError(f"Expected 'SMILES' header in stock file, got: {header}")
-
-        for line in f:
-            smiles = line.strip()
-            if smiles:
-                building_blocks.append(smiles)
-
-    logger.info(f"Loaded {len(building_blocks)} building blocks from {stock_path.name}")
-    return building_blocks
-
-
 def main() -> None:
     """Main entry point for building custom BB indices."""
     parser = argparse.ArgumentParser(description="Build custom BB indices for SynLlama from a stock file")
@@ -141,7 +110,7 @@ def main() -> None:
 
     # Load building blocks
     stock_path = paths.stocks_dir / f"{args.stock}.csv.gz"
-    building_blocks = load_building_blocks(stock_path)
+    building_blocks = list(load_stock_file(stock_path, return_as="smiles"))
 
     # Setup output directory
     output_dir = paths.custom_bb_base / args.stock
