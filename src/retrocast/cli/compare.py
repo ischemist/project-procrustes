@@ -42,13 +42,12 @@ import logging
 from collections import defaultdict
 from pathlib import Path
 
-import plotly.graph_objects as go
 import yaml
 
+from retrocast.exceptions import ConfigurationError
 from retrocast.io.blob import load_json_gz
 from retrocast.models.stats import ModelStatistics
 from retrocast.utils.logging import logger
-from retrocast.visualization import plots
 
 
 def _resolve_statistics_path(entry: dict, source_root: Path | None, benchmark: str, stock: str, yaml_dir: Path) -> Path:
@@ -59,7 +58,7 @@ def _resolve_statistics_path(entry: dict, source_root: Path | None, benchmark: s
     """
     if "statistics" in entry:
         p = Path(entry["statistics"])
-        return p if p.is_absolute() else yaml_dir / p
+        return p if p.is_absolute() else (yaml_dir / p).resolve()
 
     if source_root is None:
         raise ValueError(f"Model '{entry.get('name')}' must have either 'statistics' or a source-level 'root'")
@@ -67,34 +66,24 @@ def _resolve_statistics_path(entry: dict, source_root: Path | None, benchmark: s
     return source_root / "5-results" / benchmark / entry["name"] / stock / "statistics.json.gz"
 
 
-def handle_pareto_frontier(args: argparse.Namespace) -> None:
-    config_path = Path(args.config).resolve()
-    yaml_dir = config_path.parent
+def _load_sources(
+    cfg: dict,
+    yaml_dir: Path,
+) -> tuple[list[ModelStatistics], dict[str, float], dict[str, dict], dict[str, str]]:
+    """Load and validate all model statistics from the YAML ``sources`` block.
 
-    with open(config_path) as f:
-        cfg = yaml.safe_load(f)
-
+    Returns a 4-tuple of:
+      - stats_list:    validated ModelStatistics objects (missing/corrupt entries skipped)
+      - hourly_costs:  model_name -> hourly cost (only entries that declare one)
+      - model_config:  model_name -> {legend, short, color}
+      - model_groups:  model_name -> group_id (only entries that declare a group)
+    """
     benchmark: str = cfg["benchmark"]
     stock: str = cfg["stock"]
-    top_k: int = cfg.get("top_k", 10)
-    # CLI --time flag overrides yaml x_axis setting
-    time_based: bool = args.time or (cfg.get("x_axis", "cost") == "time")
-    auto_open: bool = not args.no_open
 
-    output_dir = yaml_dir / cfg.get("output_dir", "./6-comparisons")
-    output_dir = output_dir.resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # group_id -> color
-    group_colors: dict[str, str] = {g["id"]: g["color"] for g in cfg.get("groups", [])}
-    # group_id -> list of (x_value, accuracy) — populated during loading
-    group_points: dict[str, list[tuple[float, float]]] = defaultdict(list)
-
-    # --- Load statistics ---
     stats_list: list[ModelStatistics] = []
     hourly_costs: dict[str, float] = {}
-    model_config: dict[str, dict[str, str]] = {}
-    # model_name -> group_id (for post-plot line drawing)
+    model_config: dict[str, dict] = {}
     model_groups: dict[str, str] = {}
 
     for source in cfg["sources"]:
@@ -131,6 +120,39 @@ def handle_pareto_frontier(args: argparse.Namespace) -> None:
             if "group" in entry:
                 model_groups[name] = entry["group"]
 
+    return stats_list, hourly_costs, model_config, model_groups
+
+
+def handle_pareto_frontier(args: argparse.Namespace) -> None:
+    try:
+        import plotly.graph_objects as go
+
+        from retrocast.visualization import plots
+    except ImportError as e:
+        raise ImportError("pareto-frontier requires the 'viz' extra: uv sync --extra viz") from e
+
+    config_path = Path(args.config).resolve()
+    yaml_dir = config_path.parent
+
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f)
+
+    top_k: int = cfg.get("top_k", 10)
+    # CLI --time flag overrides yaml x_axis setting
+    time_based: bool = args.time or (cfg.get("x_axis", "cost") == "time")
+    auto_open: bool = not args.no_open
+
+    output_dir = yaml_dir / cfg.get("output_dir", "./6-comparisons")
+    output_dir = output_dir.resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # group_id -> color
+    group_colors: dict[str, str] = {g["id"]: g["color"] for g in cfg.get("groups", [])}
+    # group_id -> list of (x_value, accuracy) — populated after plotting
+    group_points: dict[str, list[tuple[float, float]]] = defaultdict(list)
+
+    stats_list, hourly_costs, model_config, model_groups = _load_sources(cfg, yaml_dir)
+
     if not stats_list:
         logger.error("[bold red]No valid statistics loaded. Exiting.[/]")
         return
@@ -153,10 +175,11 @@ def handle_pareto_frontier(args: argparse.Namespace) -> None:
         # Build name -> (x, y) from the scatter traces plot_pareto_frontier added
         point_coords: dict[str, tuple[float, float]] = {}
         for trace in fig.data:
-            if isinstance(trace, go.Scatter) and trace.x and len(trace.x) == 1:
+            if isinstance(trace, go.Scatter) and trace.x and len(trace.x) == 1:  # noqa: SIM102
                 # single-point traces are the model dots; customdata[0][0] is model_name
-                model_name = trace.customdata[0][0]
-                point_coords[model_name] = (trace.x[0], trace.y[0])
+                if trace.customdata and len(trace.customdata) > 0:
+                    model_name = trace.customdata[0][0]
+                    point_coords[model_name] = (trace.x[0], trace.y[0])
 
         for name, group_id in model_groups.items():
             if name in point_coords:
@@ -167,8 +190,11 @@ def handle_pareto_frontier(args: argparse.Namespace) -> None:
                 continue
             points.sort(key=lambda p: p[0])
             color = group_colors.get(group_id, "#888888")
-            # Convert hex to rgba for opacity
-            r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+            # Convert hex to rgba for opacity; only #RRGGBB format is supported
+            try:
+                r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+            except ValueError as e:
+                raise ConfigurationError(f"Group color must be in #RRGGBB hex format, got: {color!r}") from e
             fig.add_trace(
                 go.Scatter(
                     x=[p[0] for p in points],

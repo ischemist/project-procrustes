@@ -46,6 +46,12 @@ class RetroCastIOError(RetroCastException):
     pass
 
 
+class ConfigurationError(RetroCastException, ValueError):
+    """Raised when a YAML configuration value is invalid or malformed."""
+
+    pass
+
+
 class RetroCastSerializationError(RetroCastException):
     """Raised when data cannot be serialized to the desired format (e.g., JSON)."""
 
