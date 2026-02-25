@@ -6,7 +6,7 @@ from typing import Any
 import yaml
 
 from retrocast import __version__
-from retrocast.cli import adhoc, handlers
+from retrocast.cli import adhoc, compare, handlers
 from retrocast.paths import ENV_VAR_NAME, check_migration_needed, get_data_dir_source, resolve_data_dir
 from retrocast.utils.logging import configure_script_logging, logger
 
@@ -156,6 +156,15 @@ def main() -> None:
     create_bm_parser.add_argument("--output", required=True, help="Output path (.json.gz)")
     create_bm_parser.add_argument("--stock-name", required=True, help="Associated stock name")
 
+    # --- COMPARE ---
+    compare_parser = subparsers.add_parser("compare", help="Generate comparison plots across models")
+    compare_sub = compare_parser.add_subparsers(dest="compare_command", required=True)
+
+    pf_parser = compare_sub.add_parser("pareto-frontier", help="Plot cost vs accuracy Pareto frontier")
+    pf_parser.add_argument("config", type=Path, help="Path to YAML config file")
+    pf_parser.add_argument("--time", action="store_true", help="Use wall time on X-axis instead of cost")
+    pf_parser.add_argument("--no-open", action="store_true", help="Do not open the plot in a browser")
+
     # --- VERIFY ---
     verify_parser = subparsers.add_parser("verify", help="Verify data integrity and lineage")
     v_group = verify_parser.add_mutually_exclusive_group(required=True)
@@ -171,7 +180,7 @@ def main() -> None:
     args = parser.parse_args()
 
     # Commands that don't need config/data-dir resolution
-    if args.command in ["adapt", "score-file", "create-benchmark", "list-adapters"]:
+    if args.command in ["adapt", "score-file", "create-benchmark", "list-adapters", "compare"]:
         if args.command == "adapt":
             adhoc.handle_adapt(args)
         elif args.command == "score-file":
@@ -180,6 +189,9 @@ def main() -> None:
             adhoc.handle_create_benchmark(args)
         elif args.command == "list-adapters":
             adhoc.handle_list_adapters(args)
+        elif args.command == "compare":  # noqa: SIM102
+            if args.compare_command == "pareto-frontier":
+                compare.handle_pareto_frontier(args)
         return
 
     # Load config (optional — only used for data_dir)
