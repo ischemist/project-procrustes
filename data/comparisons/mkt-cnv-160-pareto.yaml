@@ -1,0 +1,78 @@
+benchmark: mkt-cnv-160
+stock: buyables-stock
+top_k: 10
+x_axis: cost
+output_dir: ../retrocast/6-comparisons/mkt-cnv-160
+
+groups:
+  - id: ariadne-1-preview
+    color: "#7c3aed"
+
+sources:
+  - root: ../retrocast
+    models:
+      - name: aizynthfinder-retro-star
+        hourly_cost: 0.1785
+        legend: AiZynthFinder RetroStar
+        short: AZF RS
+        color: "#f4845f"
+
+      - name: aizynthfinder-mcts
+        hourly_cost: 0.1785
+        legend: AiZynthFinder MCTS
+        short: AZF MCTS
+        color: "#f7b267"
+
+      - name: aizynthfinder-retro-star-high
+        hourly_cost: 0.1785
+        legend: AiZynthFinder RetroStar (High)
+        short: AZF RS H
+        color: "#f27059"
+
+      - name: aizynthfinder-mcts-high
+        hourly_cost: 0.1785
+        legend: AiZynthFinder MCTS (High)
+        short: AZF MCTS H
+        color: "#f79d65"
+
+      - name: retro-star-high
+        hourly_cost: 0.1785
+        legend: RetroStar (High)
+        short: RS H
+        color: "#9f85ff"
+
+      - name: syntheseus-retro0-local-retro
+        hourly_cost: 0.1785
+        legend: Syntheseus Retro0
+        short: Synth R0
+        color: "#d6d2d2"
+
+      - name: dms-explorer-xl
+        hourly_cost: 1.29
+        legend: DMS Explorer XL
+        short: DMS XL
+        color: "#5eaff2"
+
+      - name: askcos
+        hourly_cost: 0.714
+        legend: ASKCOS
+        short: ASKCOS
+        color: "#fe7295"
+
+      - name: synplanner-1.3.2-mcts-val
+        hourly_cost: 0.1785
+        legend: SynPlanner MCTS Val
+        short: SP Val
+        color: "#e377c2"
+
+      - name: synplanner-1.3.2-mcts-rollout
+        hourly_cost: 0.1785
+        legend: SynPlanner MCTS Rollout
+        short: SP Rollout
+        color: "#f06292"
+
+      - name: synplanner-1.3.2-nmcs
+        hourly_cost: 0.1785
+        legend: SynPlanner NMCS
+        short: SP NMCS
+        color: "#f48fb1"

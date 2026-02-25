@@ -14,7 +14,7 @@ repos:
   - repo: local
     hooks:
       - id: ty
-        name: ty check
+        name: ty (type checker)
         entry: uv run ty check .
         language: system
         pass_filenames: false

@@ -7,6 +7,7 @@ import pytest
 
 from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity, TargetInput
+from retrocast.models.stats import MetricResult, ModelStatistics, ReliabilityFlag, StratifiedMetric
 from retrocast.typing import InchiKeyStr, SmilesStr
 from tests.helpers import _make_leaf_molecule, _synthetic_inchikey
 
@@ -222,6 +223,58 @@ def pharma_routes_data() -> dict[str, Any]:
 def methylacetate_target_input() -> TargetIdentity:
     """provides the target input object for methyl acetate."""
     return TargetInput(id="methylacetate", smiles=canonicalize_smiles("COC(C)=O"))
+
+
+@pytest.fixture
+def synthetic_statistics_factory():
+    """
+    Factory fixture for creating synthetic ModelStatistics objects.
+
+    Mirrors the synthetic_route_factory pattern — returns a callable so tests
+    can produce one or many stats objects with controlled field values without
+    chemical complexity.
+
+    Args:
+        model_name: Stored as ModelStatistics.model_name (default: "model-a")
+        benchmark:  Stored as ModelStatistics.benchmark  (default: "pharma")
+        stock:      Stored as ModelStatistics.stock      (default: "n5-stock")
+
+    Returns:
+        A minimal but fully valid ModelStatistics object with solvability=0.75.
+
+    Examples:
+        stats = synthetic_statistics_factory()
+        stats = synthetic_statistics_factory("my-model", benchmark="mkt-cnv-160")
+        stats_list = [synthetic_statistics_factory(f"model-{i}") for i in range(3)]
+    """
+
+    def _make(
+        model_name: str = "model-a",
+        benchmark: str = "pharma",
+        stock: str = "n5-stock",
+    ) -> ModelStatistics:
+        reliability = ReliabilityFlag(code="OK", message="Sufficient samples")
+        metric_result = MetricResult(
+            value=0.75,
+            ci_lower=0.70,
+            ci_upper=0.80,
+            n_samples=100,
+            reliability=reliability,
+        )
+        stratified_metric = StratifiedMetric(
+            metric_name="solvability",
+            overall=metric_result,
+            by_group={},
+        )
+        return ModelStatistics(
+            model_name=model_name,
+            benchmark=benchmark,
+            stock=stock,
+            solvability=stratified_metric,
+            top_k_accuracy={},
+        )
+
+    return _make
 
 
 @pytest.fixture(scope="session")
