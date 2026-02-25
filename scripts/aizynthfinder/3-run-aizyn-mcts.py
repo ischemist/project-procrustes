@@ -63,18 +63,24 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # 1. Load Benchmark
-    bench_path = BASE_DIR / "data" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
+    bench_path = BASE_DIR / "data" / "retrocast" / "1-benchmarks" / "definitions" / f"{args.benchmark}.json.gz"
     benchmark = load_benchmark(bench_path)
     assert benchmark.stock_name is not None, f"Stock name not found in benchmark {args.benchmark}"
 
     # 2. Setup Output
     folder_name = "aizynthfinder-mcts" if args.effort == "normal" else f"aizynthfinder-mcts-{args.effort}"
-    save_dir = BASE_DIR / "data" / "2-raw" / folder_name / benchmark.name
+    save_dir = BASE_DIR / "data" / "retrocast" / "2-raw" / folder_name / benchmark.name
     save_dir.mkdir(parents=True, exist_ok=True)
 
     config_suffix = "" if args.effort == "normal" else f"-{args.effort}"
     config_path = (
-        BASE_DIR / "data" / "0-assets" / "model-configs" / "aizynthfinder" / f"config-mcts{config_suffix}.yaml"
+        BASE_DIR
+        / "data"
+        / "retrocast"
+        / "0-assets"
+        / "model-configs"
+        / "aizynthfinder"
+        / f"config-mcts{config_suffix}.yaml"
     )
 
     logger.info(f"effort: {args.effort} (config: {config_path.name})")

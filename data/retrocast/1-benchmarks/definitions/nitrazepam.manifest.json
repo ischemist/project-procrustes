@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.1",
+  "retrocast_version": "0.5.4.dev6",
+  "created_at": "2026-02-20T17:00:04.918418Z",
+  "action": "scripts/dev/create-benchmark-from-smiles",
+  "parameters": {
+    "name": "nitrazepam",
+    "stock_name": "buyables-stock",
+    "description": "Custom benchmark from SMILES list"
+  },
+  "directives": {},
+  "source_files": [],
+  "output_files": [
+    {
+      "path": "retrocast/1-benchmarks/definitions/nitrazepam.json.gz",
+      "file_hash": "d513ef445038d4168bad76e3ea8080e89c00e54968f582067a6494b760cd4a35",
+      "content_hash": "2640a6c2400843f8badc88c2b235ec9fe866c5ab3839595c54ef9d636286eef7"
+    }
+  ],
+  "statistics": {
+    "n_targets": 1,
+    "n_failed": 0
+  }
+}
