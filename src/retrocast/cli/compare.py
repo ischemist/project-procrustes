@@ -9,6 +9,11 @@ top_k: 10
 x_axis: cost                    # cost (default) or time
 output_dir: ./6-comparisons/my-run   # relative to the yaml file
 
+# optional — draw a solid line connecting models that share a group id
+groups:
+  - id: ariadne-1-preview
+    color: "#7c3aed"
+
 sources:
   # shorthand — paths built from root + benchmark + model name + stock
   - root: /path/to/data/retrocast
@@ -24,16 +29,20 @@ sources:
       - name: rc-r3-causal
         statistics: /path/to/.../statistics.json.gz
         hourly_cost: 0.50
-        color: "#fe7295"
-        legend: Ariadne R3
-        short: R3
+        color: "#7c3aed"
+        group: ariadne-1-preview
+        legend: "Ariadne-1-Preview (beam 5)"
+        short: "Ariadne-1-Preview<br>beam 5"
 """
 
 from __future__ import annotations
 
 import argparse
+import logging
+from collections import defaultdict
 from pathlib import Path
 
+import plotly.graph_objects as go
 import yaml
 
 from retrocast.io.blob import load_json_gz
@@ -76,10 +85,17 @@ def handle_pareto_frontier(args: argparse.Namespace) -> None:
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # group_id -> color
+    group_colors: dict[str, str] = {g["id"]: g["color"] for g in cfg.get("groups", [])}
+    # group_id -> list of (x_value, accuracy) — populated during loading
+    group_points: dict[str, list[tuple[float, float]]] = defaultdict(list)
+
     # --- Load statistics ---
     stats_list: list[ModelStatistics] = []
     hourly_costs: dict[str, float] = {}
     model_config: dict[str, dict[str, str]] = {}
+    # model_name -> group_id (for post-plot line drawing)
+    model_groups: dict[str, str] = {}
 
     for source in cfg["sources"]:
         raw_root = source.get("root")
@@ -112,6 +128,9 @@ def handle_pareto_frontier(args: argparse.Namespace) -> None:
                 "color": entry.get("color", "#888888"),
             }
 
+            if "group" in entry:
+                model_groups[name] = entry["group"]
+
     if not stats_list:
         logger.error("[bold red]No valid statistics loaded. Exiting.[/]")
         return
@@ -127,9 +146,46 @@ def handle_pareto_frontier(args: argparse.Namespace) -> None:
         time_based=time_based,
     )
 
+    # --- Group connecting lines ---
+    # Reconstruct (x, y) for each grouped model from the figure traces so we
+    # don't duplicate the x-axis calculation logic.
+    if model_groups:
+        # Build name -> (x, y) from the scatter traces plot_pareto_frontier added
+        point_coords: dict[str, tuple[float, float]] = {}
+        for trace in fig.data:
+            if isinstance(trace, go.Scatter) and trace.x and len(trace.x) == 1:
+                # single-point traces are the model dots; customdata[0][0] is model_name
+                model_name = trace.customdata[0][0]
+                point_coords[model_name] = (trace.x[0], trace.y[0])
+
+        for name, group_id in model_groups.items():
+            if name in point_coords:
+                group_points[group_id].append(point_coords[name])
+
+        for group_id, points in group_points.items():
+            if len(points) < 2:
+                continue
+            points.sort(key=lambda p: p[0])
+            color = group_colors.get(group_id, "#888888")
+            # Convert hex to rgba for opacity
+            r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+            fig.add_trace(
+                go.Scatter(
+                    x=[p[0] for p in points],
+                    y=[p[1] for p in points],
+                    mode="lines",
+                    line=dict(color=f"rgba({r},{g},{b},0.4)", width=2),
+                    showlegend=False,
+                    hoverinfo="skip",
+                )
+            )
+
     suffix = "_time" if time_based else ""
     html_path = output_dir / f"pareto_frontier{suffix}.html"
     pdf_path = output_dir / f"pareto_frontier{suffix}.pdf"
+
+    logging.getLogger("kaleido").setLevel(logging.WARNING)
+    logging.getLogger("choreographer").setLevel(logging.WARNING)
 
     fig.write_html(html_path, include_plotlyjs="cdn", auto_open=auto_open)
     fig.write_image(pdf_path)
