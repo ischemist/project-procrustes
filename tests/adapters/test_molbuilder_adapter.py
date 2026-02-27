@@ -242,6 +242,57 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
         assert len(routes) == 1
         assert routes[0].target.is_leaf
 
+    def test_non_leaf_without_disconnection_raises(self, adapter_instance, caplog):
+        """A non-leaf node (has children, not purchasable) without best_disconnection is an error."""
+        data = [
+            {
+                "smiles": "CCO",
+                "is_purchasable": False,
+                # No best_disconnection, but has children -> should raise
+                "children": [
+                    {"smiles": "CC=O", "is_purchasable": True, "children": []},
+                ],
+            }
+        ]
+        target = TargetInput(id="ethanol", smiles="CCO")
+        routes = list(adapter_instance.cast(data, target))
+        # Route should be discarded due to AdapterLogicError
+        assert len(routes) == 0
+        assert "missing 'best_disconnection'" in caplog.text
+
+    def test_functional_groups_in_metadata(self, adapter_instance):
+        """Functional groups from MolBuilder nodes are preserved in Molecule.metadata."""
+        data = [
+            {
+                "smiles": "CCO",
+                "is_purchasable": False,
+                "functional_groups": ["alcohol", "alkyl"],
+                "best_disconnection": {
+                    "reaction_name": "Reduction",
+                    "score": 0.85,
+                },
+                "children": [
+                    {
+                        "smiles": "CC=O",
+                        "is_purchasable": True,
+                        "functional_groups": ["aldehyde"],
+                        "children": [],
+                    },
+                ],
+            }
+        ]
+        target = TargetInput(id="ethanol", smiles="CCO")
+        routes = list(adapter_instance.cast(data, target))
+        assert len(routes) == 1
+
+        # Root molecule metadata
+        root_mol = routes[0].target
+        assert root_mol.metadata["functional_groups"] == ["alcohol", "alkyl"]
+
+        # Leaf molecule metadata
+        leaf = root_mol.synthesis_step.reactants[0]
+        assert leaf.metadata["functional_groups"] == ["aldehyde"]
+
     def test_all_molecules_have_inchikeys(self, adapter_instance, raw_valid_route_data, target_input):
         """Every molecule in the tree should have an InChIKey."""
 

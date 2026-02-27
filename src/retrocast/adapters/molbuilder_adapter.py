@@ -155,36 +155,48 @@ class MolBuilderAdapter(BaseAdapter):
         if canon_smiles in visited:
             raise AdapterLogicError(f"cycle detected in route graph involving smiles: {canon_smiles}")
 
-        new_visited = visited | {canon_smiles}
+        visited.add(canon_smiles)
         is_leaf = node.is_purchasable or not bool(node.children)
+
+        # Build metadata from functional groups if present
+        mol_metadata: dict[str, Any] = {}
+        if node.functional_groups:
+            mol_metadata["functional_groups"] = node.functional_groups
 
         if is_leaf:
             return Molecule(
                 smiles=canon_smiles,
                 inchikey=get_inchi_key(canon_smiles),
                 synthesis_step=None,
-                metadata={},
+                metadata=mol_metadata,
             )
 
-        # Recurse into children
+        # Non-leaf nodes must have a best_disconnection to define the synthesis step
+        if node.best_disconnection is None:
+            raise AdapterLogicError(
+                f"Non-leaf node for SMILES '{canon_smiles}' is missing 'best_disconnection' field."
+            )
+
+        # Recurse into children (copy visited set so sibling branches are independent)
         reactant_molecules: list[Molecule] = []
         for child in node.children:
-            reactant_mol = self._build_molecule(child, visited=new_visited, ignore_stereo=ignore_stereo)
+            reactant_mol = self._build_molecule(
+                child, visited=set(visited), ignore_stereo=ignore_stereo
+            )
             reactant_molecules.append(reactant_mol)
 
         # Extract reaction metadata from best_disconnection
-        step_metadata: dict[str, Any] = {}
-        template: str | None = None
-        if node.best_disconnection is not None:
-            disc = node.best_disconnection
-            step_metadata["reaction_name"] = disc.reaction_name
-            step_metadata["score"] = disc.score
-            if disc.named_reaction:
-                step_metadata["named_reaction"] = disc.named_reaction
-            if disc.category:
-                step_metadata["category"] = disc.category
-            # MolBuilder templates are name-based, not SMARTS
-            template = disc.reaction_name
+        disc = node.best_disconnection
+        step_metadata: dict[str, Any] = {
+            "reaction_name": disc.reaction_name,
+            "score": disc.score,
+        }
+        if disc.named_reaction:
+            step_metadata["named_reaction"] = disc.named_reaction
+        if disc.category:
+            step_metadata["category"] = disc.category
+        # MolBuilder templates are name-based, not SMARTS
+        template = disc.reaction_name
 
         synthesis_step = ReactionStep(
             reactants=reactant_molecules,
@@ -199,5 +211,5 @@ class MolBuilderAdapter(BaseAdapter):
             smiles=canon_smiles,
             inchikey=get_inchi_key(canon_smiles),
             synthesis_step=synthesis_step,
-            metadata={},
+            metadata=mol_metadata,
         )
