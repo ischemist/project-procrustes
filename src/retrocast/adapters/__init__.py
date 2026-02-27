@@ -5,6 +5,7 @@ from retrocast.adapters.askcos_adapter import AskcosAdapter
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.dms_adapter import DMSAdapter
 from retrocast.adapters.dreamretro_adapter import DreamRetroAdapter
+from retrocast.adapters.molbuilder_adapter import MolBuilderAdapter
 from retrocast.adapters.multistepttl_adapter import TtlRetroAdapter
 from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
 from retrocast.adapters.retrochimera_adapter import RetrochimeraAdapter
@@ -20,6 +21,7 @@ ADAPTER_MAP: dict[str, BaseAdapter] = {
     "askcos": AskcosAdapter(),
     "dms": DMSAdapter(),
     "dreamretro": DreamRetroAdapter(),
+    "molbuilder": MolBuilderAdapter(),
     "multistepttl": TtlRetroAdapter(),
     "paroutes": PaRoutesAdapter(),
     "retrochimera": RetrochimeraAdapter(),
@@ -159,6 +161,7 @@ __all__ = [
     "AskcosAdapter",
     "DMSAdapter",
     "DreamRetroAdapter",
+    "MolBuilderAdapter",
     "TtlRetroAdapter",
     "PaRoutesAdapter",
     "RetrochimeraAdapter",
