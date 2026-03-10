@@ -8,6 +8,7 @@ stock: n5-stock                 # used to build paths in shorthand mode
 top_k: 10
 x_axis: cost                    # cost (default) or time
 output_dir: ./6-comparisons/my-run   # relative to the yaml file
+output_file: pareto_frontier    # optional stem for output files (default: pareto_frontier); suffix -cost/-time is always appended
 
 # optional — draw a solid line connecting models that share a group id
 groups:
@@ -206,9 +207,10 @@ def handle_pareto_frontier(args: argparse.Namespace) -> None:
                 )
             )
 
-    suffix = "_time" if time_based else ""
-    html_path = output_dir / f"pareto_frontier{suffix}.html"
-    pdf_path = output_dir / f"pareto_frontier{suffix}.pdf"
+    suffix = "-time" if time_based else "-cost"
+    file_stem = cfg.get("output_file", "pareto_frontier")
+    html_path = output_dir / f"{file_stem}{suffix}.html"
+    pdf_path = output_dir / f"{file_stem}{suffix}.pdf"
 
     logging.getLogger("kaleido").setLevel(logging.WARNING)
     logging.getLogger("choreographer").setLevel(logging.WARNING)
