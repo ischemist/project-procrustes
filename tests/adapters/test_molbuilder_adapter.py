@@ -99,7 +99,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
 
     def test_purchasable_nodes_are_leaves(self, adapter_instance, target_input):
         """Nodes with is_purchasable=True should be leaves even if they have children."""
-        data = [
+        raw_routes = [
             {
                 "smiles": "CCO",
                 "is_purchasable": False,
@@ -119,7 +119,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
                 ],
             }
         ]
-        routes = list(adapter_instance.cast(data, target_input))
+        routes = list(adapter_instance.cast(raw_routes, target_input))
         assert len(routes) == 1
         step = routes[0].target.synthesis_step
         assert step is not None
@@ -128,7 +128,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
 
     def test_multiple_routes_ranked(self, adapter_instance):
         """Multiple tree roots produce ranked routes."""
-        data = [
+        raw_routes = [
             {
                 "smiles": "CCO",
                 "is_purchasable": False,
@@ -143,7 +143,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
             },
         ]
         target = TargetInput(id="ethanol", smiles="CCO")
-        routes = list(adapter_instance.cast(data, target))
+        routes = list(adapter_instance.cast(raw_routes, target))
         assert len(routes) == 2
         assert routes[0].rank == 1
         assert routes[1].rank == 2
@@ -151,7 +151,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
     def test_cycle_detection(self, adapter_instance, caplog):
         """Cyclic tree (child references parent) is caught and discarded."""
         target_smiles = "CC(C)Cc1ccc(C(C)C(=O)O)cc1"
-        data = [
+        raw_routes = [
             {
                 "smiles": target_smiles,
                 "is_purchasable": False,
@@ -170,13 +170,13 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
             }
         ]
         target = TargetInput(id="ibuprofen_cycle", smiles=canonicalize_smiles(target_smiles))
-        routes = list(adapter_instance.cast(data, target))
+        routes = list(adapter_instance.cast(raw_routes, target))
         assert len(routes) == 0
         assert "cycle detected" in caplog.text
 
     def test_multi_step_tree(self, adapter_instance):
         """Two-step tree: target -> intermediate -> leaf."""
-        data = [
+        raw_routes = [
             {
                 "smiles": "CCOC(C)=O",  # ethyl acetate
                 "is_purchasable": False,
@@ -204,7 +204,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
         ]
         target_smiles = canonicalize_smiles("CCOC(C)=O")
         target = TargetInput(id="ethyl_acetate", smiles=target_smiles)
-        routes = list(adapter_instance.cast(data, target))
+        routes = list(adapter_instance.cast(raw_routes, target))
 
         assert len(routes) == 1
         route = routes[0]
@@ -228,7 +228,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
 
     def test_node_without_disconnection_is_leaf(self, adapter_instance):
         """A non-purchasable node with no children and no disconnection -> leaf."""
-        data = [
+        raw_routes = [
             {
                 "smiles": "CCO",
                 "is_purchasable": False,
@@ -236,7 +236,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
             }
         ]
         target = TargetInput(id="ethanol", smiles="CCO")
-        routes = list(adapter_instance.cast(data, target))
+        routes = list(adapter_instance.cast(raw_routes, target))
         # Node has no children -> leaf -> no synthesis step -> no route steps
         # The adapter treats the root as a leaf, which means Route has length 0
         assert len(routes) == 1
@@ -244,7 +244,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
 
     def test_non_leaf_without_disconnection_raises(self, adapter_instance, caplog):
         """A non-leaf node (has children, not purchasable) without best_disconnection is an error."""
-        data = [
+        raw_routes = [
             {
                 "smiles": "CCO",
                 "is_purchasable": False,
@@ -255,14 +255,66 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
             }
         ]
         target = TargetInput(id="ethanol", smiles="CCO")
-        routes = list(adapter_instance.cast(data, target))
+        routes = list(adapter_instance.cast(raw_routes, target))
         # Route should be discarded due to AdapterLogicError
         assert len(routes) == 0
         assert "missing 'best_disconnection'" in caplog.text
 
+    def test_non_leaf_with_empty_reaction_name_is_discarded(self, adapter_instance, caplog):
+        raw_routes = [
+            {
+                "smiles": "CCO",
+                "is_purchasable": False,
+                "best_disconnection": {
+                    "reaction_name": "   ",
+                    "score": 0.5,
+                },
+                "children": [
+                    {"smiles": "CC=O", "is_purchasable": True, "children": []},
+                ],
+            }
+        ]
+        target = TargetInput(id="ethanol", smiles="CCO")
+
+        routes = list(adapter_instance.cast(raw_routes, target))
+
+        assert len(routes) == 0
+        assert "empty 'reaction_name'" in caplog.text
+
+    def test_invalid_top_level_payload_is_ignored(self, adapter_instance, target_input):
+        raw_payload = {
+            "smiles": "CCO",
+            "is_purchasable": False,
+            "children": [],
+        }
+
+        routes = list(adapter_instance.cast(raw_payload, target_input))
+
+        assert routes == []
+
+    def test_mismatched_target_smiles_route_is_discarded(self, adapter_instance):
+        raw_routes = [
+            {
+                "smiles": "CCO",
+                "is_purchasable": False,
+                "best_disconnection": {
+                    "reaction_name": "Reduction",
+                    "score": 0.85,
+                },
+                "children": [
+                    {"smiles": "CC=O", "is_purchasable": True, "children": []},
+                ],
+            }
+        ]
+        mismatched_target = TargetInput(id="ethanol", smiles="CCC")
+
+        routes = list(adapter_instance.cast(raw_routes, mismatched_target))
+
+        assert routes == []
+
     def test_functional_groups_in_metadata(self, adapter_instance):
         """Functional groups from MolBuilder nodes are preserved in Molecule.metadata."""
-        data = [
+        raw_routes = [
             {
                 "smiles": "CCO",
                 "is_purchasable": False,
@@ -282,7 +334,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
             }
         ]
         target = TargetInput(id="ethanol", smiles="CCO")
-        routes = list(adapter_instance.cast(data, target))
+        routes = list(adapter_instance.cast(raw_routes, target))
         assert len(routes) == 1
 
         # Root molecule metadata
