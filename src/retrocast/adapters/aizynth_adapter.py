@@ -69,7 +69,7 @@ class AizynthAdapter(BaseAdapter):
                 route = self._transform(aizynth_tree_root, target, rank, ignore_stereo=ignore_stereo)
                 yield route
             except RetroCastException as e:
-                logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
+                logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
                 continue
 
     def _transform(

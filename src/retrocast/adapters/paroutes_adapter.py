@@ -9,9 +9,14 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
+from retrocast.adapters.errors import (
+    adapter_cycle_error,
+    adapter_node_type_error,
+    adapter_schema_error,
+    adapter_target_mismatch,
+)
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -154,7 +159,7 @@ class PaRoutesAdapter(BaseAdapter):
             )
             yield route
         except RetroCastException as e:
-            logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
+            logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
             return
 
     def _transform(
@@ -195,7 +200,7 @@ class PaRoutesAdapter(BaseAdapter):
             AdapterLogicError: If a cycle is detected in the route graph
         """
         if raw_mol_node.type != "mol":
-            raise AdapterLogicError(f"expected node type 'mol' but got '{raw_mol_node.type}'")
+            raise adapter_node_type_error("paroutes", expected="mol", actual=raw_mol_node.type, role="molecule")
 
         if visited is None:
             visited = set()
@@ -204,7 +209,7 @@ class PaRoutesAdapter(BaseAdapter):
 
         # Cycle detection: check if we've seen this molecule before in the current path
         if canon_smiles in visited:
-            raise AdapterLogicError(f"cycle detected in route graph involving smiles: {canon_smiles}")
+            raise adapter_cycle_error("paroutes", canon_smiles)
 
         # Create new visited set with current molecule added
         new_visited = visited | {canon_smiles}
@@ -227,7 +232,8 @@ class PaRoutesAdapter(BaseAdapter):
 
         first_child = raw_mol_node.children[0]
         if not isinstance(first_child, PaRoutesReactionInput):
-            raise AdapterLogicError("child of molecule node was not a reaction node")
+            actual = getattr(first_child, "type", type(first_child).__name__)
+            raise adapter_node_type_error("paroutes", expected="reaction", actual=actual, role="molecule child")
         raw_reaction_node: PaRoutesReactionInput = first_child
 
         # build reactants recursively with updated visited set

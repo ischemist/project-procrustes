@@ -6,9 +6,9 @@ from typing import Any
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
-from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
+from retrocast.adapters.errors import adapter_route_string_error, adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -39,7 +39,7 @@ class DreamRetroAdapter(BaseAdapter):
             route = self._transform(route_str, target, raw_target_data, ignore_stereo=ignore_stereo)
             yield route
         except RetroCastException as e:
-            logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
+            logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
             return
 
     def _parse_route_string(self, route_str: str, ignore_stereo: bool = False) -> tuple[SmilesStr, PrecursorMap]:
@@ -52,7 +52,7 @@ class DreamRetroAdapter(BaseAdapter):
         precursor_map: PrecursorMap = {}
         steps = route_str.split("|")
         if not steps or not steps[0]:
-            raise AdapterLogicError("route string is empty or invalid.")
+            raise adapter_route_string_error("dreamretro", "empty route string", empty=True)
 
         if len(steps) == 1 and ">" not in steps[0]:
             target_smiles = canonicalize_smiles(steps[0], ignore_stereo=ignore_stereo)
@@ -79,8 +79,10 @@ class DreamRetroAdapter(BaseAdapter):
 
             return target_smiles, precursor_map
         except (ValueError, IndexError) as e:
-            raise AdapterLogicError(
-                f"failed to parse route string step. invalid format near '{current_step_for_error_reporting[:70]}...'."
+            raise adapter_route_string_error(
+                "dreamretro",
+                "expected each reaction step to split into product, reagents, and reactants",
+                fragment=current_step_for_error_reporting[:70],
             ) from e
 
     def _transform(

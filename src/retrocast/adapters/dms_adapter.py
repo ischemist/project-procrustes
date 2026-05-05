@@ -5,9 +5,9 @@ from typing import Any
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
+from retrocast.adapters.errors import adapter_cycle_error, adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -57,7 +57,7 @@ class DMSAdapter(BaseAdapter):
                 yield route
             except RetroCastException as e:
                 # A single route failed, log it and continue with the next one.
-                logger.debug(f"  - Route for '{target.id}' failed transformation: {e}")
+                logger.debug(f"  - Route for '{target.id}' failed transformation: {e} [{e.code}]")
                 continue
 
     def _transform(self, raw_data: DMSTree, target: TargetIdentity, rank: int, ignore_stereo: bool = False) -> Route:
@@ -93,7 +93,7 @@ class DMSAdapter(BaseAdapter):
         canon_smiles = canonicalize_smiles(dms_node.smiles, ignore_stereo=ignore_stereo)
 
         if canon_smiles in visited:
-            raise AdapterLogicError(f"cycle detected in route graph involving smiles: {canon_smiles}")
+            raise adapter_cycle_error("dms", canon_smiles)
 
         new_visited = visited | {canon_smiles}
         is_leaf = not bool(dms_node.children)

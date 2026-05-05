@@ -7,9 +7,9 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
+from retrocast.adapters.errors import adapter_node_type_error, adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr
 
@@ -70,7 +70,7 @@ class SynPlannerAdapter(BaseAdapter):
                 route = self._transform(synplanner_tree_root, target, rank, ignore_stereo=ignore_stereo)
                 yield route
             except RetroCastException as e:
-                logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
+                logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
                 continue
 
     def _transform(
@@ -113,7 +113,7 @@ class SynPlannerAdapter(BaseAdapter):
         synplanner has mapped_smiles in the 'smiles' field of reaction nodes.
         """
         if raw_mol_node.type != "mol":
-            raise AdapterLogicError(f"Expected node type 'mol' but got '{raw_mol_node.type}'")
+            raise adapter_node_type_error("synplanner", expected="mol", actual=raw_mol_node.type, role="molecule")
 
         canon_smiles = canonicalize_smiles(raw_mol_node.smiles, remove_mapping=True, ignore_stereo=ignore_stereo)
         is_leaf = raw_mol_node.in_stock or not bool(raw_mol_node.children)
@@ -134,7 +134,8 @@ class SynPlannerAdapter(BaseAdapter):
 
         first_child = raw_mol_node.children[0]
         if not isinstance(first_child, SynPlannerReactionInput):
-            raise AdapterLogicError("Child of molecule node was not a reaction node")
+            actual = getattr(first_child, "type", type(first_child).__name__)
+            raise adapter_node_type_error("synplanner", expected="reaction", actual=actual, role="molecule child")
         raw_reaction_node: SynPlannerReactionInput = first_child
 
         # Build reactants recursively
@@ -142,7 +143,8 @@ class SynPlannerAdapter(BaseAdapter):
         for reactant_mol_input in raw_reaction_node.children:
             # Type guard: children of reaction nodes should be molecule nodes
             if not isinstance(reactant_mol_input, SynPlannerMoleculeInput):
-                raise AdapterLogicError("Child of reaction node was not a molecule node")
+                actual = getattr(reactant_mol_input, "type", type(reactant_mol_input).__name__)
+                raise adapter_node_type_error("synplanner", expected="mol", actual=actual, role="reaction child")
             reactant_mol = self._build_molecule_from_synplanner_node(reactant_mol_input, ignore_stereo=ignore_stereo)
             reactant_molecules.append(reactant_mol)
 

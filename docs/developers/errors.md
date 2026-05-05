@@ -36,7 +36,7 @@ use `error.to_dict()` when persisting or reporting the structured form.
 | `chem.*` | `ChemError` | `chem.invalid_smiles`, `chem.runtime_error` | chemistry parsing, identity, or backend failure |
 | `schema.*` | `SchemaLogicError` | `schema.logic_error` | data is structurally valid but logically impossible |
 | `benchmark.*` | `BenchmarkError` | `benchmark.validation_failed` | benchmark construction or uniqueness contract failed |
-| `adapter.*` | `AdapterError` | `adapter.schema_invalid`, `adapter.target_mismatch` | raw model output failed adapter boundary contracts |
+| `adapter.*` | `AdapterError` | `adapter.schema_invalid`, `adapter.target_mismatch`, `adapter.cycle_detected`, `adapter.route_string_invalid` | raw model output failed adapter boundary contracts |
 | `io.*` | `DataIOError` | `io.not_found`, `io.decode_failed`, `io.invalid_artifact_shape`, `io.unsupported_format`, `io.write_failed` | artifact read, decode, shape, format, or write failure |
 | `serialization.*` | `RetroCastSerializationError` | `serialization.syntheseus_failed` | conversion to external route formats failed |
 | `workflow.*` | `WorkflowError` | `workflow.error` | orchestration failed at a workflow boundary |

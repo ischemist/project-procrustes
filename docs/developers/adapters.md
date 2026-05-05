@@ -139,7 +139,13 @@ An adapter may raise these expected errors from `cast`:
 | --- | --- | --- | --- |
 | `AdapterSchemaError` | `adapter.schema_invalid` | the raw target payload does not match the adapter's declared input schema | workflow records the failure for that target and continues |
 | `AdapterLogicError` | `adapter.target_mismatch` | a transformed route root does not match the benchmark target | adapter logs/skips that route when other routes may still be usable |
-| `AdapterLogicError` | `adapter.route_transform_failed` | route topology is impossible, cyclic, malformed, or missing required nodes | adapter logs/skips that route when the failure is route-local |
+| `AdapterLogicError` | `adapter.cycle_detected` | route graph revisits the same molecule in one path | adapter logs/skips that route when the failure is route-local |
+| `AdapterLogicError` | `adapter.node_type_invalid` | a bipartite graph node has the wrong role, such as molecule where reaction is required | adapter logs/skips that route when the failure is route-local |
+| `AdapterLogicError` | `adapter.node_missing` | graph edges reference a node absent from the raw lookup tables | adapter logs/skips that route when the failure is route-local |
+| `AdapterLogicError` | `adapter.route_string_empty` | a string-based route payload is empty after parsing | adapter logs/skips that route when the failure is route-local |
+| `AdapterLogicError` | `adapter.route_string_invalid` | a string-based route payload has malformed step boundaries or missing reactants/products | adapter logs/skips that route when the failure is route-local |
+| `AdapterLogicError` | `adapter.route_metadata_missing` | a route node needs model metadata to describe a reaction but it is absent or empty | adapter logs/skips that route when the failure is route-local |
+| `AdapterLogicError` | `adapter.route_transform_failed` | fallback for route-local transform failures that do not fit a narrower code | adapter logs/skips that route when the failure is route-local |
 | `UnsupportedAdapterFeatureError` | `adapter.unsupported_feature` | a valid request asks for a feature the adapter does not support | caller should treat this as a fatal configuration/request failure |
 | `ChemError` | `chem.invalid_smiles`, `chem.runtime_error` | raw route molecules cannot be canonicalized or processed by RDKit | adapter logs/skips that route when the failure is route-local |
 
@@ -171,7 +177,7 @@ RetroCast relies on exact SMILES matching.
 
 Retrosynthetic graphs must be acyclic trees.
 
-- The standard helpers include cycle detection (raising `AdapterLogicError` if a node appears twice in a path)
+- The standard helpers include cycle detection (raising `AdapterLogicError` with `adapter.cycle_detected` if a node appears twice in a path)
 - If writing a custom builder, maintain a `visited` set during recursion
 
 ### 4. Metadata

@@ -36,9 +36,14 @@ from typing import Any
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
+from retrocast.adapters.errors import (
+    adapter_cycle_error,
+    adapter_route_metadata_error,
+    adapter_schema_error,
+    adapter_target_mismatch,
+)
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -99,7 +104,7 @@ class MolBuilderAdapter(BaseAdapter):
                 route = self._transform(tree_root, target, rank, ignore_stereo=ignore_stereo)
                 yield route
             except RetroCastException as e:
-                logger.debug(f"  - Route for '{target.id}' failed transformation: {e}")
+                logger.debug(f"  - Route for '{target.id}' failed transformation: {e} [{e.code}]")
                 continue
 
     def _transform(
@@ -140,7 +145,7 @@ class MolBuilderAdapter(BaseAdapter):
         canon_smiles = canonicalize_smiles(node.smiles, ignore_stereo=ignore_stereo)
 
         if canon_smiles in visited:
-            raise AdapterLogicError(f"cycle detected in route graph involving smiles: {canon_smiles}")
+            raise adapter_cycle_error("molbuilder", canon_smiles)
 
         visited.add(canon_smiles)
         is_leaf = node.is_purchasable or not bool(node.children)
@@ -158,11 +163,11 @@ class MolBuilderAdapter(BaseAdapter):
             )
 
         if node.best_disconnection is None:
-            raise AdapterLogicError(f"Non-leaf node for SMILES '{canon_smiles}' is missing 'best_disconnection' field.")
+            raise adapter_route_metadata_error("molbuilder", smiles=canon_smiles, field="best_disconnection")
 
         if not node.best_disconnection.reaction_name.strip():
-            raise AdapterLogicError(
-                f"Non-leaf node for SMILES '{canon_smiles}' has empty 'reaction_name' in 'best_disconnection'."
+            raise adapter_route_metadata_error(
+                "molbuilder", smiles=canon_smiles, field="best_disconnection.reaction_name"
             )
 
         reactant_molecules: list[Molecule] = []

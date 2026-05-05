@@ -97,7 +97,7 @@ class RetrochimeraAdapter(BaseAdapter):
                     yield route_obj
                     rank += 1
                 except RetroCastException as e:
-                    logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
+                    logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
                     continue
 
     def _transform(

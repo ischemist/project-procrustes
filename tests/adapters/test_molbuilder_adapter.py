@@ -173,7 +173,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
         target = TargetInput(id="ibuprofen_cycle", smiles=canonicalize_smiles(target_smiles))
         routes = list(adapter_instance.cast(raw_routes, target))
         assert len(routes) == 0
-        assert "cycle detected" in caplog.text
+        assert "adapter.cycle_detected" in caplog.text
 
     def test_multi_step_tree(self, adapter_instance):
         """Two-step tree: target -> intermediate -> leaf."""
@@ -259,7 +259,8 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
         routes = list(adapter_instance.cast(raw_routes, target))
         # Route should be discarded due to AdapterLogicError
         assert len(routes) == 0
-        assert "missing 'best_disconnection'" in caplog.text
+        assert "adapter.route_metadata_missing" in caplog.text
+        assert "best_disconnection" in caplog.text
 
     def test_non_leaf_with_empty_reaction_name_is_discarded(self, adapter_instance, caplog):
         raw_routes = [
@@ -280,7 +281,8 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
         routes = list(adapter_instance.cast(raw_routes, target))
 
         assert len(routes) == 0
-        assert "empty 'reaction_name'" in caplog.text
+        assert "adapter.route_metadata_missing" in caplog.text
+        assert "best_disconnection.reaction_name" in caplog.text
 
     def test_invalid_top_level_payload_raises_schema_error(self, adapter_instance, target_input):
         raw_payload = {
