@@ -7,8 +7,9 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, RetroCastException
+from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr
 
@@ -62,11 +63,7 @@ class SynPlannerAdapter(BaseAdapter):
         try:
             validated_routes = SynPlannerRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            raise AdapterSchemaError(
-                f"raw data for target '{target.id}' failed synplanner schema validation",
-                code="adapter.schema_invalid",
-                context={"adapter": "synplanner", "target_id": target.id},
-            ) from e
+            raise adapter_schema_error("synplanner", target.id, "invalid route list") from e
 
         for rank, synplanner_tree_root in enumerate(validated_routes.root, start=1):
             try:
@@ -91,12 +88,12 @@ class SynPlannerAdapter(BaseAdapter):
         expected = canonicalize_smiles(target.smiles, remove_mapping=True, ignore_stereo=ignore_stereo)
 
         if produced != expected:
-            msg = (
-                f"mismatched smiles for target {target.id}. "
-                f"expected canonical: {expected}, but adapter produced: {produced}"
+            raise adapter_target_mismatch(
+                "synplanner",
+                target.id,
+                expected_smiles=expected,
+                actual_smiles=produced,
             )
-            logger.error(msg)
-            raise AdapterLogicError(msg)
 
         # ensure target molecule uses the rdkit-canonicalized form
         target_molecule = Molecule(

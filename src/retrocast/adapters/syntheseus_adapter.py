@@ -8,8 +8,9 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_molecule_from_bipartite_node
+from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles
-from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, RetroCastException
+from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Route, TargetIdentity
 
 logger = logging.getLogger(__name__)
@@ -62,11 +63,7 @@ class SyntheseusAdapter(BaseAdapter):
         try:
             validated_routes = SyntheseusRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            raise AdapterSchemaError(
-                f"raw data for target '{target.id}' failed syntheseus schema validation",
-                code="adapter.schema_invalid",
-                context={"adapter": "syntheseus", "target_id": target.id},
-            ) from e
+            raise adapter_schema_error("syntheseus", target.id, "invalid route list") from e
 
         for rank, syntheseus_tree_root in enumerate(validated_routes.root, start=1):
             try:
@@ -88,11 +85,11 @@ class SyntheseusAdapter(BaseAdapter):
 
         expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if target_molecule.smiles != expected_smiles:
-            msg = (
-                f"mismatched smiles for target {target.id}. "
-                f"expected canonical: {expected_smiles}, but adapter produced: {target_molecule.smiles}"
+            raise adapter_target_mismatch(
+                "syntheseus",
+                target.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=target_molecule.smiles,
             )
-            logger.error(msg)
-            raise AdapterLogicError(msg)
 
         return Route(target=target_molecule, rank=rank, metadata={})

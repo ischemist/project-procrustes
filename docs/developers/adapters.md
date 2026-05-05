@@ -73,7 +73,7 @@ class MyAdapter(BaseAdapter):
                     continue
 
                 yield Route(target=target_mol, rank=i+1, metadata={})
-            except Exception:
+            except RetroCastException:
                 continue
 ```
 
@@ -128,6 +128,24 @@ Some models have unique structures that don't fit the above patterns (e.g., grap
     1. **Canonicalization** - Use `retrocast.chem.canonicalize_smiles` for all SMILES
     2. **Cycle detection** - Ensure no molecule appears twice in a path
     3. **Target validation** - Verify the root matches `target.smiles`
+
+## Adaptation Errors
+
+Adapter error `code` values are lowercase machine contracts. Keep adapter names in `context["adapter"]` lowercase so callers can aggregate by `ADAPTER_MAP` key. Human-facing messages should use proper model capitalization, such as `DreamRetro`, `DMS`, or `MolBuilder`.
+
+An adapter may raise these expected errors from `cast`:
+
+| exception | code | when it is raised | caller policy |
+| --- | --- | --- | --- |
+| `AdapterSchemaError` | `adapter.schema_invalid` | the raw target payload does not match the adapter's declared input schema | workflow records the failure for that target and continues |
+| `AdapterLogicError` | `adapter.target_mismatch` | a transformed route root does not match the benchmark target | adapter logs/skips that route when other routes may still be usable |
+| `AdapterLogicError` | `adapter.route_transform_failed` | route topology is impossible, cyclic, malformed, or missing required nodes | adapter logs/skips that route when the failure is route-local |
+| `UnsupportedAdapterFeatureError` | `adapter.unsupported_feature` | a valid request asks for a feature the adapter does not support | caller should treat this as a fatal configuration/request failure |
+| `ChemError` | `chem.invalid_smiles`, `chem.runtime_error` | raw route molecules cannot be canonicalized or processed by RDKit | adapter logs/skips that route when the failure is route-local |
+
+Adapter resolution happens before `cast` and raises `AdapterResolutionError` (`adapter.unknown` or `adapter.resolution_missing`) when the CLI or manifest cannot select an adapter.
+
+Use `retrocast.adapters.errors.adapter_schema_error()` and `adapter_target_mismatch()` where they fit; they keep messages, codes, and context consistent.
 
 ### 1. Define Pydantic Schemas
 
@@ -235,6 +253,6 @@ pytest tests/adapters/test_my_adapter.py
     The `BaseAdapterTest` automatically verifies that your adapter:
     
     1. Correctly parses valid data
-    2. Rejects invalid schemas without crashing (returns empty generator)
+    2. Rejects invalid schemas with `AdapterSchemaError`
     3. Correctly identifies target mismatches
     4. Handles failed predictions gracefully

@@ -36,8 +36,9 @@ from typing import Any
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, RetroCastException
+from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -91,11 +92,7 @@ class MolBuilderAdapter(BaseAdapter):
         try:
             validated_routes = MolBuilderRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            raise AdapterSchemaError(
-                f"raw data for target '{target.id}' failed molbuilder schema validation",
-                code="adapter.schema_invalid",
-                context={"adapter": "molbuilder", "target_id": target.id},
-            ) from e
+            raise adapter_schema_error("molbuilder", target.id, "invalid route list") from e
 
         for rank, tree_root in enumerate(validated_routes.root, start=1):
             try:
@@ -117,12 +114,12 @@ class MolBuilderAdapter(BaseAdapter):
 
         expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if target_molecule.smiles != expected_smiles:
-            msg = (
-                f"Mismatched SMILES for target {target.id}. "
-                f"Expected canonical: {expected_smiles}, but adapter produced: {target_molecule.smiles}"
+            raise adapter_target_mismatch(
+                "molbuilder",
+                target.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=target_molecule.smiles,
             )
-            logger.error(msg)
-            raise AdapterLogicError(msg)
 
         route_metadata: dict[str, Any] = {}
         if raw_root.best_disconnection is not None:

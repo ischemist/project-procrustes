@@ -8,8 +8,9 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, RetroCastException
+from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -101,11 +102,7 @@ class AskcosAdapter(BaseAdapter):
         try:
             validated_output = AskcosOutput.model_validate(raw_target_data)
         except ValidationError as e:
-            raise AdapterSchemaError(
-                f"raw data for target '{target.id}' failed askcos schema validation",
-                code="adapter.schema_invalid",
-                context={"adapter": "askcos", "target_id": target.id},
-            ) from e
+            raise adapter_schema_error("askcos", target.id, "invalid output") from e
 
         uds = validated_output.results.uds
 
@@ -163,12 +160,14 @@ class AskcosAdapter(BaseAdapter):
             ignore_stereo=ignore_stereo,
         )
 
-        if target_molecule.smiles != target_input.smiles:
-            msg = (
-                f"mismatched smiles for target {target_input.id}. "
-                f"expected canonical: {target_input.smiles}, but adapter produced: {target_molecule.smiles}"
+        expected_smiles = canonicalize_smiles(target_input.smiles, ignore_stereo=ignore_stereo)
+        if target_molecule.smiles != expected_smiles:
+            raise adapter_target_mismatch(
+                "askcos",
+                target_input.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=target_molecule.smiles,
             )
-            raise AdapterLogicError(msg)
 
         return Route(target=target_molecule, rank=rank, metadata=metadata)
 

@@ -18,7 +18,7 @@ all boundary-facing exceptions expose:
 ```json
 {
     "code": "adapter.schema_invalid",
-    "message": "raw data for target 'x' failed dms schema validation",
+    "message": "raw data for target 'x' failed DMS schema validation",
     "context": {"adapter": "dms", "target_id": "x"},
     "retryable": false
 }

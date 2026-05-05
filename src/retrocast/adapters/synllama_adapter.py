@@ -7,8 +7,9 @@ from typing import Any
 from pydantic import BaseModel, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, RetroCastException
+from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -35,11 +36,7 @@ class SynLlaMaAdapter(BaseAdapter):
         try:
             validated_routes = SynLlamaRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            raise AdapterSchemaError(
-                f"data for target '{target.id}' failed synllama schema validation",
-                code="adapter.schema_invalid",
-                context={"adapter": "synllama", "target_id": target.id},
-            ) from e
+            raise adapter_schema_error("synllama", target.id, "invalid route list") from e
 
         for rank, route in enumerate(validated_routes.root, start=1):
             try:
@@ -63,11 +60,12 @@ class SynLlaMaAdapter(BaseAdapter):
         parsed_target_smiles = canonicalize_smiles(synthesis_parts[-1], ignore_stereo=ignore_stereo)
         expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if parsed_target_smiles != expected_smiles:
-            msg = (
-                f"mismatched smiles for target {target.id}. "
-                f"expected canonical: {expected_smiles}, but adapter produced: {parsed_target_smiles}"
+            raise adapter_target_mismatch(
+                "synllama",
+                target.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=parsed_target_smiles,
             )
-            raise AdapterLogicError(msg)
 
         precursor_map = self._parse_synthesis_string(route.synthesis_string, ignore_stereo=ignore_stereo)
         target_molecule = self._build_molecule_from_precursor_map(

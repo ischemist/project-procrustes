@@ -9,8 +9,9 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, RetroCastException
+from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -129,11 +130,7 @@ class PaRoutesAdapter(BaseAdapter):
             # unlike other adapters, the raw data for one target is a single route object, not a list.
             validated_route_root = PaRoutesMoleculeInput.model_validate(raw_target_data)
         except ValidationError as e:
-            raise AdapterSchemaError(
-                f"raw data for target '{target.id}' failed paroutes schema validation",
-                code="adapter.schema_invalid",
-                context={"adapter": "paroutes", "target_id": target.id},
-            ) from e
+            raise adapter_schema_error("paroutes", target.id, "invalid molecule route root") from e
 
         # --- custom validation: ensure all reactions are from the same patent ---
         patent_ids = self._get_patent_ids(validated_route_root)
@@ -171,12 +168,12 @@ class PaRoutesAdapter(BaseAdapter):
 
         expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if target_molecule.smiles != expected_smiles:
-            msg = (
-                f"mismatched smiles for target {target.id}. "
-                f"expected canonical: {expected_smiles}, but adapter produced: {target_molecule.smiles}"
+            raise adapter_target_mismatch(
+                "paroutes",
+                target.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=target_molecule.smiles,
             )
-            logger.error(msg)
-            raise AdapterLogicError(msg)
 
         # add patent ID to route metadata (everything up to first semicolon)
         route_metadata = {"patent_id": patent_id}
