@@ -146,7 +146,7 @@ class ArtifactNotFoundError(RetroCastIOError):
 class ArtifactFormatError(RetroCastIOError, ValueError):
     """Raised when an artifact has an unsupported or invalid format."""
 
-    default_code = "io.unsupported_format"
+    default_code = "io.invalid_artifact_shape"
 
 
 class ArtifactDecodeError(RetroCastIOError):

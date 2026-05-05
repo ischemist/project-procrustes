@@ -8,12 +8,24 @@ Tests follow the testing framework philosophy:
 """
 
 from argparse import Namespace
+from collections.abc import Generator
+from typing import Any
 
 import pytest
 
-from retrocast.cli.adhoc import handle_create_benchmark
-from retrocast.io.blob import load_json_gz
+from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.cli.adhoc import handle_adapt, handle_create_benchmark
+from retrocast.exceptions import ChemRuntimeError
+from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.models.benchmark import BenchmarkSet
+from retrocast.models.chem import Route, TargetIdentity
+
+
+class ChemFailingAdapter(BaseAdapter):
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
+        raise ChemRuntimeError("synthetic chemistry failure", context={"target_id": target.id})
 
 
 @pytest.mark.integration
@@ -378,6 +390,26 @@ class TestHandleCreateBenchmark:
         assert manifest["statistics"]["n_targets"] == 2
         assert len(manifest["source_files"]) == 1
         assert len(manifest["output_files"]) == 1
+
+
+@pytest.mark.integration
+class TestHandleAdapt:
+    def test_adapt_skips_target_local_chem_failures(self, tmp_path, monkeypatch):
+        input_path = tmp_path / "raw.json.gz"
+        output_path = tmp_path / "routes.json.gz"
+        save_json_gz({"CCO": {"bad": "payload"}}, input_path)
+        monkeypatch.setattr("retrocast.cli.adhoc.get_adapter", lambda name: ChemFailingAdapter())
+
+        args = Namespace(
+            input=str(input_path),
+            output=str(output_path),
+            adapter="synthetic",
+            benchmark=None,
+        )
+
+        handle_adapt(args)
+
+        assert load_json_gz(output_path) == {"CCO": []}
 
 
 if __name__ == "__main__":

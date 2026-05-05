@@ -11,7 +11,7 @@ from retrocast.adapters import ADAPTER_MAP, get_adapter
 from retrocast.api import score_predictions
 from retrocast.cli.errors import log_expected_error
 from retrocast.curation.filtering import deduplicate_routes
-from retrocast.exceptions import AdapterError, RetroCastException
+from retrocast.exceptions import AdapterError, ChemError, RetroCastException
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.io.data import load_benchmark, load_routes, save_routes
 from retrocast.io.provenance import create_manifest
@@ -318,7 +318,7 @@ def handle_adapt(args: Any) -> None:
                     success_count += 1
                 else:
                     processed_routes[target_input.id] = []
-            except AdapterError as e:
+            except (AdapterError, ChemError) as e:
                 logger.debug(f"Failed to adapt {target_input.id}: {e}")
                 processed_routes[target_input.id] = []
 

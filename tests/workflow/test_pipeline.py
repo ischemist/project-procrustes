@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.exceptions import AdapterSchemaError
+from retrocast.exceptions import AdapterSchemaError, ChemRuntimeError
 from retrocast.io.data import load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Route, TargetIdentity
@@ -60,6 +60,18 @@ class FailingAdapter(BaseAdapter):
             "synthetic adapter schema failure",
             code="adapter.schema_invalid",
             context={"adapter": "synthetic", "target_id": target.id},
+        )
+
+
+class ChemFailingAdapter(BaseAdapter):
+    """Adapter that raises a chemistry failure after target-local processing begins."""
+
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
+        raise ChemRuntimeError(
+            "synthetic chemistry failure",
+            context={"target_id": target.id},
         )
 
 
@@ -355,6 +367,32 @@ class TestIngestModelPredictions:
             "target_2": {"adapter.schema_invalid": 1},
         }
         assert stats.to_manifest_dict()["failures_by_code"] == {"adapter.schema_invalid": 2}
+
+    @pytest.mark.integration
+    def test_ingest_records_chem_failures_per_target(self, tmp_path, synthetic_benchmark):
+        adapter = ChemFailingAdapter()
+        raw_data = {
+            "target_1": [{"bad": "payload"}],
+            "target_2": [{"bad": "payload"}],
+        }
+
+        processed, _, stats = ingest_model_predictions(
+            model_name="failing-model",
+            benchmark=synthetic_benchmark,
+            raw_data=raw_data,
+            adapter=adapter,
+            output_dir=tmp_path,
+        )
+
+        assert processed["target_1"] == []
+        assert processed["target_2"] == []
+        assert processed["target_3"] == []
+        assert stats.routes_failed_transformation == 2
+        assert stats.failures_by_code == {"chem.runtime_error": 2}
+        assert stats.failures_by_target == {
+            "target_1": {"chem.runtime_error": 1},
+            "target_2": {"chem.runtime_error": 1},
+        }
 
 
 # =============================================================================

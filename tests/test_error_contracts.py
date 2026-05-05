@@ -48,6 +48,26 @@ def test_cli_error_formatter_includes_code_and_context():
     assert "path=../x" in rendered
 
 
+def test_cli_error_formatter_flattens_multiline_context():
+    error = RetroCastException(
+        "bad input",
+        code="schema.invalid",
+        context={"detail": "line one\nline two\rline three"},
+    )
+
+    rendered = format_cli_error(error)
+
+    assert "detail=line one line two line three" in rendered
+    assert "\n" not in rendered
+    assert "\r" not in rendered
+
+
+def test_artifact_format_error_defaults_to_invalid_shape():
+    error = ArtifactFormatError("bad artifact")
+
+    assert error.code == "io.invalid_artifact_shape"
+
+
 def test_json_gz_decode_errors_preserve_cause(tmp_path):
     path = tmp_path / "bad.json.gz"
     path.write_bytes(b"not gzip")

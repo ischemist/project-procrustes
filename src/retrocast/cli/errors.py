@@ -9,7 +9,10 @@ def format_cli_error(error: RetroCastException) -> str:
     """Format an expected RetroCast failure for a CLI boundary."""
     bits = [f"{error.message} [{error.code}]"]
     if error.context:
-        safe_context = ", ".join(f"{key}={value}" for key, value in sorted(error.context.items()))
+        safe_context = ", ".join(
+            f"{key}={str(value).replace(chr(10), ' ').replace(chr(13), ' ')}"
+            for key, value in sorted(error.context.items())
+        )
         bits.append(f"({safe_context})")
     return " ".join(bits)
 
