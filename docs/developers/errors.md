@@ -60,3 +60,5 @@ the cli is the process boundary. it formats known `RetroCastException` instances
 
 test the exception class and `code`; assert exact message text only when copy itself is the public contract.
 when wrapping matters, assert `__cause__` is present.
+
+See [adapter errors](adapters.md#adapter-error-examples) for concrete examples of route-local adapter failures.

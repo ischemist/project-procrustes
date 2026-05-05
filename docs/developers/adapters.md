@@ -153,6 +153,92 @@ Adapter resolution happens before `cast` and raises `AdapterResolutionError` (`a
 
 Use `retrocast.adapters.errors.adapter_schema_error()` and `adapter_target_mismatch()` where they fit; they keep messages, codes, and context consistent.
 
+### Adapter Error Examples
+
+These examples use tiny fake payloads to show what each route-local code means.
+
+`adapter.cycle_detected`: the route graph loops back to a molecule already in the same path.
+
+```json
+{
+    "smiles": "CCO",
+    "children": [
+        {
+            "smiles": "CC=O",
+            "children": [{"smiles": "CCO", "children": []}]
+        }
+    ]
+}
+```
+
+`adapter.node_type_invalid`: a graph slot contains the wrong kind of node. Bipartite adapters expect molecule -> reaction -> molecule.
+
+```json
+{
+    "type": "mol",
+    "smiles": "CCO",
+    "children": [{"type": "mol", "smiles": "CC=O", "children": []}]
+}
+```
+
+`adapter.node_missing`: an edge/reference points to an id or SMILES key that is absent from the raw lookup tables.
+
+```json
+{
+    "uuid2smiles": {"root": "CCO", "rxn1": "CC=O>>CCO"},
+    "node_dict": {"CCO": {"type": "chemical", "smiles": "CCO"}},
+    "pathways": [[{"source": "root", "target": "rxn1"}]]
+}
+```
+
+Here `rxn1` resolves to `CC=O>>CCO`, but `node_dict["CC=O>>CCO"]` is missing.
+
+`adapter.route_string_empty`: a string-based route field is empty after trimming/splitting.
+
+```json
+{"succ": true, "routes": ""}
+```
+
+`adapter.route_string_invalid`: the route string exists, but its grammar is malformed.
+
+```json
+{"succ": true, "routes": "CCO>CC=O"}
+```
+
+RetroStar and DreamRetro-style route steps need product, metadata/reagents, and reactants, e.g. `CCO>0.9>CC=O.[H][H]`.
+
+`adapter.route_metadata_missing`: a non-leaf node needs reaction metadata to describe how children form the parent, but that metadata is absent or empty.
+
+```json
+{
+    "smiles": "CCO",
+    "is_purchasable": false,
+    "children": [{"smiles": "CC=O", "is_purchasable": true, "children": []}]
+}
+```
+
+For MolBuilder, that missing metadata is `best_disconnection`.
+
+`adapter.target_mismatch`: the adapter produced a valid route, but the root is not the benchmark target.
+
+```json
+{
+    "target_id": "ethanol",
+    "expected_smiles": "CCO",
+    "actual_root_smiles": "CCC"
+}
+```
+
+`adapter.schema_invalid`: the raw payload does not match the adapter's top-level expected schema.
+
+```json
+{"succ": true, "routes": 123}
+```
+
+If `routes` must be a string, this is schema-invalid.
+
+`adapter.route_transform_failed`: fallback for route-local transformation failures that do not fit a sharper bucket. If this shows up often in manifests or logs, promote the recurring case to a dedicated code.
+
 ### 1. Define Pydantic Schemas
 
 Always define Pydantic models for the **raw** input format. This separates validation logic from transformation logic and ensures bad data is rejected early.
