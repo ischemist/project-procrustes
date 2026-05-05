@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_molecule_from_bipartite_node
 from retrocast.chem import canonicalize_smiles
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, RetroCastException
 from retrocast.models.chem import Route, TargetIdentity
 
 logger = logging.getLogger(__name__)
@@ -62,8 +62,11 @@ class SyntheseusAdapter(BaseAdapter):
         try:
             validated_routes = SyntheseusRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - raw data for target '{target.id}' failed syntheseus schema validation. error: {e}")
-            return
+            raise AdapterSchemaError(
+                f"raw data for target '{target.id}' failed syntheseus schema validation",
+                code="adapter.schema_invalid",
+                context={"adapter": "syntheseus", "target_id": target.id},
+            ) from e
 
         for rank, syntheseus_tree_root in enumerate(validated_routes.root, start=1):
             try:

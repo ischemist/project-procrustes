@@ -7,6 +7,7 @@ from tqdm import tqdm
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.curation.filtering import deduplicate_routes
 from retrocast.curation.sampling import sample_k_by_length, sample_random_k, sample_top_k
+from retrocast.exceptions import AdapterError
 from retrocast.io.data import save_routes
 from retrocast.io.provenance import generate_model_hash
 from retrocast.models.benchmark import BenchmarkSet
@@ -77,10 +78,10 @@ def ingest_model_predictions(
         try:
             # Adapter returns an iterator of Routes
             routes = list(adapter.cast(raw_payload, target=target, ignore_stereo=ignore_stereo))
-        except Exception as e:
-            logger.warning(f"Adapter failed for {target_id}: {e}")
+        except AdapterError as e:
+            logger.warning(f"Adapter failed for {target_id}: {e} [{e.code}]")
             routes = []
-            stats.routes_failed_transformation += 1
+            stats.record_failure(e.code, target_id=target_id)
             processed_routes[target_id] = []
             continue
 

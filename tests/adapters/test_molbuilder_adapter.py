@@ -11,6 +11,7 @@ import pytest
 
 from retrocast.adapters.molbuilder_adapter import MolBuilderAdapter
 from retrocast.chem import canonicalize_smiles
+from retrocast.exceptions import AdapterSchemaError
 from retrocast.models.chem import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
@@ -281,16 +282,17 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
         assert len(routes) == 0
         assert "empty 'reaction_name'" in caplog.text
 
-    def test_invalid_top_level_payload_is_ignored(self, adapter_instance, target_input):
+    def test_invalid_top_level_payload_raises_schema_error(self, adapter_instance, target_input):
         raw_payload = {
             "smiles": "CCO",
             "is_purchasable": False,
             "children": [],
         }
 
-        routes = list(adapter_instance.cast(raw_payload, target_input))
-
-        assert routes == []
+        with pytest.raises(AdapterSchemaError) as exc_info:
+            list(adapter_instance.cast(raw_payload, target_input))
+        assert exc_info.value.code == "adapter.schema_invalid"
+        assert exc_info.value.context == {"adapter": "molbuilder", "target_id": target_input.id}
 
     def test_mismatched_target_smiles_route_is_discarded(self, adapter_instance):
         raw_routes = [

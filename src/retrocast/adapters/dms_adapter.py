@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
@@ -46,8 +47,7 @@ class DMSAdapter(BaseAdapter):
             # 1. Model-specific validation happens HERE, inside the adapter.
             validated_routes = DMSRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.debug(f"  - Raw data for target '{target.id}' failed DMS schema validation. Error: {e}")
-            return  # Stop processing this target
+            raise adapter_schema_error("dms", target.id, "invalid route list") from e
 
         # 2. Iterate and transform each valid route
         for rank, dms_tree_root in enumerate(validated_routes.root, start=1):
@@ -71,13 +71,12 @@ class DMSAdapter(BaseAdapter):
         # Final validation: does the transformed tree root match the canonical target smiles?
         expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if target_molecule.smiles != expected_smiles:
-            # This is a logic error, not a parse error
-            msg = (
-                f"Mismatched SMILES for target {target.id}. "
-                f"Expected canonical: {expected_smiles}, but adapter produced: {target_molecule.smiles}"
+            raise adapter_target_mismatch(
+                "dms",
+                target.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=target_molecule.smiles,
             )
-            logger.error(msg)
-            raise AdapterLogicError(msg)
 
         return Route(target=target_molecule, rank=rank, metadata={})
 

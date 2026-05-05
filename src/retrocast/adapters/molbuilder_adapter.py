@@ -37,7 +37,7 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -91,8 +91,11 @@ class MolBuilderAdapter(BaseAdapter):
         try:
             validated_routes = MolBuilderRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.debug(f"  - Raw data for target '{target.id}' failed MolBuilder schema validation. Error: {e}")
-            return
+            raise AdapterSchemaError(
+                f"raw data for target '{target.id}' failed molbuilder schema validation",
+                code="adapter.schema_invalid",
+                context={"adapter": "molbuilder", "target_id": target.id},
+            ) from e
 
         for rank, tree_root in enumerate(validated_routes.root, start=1):
             try:

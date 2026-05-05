@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 
+from retrocast.exceptions import AdapterSchemaError
 from retrocast.models.chem import Route
 
 logger = logging.getLogger(__name__)
@@ -75,15 +76,20 @@ class BaseAdapterTest(ABC):
         assert route.rank >= 1
 
     def test_adapt_handles_unsuccessful_run(self, adapter_instance, raw_unsuccessful_run_data, target_input):
-        """Tests that data for an unsuccessful run yields no routes."""
-        routes = list(adapter_instance.cast(raw_unsuccessful_run_data, target_input))
-        assert len(routes) == 0
+        """Tests that data for an unsuccessful run yields no routes or a typed schema error."""
+        try:
+            routes = list(adapter_instance.cast(raw_unsuccessful_run_data, target_input))
+        except AdapterSchemaError as exc:
+            assert exc.code == "adapter.schema_invalid"
+        else:
+            assert len(routes) == 0
 
     def test_adapt_handles_invalid_schema(self, adapter_instance, raw_invalid_schema_data, target_input, caplog):
-        """Tests that data failing schema validation yields no routes and logs a warning."""
-        routes = list(adapter_instance.cast(raw_invalid_schema_data, target_input))
-        assert len(routes) == 0
-        assert "failed" in caplog.text and "validation" in caplog.text
+        """Tests that data failing schema validation raises a typed adapter schema error."""
+        with pytest.raises(AdapterSchemaError) as exc_info:
+            list(adapter_instance.cast(raw_invalid_schema_data, target_input))
+        assert exc_info.value.code == "adapter.schema_invalid"
+        assert exc_info.value.context["target_id"] == target_input.id
 
     def test_adapt_handles_mismatched_smiles(
         self, adapter_instance, raw_valid_route_data, mismatched_target_input, caplog

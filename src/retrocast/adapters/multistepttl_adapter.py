@@ -8,7 +8,7 @@ from pydantic import BaseModel, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -41,8 +41,11 @@ class TtlRetroAdapter(BaseAdapter):
         try:
             validated_data = TtlRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - pre-processed data for target '{target.id}' failed schema validation. error: {e}")
-            return
+            raise AdapterSchemaError(
+                f"pre-processed data for target '{target.id}' failed multistepttl schema validation",
+                code="adapter.schema_invalid",
+                context={"adapter": "multistepttl", "target_id": target.id},
+            ) from e
 
         for rank, route in enumerate(validated_data.root, start=1):
             try:

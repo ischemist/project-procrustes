@@ -76,7 +76,9 @@ def resolve_adapter(
     if cli_adapter is not None:
         if cli_adapter not in ADAPTER_MAP:
             raise AdapterResolutionError(
-                f"CLI adapter '{cli_adapter}' is not a valid adapter. Available: {sorted(ADAPTER_MAP.keys())}"
+                f"CLI adapter '{cli_adapter}' is not a valid adapter. Available: {sorted(ADAPTER_MAP.keys())}",
+                code="adapter.unknown",
+                context={"source": "cli", "adapter": cli_adapter, "available": sorted(ADAPTER_MAP.keys())},
             )
         logger.info(f"Resolved adapter '{cli_adapter}' from cli")
         return get_adapter(cli_adapter), "cli"
@@ -89,7 +91,14 @@ def resolve_adapter(
         if manifest_adapter not in ADAPTER_MAP:
             raise AdapterResolutionError(
                 f"Manifest in {raw_dir} declares adapter '{manifest_adapter}', "
-                f"but it is not a valid adapter. Available: {sorted(ADAPTER_MAP.keys())}"
+                f"but it is not a valid adapter. Available: {sorted(ADAPTER_MAP.keys())}",
+                code="adapter.unknown",
+                context={
+                    "source": "manifest",
+                    "adapter": manifest_adapter,
+                    "raw_dir": str(raw_dir),
+                    "available": sorted(ADAPTER_MAP.keys()),
+                },
             )
         logger.info(f"Resolved adapter '{manifest_adapter}' from manifest")
         return get_adapter(manifest_adapter), "manifest"
@@ -99,7 +108,9 @@ def resolve_adapter(
         f"Cannot resolve adapter for model '{model_name}' in {raw_dir}. "
         f"No --adapter flag provided, and no manifest.json with directives.adapter found. "
         f"Either pass --adapter explicitly or ensure the raw data directory contains a "
-        f'manifest.json with \'"directives": {{"adapter": "<name>"}}\'.'
+        f'manifest.json with \'"directives": {{"adapter": "<name>"}}\'.',
+        code="adapter.resolution_missing",
+        context={"model": model_name, "raw_dir": str(raw_dir)},
     )
 
 

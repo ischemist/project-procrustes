@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -101,8 +101,11 @@ class AskcosAdapter(BaseAdapter):
         try:
             validated_output = AskcosOutput.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - raw data for target '{target.id}' failed askcos schema validation. error: {e}")
-            return
+            raise AdapterSchemaError(
+                f"raw data for target '{target.id}' failed askcos schema validation",
+                code="adapter.schema_invalid",
+                context={"adapter": "askcos", "target_id": target.id},
+            ) from e
 
         uds = validated_output.results.uds
 

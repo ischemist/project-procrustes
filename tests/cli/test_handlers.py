@@ -575,6 +575,33 @@ class TestSecurityAndErrorHandling:
         # Verify security error was logged
         assert "Security violation" in caplog.text
 
+    def test_ingest_single_rejects_unsafe_manifest_results_filename(self, tmp_path, caplog):
+        """Manifest raw_results_filename traversal should be logged and skipped."""
+        data_dir = tmp_path / "data"
+        raw_dir = data_dir / "2-raw" / "test-model" / "test-benchmark"
+        raw_dir.mkdir(parents=True)
+
+        manifest = {"directives": {"adapter": "syntheseus", "raw_results_filename": "../escape.json.gz"}}
+        with open(raw_dir / "manifest.json", "w") as f:
+            json.dump(manifest, f)
+
+        from retrocast.cli.handlers import _ingest_single
+        from retrocast.paths import get_paths
+
+        args = Namespace(
+            adapter=None,
+            sampling_strategy=None,
+            k=None,
+            ignore_stereo=False,
+            anonymize=False,
+        )
+
+        with caplog.at_level("ERROR"):
+            _ingest_single("test-model", "test-benchmark", get_paths(data_dir), args)
+
+        assert "Security violation" in caplog.text
+        assert "raw_results_filename" in caplog.text
+
     def test_resolve_models_handles_security_error(self, tmp_path):
         """Test that _resolve_models catches SecurityError from malformed model names."""
         # Setup: Create a directory with path traversal attempt

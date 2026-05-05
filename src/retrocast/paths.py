@@ -30,21 +30,35 @@ def validate_filename(filename: str, param_name: str = "filename") -> str:
     """
     # Check for null bytes
     if "\x00" in filename:
-        raise SecurityError(f"{param_name} contains null bytes: {filename!r}")
+        raise SecurityError(
+            f"{param_name} contains null bytes: {filename!r}",
+            code="security.path_null_byte",
+            context={"param": param_name, "value": filename},
+        )
 
     # Check for path separators (both Unix and Windows)
     if "/" in filename or "\\" in filename:
         raise SecurityError(
-            f"{param_name} contains path separator: {filename!r}. Filenames cannot contain '/' or '\\'."
+            f"{param_name} contains path separator: {filename!r}. Filenames cannot contain '/' or '\\'.",
+            code="security.path_separator",
+            context={"param": param_name, "value": filename},
         )
 
     # Check for parent directory traversal
     if filename == ".." or filename.startswith("../") or filename.endswith("/.."):
-        raise SecurityError(f"{param_name} contains parent directory reference: {filename!r}")
+        raise SecurityError(
+            f"{param_name} contains parent directory reference: {filename!r}",
+            code="security.path_traversal",
+            context={"param": param_name, "value": filename},
+        )
 
     # Check for current directory reference at problematic positions
     if filename == "." or filename.startswith("./") or filename.endswith("/."):
-        raise SecurityError(f"{param_name} contains current directory reference: {filename!r}")
+        raise SecurityError(
+            f"{param_name} contains current directory reference: {filename!r}",
+            code="security.current_directory",
+            context={"param": param_name, "value": filename},
+        )
 
     return filename
 
@@ -92,7 +106,14 @@ def ensure_path_within_root(path: Path, root: Path, description: str = "path") -
         resolved_path.relative_to(resolved_root)
     except ValueError as exc:
         raise SecurityError(
-            f"{description} escapes root directory: {path} (resolved: {resolved_path}, root: {resolved_root})"
+            f"{description} escapes root directory: {path} (resolved: {resolved_path}, root: {resolved_root})",
+            code="security.path_traversal",
+            context={
+                "description": description,
+                "path": str(path),
+                "resolved_path": str(resolved_path),
+                "root": str(resolved_root),
+            },
         ) from exc
 
     return resolved_path

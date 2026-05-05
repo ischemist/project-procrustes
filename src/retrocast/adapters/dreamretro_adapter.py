@@ -6,6 +6,7 @@ from typing import Any
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
+from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Route, TargetIdentity
@@ -24,10 +25,7 @@ class DreamRetroAdapter(BaseAdapter):
         validates raw dreamretro data, transforms its single route string, and yields a route.
         """
         if not isinstance(raw_target_data, dict):
-            logger.warning(
-                f"  - raw data for target '{target.id}' failed validation: expected a dict, got {type(raw_target_data).__name__}."
-            )
-            return
+            raise adapter_schema_error("dreamretro", target.id, "expected a dict")
 
         if not raw_target_data.get("succ"):
             logger.debug(f"skipping raw data for '{target.id}': 'succ' is not true.")
@@ -35,8 +33,7 @@ class DreamRetroAdapter(BaseAdapter):
 
         route_str = raw_target_data.get("routes")
         if not isinstance(route_str, str) or not route_str:
-            logger.warning(f"  - raw data for target '{target.id}' failed validation: no valid 'routes' string found.")
-            return
+            raise adapter_schema_error("dreamretro", target.id, "no valid 'routes' string found")
 
         try:
             route = self._transform(route_str, target, raw_target_data, ignore_stereo=ignore_stereo)
@@ -94,16 +91,18 @@ class DreamRetroAdapter(BaseAdapter):
         """
         parsed_target_smiles, precursor_map = self._parse_route_string(route_str, ignore_stereo=ignore_stereo)
 
-        if parsed_target_smiles != target_input.smiles:
-            msg = (
-                f"mismatched smiles for target {target_input.id}. "
-                f"expected canonical: {target_input.smiles}, but adapter produced: {parsed_target_smiles}"
+        expected_smiles = canonicalize_smiles(target_input.smiles, ignore_stereo=ignore_stereo)
+        if parsed_target_smiles != expected_smiles:
+            raise adapter_target_mismatch(
+                "dreamretro",
+                target_input.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=parsed_target_smiles,
             )
-            raise AdapterLogicError(msg)
 
         # build molecule tree from precursor map
         molecule = build_molecule_from_precursor_map(
-            smiles=SmilesStr(target_input.smiles), precursor_map=precursor_map, ignore_stereo=ignore_stereo
+            smiles=expected_smiles, precursor_map=precursor_map, ignore_stereo=ignore_stereo
         )
 
         # extract metadata

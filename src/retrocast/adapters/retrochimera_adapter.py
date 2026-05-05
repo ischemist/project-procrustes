@@ -8,7 +8,7 @@ from pydantic import BaseModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import RetroCastException
+from retrocast.exceptions import AdapterSchemaError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -68,8 +68,11 @@ class RetrochimeraAdapter(BaseAdapter):
         try:
             validated_data = RetrochimeraData.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - raw data for target '{target.id}' failed retrochimera schema validation. error: {e}")
-            return
+            raise AdapterSchemaError(
+                f"raw data for target '{target.id}' failed retrochimera schema validation",
+                code="adapter.schema_invalid",
+                context={"adapter": "retrochimera", "target_id": target.id},
+            ) from e
 
         if validated_data.result.error is not None:
             error_msg = validated_data.result.error.get("message", "unknown error")

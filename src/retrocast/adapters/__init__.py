@@ -13,7 +13,7 @@ from retrocast.adapters.retrostar_adapter import RetroStarAdapter
 from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
-from retrocast.exceptions import RetroCastException
+from retrocast.exceptions import AdapterResolutionError
 from retrocast.models.chem import Route, TargetIdentity
 
 ADAPTER_MAP: dict[str, BaseAdapter] = {
@@ -42,8 +42,10 @@ def get_adapter(adapter_name: str) -> BaseAdapter:
     """
     adapter = ADAPTER_MAP.get(adapter_name)
     if adapter is None:
-        raise RetroCastException(
-            f"unknown adapter '{adapter_name}'. Check `retrocast.adapters.ADAPTER_MAP` for available adapters."
+        raise AdapterResolutionError(
+            f"unknown adapter '{adapter_name}'. Check `retrocast.adapters.ADAPTER_MAP` for available adapters.",
+            code="adapter.unknown",
+            context={"adapter": adapter_name, "available": sorted(ADAPTER_MAP.keys())},
         )
     return adapter
 

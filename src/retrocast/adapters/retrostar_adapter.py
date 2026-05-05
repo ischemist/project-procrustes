@@ -6,6 +6,7 @@ from typing import Any
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
+from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Route, TargetIdentity
@@ -24,10 +25,7 @@ class RetroStarAdapter(BaseAdapter):
         Validates raw RetroStar data, transforms its single route string, and yields a Route.
         """
         if not isinstance(raw_target_data, dict):
-            logger.warning(
-                f"  - Raw data for target '{target.id}' failed validation: expected a dict, got {type(raw_target_data).__name__}."
-            )
-            return
+            raise adapter_schema_error("retrostar", target.id, "expected a dict")
 
         if not raw_target_data.get("succ"):
             logger.debug(f"Skipping raw data for '{target.id}': 'succ' is not true.")
@@ -35,8 +33,7 @@ class RetroStarAdapter(BaseAdapter):
 
         route_str = raw_target_data.get("routes")
         if not isinstance(route_str, str) or not route_str:
-            logger.warning(f"  - Raw data for target '{target.id}' failed validation: no valid 'routes' string found.")
-            return
+            raise adapter_schema_error("retrostar", target.id, "no valid 'routes' string found")
 
         # Extract route_cost if available
         route_cost = raw_target_data.get("route_cost")
@@ -100,11 +97,12 @@ class RetroStarAdapter(BaseAdapter):
 
         expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if parsed_target_smiles != expected_smiles:
-            msg = (
-                f"Mismatched SMILES for target {target.id}. "
-                f"Expected canonical: {expected_smiles}, but adapter produced: {parsed_target_smiles}"
+            raise adapter_target_mismatch(
+                "retrostar",
+                target.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=parsed_target_smiles,
             )
-            raise AdapterLogicError(msg)
 
         # Build the molecule tree using the new schema helper
         target_molecule = build_molecule_from_precursor_map(

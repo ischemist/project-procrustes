@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr
 
@@ -62,8 +62,11 @@ class SynPlannerAdapter(BaseAdapter):
         try:
             validated_routes = SynPlannerRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - raw data for target '{target.id}' failed synplanner schema validation. error: {e}")
-            return
+            raise AdapterSchemaError(
+                f"raw data for target '{target.id}' failed synplanner schema validation",
+                code="adapter.schema_invalid",
+                context={"adapter": "synplanner", "target_id": target.id},
+            ) from e
 
         for rank, synplanner_tree_root in enumerate(validated_routes.root, start=1):
             try:

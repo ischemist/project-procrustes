@@ -45,7 +45,8 @@ from pathlib import Path
 
 import yaml
 
-from retrocast.exceptions import ConfigurationError
+from retrocast.cli.errors import log_expected_error
+from retrocast.exceptions import ConfigurationError, RetroCastException
 from retrocast.io.blob import load_json_gz
 from retrocast.models.stats import ModelStatistics
 from retrocast.utils.logging import logger
@@ -105,6 +106,9 @@ def _load_sources(
             try:
                 stats = ModelStatistics.model_validate(load_json_gz(stats_path))
                 stats_list.append(stats)
+            except RetroCastException as e:
+                log_expected_error(logger, f"[red]Failed to load {name}[/]", e)
+                continue
             except Exception as e:
                 logger.error(f"[red]Failed to load {name}[/]: {e}")
                 continue
@@ -195,7 +199,11 @@ def handle_pareto_frontier(args: argparse.Namespace) -> None:
             try:
                 r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
             except ValueError as e:
-                raise ConfigurationError(f"Group color must be in #RRGGBB hex format, got: {color!r}") from e
+                raise ConfigurationError(
+                    f"Group color must be in #RRGGBB hex format, got: {color!r}",
+                    code="config.invalid_color",
+                    context={"group": group_id, "color": color},
+                ) from e
             fig.add_trace(
                 go.Scatter(
                     x=[p[0] for p in points],

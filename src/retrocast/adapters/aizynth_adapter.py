@@ -8,8 +8,9 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_molecule_from_bipartite_node
+from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Route, TargetIdentity
 
 logger = logging.getLogger(__name__)
@@ -61,8 +62,7 @@ class AizynthAdapter(BaseAdapter):
         try:
             validated_routes = AizynthRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - raw data for target '{target.id}' failed aizynth schema validation. error: {e}")
-            return
+            raise adapter_schema_error("aizynth", target.id, "invalid route list") from e
 
         for rank, aizynth_tree_root in enumerate(validated_routes.root, start=1):
             try:
@@ -84,11 +84,11 @@ class AizynthAdapter(BaseAdapter):
 
         expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if target_molecule.smiles != expected_smiles:
-            msg = (
-                f"mismatched smiles for target {target.id}. "
-                f"expected canonical: {expected_smiles}, but adapter produced: {target_molecule.smiles}"
+            raise adapter_target_mismatch(
+                "aizynth",
+                target.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=target_molecule.smiles,
             )
-            logger.error(msg)
-            raise AdapterLogicError(msg)
 
         return Route(target=target_molecule, rank=rank, metadata={})
