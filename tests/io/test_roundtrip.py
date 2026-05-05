@@ -596,7 +596,7 @@ class TestStockFile:
 
         with pytest.raises(RetroCastIOError, match="Invalid stock CSV format") as exc_info:
             load_stock_file(stock_file)
-        assert exc_info.value.code == "io.invalid_header"
+        assert exc_info.value.code == "io.invalid_artifact_shape"
         assert exc_info.value.context["required_column"] == "InChIKey"
 
     def test_load_stock_missing_file_raises(self, tmp_path):
@@ -662,10 +662,8 @@ class TestStockFile:
             writer.writerow(["SMILES", "InChIKey"])
             writer.writerow(["C", "VNWKTOKETHGBQD-UHFFFAOYSA-N"])
 
-        with pytest.raises(RetroCastIOError, match="Invalid return_as parameter") as exc_info:
+        with pytest.raises(ValueError, match="Invalid return_as parameter"):
             load_stock_file(stock_file, return_as="invalid")
-        assert exc_info.value.code == "io.invalid_return_format"
-        assert exc_info.value.context["return_as"] == "invalid"
 
     def test_load_stock_as_smiles_missing_smiles_column_raises(self, tmp_path):
         """Missing SMILES column should raise when return_as='smiles'."""

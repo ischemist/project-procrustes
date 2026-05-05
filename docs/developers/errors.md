@@ -20,7 +20,7 @@ all boundary-facing exceptions expose:
     "code": "adapter.schema_invalid",
     "message": "raw data for target 'x' failed dms schema validation",
     "context": {"adapter": "dms", "target_id": "x"},
-    "retryable": false,
+    "retryable": false
 }
 ```
 
@@ -30,13 +30,14 @@ use `error.to_dict()` when persisting or reporting the structured form.
 
 | family | base class | examples | meaning |
 | --- | --- | --- | --- |
-| `input.*` | `InputError` | `security.path_invalid` | external cli/config/path input is invalid |
+| `input.*` | `InputError` | `input.invalid` | external cli/config input is invalid |
+| `security.*` | `SecurityError` | `security.path_invalid`, `security.path_traversal` | path, filename, or filesystem boundary input is unsafe |
 | `config.*` | `ConfigurationError` | `config.invalid_color` | config values cannot be interpreted safely |
 | `chem.*` | `ChemError` | `chem.invalid_smiles`, `chem.runtime_error` | chemistry parsing, identity, or backend failure |
 | `schema.*` | `SchemaLogicError` | `schema.logic_error` | data is structurally valid but logically impossible |
 | `benchmark.*` | `BenchmarkError` | `benchmark.validation_failed` | benchmark construction or uniqueness contract failed |
 | `adapter.*` | `AdapterError` | `adapter.schema_invalid`, `adapter.target_mismatch` | raw model output failed adapter boundary contracts |
-| `io.*` | `DataIOError` | `io.not_found`, `io.decode_failed`, `io.invalid_artifact_shape`, `io.write_failed` | artifact read, decode, shape, or write failure |
+| `io.*` | `DataIOError` | `io.not_found`, `io.decode_failed`, `io.invalid_artifact_shape`, `io.unsupported_format`, `io.write_failed` | artifact read, decode, shape, format, or write failure |
 | `serialization.*` | `RetroCastSerializationError` | `serialization.syntheseus_failed` | conversion to external route formats failed |
 | `workflow.*` | `WorkflowError` | `workflow.error` | orchestration failed at a workflow boundary |
 

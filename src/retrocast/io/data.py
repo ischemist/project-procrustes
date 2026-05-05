@@ -12,7 +12,6 @@ from retrocast.exceptions import (
     ArtifactFormatError,
     ArtifactNotFoundError,
     ArtifactWriteError,
-    RetroCastIOError,
 )
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.io.provenance import create_manifest
@@ -146,16 +145,13 @@ def load_stock_file(
         Set of InChI keys or SMILES representing available stock molecules
 
     Raises:
-        RetroCastIOError: If file cannot be read, format is invalid, or return_as is invalid
+        RetroCastIOError: If file cannot be read or the artifact format is invalid.
+        ValueError: If return_as is not "inchikey" or "smiles".
     """
     path = Path(path)
 
     if return_as not in ("inchikey", "smiles"):
-        raise ArtifactFormatError(
-            f"Invalid return_as parameter: '{return_as}'. Must be 'inchikey' or 'smiles'.",
-            code="io.invalid_return_format",
-            context={"path": str(path), "return_as": return_as},
-        )
+        raise ValueError(f"Invalid return_as parameter: '{return_as}'. Must be 'inchikey' or 'smiles'.")
 
     if not path.exists():
         raise ArtifactNotFoundError(
@@ -185,7 +181,7 @@ def load_stock_file(
             if reader.fieldnames is None or required_col not in reader.fieldnames:
                 raise ArtifactFormatError(
                     f"Invalid stock CSV format. Expected header with '{required_col}' column. Got: {reader.fieldnames}",
-                    code="io.invalid_header",
+                    code="io.invalid_artifact_shape",
                     context={"path": str(path), "required_column": required_col, "columns": reader.fieldnames},
                 )
 
@@ -203,9 +199,9 @@ def load_stock_file(
         return molecules
 
     except OSError as e:
-        raise RetroCastIOError(
+        raise ArtifactDecodeError(
             f"Failed to read stock file {path}: {e}",
-            code="io.read_failed",
+            code="io.decode_failed",
             context={"path": str(path), "artifact": "stock"},
         ) from e
 
