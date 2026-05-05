@@ -38,7 +38,6 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.errors import (
     adapter_cycle_error,
-    adapter_route_metadata_error,
     adapter_schema_error,
     adapter_target_mismatch,
 )
@@ -162,29 +161,24 @@ class MolBuilderAdapter(BaseAdapter):
                 metadata=mol_metadata,
             )
 
-        if node.best_disconnection is None:
-            raise adapter_route_metadata_error("molbuilder", smiles=canon_smiles, field="best_disconnection")
-
-        if not node.best_disconnection.reaction_name.strip():
-            raise adapter_route_metadata_error(
-                "molbuilder", smiles=canon_smiles, field="best_disconnection.reaction_name"
-            )
-
         reactant_molecules: list[Molecule] = []
         for child in node.children:
             reactant_mol = self._build_molecule(child, visited=set(visited), ignore_stereo=ignore_stereo)
             reactant_molecules.append(reactant_mol)
 
         disc = node.best_disconnection
-        step_metadata: dict[str, Any] = {
-            "reaction_name": disc.reaction_name,
-            "score": disc.score,
-        }
-        if disc.named_reaction:
-            step_metadata["named_reaction"] = disc.named_reaction
-        if disc.category:
-            step_metadata["category"] = disc.category
-        template = disc.reaction_name
+        step_metadata: dict[str, Any] = {}
+        template = None
+        if disc is not None:
+            reaction_name = disc.reaction_name.strip()
+            if reaction_name:
+                step_metadata["reaction_name"] = reaction_name
+                template = reaction_name
+            step_metadata["score"] = disc.score
+            if disc.named_reaction:
+                step_metadata["named_reaction"] = disc.named_reaction
+            if disc.category:
+                step_metadata["category"] = disc.category
 
         synthesis_step = ReactionStep(
             reactants=reactant_molecules,

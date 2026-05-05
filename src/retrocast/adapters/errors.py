@@ -94,11 +94,3 @@ def adapter_route_string_error(
         code=code,
         context=context,
     )
-
-
-def adapter_route_metadata_error(adapter: str, *, smiles: str, field: str) -> AdapterLogicError:
-    return AdapterLogicError(
-        f"{adapter_display_name(adapter)} non-leaf node for SMILES '{smiles}' is missing required route metadata field '{field}'",
-        code="adapter.route_metadata_missing",
-        context={"adapter": adapter, "smiles": smiles, "field": field},
-    )

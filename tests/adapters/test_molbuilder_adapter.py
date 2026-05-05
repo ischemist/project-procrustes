@@ -243,13 +243,12 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
         assert len(routes) == 1
         assert routes[0].target.is_leaf
 
-    def test_non_leaf_without_disconnection_raises(self, adapter_instance, caplog):
-        """A non-leaf node (has children, not purchasable) without best_disconnection is an error."""
+    def test_non_leaf_without_disconnection_preserves_topology(self, adapter_instance):
+        """A non-leaf node without best_disconnection still carries valid topology."""
         raw_routes = [
             {
                 "smiles": "CCO",
                 "is_purchasable": False,
-                # No best_disconnection, but has children -> should raise
                 "children": [
                     {"smiles": "CC=O", "is_purchasable": True, "children": []},
                 ],
@@ -257,12 +256,14 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
         ]
         target = TargetInput(id="ethanol", smiles="CCO")
         routes = list(adapter_instance.cast(raw_routes, target))
-        # Route should be discarded due to AdapterLogicError
-        assert len(routes) == 0
-        assert "adapter.route_metadata_missing" in caplog.text
-        assert "best_disconnection" in caplog.text
+        assert len(routes) == 1
+        step = routes[0].target.synthesis_step
+        assert step is not None
+        assert step.template is None
+        assert step.metadata == {}
+        assert [mol.smiles for mol in step.reactants] == ["CC=O"]
 
-    def test_non_leaf_with_empty_reaction_name_is_discarded(self, adapter_instance, caplog):
+    def test_non_leaf_with_empty_reaction_name_preserves_topology(self, adapter_instance):
         raw_routes = [
             {
                 "smiles": "CCO",
@@ -280,9 +281,11 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
 
         routes = list(adapter_instance.cast(raw_routes, target))
 
-        assert len(routes) == 0
-        assert "adapter.route_metadata_missing" in caplog.text
-        assert "best_disconnection.reaction_name" in caplog.text
+        assert len(routes) == 1
+        step = routes[0].target.synthesis_step
+        assert step is not None
+        assert step.template is None
+        assert step.metadata == {"score": 0.5}
 
     def test_invalid_top_level_payload_raises_schema_error(self, adapter_instance, target_input):
         raw_payload = {

@@ -144,7 +144,6 @@ An adapter may raise these expected errors from `cast`:
 | `AdapterLogicError` | `adapter.node_missing` | graph edges reference a node absent from the raw lookup tables | adapter logs/skips that route when the failure is route-local |
 | `AdapterLogicError` | `adapter.route_string_empty` | a string-based route payload is empty after parsing | adapter logs/skips that route when the failure is route-local |
 | `AdapterLogicError` | `adapter.route_string_invalid` | a string-based route payload has malformed step boundaries or missing reactants/products | adapter logs/skips that route when the failure is route-local |
-| `AdapterLogicError` | `adapter.route_metadata_missing` | a route node needs model metadata to describe a reaction but it is absent or empty | adapter logs/skips that route when the failure is route-local |
 | `AdapterLogicError` | `adapter.route_transform_failed` | fallback for route-local transform failures that do not fit a narrower code | adapter logs/skips that route when the failure is route-local |
 | `UnsupportedAdapterFeatureError` | `adapter.unsupported_feature` | a valid request asks for a feature the adapter does not support | caller should treat this as a fatal configuration/request failure |
 | `ChemError` | `chem.invalid_smiles`, `chem.runtime_error` | raw route molecules cannot be canonicalized or processed by RDKit | adapter logs/skips that route when the failure is route-local |
@@ -206,18 +205,6 @@ Here `rxn1` resolves to `CC=O>>CCO`, but `node_dict["CC=O>>CCO"]` is missing.
 ```
 
 RetroStar and DreamRetro-style route steps need product, metadata/reagents, and reactants, e.g. `CCO>0.9>CC=O.[H][H]`.
-
-`adapter.route_metadata_missing`: a non-leaf node needs reaction metadata to describe how children form the parent, but that metadata is absent or empty.
-
-```json
-{
-    "smiles": "CCO",
-    "is_purchasable": false,
-    "children": [{"smiles": "CC=O", "is_purchasable": true, "children": []}]
-}
-```
-
-For MolBuilder, that missing metadata is `best_disconnection`.
 
 `adapter.target_mismatch`: the adapter produced a valid route, but the root is not the benchmark target.
 
