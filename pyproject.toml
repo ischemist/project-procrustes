@@ -3,7 +3,7 @@ name = "retrocast"
 description = "a framework for ingesting, validating, canonicalizing, and adapting retrosynthesis model outputs to a unified benchmark standard."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "Anton Morgunov", email = "anton@ischemist.com" }]
 dependencies = [
   "packaging>=25.0",
@@ -23,27 +23,23 @@ Issues = "https://github.com/ischemist/project-procrustes/issues"
 retrocast = "retrocast.cli.main:main"
 
 [project.optional-dependencies]
-aizyn = [
-  "aizynthfinder==4.4.0",
-  "numpy<=2.2",  # Numba needs NumPy 2.2 or less. Got NumPy 2.3.
-]
-dms = ["directmultistep"]
-retro-star = ["retro-star>=0.1.0", "torch"]
-syntheseus = [
-  "syntheseus[local-retro]>=0.5.0",
-  "numpy<2",
-  "pandas<2.2",
-  "dgl",
-  "torch<=2.1",
-  "torchdata<=0.7.0",
-  "faiss-cpu",
-  "torch-scatter"
-]
-viz = [
-  "ischemist>=0.2.0",
-  "kaleido>=1.1.0",
-  "plotly>=6.3.0",
-]
+# aizyn = [
+#   "aizynthfinder==4.4.0",
+#   "numpy<=2.2",  # Numba needs NumPy 2.2 or less. Got NumPy 2.3.
+# ]
+# dms = ["directmultistep"]
+# retro-star = ["retro-star>=0.1.0", "torch"]
+# syntheseus = [
+#   "syntheseus[local-retro]>=0.5.0",
+#   "numpy<2",
+#   "pandas<2.2",
+#   "dgl",
+#   "torch<=2.1",
+#   "torchdata<=0.7.0",
+#   "faiss-cpu",
+#   "torch-scatter"
+# ]
+viz = ["ischemist>=0.2.0", "kaleido>=1.1.0", "plotly>=6.3.0"]
 
 [dependency-groups]
 dev = [
@@ -76,7 +72,7 @@ omit = [
   "*/retrocast/utils/logging.py",
   "*/retrocast/exceptions.py",
   "*/retrocast/visualization/*.py",
-  "*/retrocast/cli/main.py"
+  "*/retrocast/cli/main.py",
 ]
 
 [tool.coverage.report]
@@ -88,10 +84,10 @@ exclude_lines = [
   "if __name__ == .__main__.:",
   "if TYPE_CHECKING:",
   "pass",
-  "logger\\."
+  "logger\\.",
 ]
 
-[tool.pytest.ini_options]
+[tool.pytest]
 markers = [
   "unit: runs in <10ms, tests single functions/classes, no IO",
   "integration: tests workflow glue, uses tmp_path",
@@ -102,17 +98,17 @@ markers = [
 [tool.ruff]
 line-length = 120
 lint.select = [
-  "E",  # pycodestyle
-  "F",  # Pyflakes
-  "UP",  # pyupgrade
-  "B",  # flake8-bugbear
-  "SIM",  # flake8-simplify
-  "I",  # isort
+  "E", # pycodestyle
+  "F", # Pyflakes
+  "UP", # pyupgrade
+  "B", # flake8-bugbear
+  "SIM", # flake8-simplify
+  "I", # isort
 ]
 lint.ignore = ["E501", "SIM108"]
 
-[tool.setuptools]
-package-dir = { "" = "src" }
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.setuptools_scm]
 version_scheme = "guess-next-dev"
@@ -121,34 +117,16 @@ local_scheme = "no-local-version"
 [tool.ty.src]
 exclude = ["tests", "scripts"]
 
-[tool.uv]
-conflicts = [
-  [
-    { extra = "dms" },
-    { extra = "aizyn" },
-    { extra = "retro-star" },
-    { extra = "syntheseus" },
-  ]
-]
+# [tool.uv]
+# conflicts = [
+#   [
+#     { extra = "dms" },
+#     { extra = "aizyn" },
+#     { extra = "retro-star" },
+#     { extra = "syntheseus" },
+#   ],
+# ]
 
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
-
-[[tool.uv.index]]
-name = "pytorch-cu126"
-url = "https://download.pytorch.org/whl/cu126"
-explicit = true
-
-[tool.uv.sources]
-dgl = [
-  { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin'" },
-]
-retro_star = { git = "https://github.com/anmorgunov/retro_star", branch = "master" }
-torch = [
-  { index = "pytorch-cpu", extra = "retro-star" },
-]
 
 [tool.uv.extra-build-dependencies]
 torch-scatter = ["torch"]

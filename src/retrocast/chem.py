@@ -1,5 +1,5 @@
 import logging
-from enum import Enum
+from enum import StrEnum
 
 from rdkit import Chem, rdBase
 from rdkit.Chem import rdinchi, rdMolDescriptors
@@ -15,7 +15,7 @@ rdBase.DisableLog("rdApp.*")
 NO_STEREO_PLACEHOLDER = "UHFFFAOYSA"
 
 
-class InchiKeyLevel(str, Enum):
+class InchiKeyLevel(StrEnum):
     """
     Levels of InChI key specificity for chemical comparison.
 

@@ -557,11 +557,12 @@ def _render_series(fig: go.Figure, series: PlotSeries, x_offset: float = 0.0):
         fig.add_trace(go.Bar(**common_args, error_y=error_y))
     elif series.mode_hint == "scatter":
         # FIX: No more conditional lines. Always markers for comparison plots.
+        scatter_error_y = {**error_y, "width": 4, "thickness": 1.5} if error_y is not None else None
         fig.add_trace(
             go.Scatter(
                 **common_args,
                 mode="markers",
-                error_y={**error_y, "width": 4, "thickness": 1.5},
+                error_y=scatter_error_y,
                 marker=dict(color=series.color, size=10, symbol="circle"),
             )
         )

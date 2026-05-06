@@ -1,4 +1,4 @@
-from retrocast.io.blob import load_json_gz, save_json_gz
+from retrocast.io.blob import load_json_gz, save_json_gz, save_jsonl_gz
 from retrocast.io.data import (
     load_benchmark,
     load_execution_stats,
@@ -21,6 +21,7 @@ __all__ = [
     # blob
     "load_json_gz",
     "save_json_gz",
+    "save_jsonl_gz",
     # data
     "load_benchmark",
     "load_execution_stats",

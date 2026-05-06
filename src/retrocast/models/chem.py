@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import statistics
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field, computed_field
@@ -287,7 +287,7 @@ class Route(BaseModel):
 Molecule.model_rebuild()
 
 
-class VendorSource(str, Enum):
+class VendorSource(StrEnum):
     """Enumeration of buyables vendor sources."""
 
     MCULE = "MC"

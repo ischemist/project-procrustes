@@ -1,0 +1,81 @@
+{
+  "action": "scripts/paroutes/training-set-prep/create-training-release",
+  "created_at": "2026-05-05T18:21:18.267170+00:00",
+  "output_files": {
+    "all": {
+      "path": "all.jsonl.gz",
+      "sha256": "1aef590a64ab619ee4f8d8e4c9a10ddcbbe748f8d7a04bfad2e991c560ea2179"
+    },
+    "buyables_all": {
+      "path": "buyables/all.jsonl.gz",
+      "sha256": "669a5eba1710439e56a8f34a0baac09bbeddfd3ea25b01f2cc878a86f6221c04"
+    },
+    "buyables_train": {
+      "path": "buyables/train.jsonl.gz",
+      "sha256": "1e46de2b001d24e798d6760bc188af5e35d4988255b5a5c4b287c1753bbecc75"
+    },
+    "buyables_val": {
+      "path": "buyables/val.jsonl.gz",
+      "sha256": "6eb9cfbef36b084b9bf87f6b6064ac03f1ed995152ad5986bdf416c53c2048b6"
+    },
+    "train": {
+      "path": "train.jsonl.gz",
+      "sha256": "afcc01f50e44a804dc2a6e0e388fdbc4201b611237e747bb81db8466a2e7f20e"
+    },
+    "val": {
+      "path": "val.jsonl.gz",
+      "sha256": "4b17b9496ce5ba80ea16d4a680388a323f60d24497a86519e9ea44b0c2526a7e"
+    }
+  },
+  "parameters": {
+    "buyables_filter": "all route leaves present in buyables-stock by full inchikey",
+    "deduplication": "route.get_signature()",
+    "mode": "route",
+    "reaction_holdout": "drop routes with any reaction signature present in n1 union n5",
+    "route_holdout": "exclude full n1 union n5 by route.get_signature()",
+    "seed": 20260502,
+    "show_progress": true,
+    "val_fraction": 0.05
+  },
+  "release_name": "route-heldout-n1-n5",
+  "retrocast_version": "0.5.4.dev4",
+  "source_files": [
+    {
+      "path": "data/retrocast/0-assets/paroutes/all-routes.json.gz",
+      "sha256": "d504e5964af1b09632d4048f6ab81d626babc5d344dff1be00ece312716f2405"
+    },
+    {
+      "path": "data/retrocast/0-assets/paroutes/n1-routes.json.gz",
+      "sha256": "49d7e209328b7cf7edc09ca827b0a21938d520a6b1d2dc0a46a65c6f392c2c89"
+    },
+    {
+      "path": "data/retrocast/0-assets/paroutes/n5-routes.json.gz",
+      "sha256": "5333b4aeb4e65a2c50e42a8f3a3701c75d76c8045280ec6cc460fbb3ebd605ad"
+    },
+    {
+      "path": "data/retrocast/1-benchmarks/stocks/buyables-stock.csv.gz",
+      "sha256": "aee42d44c9a96279dd13732d8a298bcfcad34a3ac0ba6b4b2715ec36ad18ec0b"
+    }
+  ],
+  "statistics": {
+    "buyables": {
+      "all": 57490,
+      "train": 54611,
+      "val": 2879
+    },
+    "duplicate_routes_removed": 243495,
+    "heldout_reaction_signatures": 0,
+    "heldout_route_signatures": 17871,
+    "n_records": 163636,
+    "raw_all_routes": 457166,
+    "seed": 20260502,
+    "skipped_adaptation": 9,
+    "skipped_reaction_holdout": 0,
+    "skipped_route_holdout": 50026,
+    "splits": {
+      "train": 155447,
+      "val": 8189
+    },
+    "val_fraction": 0.05
+  }
+}

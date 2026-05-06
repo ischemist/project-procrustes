@@ -7,7 +7,7 @@ Subsets created:
 3. random-n5-100 (legacy support)
 
 Usage:
-    uv run scripts/paroutes/02-create-subsets.py
+    uv run scripts/paroutes/benchmark-prep/02-create-subsets.py
 """
 
 from pathlib import Path
@@ -18,8 +18,9 @@ from retrocast.io import create_manifest, load_benchmark, load_stock_file, save_
 from retrocast.models.benchmark import create_benchmark
 from retrocast.utils.logging import configure_script_logging, logger
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-STOCKS_DIR = BASE_DIR / "data" / "1-benchmarks" / "stocks"
+BASE_DIR = Path(__file__).resolve().parents[3]
+DATA_DIR = BASE_DIR / "data" / "retrocast"
+STOCKS_DIR = DATA_DIR / "1-benchmarks" / "stocks"
 
 
 def create_subset(
@@ -40,7 +41,7 @@ def create_subset(
     # Create manifest
     manifest_path = out_dir / f"{name}.manifest.json"
     manifest = create_manifest(
-        action="scripts/paroutes/02-create-subsets",
+        action="scripts/paroutes/benchmark-prep/02-create-subsets",
         sources=source_paths + [stock_path],
         outputs=[(out_path, subset, "benchmark")],
         root_dir=BASE_DIR / "data",
@@ -64,7 +65,7 @@ def main():
     MKTLIN_SEED = 19450716
     MKTCNV_SEED = 20180329
 
-    DEF_DIR = BASE_DIR / "data" / "1-benchmarks" / "definitions"
+    DEF_DIR = DATA_DIR / "1-benchmarks" / "definitions"
 
     # Reference Routes (full paroutes)
     n1_path = DEF_DIR / "paroutes-n1-full-pruned.json.gz"

@@ -2,7 +2,7 @@ import hashlib
 import json
 import logging
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
@@ -14,7 +14,7 @@ from retrocast.models.provenance import FileInfo, Manifest
 logger = logging.getLogger(__name__)
 
 
-class ContentType(str, Enum):
+class ContentType(StrEnum):
     """
     Content types for manifest hashing.
 

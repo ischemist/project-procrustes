@@ -9,6 +9,7 @@ Philosophy: Data persistence is not optional. Content hashes must be:
 
 import csv
 import gzip
+import json
 import tempfile
 from pathlib import Path
 
@@ -17,7 +18,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from retrocast.exceptions import RetroCastIOError
-from retrocast.io.blob import load_json_gz, save_json_gz
+from retrocast.io.blob import load_json_gz, save_json_gz, save_jsonl_gz
 from retrocast.io.data import (
     BenchmarkResultsLoader,
     load_benchmark,
@@ -39,6 +40,31 @@ from tests.helpers import _synthetic_inchikey
 # =============================================================================
 # Tests for calculate_file_hash
 # =============================================================================
+
+
+@pytest.mark.unit
+class TestBlobWriters:
+    def test_save_json_gz_is_reproducible(self, tmp_path):
+        payload = {"b": [2, 1], "a": "same"}
+        first = tmp_path / "first.json.gz"
+        second = tmp_path / "second.json.gz"
+
+        save_json_gz(payload, first)
+        save_json_gz(payload, second)
+
+        assert first.read_bytes() == second.read_bytes()
+        assert load_json_gz(first) == payload
+
+    def test_save_jsonl_gz_writes_rows_and_count(self, tmp_path):
+        out_path = tmp_path / "rows.jsonl.gz"
+
+        n_rows = save_jsonl_gz([{"b": 2, "a": 1}, {"c": 3}], out_path)
+
+        assert n_rows == 2
+        with gzip.open(out_path, "rt", encoding="utf-8") as f:
+            rows = [json.loads(line) for line in f]
+
+        assert rows == [{"a": 1, "b": 2}, {"c": 3}]
 
 
 @pytest.mark.unit

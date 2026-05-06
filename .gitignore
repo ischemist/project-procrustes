@@ -38,6 +38,7 @@ data/scored/
 _backups/
 # AI
 _prompts/
+.practices/
 
 clone.sh
 
