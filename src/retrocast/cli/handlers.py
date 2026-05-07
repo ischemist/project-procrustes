@@ -11,8 +11,9 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn
 
 from retrocast.adapters.resolve import resolve_adapter, resolve_raw_results_filename
 from retrocast.chem import InchiKeyLevel
+from retrocast.cli.errors import log_expected_error
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
-from retrocast.exceptions import SecurityError
+from retrocast.exceptions import AdapterResolutionError, RetroCastException, SecurityError
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.io.data import load_benchmark, load_execution_stats, load_routes, load_stock_file
 from retrocast.io.provenance import create_manifest
@@ -150,7 +151,7 @@ def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any)
     # Security: Ensure raw_dir is within the raw directory bounds
     try:
         raw_dir = ensure_path_within_root(raw_dir, paths["raw"], "raw data directory")
-    except Exception as e:
+    except SecurityError as e:
         logger.error(f"Security violation for {model_name}/{benchmark_name}: {e}")
         return
 
@@ -166,12 +167,16 @@ def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any)
             model_name=model_name,
         )
         logger.info(f"Resolved adapter from {source} for {model_name}/{benchmark_name}")
-    except Exception as e:
-        logger.error(f"Skipping {model_name}/{benchmark_name}: {e}")
+    except AdapterResolutionError as e:
+        logger.error(f"Skipping {model_name}/{benchmark_name}: {e} [{e.code}]")
         return
 
     # Resolve raw results filename from manifest directives
-    raw_filename = resolve_raw_results_filename(raw_dir=raw_dir)
+    try:
+        raw_filename = resolve_raw_results_filename(raw_dir=raw_dir)
+    except SecurityError as e:
+        logger.error(f"Security violation for {model_name}/{benchmark_name}: {e}")
+        return
     raw_path = raw_dir / raw_filename
 
     # Security: Ensure raw_path is within the raw directory bounds
@@ -228,6 +233,8 @@ def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any)
         with open(manifest_path, "w") as f:
             f.write(manifest.model_dump_json(indent=2))
 
+    except RetroCastException as e:
+        log_expected_error(logger, f"Failed to ingest {model_name} on {benchmark_name}", e, exc_info=True)
     except Exception as e:
         logger.error(f"Failed to ingest {model_name} on {benchmark_name}: {e}", exc_info=True)
 
@@ -254,7 +261,7 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
     # Security: Ensure paths are within bounds
     try:
         routes_path = ensure_path_within_root(routes_path, paths["processed"], "routes path")
-    except Exception as e:
+    except SecurityError as e:
         logger.error(f"Security violation for {model_name}/{benchmark_name}: {e}")
         return
 
@@ -289,7 +296,7 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
         # Security: Ensure exec_stats_path is within bounds
         try:
             exec_stats_path = ensure_path_within_root(exec_stats_path, paths["raw"], "execution stats path")
-        except Exception as e:
+        except SecurityError as e:
             logger.warning(f"Security violation for execution stats: {e}")
             exec_stats_path = None
 
@@ -297,6 +304,8 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
             try:
                 execution_stats = load_execution_stats(exec_stats_path)
                 logger.info(f"Loaded execution stats from {exec_stats_path}")
+            except RetroCastException as e:
+                logger.warning(f"Failed to load execution stats from {exec_stats_path}: {e} [{e.code}]")
             except Exception as e:
                 logger.warning(f"Failed to load execution stats from {exec_stats_path}: {e}")
 
@@ -335,6 +344,8 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
 
         logger.info(f"Scored {model_name} on {benchmark_name} (Stock: {stock_name}). Saved to {out_path}")
 
+    except RetroCastException as e:
+        log_expected_error(logger, f"Failed to score {model_name} on {benchmark_name}", e, exc_info=True)
     except Exception as e:
         logger.error(f"Failed to score {model_name} on {benchmark_name}: {e}", exc_info=True)
 
@@ -363,7 +374,7 @@ def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any
     # Security: Ensure scored_base is within the scored directory bounds
     try:
         scored_base = ensure_path_within_root(scored_base, paths["scored"], "scored base directory")
-    except Exception as e:
+    except SecurityError as e:
         logger.error(f"Security violation for {model_name}/{benchmark_name}: {e}")
         return
 
@@ -385,7 +396,7 @@ def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any
         # Security: Ensure score_path is within bounds
         try:
             score_path = ensure_path_within_root(score_path, paths["scored"], "score file path")
-        except Exception as e:
+        except SecurityError as e:
             logger.error(f"Security violation for {model_name}/{benchmark_name}/{stock_name}: {e}")
             continue
         if not score_path.exists():
@@ -423,6 +434,8 @@ def _analyze_single(model_name: str, benchmark_name: str, paths: dict, args: Any
             console.print(create_single_model_summary_table(final_stats, visible_k=args.top_k))
             console.print(f"\n[dim]Full report saved to: {output_dir}[/]\n")
 
+        except RetroCastException as e:
+            log_expected_error(logger, f"Failed analysis for {model_name} ({stock_name})", e, exc_info=True)
         except Exception as e:
             logger.error(f"Failed analysis for {model_name} ({stock_name}): {e}", exc_info=True)
 
@@ -538,6 +551,9 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
                 )
                 all_reports.append(report)
                 _render_report(report)
+            except RetroCastException as e:
+                console.print(f"[red]Failed to verify {manifest_path}: {e}[/]")
+                logger.error(f"Verification error for {manifest_path}: {e.code}", exc_info=True)
             except Exception as e:
                 console.print(f"[red]Failed to verify {manifest_path}: {e}[/]")
                 logger.error(f"Verification error for {manifest_path}", exc_info=True)

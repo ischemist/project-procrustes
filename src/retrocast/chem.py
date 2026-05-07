@@ -4,7 +4,7 @@ from enum import StrEnum
 from rdkit import Chem, rdBase
 from rdkit.Chem import rdinchi, rdMolDescriptors
 
-from retrocast.exceptions import InvalidSmilesError, RetroCastException
+from retrocast.exceptions import ChemRuntimeError, InvalidInchiKeyError, InvalidSmilesError, RetroCastException
 from retrocast.typing import InchiKeyStr, SmilesStr
 
 logger = logging.getLogger(__name__)
@@ -49,18 +49,29 @@ def _get_mol(smiles: str, func_name: str) -> Chem.Mol:
     """
     if not isinstance(smiles, str) or not smiles:
         msg = f"SMILES input must be a non-empty string in {func_name}"
-        logger.error(msg)
-        raise InvalidSmilesError(msg)
+        raise InvalidSmilesError(
+            msg,
+            code="chem.invalid_smiles",
+            context={"operation": func_name, "value": smiles},
+        )
 
     # rdkit handles exceptions poorly, usually just returns None or segfaults (rarely now)
     try:
         mol = Chem.MolFromSmiles(smiles)
     except Exception as e:
         # rare edge case where rdkit raises instead of returning None
-        raise RetroCastException(f"RDKit raised error parsing '{smiles}': {e}") from e
+        raise ChemRuntimeError(
+            f"RDKit raised error parsing '{smiles}': {e}",
+            code="chem.rdkit_parse_failed",
+            context={"operation": func_name, "smiles": smiles},
+        ) from e
 
     if mol is None:
-        raise InvalidSmilesError(f"Invalid SMILES string: {smiles}")
+        raise InvalidSmilesError(
+            f"Invalid SMILES string: {smiles}",
+            code="chem.invalid_smiles",
+            context={"operation": func_name, "smiles": smiles},
+        )
 
     return mol
 
@@ -94,7 +105,11 @@ def canonicalize_smiles(smiles: str, remove_mapping: bool = False, ignore_stereo
     except (InvalidSmilesError, RetroCastException):
         raise
     except Exception as e:
-        raise RetroCastException(f"Unexpected RDKit error canonicalizing '{smiles}': {e}") from e
+        raise ChemRuntimeError(
+            f"Unexpected RDKit error canonicalizing '{smiles}': {e}",
+            code="chem.rdkit_canonicalize_failed",
+            context={"operation": "canonicalize_smiles", "smiles": smiles},
+        ) from e
 
 
 def get_inchi_key(smiles: str, level: InchiKeyLevel = InchiKeyLevel.FULL) -> InchiKeyStr:
@@ -135,13 +150,21 @@ def get_inchi_key(smiles: str, level: InchiKeyLevel = InchiKeyLevel.FULL) -> Inc
             # MolToInchi returns (inchi, ret_code, message, log, aux_info)
             inchi, ret_code, _, _, _ = rdinchi.MolToInchi(mol, options="-SNon")
             if ret_code != 0:
-                raise RetroCastException(f"rdkit failed to generate inchi (code {ret_code})")
+                raise ChemRuntimeError(
+                    f"rdkit failed to generate inchi (code {ret_code})",
+                    code="chem.inchi_generation_failed",
+                    context={"smiles": smiles, "ret_code": ret_code, "level": level.value},
+                )
             key = rdinchi.InchiToInchiKey(inchi)
         else:
             key = Chem.MolToInchiKey(mol)
 
         if not key:
-            raise RetroCastException(f"Empty InchiKey generated for '{smiles}'")
+            raise ChemRuntimeError(
+                f"Empty InchiKey generated for '{smiles}'",
+                code="chem.inchikey_empty",
+                context={"smiles": smiles, "level": level.value},
+            )
 
         if level == InchiKeyLevel.CONNECTIVITY:
             return InchiKeyStr(key.split("-")[0])
@@ -151,7 +174,11 @@ def get_inchi_key(smiles: str, level: InchiKeyLevel = InchiKeyLevel.FULL) -> Inc
     except (InvalidSmilesError, RetroCastException):
         raise
     except Exception as e:
-        raise RetroCastException(f"unexpected error generating inchikey: {e}") from e
+        raise ChemRuntimeError(
+            f"unexpected error generating inchikey: {e}",
+            code="chem.inchikey_generation_failed",
+            context={"smiles": smiles, "level": level.value},
+        ) from e
 
 
 def reduce_inchikey(inchikey: str, level: InchiKeyLevel) -> InchiKeyStr:
@@ -186,19 +213,29 @@ def reduce_inchikey(inchikey: str, level: InchiKeyLevel) -> InchiKeyStr:
 
     # basic validation: 14 chars (1 part) or 27 chars (3 parts)
     if len(parts) not in (1, 3):
-        raise ValueError(f"malformed inchikey structure: {inchikey}")
+        raise InvalidInchiKeyError(
+            f"malformed inchikey structure: {inchikey}",
+            code="chem.invalid_inchikey",
+            context={"inchikey": inchikey, "target_level": level.value},
+        )
 
     # validate connectivity block is exactly 14 chars
     if len(parts[0]) != 14:
-        raise ValueError(f"invalid connectivity block length (expected 14, got {len(parts[0])}): {inchikey}")
+        raise InvalidInchiKeyError(
+            f"invalid connectivity block length (expected 14, got {len(parts[0])}): {inchikey}",
+            code="chem.invalid_inchikey",
+            context={"inchikey": inchikey, "target_level": level.value, "connectivity_length": len(parts[0])},
+        )
 
     current_is_partial = len(parts) == 1
     target_is_full = level in (InchiKeyLevel.FULL, InchiKeyLevel.NO_STEREO)
 
     # prevent upscaling (14 -> 25)
     if current_is_partial and target_is_full:
-        raise RetroCastException(
-            f"cannot upscale connectivity key '{inchikey}' to level '{level}'. information has been lost."
+        raise InvalidInchiKeyError(
+            f"cannot upscale connectivity key '{inchikey}' to level '{level}'. information has been lost.",
+            code="chem.inchikey_upscale",
+            context={"inchikey": inchikey, "target_level": level.value},
         )
 
     if level == InchiKeyLevel.FULL:
@@ -230,22 +267,31 @@ def get_heavy_atom_count(smiles: str) -> int:
         RetroCastException: For any other unexpected errors during processing.
     """
     if not isinstance(smiles, str) or not smiles:
-        logger.error("Provided SMILES for HAC calculation is not a valid string or is empty.")
-        raise InvalidSmilesError("SMILES input must be a non-empty string.")
+        raise InvalidSmilesError(
+            "SMILES input must be a non-empty string.",
+            code="chem.invalid_smiles",
+            context={"operation": "get_heavy_atom_count", "value": smiles},
+        )
 
     try:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
-            logger.debug(f"RDKit failed to parse SMILES for HAC calculation: '{smiles}'")
-            raise InvalidSmilesError(f"Invalid SMILES string: {smiles}")
+            raise InvalidSmilesError(
+                f"Invalid SMILES string: {smiles}",
+                code="chem.invalid_smiles",
+                context={"operation": "get_heavy_atom_count", "smiles": smiles},
+            )
 
         return mol.GetNumAtoms()
 
     except InvalidSmilesError:
         raise
     except Exception as e:
-        logger.error(f"An unexpected RDKit error occurred during HAC calculation for SMILES '{smiles}': {e}")
-        raise RetroCastException(f"An unexpected error occurred during HAC calculation: {e}") from e
+        raise ChemRuntimeError(
+            f"An unexpected error occurred during HAC calculation: {e}",
+            code="chem.descriptor_failed",
+            context={"operation": "get_heavy_atom_count", "smiles": smiles},
+        ) from e
 
 
 def get_molecular_weight(smiles: str) -> float:
@@ -263,22 +309,31 @@ def get_molecular_weight(smiles: str) -> float:
         RetroCastException: For any other unexpected errors during processing.
     """
     if not isinstance(smiles, str) or not smiles:
-        logger.error("Provided SMILES for MW calculation is not a valid string or is empty.")
-        raise InvalidSmilesError("SMILES input must be a non-empty string.")
+        raise InvalidSmilesError(
+            "SMILES input must be a non-empty string.",
+            code="chem.invalid_smiles",
+            context={"operation": "get_molecular_weight", "value": smiles},
+        )
 
     try:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
-            logger.warning(f"RDKit failed to parse SMILES for MW calculation: '{smiles}'")
-            raise InvalidSmilesError(f"Invalid SMILES string: {smiles}")
+            raise InvalidSmilesError(
+                f"Invalid SMILES string: {smiles}",
+                code="chem.invalid_smiles",
+                context={"operation": "get_molecular_weight", "smiles": smiles},
+            )
 
         return rdMolDescriptors.CalcExactMolWt(mol)
 
     except InvalidSmilesError:
         raise
     except Exception as e:
-        logger.error(f"An unexpected RDKit error occurred during MW calculation for SMILES '{smiles}': {e}")
-        raise RetroCastException(f"An unexpected error occurred during MW calculation: {e}") from e
+        raise ChemRuntimeError(
+            f"An unexpected error occurred during MW calculation: {e}",
+            code="chem.descriptor_failed",
+            context={"operation": "get_molecular_weight", "smiles": smiles},
+        ) from e
 
 
 def get_chiral_center_count(smiles: str) -> int:
@@ -296,14 +351,20 @@ def get_chiral_center_count(smiles: str) -> int:
         RetroCastException: For any other unexpected errors during processing.
     """
     if not isinstance(smiles, str) or not smiles:
-        logger.error("Provided SMILES for chiral center count is not a valid string or is empty.")
-        raise InvalidSmilesError("SMILES input must be a non-empty string.")
+        raise InvalidSmilesError(
+            "SMILES input must be a non-empty string.",
+            code="chem.invalid_smiles",
+            context={"operation": "get_chiral_center_count", "value": smiles},
+        )
 
     try:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
-            logger.warning(f"RDKit failed to parse SMILES for chiral center count: '{smiles}'")
-            raise InvalidSmilesError(f"Invalid SMILES string: {smiles}")
+            raise InvalidSmilesError(
+                f"Invalid SMILES string: {smiles}",
+                code="chem.invalid_smiles",
+                context={"operation": "get_chiral_center_count", "smiles": smiles},
+            )
 
         chiral_centers = Chem.FindMolChiralCenters(mol)
         return len(chiral_centers)
@@ -311,5 +372,8 @@ def get_chiral_center_count(smiles: str) -> int:
     except InvalidSmilesError:
         raise
     except Exception as e:
-        logger.error(f"An unexpected RDKit error occurred during chiral center count for SMILES '{smiles}': {e}")
-        raise RetroCastException(f"An unexpected error occurred during chiral center count: {e}") from e
+        raise ChemRuntimeError(
+            f"An unexpected error occurred during chiral center count: {e}",
+            code="chem.descriptor_failed",
+            context={"operation": "get_chiral_center_count", "smiles": smiles},
+        ) from e

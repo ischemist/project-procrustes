@@ -23,8 +23,10 @@ def test_get_adapter_unknown_adapter_raises_exception():
     with a helpful error message.
     """
     unknown_name = "this-adapter-does-not-exist"
-    with pytest.raises(RetroCastException, match=f"unknown adapter '{unknown_name}'"):
+    with pytest.raises(RetroCastException, match=f"unknown adapter '{unknown_name}'") as exc_info:
         get_adapter(unknown_name)
+    assert exc_info.value.code == "adapter.unknown"
+    assert exc_info.value.context["adapter"] == unknown_name
 
 
 @pytest.mark.parametrize("adapter_name, adapter_instance", ADAPTER_MAP.items())

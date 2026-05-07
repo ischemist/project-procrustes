@@ -46,8 +46,10 @@ class TestBipartiteBuilder:
             in_stock=False,
             children=[SimpleNamespace(smiles="CC=O", type="mol", in_stock=True, children=[])],
         )
-        with pytest.raises(AdapterLogicError, match="Child of molecule node was not a reaction node"):
+        with pytest.raises(AdapterLogicError) as exc_info:
             build_molecule_from_bipartite_node(raw_data)
+        assert exc_info.value.code == "adapter.node_type_invalid"
+        assert exc_info.value.context["expected"] == "reaction"
 
 
 class TestPrecursorMapBuilder:

@@ -66,7 +66,7 @@ class TestDMSAdapterUnit(BaseAdapterTest):
         target_input = TargetInput(id="ibuprofen_cycle_test", smiles=canonicalize_smiles(target_smiles))
         routes = list(adapter_instance.cast(cyclic_route_data, target_input))
         assert len(routes) == 0
-        assert "cycle detected" in caplog.text
+        assert "adapter.cycle_detected" in caplog.text
 
 
 @pytest.mark.integration

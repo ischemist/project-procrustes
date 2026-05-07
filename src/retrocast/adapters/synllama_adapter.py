@@ -7,8 +7,9 @@ from typing import Any
 from pydantic import BaseModel, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.errors import adapter_route_string_error, adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -35,15 +36,14 @@ class SynLlaMaAdapter(BaseAdapter):
         try:
             validated_routes = SynLlamaRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - data for target '{target.id}' failed synllama schema validation. error: {e}")
-            return
+            raise adapter_schema_error("synllama", target.id, "invalid route list") from e
 
         for rank, route in enumerate(validated_routes.root, start=1):
             try:
                 route_obj = self._transform(route, target, rank=rank, ignore_stereo=ignore_stereo)
                 yield route_obj
             except RetroCastException as e:
-                logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
+                logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
                 continue
 
     def _transform(
@@ -54,17 +54,18 @@ class SynLlaMaAdapter(BaseAdapter):
         # this is the most reliable way to identify it.
         synthesis_parts = [p.strip() for p in route.synthesis_string.split(";") if p.strip()]
         if not synthesis_parts:
-            raise AdapterLogicError("synthesis string is empty.")
+            raise adapter_route_string_error("synllama", "empty synthesis string", empty=True)
 
         # the final product is always the last element. this is the most reliable way to identify it.
         parsed_target_smiles = canonicalize_smiles(synthesis_parts[-1], ignore_stereo=ignore_stereo)
         expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if parsed_target_smiles != expected_smiles:
-            msg = (
-                f"mismatched smiles for target {target.id}. "
-                f"expected canonical: {expected_smiles}, but adapter produced: {parsed_target_smiles}"
+            raise adapter_target_mismatch(
+                "synllama",
+                target.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=parsed_target_smiles,
             )
-            raise AdapterLogicError(msg)
 
         precursor_map = self._parse_synthesis_string(route.synthesis_string, ignore_stereo=ignore_stereo)
         target_molecule = self._build_molecule_from_precursor_map(
@@ -139,7 +140,7 @@ class SynLlaMaAdapter(BaseAdapter):
         parts = [p.strip() for p in synthesis_str.split(";") if p.strip()]
 
         if not parts:
-            raise AdapterLogicError("synthesis string is empty.")
+            raise adapter_route_string_error("synllama", "empty synthesis string", empty=True)
 
         template_indices = [i for i, p in enumerate(parts) if p.startswith("R") and p[1:].isdigit()]
 
@@ -152,7 +153,11 @@ class SynLlaMaAdapter(BaseAdapter):
         for template_idx in template_indices:
             product_idx = template_idx + 1
             if product_idx >= len(parts):
-                raise AdapterLogicError(f"malformed route: template '{parts[template_idx]}' has no product.")
+                raise adapter_route_string_error(
+                    "synllama",
+                    "template has no product",
+                    fragment=parts[template_idx],
+                )
 
             product_smiles = canonicalize_smiles(parts[product_idx], ignore_stereo=ignore_stereo)
             explicit_reactant_parts = parts[reactant_start_idx:template_idx]
@@ -161,7 +166,11 @@ class SynLlaMaAdapter(BaseAdapter):
                 all_reactants.append(last_product_smi)
 
             if not all_reactants:
-                raise AdapterLogicError(f"no reactants found for product '{parts[product_idx]}'")
+                raise adapter_route_string_error(
+                    "synllama",
+                    "no reactants found for product",
+                    fragment=parts[product_idx],
+                )
 
             precursor_map[product_smiles] = all_reactants
 

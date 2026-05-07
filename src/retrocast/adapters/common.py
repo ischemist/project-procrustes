@@ -1,8 +1,8 @@
 import logging
 from typing import Any, Protocol
 
+from retrocast.adapters.errors import adapter_node_type_error
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import Molecule, ReactionStep
 from retrocast.typing import SmilesStr
 
@@ -147,7 +147,7 @@ def build_molecule_from_bipartite_node(raw_mol_node: BipartiteMolNode, ignore_st
         A Molecule object representing this node and its synthesis tree.
     """
     if raw_mol_node.type != "mol":
-        raise AdapterLogicError(f"Expected node type 'mol' but got '{raw_mol_node.type}'")
+        raise adapter_node_type_error("bipartite", expected="mol", actual=raw_mol_node.type, role="molecule")
 
     canon_smiles = canonicalize_smiles(raw_mol_node.smiles, ignore_stereo=ignore_stereo)
     is_leaf = raw_mol_node.in_stock or not bool(raw_mol_node.children)
@@ -168,7 +168,9 @@ def build_molecule_from_bipartite_node(raw_mol_node: BipartiteMolNode, ignore_st
 
     raw_reaction_node: BipartiteRxnNode = raw_mol_node.children[0]
     if raw_reaction_node.type != "reaction":
-        raise AdapterLogicError("Child of molecule node was not a reaction node")
+        raise adapter_node_type_error(
+            "bipartite", expected="reaction", actual=raw_reaction_node.type, role="molecule child"
+        )
 
     # Build reactants recursively
     reactant_molecules: list[Molecule] = []

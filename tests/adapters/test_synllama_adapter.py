@@ -72,17 +72,18 @@ class TestSynLlamaAdapterUnit(BaseAdapterTest):
         assert all(r.is_leaf for r in synthesis_step2.reactants)
 
     @pytest.mark.parametrize(
-        "bad_string, error_match",
+        "bad_string, expected_code",
         [
-            ("C;R1", "malformed route: template 'R1' has no product"),
-            ("R1;C", "no reactants found for product 'C'"),
-            ("", "synthesis string is empty."),
+            ("C;R1", "adapter.route_string_invalid"),
+            ("R1;C", "adapter.route_string_invalid"),
+            ("", "adapter.route_string_empty"),
         ],
     )
-    def test_parser_raises_on_invalid_string_format(self, adapter_instance, bad_string, error_match):
+    def test_parser_raises_on_invalid_string_format(self, adapter_instance, bad_string, expected_code):
         """tests that the private parser method raises specific logic errors."""
-        with pytest.raises(AdapterLogicError, match=error_match):
+        with pytest.raises(AdapterLogicError) as exc_info:
             adapter_instance._parse_synthesis_string(bad_string)
+        assert exc_info.value.code == expected_code
 
 
 @pytest.mark.integration

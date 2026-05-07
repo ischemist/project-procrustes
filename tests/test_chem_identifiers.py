@@ -14,7 +14,7 @@ from retrocast.chem import (
     get_molecular_weight,
     reduce_inchikey,
 )
-from retrocast.exceptions import InvalidSmilesError, RetroCastException
+from retrocast.exceptions import InvalidInchiKeyError, InvalidSmilesError, RetroCastException
 
 # ============================================================================
 # canonicalization
@@ -207,11 +207,15 @@ def test_reduce_inchikey_prevent_upscaling() -> None:
     conn_key = "UHOVQNZJYSORNB"
 
     # prevent 14 -> 27
-    with pytest.raises(RetroCastException, match="cannot upscale"):
+    with pytest.raises(InvalidInchiKeyError, match="cannot upscale") as exc_info:
         reduce_inchikey(conn_key, InchiKeyLevel.FULL)
+    assert exc_info.value.code == "chem.inchikey_upscale"
+    assert exc_info.value.context == {"inchikey": conn_key, "target_level": "full"}
 
-    with pytest.raises(RetroCastException, match="cannot upscale"):
+    with pytest.raises(InvalidInchiKeyError, match="cannot upscale") as exc_info:
         reduce_inchikey(conn_key, InchiKeyLevel.NO_STEREO)
+    assert exc_info.value.code == "chem.inchikey_upscale"
+    assert exc_info.value.context == {"inchikey": conn_key, "target_level": "no_stereo"}
 
 
 @pytest.mark.unit
@@ -352,8 +356,9 @@ def test_stereo_round_trip_invariant() -> None:
 
 @pytest.mark.unit
 def test_invalid_smiles_raises() -> None:
-    with pytest.raises(InvalidSmilesError):
+    with pytest.raises(InvalidSmilesError) as exc_info:
         get_inchi_key("not a smile")
+    assert exc_info.value.code == "chem.invalid_smiles"
 
 
 @pytest.mark.unit
@@ -371,16 +376,18 @@ def test_reduce_inchikey_rejects_malformed_input(bad_key: str) -> None:
     guard test: reduce_inchikey should reject malformed keys.
     only 14-char (connectivity) or 27-char (full) keys are valid.
     """
-    with pytest.raises((ValueError, RetroCastException)):
+    with pytest.raises(InvalidInchiKeyError) as exc_info:
         reduce_inchikey(bad_key, InchiKeyLevel.CONNECTIVITY)
+    assert exc_info.value.code == "chem.invalid_inchikey"
 
 
 @pytest.mark.unit
 @patch("retrocast.chem.Chem.MolToInchiKey")
 def test_rdkit_empty_result_guarded(mock_inchi) -> None:
     mock_inchi.return_value = ""
-    with pytest.raises(RetroCastException, match="Empty InchiKey"):
+    with pytest.raises(RetroCastException, match="Empty InchiKey") as exc_info:
         get_inchi_key("C")
+    assert exc_info.value.code == "chem.inchikey_empty"
 
 
 @pytest.mark.unit

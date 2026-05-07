@@ -73,7 +73,7 @@ class MyAdapter(BaseAdapter):
                     continue
 
                 yield Route(target=target_mol, rank=i+1, metadata={})
-            except Exception:
+            except RetroCastException:
                 continue
 ```
 
@@ -129,6 +129,103 @@ Some models have unique structures that don't fit the above patterns (e.g., grap
     2. **Cycle detection** - Ensure no molecule appears twice in a path
     3. **Target validation** - Verify the root matches `target.smiles`
 
+## Adaptation Errors
+
+Adapter error `code` values are lowercase machine contracts. Keep adapter names in `context["adapter"]` lowercase so callers can aggregate by `ADAPTER_MAP` key. Human-facing messages should use proper model capitalization, such as `DreamRetro`, `DMS`, or `MolBuilder`.
+
+An adapter may raise these expected errors from `cast`:
+
+| exception | code | when it is raised | caller policy |
+| --- | --- | --- | --- |
+| `AdapterSchemaError` | `adapter.schema_invalid` | the raw target payload does not match the adapter's declared input schema | workflow records the failure for that target and continues |
+| `AdapterLogicError` | `adapter.target_mismatch` | a transformed route root does not match the benchmark target | adapter logs/skips that route when other routes may still be usable |
+| `AdapterLogicError` | `adapter.cycle_detected` | route graph revisits the same molecule in one path | adapter logs/skips that route when the failure is route-local |
+| `AdapterLogicError` | `adapter.node_type_invalid` | a bipartite graph node has the wrong role, such as molecule where reaction is required | adapter logs/skips that route when the failure is route-local |
+| `AdapterLogicError` | `adapter.node_missing` | graph edges reference a node absent from the raw lookup tables | adapter logs/skips that route when the failure is route-local |
+| `AdapterLogicError` | `adapter.route_string_empty` | a string-based route payload is empty after parsing | adapter logs/skips that route when the failure is route-local |
+| `AdapterLogicError` | `adapter.route_string_invalid` | a string-based route payload has malformed step boundaries or missing reactants/products | adapter logs/skips that route when the failure is route-local |
+| `AdapterLogicError` | `adapter.route_transform_failed` | fallback for route-local transform failures that do not fit a narrower code | adapter logs/skips that route when the failure is route-local |
+| `UnsupportedAdapterFeatureError` | `adapter.unsupported_feature` | a valid request asks for a feature the adapter does not support | caller should treat this as a fatal configuration/request failure |
+| `ChemError` | `chem.invalid_smiles`, `chem.runtime_error` | raw route molecules cannot be canonicalized or processed by RDKit | adapter logs/skips that route when the failure is route-local |
+
+Adapter resolution happens before `cast` and raises `AdapterResolutionError` (`adapter.unknown` or `adapter.resolution_missing`) when the CLI or manifest cannot select an adapter.
+
+Use `retrocast.adapters.errors.adapter_schema_error()` and `adapter_target_mismatch()` where they fit; they keep messages, codes, and context consistent.
+
+### Adapter Error Examples
+
+These examples use tiny fake payloads to show what each route-local code means.
+
+`adapter.cycle_detected`: the route graph loops back to a molecule already in the same path.
+
+```json
+{
+    "smiles": "CCO",
+    "children": [
+        {
+            "smiles": "CC=O",
+            "children": [{"smiles": "CCO", "children": []}]
+        }
+    ]
+}
+```
+
+`adapter.node_type_invalid`: a graph slot contains the wrong kind of node. Bipartite adapters expect molecule -> reaction -> molecule.
+
+```json
+{
+    "type": "mol",
+    "smiles": "CCO",
+    "children": [{"type": "mol", "smiles": "CC=O", "children": []}]
+}
+```
+
+`adapter.node_missing`: an edge/reference points to an id or SMILES key that is absent from the raw lookup tables.
+
+```json
+{
+    "uuid2smiles": {"root": "CCO", "rxn1": "CC=O>>CCO"},
+    "node_dict": {"CCO": {"type": "chemical", "smiles": "CCO"}},
+    "pathways": [[{"source": "root", "target": "rxn1"}]]
+}
+```
+
+Here `rxn1` resolves to `CC=O>>CCO`, but `node_dict["CC=O>>CCO"]` is missing.
+
+`adapter.route_string_empty`: a string-based route field is empty after trimming/splitting.
+
+```json
+{"succ": true, "routes": ""}
+```
+
+`adapter.route_string_invalid`: the route string exists, but its grammar is malformed.
+
+```json
+{"succ": true, "routes": "CCO>CC=O"}
+```
+
+RetroStar and DreamRetro-style route steps need product, metadata/reagents, and reactants, e.g. `CCO>0.9>CC=O.[H][H]`.
+
+`adapter.target_mismatch`: the adapter produced a valid route, but the root is not the benchmark target.
+
+```json
+{
+    "target_id": "ethanol",
+    "expected_smiles": "CCO",
+    "actual_root_smiles": "CCC"
+}
+```
+
+`adapter.schema_invalid`: the raw payload does not match the adapter's top-level expected schema.
+
+```json
+{"succ": true, "routes": 123}
+```
+
+If `routes` must be a string, this is schema-invalid.
+
+`adapter.route_transform_failed`: fallback for route-local transformation failures that do not fit a sharper bucket. If this shows up often in manifests or logs, promote the recurring case to a dedicated code.
+
 ### 1. Define Pydantic Schemas
 
 Always define Pydantic models for the **raw** input format. This separates validation logic from transformation logic and ensures bad data is rejected early.
@@ -153,7 +250,7 @@ RetroCast relies on exact SMILES matching.
 
 Retrosynthetic graphs must be acyclic trees.
 
-- The standard helpers include cycle detection (raising `AdapterLogicError` if a node appears twice in a path)
+- The standard helpers include cycle detection (raising `AdapterLogicError` with `adapter.cycle_detected` if a node appears twice in a path)
 - If writing a custom builder, maintain a `visited` set during recursion
 
 ### 4. Metadata
@@ -235,6 +332,6 @@ pytest tests/adapters/test_my_adapter.py
     The `BaseAdapterTest` automatically verifies that your adapter:
     
     1. Correctly parses valid data
-    2. Rejects invalid schemas without crashing (returns empty generator)
+    2. Rejects invalid schemas with `AdapterSchemaError`
     3. Correctly identifies target mismatches
     4. Handles failed predictions gracefully
