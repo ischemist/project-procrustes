@@ -224,18 +224,14 @@ class TestAskcosAdapterErrorHandling:
     """Tests for error handling and edge cases."""
 
     @pytest.mark.parametrize(
-        "key_to_remove, error_match",
+        "key_to_remove, role",
         [
-            pytest.param("COC(C)=O", "node data for smiles 'COC(C)=O' not found", id="chemical_smiles_missing"),
-            pytest.param(
-                "CC(=O)Cl.CO>>COC(C)=O",
-                "node data for reaction 'CC(=O)Cl.CO>>COC(C)=O' not found",
-                id="reaction_smiles_missing",
-            ),
+            pytest.param("COC(C)=O", "chemical", id="chemical_smiles_missing"),
+            pytest.param("CC(=O)Cl.CO>>COC(C)=O", "reaction", id="reaction_smiles_missing"),
         ],
     )
     def test_logs_warning_on_inconsistent_nodedict(
-        self, raw_askcos_data, methylacetate_target_input, key_to_remove, error_match, caplog
+        self, raw_askcos_data, methylacetate_target_input, key_to_remove, role, caplog
     ):
         """Tests resilience to inconsistencies in the node_dict mapping."""
         adapter = AskcosAdapter()
@@ -249,4 +245,5 @@ class TestAskcosAdapterErrorHandling:
         # The key assertion: we produced FEWER routes than total pathways.
         total_pathways = len(raw_target_data["results"]["uds"]["pathways"])
         assert len(routes) < total_pathways
-        assert error_match in caplog.text
+        assert "adapter.node_missing" in caplog.text
+        assert role in caplog.text

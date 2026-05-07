@@ -451,6 +451,27 @@ class TestRouteRoundtrip:
 
         assert [r.rank for r in loaded["target"]] == [1, 2, 3]
 
+    def test_load_routes_missing_file_raises_not_found_code(self, tmp_path):
+        """Missing routes files should be typed as missing artifacts."""
+        path = tmp_path / "missing-routes.json.gz"
+
+        with pytest.raises(RetroCastIOError) as exc_info:
+            load_routes(path)
+
+        assert exc_info.value.code == "io.not_found"
+        assert exc_info.value.context == {"path": str(path), "artifact": "routes"}
+
+    def test_load_routes_invalid_json_shape_raises_format_code(self, tmp_path):
+        """Route files with valid JSON but invalid route shape should be typed as format errors."""
+        path = tmp_path / "routes.json.gz"
+        save_json_gz({"target": [{"not": "a route"}]}, path)
+
+        with pytest.raises(RetroCastIOError) as exc_info:
+            load_routes(path)
+
+        assert exc_info.value.code == "io.invalid_artifact_shape"
+        assert exc_info.value.context == {"path": str(path), "artifact": "routes"}
+
 
 # =============================================================================
 # Tests for benchmark save/load roundtrip
@@ -561,8 +582,10 @@ class TestStockFile:
         stock_file = tmp_path / "stock.txt"
         stock_file.write_text("C\nCC\n")
 
-        with pytest.raises(RetroCastIOError, match="Only .csv.gz format is supported"):
+        with pytest.raises(RetroCastIOError, match="Only .csv.gz format is supported") as exc_info:
             load_stock_file(stock_file)
+        assert exc_info.value.code == "io.unsupported_format"
+        assert exc_info.value.context["expected_suffix"] == ".csv.gz"
 
     def test_load_stock_csv_invalid_header_raises(self, tmp_path):
         """Invalid CSV.GZ header should raise RetroCastIOError."""
@@ -571,16 +594,20 @@ class TestStockFile:
         with gzip.open(stock_file, "wt") as f:
             f.write("WrongHeader1,WrongHeader2\nC,VNWKTOKETHGBQD-UHFFFAOYSA-N\n")
 
-        with pytest.raises(RetroCastIOError, match="Invalid stock CSV format"):
+        with pytest.raises(RetroCastIOError, match="Invalid stock CSV format") as exc_info:
             load_stock_file(stock_file)
+        assert exc_info.value.code == "io.invalid_artifact_shape"
+        assert exc_info.value.context["required_column"] == "InChIKey"
 
     def test_load_stock_missing_file_raises(self, tmp_path):
         """Missing file should raise RetroCastIOError."""
 
         stock_file = tmp_path / "nonexistent.csv.gz"
 
-        with pytest.raises(RetroCastIOError, match="Stock file not found"):
+        with pytest.raises(RetroCastIOError, match="Stock file not found") as exc_info:
             load_stock_file(stock_file)
+        assert exc_info.value.code == "io.not_found"
+        assert exc_info.value.context["artifact"] == "stock"
 
     def test_load_stock_as_smiles_returns_smiles(self, tmp_path):
         """Stock CSV.GZ with return_as='smiles' should return SMILES set."""
@@ -635,7 +662,7 @@ class TestStockFile:
             writer.writerow(["SMILES", "InChIKey"])
             writer.writerow(["C", "VNWKTOKETHGBQD-UHFFFAOYSA-N"])
 
-        with pytest.raises(RetroCastIOError, match="Invalid return_as parameter"):
+        with pytest.raises(ValueError, match="Invalid return_as parameter"):
             load_stock_file(stock_file, return_as="invalid")
 
     def test_load_stock_as_smiles_missing_smiles_column_raises(self, tmp_path):
@@ -692,6 +719,18 @@ def test_json_gz_roundtrip_arbitrary_dict(data):
         save_json_gz(data, path)
         loaded = load_json_gz(path)
         assert loaded == data
+
+
+@pytest.mark.unit
+def test_load_json_gz_missing_file_raises_not_found_code(tmp_path):
+    """Missing JSON artifacts should not be reported as decode failures."""
+    path = tmp_path / "missing.json.gz"
+
+    with pytest.raises(RetroCastIOError) as exc_info:
+        load_json_gz(path)
+
+    assert exc_info.value.code == "io.not_found"
+    assert exc_info.value.context == {"path": str(path)}
 
 
 # =============================================================================

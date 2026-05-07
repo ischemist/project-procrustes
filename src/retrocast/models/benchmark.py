@@ -151,7 +151,12 @@ def validate_benchmark_targets(targets: dict[str, BenchmarkTarget]) -> None:
 
     if errors:
         raise BenchmarkValidationError(
-            "Benchmark contains duplicate molecules:\n" + "\n".join(f"  - {e}" for e in errors)
+            "Benchmark contains duplicate molecules:\n" + "\n".join(f"  - {e}" for e in errors),
+            code="benchmark.duplicate_molecule",
+            context={
+                "smiles_duplicate_count": len(smiles_duplicates),
+                "inchikey_duplicate_count": len(inchikey_duplicates),
+            },
         )
 
 
@@ -186,7 +191,9 @@ def validate_acceptable_routes_solvable(benchmark: BenchmarkSet, stock: set[Inch
             error_summary.append(f"... and {len(errors) - 10} more unsolvable routes")
 
         raise BenchmarkValidationError(
-            f"Found {len(errors)} unsolvable acceptable routes:\n" + "\n".join(f"  - {e}" for e in error_summary)
+            f"Found {len(errors)} unsolvable acceptable routes:\n" + "\n".join(f"  - {e}" for e in error_summary),
+            code="benchmark.unsolvable_route",
+            context={"benchmark": benchmark.name, "unsolvable_route_count": len(errors)},
         )
 
 

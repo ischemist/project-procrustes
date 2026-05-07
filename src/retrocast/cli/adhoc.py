@@ -9,7 +9,9 @@ from tqdm import tqdm
 
 from retrocast.adapters import ADAPTER_MAP, get_adapter
 from retrocast.api import score_predictions
+from retrocast.cli.errors import log_expected_error
 from retrocast.curation.filtering import deduplicate_routes
+from retrocast.exceptions import AdapterError, ChemError, RetroCastException
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.io.data import load_benchmark, load_routes, save_routes
 from retrocast.io.provenance import create_manifest
@@ -197,6 +199,9 @@ def handle_create_benchmark(args: Any) -> None:
 
         logger.info(f"Created manifest at {manifest_path}")
 
+    except RetroCastException as e:
+        log_expected_error(logger, "Failed to create benchmark", e, exc_info=True)
+        sys.exit(1)
     except Exception as e:
         logger.critical(f"Failed to create benchmark: {e}", exc_info=True)
         sys.exit(1)
@@ -239,6 +244,9 @@ def handle_score_file(args: Any) -> None:
         save_json_gz(results, output_path)
         logger.info(f"Scoring complete. Results saved to {output_path}")
 
+    except RetroCastException as e:
+        log_expected_error(logger, "Scoring failed", e, exc_info=True)
+        sys.exit(1)
     except Exception as e:
         logger.critical(f"Scoring failed: {e}", exc_info=True)
         sys.exit(1)
@@ -310,7 +318,7 @@ def handle_adapt(args: Any) -> None:
                     success_count += 1
                 else:
                     processed_routes[target_input.id] = []
-            except Exception as e:
+            except (AdapterError, ChemError) as e:
                 logger.debug(f"Failed to adapt {target_input.id}: {e}")
                 processed_routes[target_input.id] = []
 
@@ -331,6 +339,9 @@ def handle_adapt(args: Any) -> None:
         with open(manifest_path, "w") as f:
             f.write(manifest.model_dump_json(indent=2))
 
+    except RetroCastException as e:
+        log_expected_error(logger, "Adaptation failed", e, exc_info=True)
+        sys.exit(1)
     except Exception as e:
         logger.critical(f"Adaptation failed: {e}", exc_info=True)
         sys.exit(1)

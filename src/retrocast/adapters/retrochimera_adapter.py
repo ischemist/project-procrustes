@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.errors import adapter_schema_error
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
@@ -68,8 +69,7 @@ class RetrochimeraAdapter(BaseAdapter):
         try:
             validated_data = RetrochimeraData.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - raw data for target '{target.id}' failed retrochimera schema validation. error: {e}")
-            return
+            raise adapter_schema_error("retrochimera", target.id, "invalid output") from e
 
         if validated_data.result.error is not None:
             error_msg = validated_data.result.error.get("message", "unknown error")
@@ -80,7 +80,8 @@ class RetrochimeraAdapter(BaseAdapter):
         expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if canonicalize_smiles(validated_data.smiles, ignore_stereo=ignore_stereo) != expected_smiles:
             logger.warning(
-                f"  - mismatched smiles for target '{target.id}': expected {expected_smiles}, got {canonicalize_smiles(validated_data.smiles, ignore_stereo=ignore_stereo)}"
+                f"  - RetroChimera produced mismatched SMILES for target '{target.id}': "
+                f"expected {expected_smiles}, got {canonicalize_smiles(validated_data.smiles, ignore_stereo=ignore_stereo)}"
             )
             return
 
@@ -96,7 +97,7 @@ class RetrochimeraAdapter(BaseAdapter):
                     yield route_obj
                     rank += 1
                 except RetroCastException as e:
-                    logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
+                    logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
                     continue
 
     def _transform(

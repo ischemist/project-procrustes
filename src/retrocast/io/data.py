@@ -5,9 +5,14 @@ import logging
 from pathlib import Path
 from typing import Literal, overload
 
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
-from retrocast.exceptions import RetroCastIOError
+from retrocast.exceptions import (
+    ArtifactDecodeError,
+    ArtifactFormatError,
+    ArtifactNotFoundError,
+    ArtifactWriteError,
+)
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.io.provenance import create_manifest
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
@@ -32,12 +37,19 @@ def save_routes(routes: RoutesDict, path: Path) -> None:
         path: output path (usually .json.gz)
     """
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
 
-    # dump_json returns bytes, so we use "wb"
-    json_bytes = _ROUTES_ADAPTER.dump_json(routes, indent=2)
-    with gzip.open(path, "wb") as f:
-        f.write(json_bytes)
+        # dump_json returns bytes, so we use "wb"
+        json_bytes = _ROUTES_ADAPTER.dump_json(routes, indent=2)
+        with gzip.open(path, "wb") as f:
+            f.write(json_bytes)
+    except (OSError, TypeError, ValueError) as e:
+        raise ArtifactWriteError(
+            f"Failed to save routes to {path}: {e}",
+            code="io.write_failed",
+            context={"path": str(path), "artifact": "routes"},
+        ) from e
     logger.debug(f"Saved {sum(len(r) for r in routes.values())} routes to {path}")
 
 
@@ -50,11 +62,31 @@ def load_routes(path: Path) -> RoutesDict:
     """
     path = Path(path)
     logger.debug(f"Loading routes from {path}...")
+    if not path.exists():
+        raise ArtifactNotFoundError(
+            f"Routes file not found: {path}",
+            code="io.not_found",
+            context={"path": str(path), "artifact": "routes"},
+        )
 
-    with gzip.open(path, "rb") as f:
-        json_bytes = f.read()
+    try:
+        with gzip.open(path, "rb") as f:
+            json_bytes = f.read()
+    except OSError as e:
+        raise ArtifactDecodeError(
+            f"Failed to load routes from {path}: {e}",
+            code="io.decode_failed",
+            context={"path": str(path), "artifact": "routes"},
+        ) from e
 
-    routes = _ROUTES_ADAPTER.validate_json(json_bytes)
+    try:
+        routes = _ROUTES_ADAPTER.validate_json(json_bytes)
+    except ValidationError as e:
+        raise ArtifactFormatError(
+            f"Invalid routes JSON format in {path}: {e}",
+            code="io.invalid_artifact_shape",
+            context={"path": str(path), "artifact": "routes"},
+        ) from e
     logger.debug(f"Loaded {sum(len(r) for r in routes.values())} routes for {len(routes)} targets.")
     return routes
 
@@ -65,7 +97,14 @@ def load_benchmark(path: Path) -> BenchmarkSet:
     """
     logger.info(f"Loading benchmark from {path}...")
     data = load_json_gz(path)
-    benchmark = BenchmarkSet.model_validate(data)
+    try:
+        benchmark = BenchmarkSet.model_validate(data)
+    except ValidationError as e:
+        raise ArtifactFormatError(
+            f"Invalid benchmark JSON format in {path}: {e}",
+            code="io.invalid_artifact_shape",
+            context={"path": str(path), "artifact": "benchmark"},
+        ) from e
     logger.info(f"Loaded benchmark '{benchmark.name}' with {len(benchmark.targets)} targets.")
     return benchmark
 
@@ -78,7 +117,11 @@ def load_raw_paroutes_list(path: Path) -> list[dict]:
     logger.info(f"Loading raw PaRoutes data from {path}...")
     data = load_json_gz(path)
     if not isinstance(data, list):
-        raise ValueError(f"Expected list, got {type(data)}")
+        raise ArtifactFormatError(
+            f"Expected list, got {type(data)}",
+            code="io.invalid_artifact_shape",
+            context={"path": str(path), "expected": "list", "actual": type(data).__name__},
+        )
     return data
 
 
@@ -102,23 +145,28 @@ def load_stock_file(
         Set of InChI keys or SMILES representing available stock molecules
 
     Raises:
-        RetroCastIOError: If file cannot be read, format is invalid, or return_as is invalid
+        RetroCastIOError: If file cannot be read or the artifact format is invalid.
+        ValueError: If return_as is not "inchikey" or "smiles".
     """
     path = Path(path)
 
     if return_as not in ("inchikey", "smiles"):
-        raise RetroCastIOError(f"Invalid return_as parameter: '{return_as}'. Must be 'inchikey' or 'smiles'.")
+        raise ValueError(f"Invalid return_as parameter: '{return_as}'. Must be 'inchikey' or 'smiles'.")
 
     if not path.exists():
-        raise RetroCastIOError(
+        raise ArtifactNotFoundError(
             f"Stock file not found: {path}. "
-            f"Expected .csv.gz format. Run scripts/1-canonicalize-stock.py to generate stock files."
+            f"Expected .csv.gz format. Run scripts/1-canonicalize-stock.py to generate stock files.",
+            code="io.not_found",
+            context={"path": str(path), "artifact": "stock"},
         )
 
     if not path.name.endswith(".csv.gz"):
-        raise RetroCastIOError(
+        raise ArtifactFormatError(
             f"Invalid stock file format: {path}. "
-            f"Only .csv.gz format is supported. Run scripts/1-canonicalize-stock.py to convert."
+            f"Only .csv.gz format is supported. Run scripts/1-canonicalize-stock.py to convert.",
+            code="io.unsupported_format",
+            context={"path": str(path), "expected_suffix": ".csv.gz"},
         )
 
     logger.debug(f"Loading stock from {path}...")
@@ -131,8 +179,10 @@ def load_stock_file(
             # Validate header
             required_col = "InChIKey" if return_as == "inchikey" else "SMILES"
             if reader.fieldnames is None or required_col not in reader.fieldnames:
-                raise RetroCastIOError(
-                    f"Invalid stock CSV format. Expected header with '{required_col}' column. Got: {reader.fieldnames}"
+                raise ArtifactFormatError(
+                    f"Invalid stock CSV format. Expected header with '{required_col}' column. Got: {reader.fieldnames}",
+                    code="io.invalid_artifact_shape",
+                    context={"path": str(path), "required_column": required_col, "columns": reader.fieldnames},
                 )
 
             for row in reader:
@@ -149,7 +199,11 @@ def load_stock_file(
         return molecules
 
     except OSError as e:
-        raise RetroCastIOError(f"Failed to read stock file {path}: {e}") from e
+        raise ArtifactDecodeError(
+            f"Failed to read stock file {path}: {e}",
+            code="io.decode_failed",
+            context={"path": str(path), "artifact": "stock"},
+        ) from e
 
 
 def load_execution_stats(path: Path) -> ExecutionStats:
@@ -158,7 +212,14 @@ def load_execution_stats(path: Path) -> ExecutionStats:
     """
     logger.info(f"Loading execution stats from {path}...")
     data = load_json_gz(path)
-    stats = ExecutionStats.model_validate(data)
+    try:
+        stats = ExecutionStats.model_validate(data)
+    except ValidationError as e:
+        raise ArtifactFormatError(
+            f"Invalid execution stats JSON format in {path}: {e}",
+            code="io.invalid_artifact_shape",
+            context={"path": str(path), "artifact": "execution_stats"},
+        ) from e
     logger.info(
         f"Loaded execution stats with {len(stats.wall_time)} wall_time and {len(stats.cpu_time)} cpu_time entries."
     )
@@ -213,7 +274,6 @@ def save_stock_files(
     """
 
     output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Define output paths (gzipped)
     csv_path = output_dir / f"{stock_name}.csv.gz"
@@ -221,6 +281,14 @@ def save_stock_files(
     manifest_path = output_dir / f"{stock_name}.manifest.json"
 
     logger.info(f"Saving stock files for '{stock_name}'...")
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise ArtifactWriteError(
+            f"Failed to create stock output directory {output_dir}: {e}",
+            code="io.write_failed",
+            context={"path": str(output_dir), "artifact": "stock"},
+        ) from e
 
     # Sort by InChI key for deterministic output
     sorted_items = sorted(stock.items(), key=lambda x: x[0])
@@ -234,7 +302,11 @@ def save_stock_files(
             for inchi_key, smiles in sorted_items:
                 writer.writerow([smiles, inchi_key])
     except OSError as e:
-        raise RetroCastIOError(f"Failed to write CSV file {csv_path}: {e}") from e
+        raise ArtifactWriteError(
+            f"Failed to write CSV file {csv_path}: {e}",
+            code="io.write_failed",
+            context={"path": str(csv_path), "artifact": "stock_csv"},
+        ) from e
 
     # Save TXT (SMILES only, for models that need plain text) - gzipped
     logger.debug(f"Writing TXT to {txt_path}...")
@@ -243,7 +315,11 @@ def save_stock_files(
             for _, smiles in sorted_items:
                 f.write(f"{smiles}\n")
     except OSError as e:
-        raise RetroCastIOError(f"Failed to write TXT file {txt_path}: {e}") from e
+        raise ArtifactWriteError(
+            f"Failed to write TXT file {txt_path}: {e}",
+            code="io.write_failed",
+            context={"path": str(txt_path), "artifact": "stock_txt"},
+        ) from e
 
     # Create manifest
     logger.debug(f"Creating manifest at {manifest_path}...")
@@ -263,8 +339,15 @@ def save_stock_files(
     )
 
     manifest_json = manifest.model_dump(mode="json")
-    with manifest_path.open("w", encoding="utf-8") as f:
-        json.dump(manifest_json, f, indent=2, sort_keys=False)
+    try:
+        with manifest_path.open("w", encoding="utf-8") as f:
+            json.dump(manifest_json, f, indent=2, sort_keys=False)
+    except (OSError, TypeError, ValueError) as e:
+        raise ArtifactWriteError(
+            f"Failed to write stock manifest {manifest_path}: {e}",
+            code="io.write_failed",
+            context={"path": str(manifest_path), "artifact": "stock_manifest"},
+        ) from e
 
     logger.info(f"✓ Saved {len(stock):,} molecules")
     logger.debug(f"  CSV: {csv_path}")

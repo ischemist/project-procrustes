@@ -346,6 +346,16 @@ class RunStatistics(BaseModel):
     final_unique_routes_saved: int = 0
     targets_with_at_least_one_route: set[str] = Field(default_factory=set)
     routes_per_target: dict[str, int] = Field(default_factory=dict)
+    failures_by_code: dict[str, int] = Field(default_factory=dict)
+    failures_by_target: dict[str, dict[str, int]] = Field(default_factory=dict)
+
+    def record_failure(self, code: str, *, target_id: str | None = None) -> None:
+        """Record a workflow-classified target failure."""
+        self.routes_failed_transformation += 1
+        self.failures_by_code[code] = self.failures_by_code.get(code, 0) + 1
+        if target_id is not None:
+            target_failures = self.failures_by_target.setdefault(target_id, {})
+            target_failures[code] = target_failures.get(code, 0) + 1
 
     @property
     def total_failures(self) -> int:
@@ -393,7 +403,7 @@ class RunStatistics(BaseModel):
             return 0.0
         return round(statistics.median(self.routes_per_target.values()), 2)
 
-    def to_manifest_dict(self) -> dict[str, int | float]:
+    def to_manifest_dict(self) -> dict[str, int | float | dict[str, int]]:
         """Generates a dictionary suitable for including in the final manifest."""
         return {
             "total_routes_in_raw_files": self.total_routes_in_raw_files,
@@ -406,4 +416,5 @@ class RunStatistics(BaseModel):
             "max_routes_per_target": self.max_routes_per_target,
             "avg_routes_per_target": self.avg_routes_per_target,
             "median_routes_per_target": self.median_routes_per_target,
+            "failures_by_code": dict(sorted(self.failures_by_code.items())),
         }
