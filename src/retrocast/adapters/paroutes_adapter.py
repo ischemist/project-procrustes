@@ -16,7 +16,7 @@ from retrocast.adapters.errors import (
     adapter_target_mismatch,
 )
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import RetroCastException
+from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -140,10 +140,11 @@ class PaRoutesAdapter(BaseAdapter):
         # --- custom validation: ensure all reactions are from the same patent ---
         patent_ids = self._get_patent_ids(validated_route_root)
         if len(patent_ids) > 1:
-            logger.warning(
-                f"  - skipping route for '{target.id}': contains reactions from multiple patents: {patent_ids}"
+            raise AdapterLogicError(
+                f"PaRoutes route for target '{target.id}' contains reactions from multiple patents",
+                code="adapter.multiple_patents",
+                context={"adapter": "paroutes", "target_id": target.id, "patent_ids": sorted(patent_ids)},
             )
-            return
         elif len(patent_ids) == 1:
             patent_id = list(patent_ids)[0]
             year = self._get_year_from_patent_id(patent_id)
@@ -151,16 +152,13 @@ class PaRoutesAdapter(BaseAdapter):
                 self.year_counts[year] += 1
 
         if not patent_ids:  # skip if no patent id was found
-            return
-
-        try:
-            route = self._transform(
-                validated_route_root, target, patent_id=list(patent_ids)[0], ignore_stereo=ignore_stereo
+            raise AdapterLogicError(
+                f"PaRoutes route for target '{target.id}' does not contain a patent id",
+                code="adapter.patent_id_missing",
+                context={"adapter": "paroutes", "target_id": target.id},
             )
-            yield route
-        except RetroCastException as e:
-            logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
-            return
+
+        yield self._transform(validated_route_root, target, patent_id=list(patent_ids)[0], ignore_stereo=ignore_stereo)
 
     def _transform(
         self, paroutes_root: PaRoutesMoleculeInput, target: TargetIdentity, patent_id: str, ignore_stereo: bool = False

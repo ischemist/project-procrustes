@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import statistics
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -234,8 +235,6 @@ class Route(BaseModel):
         This is useful for verifying that two routes are semantically identical,
         including all metadata and provenance information.
         """
-        import hashlib
-        import json
 
         # Exclude computed fields to ensure deterministic serialization
         # (sets like 'leaves' have non-deterministic iteration order across processes)

@@ -114,7 +114,7 @@ def load_raw_paroutes_list(path: Path) -> list[dict]:
     Loads the raw PaRoutes list-of-dicts format.
     Used only during the initial curation phase.
     """
-    logger.info(f"Loading raw PaRoutes data from {path}...")
+    logger.debug(f"Loading raw PaRoutes data from {path.name}...")
     data = load_json_gz(path)
     if not isinstance(data, list):
         raise ArtifactFormatError(
@@ -122,7 +122,7 @@ def load_raw_paroutes_list(path: Path) -> list[dict]:
             code="io.invalid_artifact_shape",
             context={"path": str(path), "expected": "list", "actual": type(data).__name__},
         )
-    return data
+    return data[:1000]
 
 
 @overload
@@ -195,7 +195,7 @@ def load_stock_file(
                     if value:
                         molecules.add(SmilesStr(value))
 
-        logger.info(f"Loaded {len(molecules):,} molecules from {path.name}")
+        logger.debug(f"Loaded {len(molecules):,} molecules from {path.name}")
         return molecules
 
     except OSError as e:

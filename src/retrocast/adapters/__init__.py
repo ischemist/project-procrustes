@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any
 
 from retrocast.adapters.aizynth_adapter import AizynthAdapter
@@ -13,7 +14,7 @@ from retrocast.adapters.retrostar_adapter import RetroStarAdapter
 from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
-from retrocast.exceptions import AdapterResolutionError
+from retrocast.exceptions import AdapterError, AdapterResolutionError, ChemError, RetroCastException
 from retrocast.models.chem import Route, TargetIdentity
 
 ADAPTER_MAP: dict[str, BaseAdapter] = {
@@ -36,6 +37,12 @@ ADAPTER_MAP: dict[str, BaseAdapter] = {
 TARGET_CENTRIC_ADAPTERS = {"askcos", "retrochimera", "paroutes"}
 
 
+@dataclass(frozen=True)
+class SingleRouteAdaptationResult:
+    route: Route | None
+    error: RetroCastException | None = None
+
+
 def get_adapter(adapter_name: str) -> BaseAdapter:
     """
     Retrieves an adapter instance from the `ADAPTER_MAP`.
@@ -56,6 +63,15 @@ def adapt_single_route(
     adapter_name: str,
 ) -> Route | None:
     """Adapt a single raw route to the unified Route format."""
+    return adapt_single_route_with_diagnostics(raw_route, target, adapter_name).route
+
+
+def adapt_single_route_with_diagnostics(
+    raw_route: Any,
+    target: TargetIdentity,
+    adapter_name: str,
+) -> SingleRouteAdaptationResult:
+    """Adapt a single raw route and return any expected boundary failure."""
     adapter = get_adapter(adapter_name)
 
     if adapter_name in TARGET_CENTRIC_ADAPTERS:
@@ -63,7 +79,10 @@ def adapt_single_route(
     else:
         raw_data = [raw_route] if not isinstance(raw_route, list) else raw_route
 
-    return next(adapter.cast(raw_data, target), None)
+    try:
+        return SingleRouteAdaptationResult(route=next(adapter.cast(raw_data, target), None))
+    except (AdapterError, ChemError) as exc:
+        return SingleRouteAdaptationResult(route=None, error=exc)
 
 
 def adapt_routes(
@@ -107,8 +126,10 @@ def adapt_routes(
 
 __all__ = [
     "adapt_single_route",
+    "adapt_single_route_with_diagnostics",
     "adapt_routes",
     "get_adapter",
+    "SingleRouteAdaptationResult",
     "ADAPTER_MAP",
     "TARGET_CENTRIC_ADAPTERS",
     "BaseAdapter",
