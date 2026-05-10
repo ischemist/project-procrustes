@@ -278,6 +278,19 @@ def build_training_records_from_adapted(
             )
         )
 
+    postprocessing: dict[str, Any] = {
+        "unique_reference_route_signatures": len(heldout_route_signatures),
+        "exact_route_matches_removed": skipped_route_holdout,
+        "duplicate_routes_removed": duplicate_routes,
+    }
+    if config.holdout_mode == "reaction":
+        postprocessing["reaction_overlap"] = {
+            "unique_reference_reaction_signatures": len(heldout_reaction_signatures),
+            "routes_with_overlapping_reactions": reaction_excision_source_routes,
+            "fragments_kept_after_excision": reaction_excision_fragments,
+            "routes_fully_removed_after_excision": fully_removed_by_reaction_excision,
+        }
+
     return TrainingSetBuildResult(
         release_name=config.release_name,
         records=records,
@@ -286,24 +299,12 @@ def build_training_records_from_adapted(
                 "all_routes": all_adaptation.raw_routes,
             },
             "adaptation": {
-                "all": all_adaptation.to_manifest_dict(),
-                "heldout": {
+                "all_routes": all_adaptation.to_manifest_dict(),
+                "reference_datasets": {
                     dataset: stats.to_manifest_dict() for dataset, stats in sorted((heldout_adaptation or {}).items())
                 },
             },
-            "holdout": {
-                "route_signatures": len(heldout_route_signatures),
-                "reaction_signatures": len(heldout_reaction_signatures),
-                "excluded_routes": {"route": skipped_route_holdout},
-                "reaction_excision": {
-                    "source_routes_with_overlap": reaction_excision_source_routes,
-                    "surviving_fragments": reaction_excision_fragments,
-                    "fully_removed_source_routes": fully_removed_by_reaction_excision,
-                },
-            },
-            "deduplication": {
-                "duplicate_routes_removed": duplicate_routes,
-            },
+            "postprocessing": postprocessing,
             "output": summarize_records(records),
         },
     )
@@ -374,6 +375,7 @@ def write_training_release(
 ) -> dict[str, Any]:
     release_dir = output_dir / result.release_name
     release_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("Writing training release to %s", release_dir)
 
     files = {
         "all": release_dir / "all.jsonl.gz",
@@ -386,6 +388,7 @@ def write_training_release(
         "val": [record for record in result.records if record.split == "val"],
     }
     for name, records in grouped_records.items():
+        logger.info("  writing %s (%s records)", files[name].name, f"{len(records):,}")
         save_jsonl_gz((record.to_json_dict() for record in records), files[name])
 
     manifest = build_training_manifest(
@@ -397,6 +400,7 @@ def write_training_release(
         summary=result.summary,
     )
     manifest_path = release_dir / "manifest.json"
+    logger.info("  writing %s", manifest_path.name)
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return manifest
 

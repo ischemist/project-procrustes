@@ -196,3 +196,6 @@ See all available commands in the [CLI Reference](guides/cli.md).
 
 **Explore Benchmarks**  
 Learn about stratified evaluation sets in the [Benchmarks Guide](guides/benchmarks.md).
+
+**From isChemist: Structure precedes quantity.**  
+Essays and software that make better scientific questions possible. Subscribe at [ischemist.com/newsletter](https://ischemist.com/newsletter), or check [service status](https://status.ischemist.com) if hosted RetroCast resources or SynthArena look off.

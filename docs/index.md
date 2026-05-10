@@ -164,3 +164,9 @@ Achieving structural mastery in retrosynthesis is a long journey—one that requ
 ## License
 
 MIT License. See [LICENSE](https://github.com/ischemist/project-procrustes/blob/master/LICENSE) for details.
+
+!!! note "From isChemist: Structure precedes quantity."
+
+    Essays and software that make better scientific questions possible.
+
+    Subscribe at [ischemist.com/newsletter](https://ischemist.com/newsletter), or check [service status](https://status.ischemist.com) if RetroCast docs, data downloads, or SynthArena look off.

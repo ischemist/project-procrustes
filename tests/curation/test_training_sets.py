@@ -93,9 +93,9 @@ class TestTrainingSetSplits:
 
         assert [record.route_signature for record in result.records] == [route.get_signature()]
         assert result.summary["input"]["all_routes"] == 2
-        assert result.summary["adaptation"]["all"]["skipped_routes"] == 3
-        assert result.summary["holdout"]["excluded_routes"]["route"] == 1
-        assert result.summary["adaptation"]["all"]["failures_by_code"] == {"adapter.schema_invalid": 2}
+        assert result.summary["adaptation"]["all_routes"]["skipped_routes"] == 3
+        assert result.summary["postprocessing"]["exact_route_matches_removed"] == 1
+        assert result.summary["adaptation"]["all_routes"]["failures_by_code"] == {"adapter.schema_invalid": 2}
 
     def test_adapt_training_routes_tracks_failures_by_code(self):
         valid_route = {
@@ -211,11 +211,12 @@ class TestTrainingSetSplits:
         record_signatures = {record.route_signature for record in result.records}
         record_targets = {record.route.target.inchikey for record in result.records}
         assert len(result.records) == 2
-        assert result.summary["holdout"]["excluded_routes"]["route"] == 0
-        assert result.summary["holdout"]["reaction_excision"] == {
-            "source_routes_with_overlap": 1,
-            "surviving_fragments": 2,
-            "fully_removed_source_routes": 0,
+        assert result.summary["postprocessing"]["exact_route_matches_removed"] == 0
+        assert result.summary["postprocessing"]["reaction_overlap"] == {
+            "unique_reference_reaction_signatures": 1,
+            "routes_with_overlapping_reactions": 1,
+            "fragments_kept_after_excision": 2,
+            "routes_fully_removed_after_excision": 0,
         }
         assert heldout_route.get_signature() not in record_signatures
         assert full_route.get_signature() not in record_signatures

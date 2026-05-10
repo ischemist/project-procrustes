@@ -25,7 +25,4 @@ Each release folder contains:
 - `all.jsonl.gz`
 - `train.jsonl.gz`
 - `val.jsonl.gz`
-- `buyables/all.jsonl.gz`
-- `buyables/train.jsonl.gz`
-- `buyables/val.jsonl.gz`
 - `manifest.json`
