@@ -66,7 +66,7 @@ def simple_route_with_reactants(draw, min_reactants=2, max_reactants=5):
 
 
 class TestRouteSignatureProperties:
-    """Property-based tests for Route.get_signature()."""
+    """Property-based tests for Route.get_structural_signature()."""
 
     @given(simple_route_with_reactants())
     @settings(max_examples=100)
@@ -74,7 +74,7 @@ class TestRouteSignatureProperties:
     def test_signature_order_invariant(self, route_and_reactants):
         """Test that get_signature is invariant to reactant order (commutative)."""
         route, reactants = route_and_reactants
-        original_signature = route.get_signature()
+        original_signature = route.get_structural_signature()
 
         # Shuffle reactants and rebuild route
         shuffled_reactants = reactants.copy()
@@ -87,7 +87,7 @@ class TestRouteSignatureProperties:
             synthesis_step=shuffled_step,
         )
         shuffled_route = Route(target=shuffled_target, rank=route.rank)
-        shuffled_signature = shuffled_route.get_signature()
+        shuffled_signature = shuffled_route.get_structural_signature()
 
         assert original_signature == shuffled_signature, "Signature should be identical regardless of reactant order"
 
@@ -98,9 +98,9 @@ class TestRouteSignatureProperties:
         """Test that get_signature always returns the same value for same route."""
         route, _ = route_and_reactants
 
-        sig1 = route.get_signature()
-        sig2 = route.get_signature()
-        sig3 = route.get_signature()
+        sig1 = route.get_structural_signature()
+        sig2 = route.get_structural_signature()
+        sig3 = route.get_structural_signature()
 
         assert sig1 == sig2 == sig3, "Signature must be deterministic"
 
@@ -110,7 +110,7 @@ class TestRouteSignatureProperties:
     def test_signature_is_valid_hash(self, route_and_reactants):
         """Test that get_signature returns a valid SHA256 hex string."""
         route, _ = route_and_reactants
-        signature = route.get_signature()
+        signature = route.get_structural_signature()
 
         assert isinstance(signature, str)
         assert len(signature) == 64  # SHA256 produces 64 hex chars
@@ -152,7 +152,7 @@ class TestRouteSignatureProperties:
         )
         route2 = Route(target=target2, rank=1)
 
-        assert route1.get_signature() == route2.get_signature(), (
+        assert route1.get_structural_signature() == route2.get_structural_signature(), (
             "Swapping left/right children should not change signature"
         )
 
@@ -205,9 +205,9 @@ class TestRouteSignatureProperties:
         )
         route3 = Route(target=target3, rank=1)
 
-        sig1 = route1.get_signature()
-        sig2 = route2.get_signature()
-        sig3 = route3.get_signature()
+        sig1 = route1.get_structural_signature()
+        sig2 = route2.get_structural_signature()
+        sig3 = route3.get_structural_signature()
 
         assert sig1 == sig2, "Swapping reactants at intermediate level should not change signature"
         assert sig1 == sig3, "Swapping reactants at top level should not change signature"
@@ -232,7 +232,7 @@ class TestRouteSignatureProperties:
                 synthesis_step=step,
             )
             route = Route(target=target, rank=1)
-            signatures.append(route.get_signature())
+            signatures.append(route.get_structural_signature())
 
         # All 6 permutations should produce the same signature
         assert len(set(signatures)) == 1, (
@@ -272,7 +272,7 @@ class TestRouteContentHashProperties:
         assert route.get_content_hash() != different_rank_route.get_content_hash()
 
         # But tree signature should be the same
-        assert route.get_signature() == different_rank_route.get_signature()
+        assert route.get_structural_signature() == different_rank_route.get_structural_signature()
 
 
 class TestRouteTopologyProperties:
@@ -348,7 +348,7 @@ class TestSyntheticRouteFactory:
             assert isinstance(route, Route)
             assert route.rank == 1
             assert route.target is not None
-            assert isinstance(route.get_signature(), str)
+            assert isinstance(route.get_structural_signature(), str)
 
     @pytest.mark.unit
     def test_factory_linear_invalid_depth_raises(self, synthetic_route_factory):
@@ -375,4 +375,4 @@ class TestSyntheticRouteFactory:
         route2 = synthetic_route_factory("linear", depth=3)
 
         # Same parameters should produce routes with same signature
-        assert route1.get_signature() == route2.get_signature()
+        assert route1.get_structural_signature() == route2.get_structural_signature()

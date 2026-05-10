@@ -41,7 +41,7 @@ def make_route(name: str, depth: int) -> Route:
 def make_adapted_route(name: str, route: Route) -> AdaptedTrainingRoute:
     return AdaptedTrainingRoute(
         route=route,
-        route_signature=route.get_signature(),
+        route_signature=route.get_structural_signature(),
         reaction_signatures=route.get_reaction_signatures(),
         source=RawRouteSource(dataset="all-routes", raw_index=0, raw_route_hash=f"hash-{name}"),
     )
@@ -91,7 +91,7 @@ class TestTrainingSetSplits:
             config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
         )
 
-        assert [record.route_signature for record in result.records] == [route.get_signature()]
+        assert [record.route_signature for record in result.records] == [route.get_structural_signature()]
         assert result.summary["input"]["all_routes"] == 2
         assert result.summary["adaptation"]["all_routes"]["skipped_routes"] == 3
         assert result.summary["postprocessing"]["exact_route_matches_removed"] == 1
@@ -218,8 +218,8 @@ class TestTrainingSetSplits:
             "fragments_kept_after_excision": 2,
             "routes_fully_removed_after_excision": 0,
         }
-        assert heldout_route.get_signature() not in record_signatures
-        assert full_route.get_signature() not in record_signatures
+        assert heldout_route.get_structural_signature() not in record_signatures
+        assert full_route.get_structural_signature() not in record_signatures
         assert record_targets == {"INCHI-d", "INCHI-b"}
 
 

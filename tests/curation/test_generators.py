@@ -432,8 +432,8 @@ class TestGeneratePrunedRoutes:
         result = generate_pruned_routes(route, stock)
 
         # One route should have the same signature as original
-        original_sig = route.get_signature()
-        result_sigs = [r.get_signature() for r in result]
+        original_sig = route.get_structural_signature()
+        result_sigs = [r.get_structural_signature() for r in result]
         assert original_sig in result_sigs
 
 
@@ -516,7 +516,7 @@ class TestGeneratePrunedRoutesProperties:
 
         result = generate_pruned_routes(route, stock)
 
-        signatures = [r.get_signature() for r in result]
+        signatures = [r.get_structural_signature() for r in result]
         # All signatures should be unique (antichain filtering prevents duplicates)
         assert len(signatures) == len(set(signatures))
 
@@ -639,7 +639,7 @@ class TestGeneratePrunedRoutesHypothesis:
 
             result = generate_pruned_routes(route, stock)
 
-            signatures = [r.get_signature() for r in result]
+            signatures = [r.get_structural_signature() for r in result]
             assert len(signatures) == len(set(signatures)), f"Found duplicate signatures in {len(result)} routes"
 
         check_unique_sigs()
@@ -657,8 +657,8 @@ class TestGeneratePrunedRoutesHypothesis:
             result = generate_pruned_routes(route, stock)
 
             # Original signature should be in results
-            original_sig = route.get_signature()
-            result_sigs = [r.get_signature() for r in result]
+            original_sig = route.get_structural_signature()
+            result_sigs = [r.get_structural_signature() for r in result]
 
             assert original_sig in result_sigs, "Original solvable route not included in results"
 

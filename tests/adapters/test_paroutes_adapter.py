@@ -110,6 +110,20 @@ class TestPaRoutesAdapterContract:
 
         check_molecule(routes_ex1[0].target)
 
+    def test_all_reaction_steps_keep_templates_empty_and_metadata_trustworthy(self, routes_ex1):
+        """verify ambiguous paroutes annotations stay in metadata without pretending to be templates."""
+
+        def check_molecule(mol):
+            if mol.synthesis_step is not None:
+                assert mol.synthesis_step.template is None
+                assert "source_id" in mol.synthesis_step.metadata
+                assert "reaction_hash" not in mol.synthesis_step.metadata
+                assert "smiles" not in mol.synthesis_step.metadata
+                for reactant in mol.synthesis_step.reactants:
+                    check_molecule(reactant)
+
+        check_molecule(routes_ex1[0].target)
+
     def test_length_calculation(self, routes_ex1, routes_ex2):
         """verify route length is calculated correctly."""
         # paroutes-ex-1 has 2 reaction steps (length 2)
@@ -196,6 +210,39 @@ class TestPaRoutesAdapterRegression:
             canonicalize_smiles("O=C(O)c1ccncc1Cl"),
         }
         assert reactant_smiles == expected_smiles
+
+    def test_extracts_condition_slot_metadata(self, adapter, raw_paroutes_data):
+        """regression: keep condition-slot metadata while leaving untrustworthy fields out."""
+        target_id = "paroutes-ex-1"
+        raw_route = raw_paroutes_data[target_id]
+        target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
+
+        route = list(adapter.cast(raw_route, target_input))[0]
+        outer_reaction = route.target.synthesis_step
+        assert outer_reaction is not None
+
+        outer_condition_slot = raw_route["children"][0]["metadata"]["rsmi"].split(">")[1]
+        assert outer_reaction.metadata["source_id"] == raw_route["children"][0]["metadata"]["ID"]
+        assert outer_reaction.metadata["ring_breaker"] is False
+        assert outer_reaction.metadata["condition_slot"] == outer_condition_slot
+        assert outer_reaction.metadata["condition_slot_smiles"] == sorted(
+            canonicalize_smiles(token) for token in outer_condition_slot.split(".")
+        )
+        assert "reaction_hash" not in outer_reaction.metadata
+        assert "smiles" not in outer_reaction.metadata
+
+        inner_molecule = next(reactant for reactant in outer_reaction.reactants if not reactant.is_leaf)
+        inner_reaction = inner_molecule.synthesis_step
+        assert inner_reaction is not None
+        inner_condition_slot = raw_route["children"][0]["children"][1]["children"][0]["metadata"]["rsmi"].split(">")[1]
+        assert (
+            inner_reaction.metadata["source_id"]
+            == raw_route["children"][0]["children"][1]["children"][0]["metadata"]["ID"]
+        )
+        assert inner_reaction.metadata["condition_slot"] == inner_condition_slot
+        assert inner_reaction.metadata["condition_slot_smiles"] == sorted(
+            canonicalize_smiles(token) for token in inner_condition_slot.split(".")
+        )
 
 
 class TestPaRoutesYearParsing:

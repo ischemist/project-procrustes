@@ -204,7 +204,7 @@ class TestDeduplicateRoutes:
         route2 = synthetic_route_factory("linear", depth=2)  # Same structure
 
         # They have same signature
-        assert route1.get_signature() == route2.get_signature()
+        assert route1.get_structural_signature() == route2.get_structural_signature()
 
         result = deduplicate_routes([route1, route2])
 
@@ -217,7 +217,7 @@ class TestDeduplicateRoutes:
         route2 = synthetic_route_factory("linear", depth=2)
 
         # Different depths = different signatures
-        assert route1.get_signature() != route2.get_signature()
+        assert route1.get_structural_signature() != route2.get_structural_signature()
 
         result = deduplicate_routes([route1, route2])
 
@@ -245,6 +245,23 @@ class TestDeduplicateRoutes:
         route = synthetic_route_factory("linear", depth=1)
         result = deduplicate_routes([route])
         assert len(result) == 1
+
+    def test_supports_custom_identity_key(self, synthetic_route_factory):
+        """Should let callers define a broader or narrower dedup identity."""
+        route1 = synthetic_route_factory("linear", depth=1)
+        route2 = synthetic_route_factory("convergent", depth=2)
+        route3 = synthetic_route_factory("linear", depth=3)
+
+        result = deduplicate_routes([route1, route2, route3], key=lambda route: route.length)
+
+        assert len(result) == 3
+        assert result == [route1, route2, route3]
+
+        duplicate_depth_result = deduplicate_routes(
+            [route1, synthetic_route_factory("linear", depth=1)],
+            key=lambda route: route.length,
+        )
+        assert duplicate_depth_result == [route1]
 
 
 # =============================================================================

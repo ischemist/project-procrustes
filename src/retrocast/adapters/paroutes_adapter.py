@@ -16,7 +16,7 @@ from retrocast.adapters.errors import (
     adapter_target_mismatch,
 )
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError
+from retrocast.exceptions import AdapterLogicError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -30,6 +30,9 @@ logger = logging.getLogger(__name__)
 class PaRoutesReactionMetadata(BaseModel):
     id: str = Field(..., alias="ID")
     rsmi: str | None = None  # reaction-mapped SMILES
+    smiles: str | None = None  # mapped reactants>>product without the condition slot
+    reaction_hash: str | None = None
+    ring_breaker: bool | None = Field(None, alias="RingBreaker")
 
 
 class PaRoutesBaseNode(BaseModel):
@@ -124,6 +127,67 @@ class PaRoutesAdapter(BaseAdapter):
 
         self.unparsed_categories["unknown_format"] += 1
         return None
+
+    def _extract_condition_slot(self, rsmi: str | None) -> str | None:
+        """extract the raw middle condition slot from a paroutes reaction smiles string."""
+        if not rsmi:
+            return None
+
+        parts = rsmi.split(">")
+        if len(parts) != 3:
+            logger.warning("could not parse condition slot from rsmi with %s sections: %s", len(parts), rsmi)
+            return None
+
+        condition_slot = parts[1].strip()
+        return condition_slot or None
+
+    def _parse_condition_slot_smiles(self, condition_slot: str, *, ignore_stereo: bool) -> list[SmilesStr]:
+        """best-effort canonicalization of molecules listed in the condition slot."""
+        parsed_smiles: list[SmilesStr] = []
+        for token in condition_slot.split("."):
+            token = token.strip()
+            if not token:
+                continue
+            try:
+                parsed_smiles.append(
+                    canonicalize_smiles(
+                        token,
+                        remove_mapping=True,
+                        ignore_stereo=ignore_stereo,
+                    )
+                )
+            except RetroCastException:
+                logger.warning("could not canonicalize condition-slot token: %s", token)
+
+        return sorted(parsed_smiles)
+
+    def _build_reaction_metadata(
+        self,
+        rxn_metadata: PaRoutesReactionMetadata | None,
+        *,
+        ignore_stereo: bool,
+    ) -> dict[str, Any]:
+        """build trustworthy reaction metadata from ambiguous paroutes side information."""
+        if rxn_metadata is None:
+            return {}
+
+        metadata: dict[str, Any] = {
+            "source_id": rxn_metadata.id,
+        }
+        if rxn_metadata.ring_breaker is not None:
+            metadata["ring_breaker"] = rxn_metadata.ring_breaker
+
+        condition_slot = self._extract_condition_slot(rxn_metadata.rsmi)
+        if condition_slot is not None:
+            metadata["condition_slot"] = condition_slot
+            condition_slot_smiles = self._parse_condition_slot_smiles(
+                condition_slot,
+                ignore_stereo=ignore_stereo,
+            )
+            if condition_slot_smiles:
+                metadata["condition_slot_smiles"] = condition_slot_smiles
+
+        return metadata
 
     def cast(
         self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
@@ -244,12 +308,11 @@ class PaRoutesAdapter(BaseAdapter):
         rxn_metadata = raw_reaction_node.metadata
         mapped_smiles_str = rxn_metadata.rsmi if rxn_metadata else None
         mapped_smiles = ReactionSmilesStr(mapped_smiles_str) if mapped_smiles_str else None
-
-        # create the reaction step with full metadata
-        metadata_dict = rxn_metadata.model_dump(by_alias=True) if rxn_metadata else {}
+        metadata_dict = self._build_reaction_metadata(rxn_metadata, ignore_stereo=ignore_stereo)
         synthesis_step = ReactionStep(
             reactants=reactant_molecules,
             mapped_smiles=mapped_smiles,
+            template=None,
             reagents=None,
             solvents=None,
             metadata=metadata_dict,

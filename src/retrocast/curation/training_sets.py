@@ -79,8 +79,8 @@ class TrainingSetBuildConfig:
                 "enabled": self.show_progress,
             },
             "release_rules": {
-                "deduplication_key": "route.get_signature()",
-                "route_holdout": "exclude full n1 union n5 by route.get_signature()",
+                "deduplication_key": "route.get_structural_signature()",
+                "route_holdout": "exclude full n1 union n5 by route.get_structural_signature()",
                 "reaction_holdout": "excise reactions present in n1 union n5 and keep surviving sub-routes",
             },
         }
@@ -162,7 +162,7 @@ def adapt_training_routes(
         adapted_routes.append(
             AdaptedTrainingRoute(
                 route=route,
-                route_signature=route.get_signature(),
+                route_signature=route.get_structural_signature(),
                 reaction_signatures=route.get_reaction_signatures() if collect_reactions else set(),
                 source=RawRouteSource(
                     dataset=dataset,
@@ -208,7 +208,7 @@ def excise_heldout_reactions(
     return [
         AdaptedTrainingRoute(
             route=route,
-            route_signature=route.get_signature(),
+            route_signature=route.get_structural_signature(),
             reaction_signatures=route.get_reaction_signatures(),
             source=adapted_route.source,
         )
