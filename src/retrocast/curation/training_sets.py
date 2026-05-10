@@ -15,10 +15,13 @@ from tqdm.auto import tqdm
 from retrocast.adapters import adapt_single_route_with_diagnostics
 from retrocast.curation.filtering import deduplicate_routes, excise_reactions_from_route
 from retrocast.io import ContentType, create_manifest, save_jsonl_gz
-from retrocast.models.chem import ReactionSignature, Route, TargetInput
+from retrocast.models.chem import Molecule, ReactionSignature, ReactionStep, Route, TargetInput
 
 TrainingHoldoutMode = Literal["route", "reaction"]
 SplitName = Literal["train", "val"]
+ConditionIdentity = tuple[str, ...] | str | None
+TransformDedupStepKey = tuple[str | None, ConditionIdentity]
+TransformDedupKey = tuple[str, tuple[TransformDedupStepKey, ...]]
 T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
@@ -30,6 +33,7 @@ class RawRouteSource:
     dataset: str
     raw_index: int
     raw_route_hash: str
+    patent_id: str | None = None
 
 
 @dataclass
@@ -51,6 +55,7 @@ class TrainingRouteRecord:
                 "dataset": "paroutes-all-routes",
                 "raw_indices": [source.raw_index for source in self.sources],
                 "raw_route_hashes": [source.raw_route_hash for source in self.sources],
+                "patent_ids": [source.patent_id for source in self.sources],
             },
             "route": self.route.model_dump(mode="json"),
         }
@@ -79,9 +84,10 @@ class TrainingSetBuildConfig:
                 "enabled": self.show_progress,
             },
             "release_rules": {
-                "deduplication_key": "route.get_structural_signature()",
                 "route_holdout": "exclude full n1 union n5 by route.get_structural_signature()",
                 "reaction_holdout": "excise reactions present in n1 union n5 and keep surviving sub-routes",
+                "chemical_exact_dedup": "collapse exact route duplicates by route.get_annotated_signature(include_mapped_smiles=True)",
+                "transform_dedup": "collapse mapped-smiles variants by structure + condition identity + raw paroutes reaction_hash sidecar",
             },
         }
 
@@ -96,9 +102,18 @@ class TrainingSetBuildResult:
 @dataclass(frozen=True)
 class AdaptedTrainingRoute:
     route: Route
-    route_signature: str
+    structural_signature: str
     reaction_signatures: set[ReactionSignature]
     source: RawRouteSource
+    transform_ids_by_source_id: dict[str, str]
+
+
+@dataclass
+class PreparedTrainingRoute:
+    route: Route
+    structural_signature: str
+    sources: list[RawRouteSource] = field(default_factory=list)
+    transform_ids_by_source_id: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -122,6 +137,196 @@ class AdaptationStatistics:
 def stable_raw_route_hash(raw_route: dict[str, Any]) -> str:
     payload = json.dumps(raw_route, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def extract_paroutes_transform_ids_by_source_id(raw_route: Mapping[str, Any]) -> dict[str, str]:
+    """Collect raw paroutes reaction_hash values keyed by reaction source id."""
+    transform_ids_by_source_id: dict[str, str] = {}
+
+    def _visit(node: Mapping[str, Any]) -> None:
+        metadata = node.get("metadata")
+        if isinstance(metadata, Mapping):
+            source_id = metadata.get("ID")
+            transform_id = metadata.get("reaction_hash")
+            if isinstance(source_id, str) and isinstance(transform_id, str) and transform_id:
+                transform_ids_by_source_id[source_id] = transform_id
+
+        children = node.get("children")
+        if not isinstance(children, list):
+            return
+
+        for child in children:
+            if isinstance(child, Mapping):
+                _visit(child)
+
+    _visit(raw_route)
+    return transform_ids_by_source_id
+
+
+def iter_route_steps(route: Route) -> list[ReactionStep]:
+    """Return reaction steps in deterministic root-first depth-first order."""
+    steps: list[ReactionStep] = []
+
+    def _visit(node: Molecule) -> None:
+        if node.synthesis_step is None:
+            return
+        steps.append(node.synthesis_step)
+        for reactant in node.synthesis_step.reactants:
+            _visit(reactant)
+
+    _visit(route.target)
+    return steps
+
+
+def get_exact_chemical_signature(route: Route) -> str:
+    """Identity for unquestionably identical chemistry, excluding route provenance."""
+    return route.get_annotated_signature(include_mapped_smiles=True)
+
+
+def get_step_condition_identity(step: ReactionStep) -> ConditionIdentity:
+    """Condition identity used for transform-level deduplication."""
+    condition_slot_smiles = step.metadata.get("condition_slot_smiles")
+    if isinstance(condition_slot_smiles, list) and all(isinstance(value, str) for value in condition_slot_smiles):
+        return tuple(condition_slot_smiles)
+
+    condition_slot = step.metadata.get("condition_slot")
+    if isinstance(condition_slot, str) and condition_slot:
+        return condition_slot
+
+    return None
+
+
+def get_transform_dedup_key(route: Route, *, transform_ids_by_source_id: Mapping[str, str]) -> TransformDedupKey:
+    """Identity for collapsing mapped-smiles drift while preserving condition variants."""
+    step_keys: list[TransformDedupStepKey] = []
+    for step in iter_route_steps(route):
+        source_id = step.metadata.get("source_id")
+        transform_id = transform_ids_by_source_id.get(source_id) if isinstance(source_id, str) else None
+        step_keys.append((transform_id, get_step_condition_identity(step)))
+    return route.get_structural_signature(), tuple(step_keys)
+
+
+def get_mapped_smiles_profile(route: Route) -> tuple[str | None, ...]:
+    """Return the per-step mapped reaction smiles profile for canonical route selection."""
+    return tuple(step.mapped_smiles for step in iter_route_steps(route))
+
+
+def clone_route_for_training_release(route: Route) -> Route:
+    """Clone a route and strip source-specific metadata that should not survive release merges."""
+    cloned_route = route.model_copy(deep=True)
+    cloned_route.metadata = cloned_route.metadata.copy()
+    cloned_route.metadata.pop("patent_id", None)
+    return cloned_route
+
+
+def merge_alternative_mapped_smiles(canonical_route: Route, routes: Sequence[Route]) -> None:
+    """Record non-canonical mapped-smiles variants on the kept route."""
+    canonical_steps = iter_route_steps(canonical_route)
+    route_steps = [iter_route_steps(route) for route in routes]
+    for step_index, canonical_step in enumerate(canonical_steps):
+        variant_smiles: set[str] = set()
+        if canonical_step.mapped_smiles is not None:
+            variant_smiles.add(canonical_step.mapped_smiles)
+
+        existing_alternatives = canonical_step.metadata.get("alternative_mapped_smiles")
+        if isinstance(existing_alternatives, list):
+            variant_smiles.update(value for value in existing_alternatives if isinstance(value, str))
+
+        for steps in route_steps:
+            if len(steps) != len(canonical_steps):
+                raise ValueError("cannot merge mapped smiles for routes with different step counts")
+
+            mapped_smiles = steps[step_index].mapped_smiles
+            if mapped_smiles is not None:
+                variant_smiles.add(mapped_smiles)
+
+            step_alternatives = steps[step_index].metadata.get("alternative_mapped_smiles")
+            if isinstance(step_alternatives, list):
+                variant_smiles.update(value for value in step_alternatives if isinstance(value, str))
+
+        alternatives = sorted(
+            mapped_smiles for mapped_smiles in variant_smiles if mapped_smiles != canonical_step.mapped_smiles
+        )
+        canonical_step.metadata = canonical_step.metadata.copy()
+        if alternatives:
+            canonical_step.metadata["alternative_mapped_smiles"] = alternatives
+        else:
+            canonical_step.metadata.pop("alternative_mapped_smiles", None)
+
+
+def merge_exact_chemical_duplicates(routes: Sequence[AdaptedTrainingRoute]) -> tuple[list[PreparedTrainingRoute], int]:
+    """Collapse exact duplicate chemistry while preserving all raw sources."""
+    routes_by_signature: dict[str, PreparedTrainingRoute] = {}
+    duplicates_removed = 0
+
+    for adapted_route in routes:
+        exact_signature = get_exact_chemical_signature(adapted_route.route)
+        existing_route = routes_by_signature.get(exact_signature)
+        if existing_route is None:
+            routes_by_signature[exact_signature] = PreparedTrainingRoute(
+                route=clone_route_for_training_release(adapted_route.route),
+                structural_signature=adapted_route.structural_signature,
+                sources=[adapted_route.source],
+                transform_ids_by_source_id=dict(adapted_route.transform_ids_by_source_id),
+            )
+            continue
+
+        existing_route.sources.append(adapted_route.source)
+        duplicates_removed += 1
+
+    return list(routes_by_signature.values()), duplicates_removed
+
+
+def merge_transform_equivalent_routes(
+    routes: Sequence[PreparedTrainingRoute],
+) -> tuple[list[PreparedTrainingRoute], int]:
+    """Collapse mapped-smiles variants that share structure, condition identity, and transform ids."""
+    grouped_routes: dict[TransformDedupKey, list[PreparedTrainingRoute]] = defaultdict(list)
+    for route in routes:
+        grouped_routes[
+            get_transform_dedup_key(route.route, transform_ids_by_source_id=route.transform_ids_by_source_id)
+        ].append(route)
+
+    merged_routes: list[PreparedTrainingRoute] = []
+    duplicates_removed = 0
+
+    for group in grouped_routes.values():
+        duplicates_removed += len(group) - 1
+        if len(group) == 1:
+            merged_routes.append(group[0])
+            continue
+
+        profile_weights: dict[tuple[str | None, ...], int] = defaultdict(int)
+        routes_by_profile: dict[tuple[str | None, ...], list[PreparedTrainingRoute]] = defaultdict(list)
+        for route in group:
+            profile = get_mapped_smiles_profile(route.route)
+            profile_weights[profile] += len(route.sources)
+            routes_by_profile[profile].append(route)
+
+        canonical_profile = min(
+            profile_weights,
+            key=lambda profile: (
+                -profile_weights[profile],
+                tuple("" if value is None else value for value in profile),
+            ),
+        )
+        canonical_source = min(
+            routes_by_profile[canonical_profile],
+            key=lambda route: tuple(source.raw_route_hash for source in route.sources),
+        )
+
+        merged_route = clone_route_for_training_release(canonical_source.route)
+        merge_alternative_mapped_smiles(merged_route, [route.route for route in group])
+        merged_routes.append(
+            PreparedTrainingRoute(
+                route=merged_route,
+                structural_signature=canonical_source.structural_signature,
+                sources=[source for route in group for source in route.sources],
+                transform_ids_by_source_id=dict(canonical_source.transform_ids_by_source_id),
+            )
+        )
+
+    return merged_routes, duplicates_removed
 
 
 def progress_iter(items: Sequence[T], desc: str, enabled: bool) -> Iterable[T]:
@@ -159,16 +364,19 @@ def adapt_training_routes(
                 failures_by_code[adaptation.error.code] += 1
             continue
         route = adaptation.route
+        patent_id = route.metadata.get("patent_id") if isinstance(route.metadata.get("patent_id"), str) else None
         adapted_routes.append(
             AdaptedTrainingRoute(
                 route=route,
-                route_signature=route.get_structural_signature(),
+                structural_signature=route.get_structural_signature(),
                 reaction_signatures=route.get_reaction_signatures() if collect_reactions else set(),
                 source=RawRouteSource(
                     dataset=dataset,
                     raw_index=idx,
                     raw_route_hash=stable_raw_route_hash(raw_route),
+                    patent_id=patent_id,
                 ),
+                transform_ids_by_source_id=extract_paroutes_transform_ids_by_source_id(raw_route),
             )
         )
     return adapted_routes, AdaptationStatistics(
@@ -188,7 +396,7 @@ def collect_heldout_signatures(
     reaction_signatures: set[ReactionSignature] = set()
     for routes in routes_by_dataset.values():
         for route in routes:
-            route_signatures.add(route.route_signature)
+            route_signatures.add(route.structural_signature)
             if collect_reactions:
                 reaction_signatures.update(route.reaction_signatures)
     return route_signatures, reaction_signatures
@@ -208,9 +416,10 @@ def excise_heldout_reactions(
     return [
         AdaptedTrainingRoute(
             route=route,
-            route_signature=route.get_structural_signature(),
+            structural_signature=route.get_structural_signature(),
             reaction_signatures=route.get_reaction_signatures(),
             source=adapted_route.source,
+            transform_ids_by_source_id=dict(adapted_route.transform_ids_by_source_id),
         )
         for route in unique_excised_routes
     ], True
@@ -228,60 +437,64 @@ def build_training_records_from_adapted(
         collect_reactions=config.holdout_mode == "reaction",
     )
 
-    routes_by_signature: dict[str, Route] = {}
-    sources_by_signature: dict[str, list[RawRouteSource]] = defaultdict(list)
+    candidate_routes: list[AdaptedTrainingRoute] = []
     skipped_route_holdout = 0
-    duplicate_routes = 0
     reaction_excision_source_routes = 0
     reaction_excision_fragments = 0
     fully_removed_by_reaction_excision = 0
 
     for adapted_route in all_routes:
-        if adapted_route.route_signature in heldout_route_signatures:
+        if adapted_route.structural_signature in heldout_route_signatures:
             skipped_route_holdout += 1
             continue
 
-        candidate_routes = [adapted_route]
+        candidate_routes_for_route = [adapted_route]
         if config.holdout_mode == "reaction":
-            candidate_routes, was_excised = excise_heldout_reactions(adapted_route, heldout_reaction_signatures)
+            candidate_routes_for_route, was_excised = excise_heldout_reactions(
+                adapted_route, heldout_reaction_signatures
+            )
             if was_excised:
                 reaction_excision_source_routes += 1
-                reaction_excision_fragments += len(candidate_routes)
-                if not candidate_routes:
+                reaction_excision_fragments += len(candidate_routes_for_route)
+                if not candidate_routes_for_route:
                     fully_removed_by_reaction_excision += 1
 
-        for candidate_route in candidate_routes:
-            if candidate_route.route_signature in routes_by_signature:
-                duplicate_routes += 1
-            else:
-                routes_by_signature[candidate_route.route_signature] = candidate_route.route
+        candidate_routes.extend(candidate_routes_for_route)
 
-            sources_by_signature[candidate_route.route_signature].append(candidate_route.source)
+    chemically_unique_routes, exact_chemical_duplicates_removed = merge_exact_chemical_duplicates(candidate_routes)
+    deduplicated_routes, mapped_smiles_variants_collapsed = merge_transform_equivalent_routes(chemically_unique_routes)
+
+    prepared_routes_by_key = {
+        f"route-{ordinal:09d}": prepared_route for ordinal, prepared_route in enumerate(deduplicated_routes, start=1)
+    }
 
     split_by_signature = assign_train_val_splits(
-        routes_by_signature,
+        {route_key: prepared_route.route for route_key, prepared_route in prepared_routes_by_key.items()},
         val_fraction=config.val_fraction,
         seed=config.seed,
     )
 
     records: list[TrainingRouteRecord] = []
-    for ordinal, route_signature in enumerate(sorted(routes_by_signature), start=1):
-        route = routes_by_signature[route_signature]
+    for ordinal, route_key in enumerate(sorted(prepared_routes_by_key), start=1):
+        prepared_route = prepared_routes_by_key[route_key]
+        route = prepared_route.route
         records.append(
             TrainingRouteRecord(
                 id=f"{config.route_prefix}-{config.release_name}-{ordinal:06d}",
-                split=split_by_signature[route_signature],
-                route_signature=route_signature,
+                split=split_by_signature[route_key],
+                route_signature=prepared_route.structural_signature,
                 content_hash=route.get_content_hash(),
                 route=route,
-                sources=sources_by_signature[route_signature],
+                sources=prepared_route.sources,
             )
         )
 
     postprocessing: dict[str, Any] = {
         "unique_reference_route_signatures": len(heldout_route_signatures),
         "exact_route_matches_removed": skipped_route_holdout,
-        "duplicate_routes_removed": duplicate_routes,
+        "chemical_duplicates_removed": exact_chemical_duplicates_removed,
+        "mapped_smiles_variants_collapsed": mapped_smiles_variants_collapsed,
+        "duplicate_routes_removed": exact_chemical_duplicates_removed + mapped_smiles_variants_collapsed,
     }
     if config.holdout_mode == "reaction":
         postprocessing["reaction_overlap"] = {

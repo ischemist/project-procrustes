@@ -134,6 +134,11 @@ def main() -> None:
             postprocessing["exact_route_matches_removed"],
             postprocessing["duplicate_routes_removed"],
         )
+        logger.info(
+            "Dedup breakdown: %s exact-chemistry duplicates removed; %s mapped-smiles variants collapsed.",
+            postprocessing["chemical_duplicates_removed"],
+            postprocessing["mapped_smiles_variants_collapsed"],
+        )
         reaction_overlap = postprocessing.get("reaction_overlap")
         if reaction_overlap is not None:
             logger.info(

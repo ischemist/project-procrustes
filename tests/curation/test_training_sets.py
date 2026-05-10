@@ -38,12 +38,50 @@ def make_route(name: str, depth: int) -> Route:
     return Route(target=current, rank=1)
 
 
-def make_adapted_route(name: str, route: Route) -> AdaptedTrainingRoute:
+def make_reaction_route(
+    name: str,
+    *,
+    mapped_smiles: str,
+    source_id: str = "rxn-1",
+    condition_slot_smiles: list[str] | None = None,
+    patent_id: str = "patent-default",
+) -> Route:
+    reactant = make_leaf(f"{name}-leaf")
+    metadata = {"source_id": source_id}
+    if condition_slot_smiles is not None:
+        metadata["condition_slot_smiles"] = condition_slot_smiles
+
+    target = Molecule(
+        smiles=SmilesStr(f"{name}-target"),
+        inchikey=InchiKeyStr(f"INCHI-{name}-target"),
+        synthesis_step=ReactionStep(
+            reactants=[reactant],
+            mapped_smiles=mapped_smiles,
+            metadata=metadata,
+        ),
+    )
+    return Route(target=target, rank=1, metadata={"patent_id": patent_id})
+
+
+def make_adapted_route(
+    name: str,
+    route: Route,
+    *,
+    patent_id: str | None = None,
+    transform_ids_by_source_id: dict[str, str] | None = None,
+) -> AdaptedTrainingRoute:
+    patent_id = patent_id or f"patent-{name}"
     return AdaptedTrainingRoute(
         route=route,
-        route_signature=route.get_structural_signature(),
+        structural_signature=route.get_structural_signature(),
         reaction_signatures=route.get_reaction_signatures(),
-        source=RawRouteSource(dataset="all-routes", raw_index=0, raw_route_hash=f"hash-{name}"),
+        source=RawRouteSource(
+            dataset="all-routes",
+            raw_index=0,
+            raw_route_hash=f"hash-{name}",
+            patent_id=patent_id,
+        ),
+        transform_ids_by_source_id=transform_ids_by_source_id or {},
     )
 
 
@@ -97,6 +135,137 @@ class TestTrainingSetSplits:
         assert result.summary["postprocessing"]["exact_route_matches_removed"] == 1
         assert result.summary["adaptation"]["all_routes"]["failures_by_code"] == {"adapter.schema_invalid": 2}
 
+    def test_build_from_adapted_routes_merges_patent_only_duplicates(self):
+        route_a = make_reaction_route(
+            "dup",
+            mapped_smiles="C.C>O>CC",
+            patent_id="patent-a",
+        )
+        route_b = make_reaction_route(
+            "dup",
+            mapped_smiles="C.C>O>CC",
+            patent_id="patent-b",
+        )
+
+        result = build_training_records_from_adapted(
+            all_routes=[
+                make_adapted_route(
+                    "dup-a", route_a, patent_id="patent-a", transform_ids_by_source_id={"rxn-1": "hash-1"}
+                ),
+                make_adapted_route(
+                    "dup-b", route_b, patent_id="patent-b", transform_ids_by_source_id={"rxn-1": "hash-1"}
+                ),
+            ],
+            all_adaptation=AdaptationStatistics(
+                raw_routes=2,
+                adapted_routes=2,
+                skipped_routes=0,
+                skipped_without_error_code=0,
+                failures_by_code={},
+            ),
+            heldout_routes={},
+            heldout_adaptation={},
+            config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
+        )
+
+        assert len(result.records) == 1
+        assert result.summary["postprocessing"]["chemical_duplicates_removed"] == 1
+        assert result.summary["postprocessing"]["mapped_smiles_variants_collapsed"] == 0
+        assert "patent_id" not in result.records[0].route.metadata
+        assert [source.patent_id for source in result.records[0].sources] == ["patent-a", "patent-b"]
+
+        record_json = result.records[0].to_json_dict()
+        assert record_json["source"]["patent_ids"] == ["patent-a", "patent-b"]
+
+    def test_build_from_adapted_routes_keeps_condition_variants_separate(self):
+        route_a = make_reaction_route(
+            "cond",
+            mapped_smiles="C.C>O>CC",
+            condition_slot_smiles=["O"],
+        )
+        route_b = make_reaction_route(
+            "cond",
+            mapped_smiles="C.C>N>CC",
+            condition_slot_smiles=["N"],
+        )
+
+        result = build_training_records_from_adapted(
+            all_routes=[
+                make_adapted_route("cond-a", route_a, transform_ids_by_source_id={"rxn-1": "hash-1"}),
+                make_adapted_route("cond-b", route_b, transform_ids_by_source_id={"rxn-1": "hash-1"}),
+            ],
+            all_adaptation=AdaptationStatistics(
+                raw_routes=2,
+                adapted_routes=2,
+                skipped_routes=0,
+                skipped_without_error_code=0,
+                failures_by_code={},
+            ),
+            heldout_routes={},
+            heldout_adaptation={},
+            config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
+        )
+
+        assert len(result.records) == 2
+        assert result.summary["postprocessing"]["chemical_duplicates_removed"] == 0
+        assert result.summary["postprocessing"]["mapped_smiles_variants_collapsed"] == 0
+
+    def test_build_from_adapted_routes_collapses_mapped_smiles_variants(self):
+        canonical_route = make_reaction_route(
+            "mapped",
+            mapped_smiles="C.C>O>CC",
+            condition_slot_smiles=["O"],
+            patent_id="patent-a",
+        )
+        duplicate_canonical_route = make_reaction_route(
+            "mapped",
+            mapped_smiles="C.C>O>CC",
+            condition_slot_smiles=["O"],
+            patent_id="patent-b",
+        )
+        variant_route = make_reaction_route(
+            "mapped",
+            mapped_smiles="[CH3:1].[CH3:2]>O>[CH3:1][CH3:2]",
+            condition_slot_smiles=["O"],
+            patent_id="patent-c",
+        )
+
+        result = build_training_records_from_adapted(
+            all_routes=[
+                make_adapted_route(
+                    "mapped-a", canonical_route, patent_id="patent-a", transform_ids_by_source_id={"rxn-1": "hash-1"}
+                ),
+                make_adapted_route(
+                    "mapped-b",
+                    duplicate_canonical_route,
+                    patent_id="patent-b",
+                    transform_ids_by_source_id={"rxn-1": "hash-1"},
+                ),
+                make_adapted_route(
+                    "mapped-c", variant_route, patent_id="patent-c", transform_ids_by_source_id={"rxn-1": "hash-1"}
+                ),
+            ],
+            all_adaptation=AdaptationStatistics(
+                raw_routes=3,
+                adapted_routes=3,
+                skipped_routes=0,
+                skipped_without_error_code=0,
+                failures_by_code={},
+            ),
+            heldout_routes={},
+            heldout_adaptation={},
+            config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
+        )
+
+        assert len(result.records) == 1
+        assert result.summary["postprocessing"]["chemical_duplicates_removed"] == 1
+        assert result.summary["postprocessing"]["mapped_smiles_variants_collapsed"] == 1
+
+        step = result.records[0].route.target.synthesis_step
+        assert step is not None
+        assert step.mapped_smiles == "C.C>O>CC"
+        assert step.metadata["alternative_mapped_smiles"] == ["[CH3:1].[CH3:2]>O>[CH3:1][CH3:2]"]
+
     def test_adapt_training_routes_tracks_failures_by_code(self):
         valid_route = {
             "type": "mol",
@@ -106,7 +275,11 @@ class TestTrainingSetSplits:
                 {
                     "type": "reaction",
                     "smiles": "CCO",
-                    "metadata": {"ID": "US20150051201A1;outer", "rsmi": "CC.O>>CCO"},
+                    "metadata": {
+                        "ID": "US20150051201A1;outer",
+                        "rsmi": "CC.O>>CCO",
+                        "reaction_hash": "outer-hash",
+                    },
                     "children": [
                         {
                             "type": "mol",
@@ -116,7 +289,11 @@ class TestTrainingSetSplits:
                                 {
                                     "type": "reaction",
                                     "smiles": "CC",
-                                    "metadata": {"ID": "US20150051201A1;inner", "rsmi": "C.C>>CC"},
+                                    "metadata": {
+                                        "ID": "US20150051201A1;inner",
+                                        "rsmi": "C.C>>CC",
+                                        "reaction_hash": "inner-hash",
+                                    },
                                     "children": [
                                         {"type": "mol", "smiles": "C", "in_stock": True, "children": []},
                                         {"type": "mol", "smiles": "C", "in_stock": True, "children": []},
@@ -150,6 +327,11 @@ class TestTrainingSetSplits:
         assert stats.failures_by_code == {
             "adapter.multiple_patents": 1,
             "adapter.schema_invalid": 1,
+        }
+        assert adapted_routes[0].source.patent_id == "US20150051201A1"
+        assert adapted_routes[0].transform_ids_by_source_id == {
+            "US20150051201A1;outer": "outer-hash",
+            "US20150051201A1;inner": "inner-hash",
         }
 
     def test_reaction_holdout_excises_overlapping_reactions(self):
