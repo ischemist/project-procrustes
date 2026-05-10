@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from retrocast._version import __version__
 
@@ -10,8 +10,14 @@ from retrocast._version import __version__
 class FileInfo(BaseModel):
     """Metadata for a single file tracked by the manifest."""
 
+    label: str | None = Field(default=None, description="Optional stable name for this tracked file.")
     path: str
-    file_hash: str = Field(..., description="SHA256 hash of the physical file")
+    file_hash: str = Field(
+        ...,
+        description="SHA256 hash of the physical file",
+        validation_alias=AliasChoices("file_hash", "sha256"),
+        serialization_alias="sha256",
+    )
     content_hash: str | None = Field(
         default=None, description="Semantic hash of the content (e.g. order-agnostic route hash)"
     )
@@ -21,6 +27,8 @@ class Manifest(BaseModel):
     """
     Provenance record for any data artifact produced by retrocast.
     """
+
+    model_config = ConfigDict(extra="allow")
 
     schema_version: str = "1.1"
     retrocast_version: str = Field(default_factory=lambda: __version__)
@@ -38,15 +46,23 @@ class Manifest(BaseModel):
             "Common directives: 'adapter', 'planner_version', 'raw_results_filename'"
         ),
     )
+    release_name: str | None = Field(default=None, description="Optional stable release identifier.")
 
     # Inputs
     source_files: list[FileInfo] = Field(default_factory=list)
 
     # Outputs
-    output_files: list[FileInfo] = Field(default_factory=list)
+    output_files: list[FileInfo] | dict[str, FileInfo] = Field(default_factory=list)
 
     # Optional stats (e.g., "n_targets_saved": 600)
     statistics: dict[str, Any] = Field(default_factory=dict)
+    summary: dict[str, Any] = Field(default_factory=dict)
+
+    def iter_output_files(self) -> list[FileInfo]:
+        """Return output files as a flat list regardless of storage shape."""
+        if isinstance(self.output_files, dict):
+            return list(self.output_files.values())
+        return self.output_files
 
 
 VerificationLevel = Literal["PASS", "FAIL", "WARN", "INFO"]

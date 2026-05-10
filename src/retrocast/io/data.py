@@ -122,7 +122,7 @@ def load_raw_paroutes_list(path: Path) -> list[dict]:
             code="io.invalid_artifact_shape",
             context={"path": str(path), "expected": "list", "actual": type(data).__name__},
         )
-    return data[:1000]
+    return data
 
 
 @overload

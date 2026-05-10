@@ -7,27 +7,22 @@ import random
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, TypeVar
 
 from tqdm.auto import tqdm
 
-from retrocast import __version__
 from retrocast.adapters import adapt_single_route_with_diagnostics
-from retrocast.chem import InchiKeyLevel
 from retrocast.curation.filtering import deduplicate_routes, excise_reactions_from_route
-from retrocast.io import save_jsonl_gz
-from retrocast.io.provenance import calculate_file_hash
-from retrocast.metrics.solvability import is_route_solved
+from retrocast.io import ContentType, create_manifest, save_jsonl_gz
 from retrocast.models.chem import ReactionSignature, Route, TargetInput
-from retrocast.typing import InchiKeyStr
 
 TrainingHoldoutMode = Literal["route", "reaction"]
 SplitName = Literal["train", "val"]
 T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
+TRAINING_RELEASE_ACTION = "scripts/paroutes/training-set-prep/create-training-release"
 
 
 @dataclass(frozen=True)
@@ -43,10 +38,6 @@ class TrainingRouteRecord:
     split: SplitName
     route_signature: str
     content_hash: str
-    buyables_solved: bool
-    n_leaves: int
-    n_buyable_leaves: int
-    missing_buyable_leaf_inchikeys: list[str]
     route: Route
     sources: list[RawRouteSource] = field(default_factory=list)
 
@@ -56,10 +47,6 @@ class TrainingRouteRecord:
             "split": self.split,
             "route_signature": self.route_signature,
             "content_hash": self.content_hash,
-            "buyables_solved": self.buyables_solved,
-            "n_leaves": self.n_leaves,
-            "n_buyable_leaves": self.n_buyable_leaves,
-            "missing_buyable_leaf_inchikeys": self.missing_buyable_leaf_inchikeys,
             "source": {
                 "dataset": "paroutes-all-routes",
                 "raw_indices": [source.raw_index for source in self.sources],
@@ -75,19 +62,35 @@ class TrainingSetBuildConfig:
     val_fraction: float = 0.05
     seed: int = 20260502
     route_prefix: str = "paroutes"
-    stock_match_level: InchiKeyLevel = InchiKeyLevel.FULL
     show_progress: bool = True
 
     @property
     def release_name(self) -> str:
         return f"{self.holdout_mode}-heldout-n1-n5"
 
+    def to_manifest_dict(self) -> dict[str, Any]:
+        return {
+            "holdout_mode": self.holdout_mode,
+            "split": {
+                "val_fraction": self.val_fraction,
+                "seed": self.seed,
+            },
+            "progress": {
+                "enabled": self.show_progress,
+            },
+            "release_rules": {
+                "deduplication_key": "route.get_signature()",
+                "route_holdout": "exclude full n1 union n5 by route.get_signature()",
+                "reaction_holdout": "excise reactions present in n1 union n5 and keep surviving sub-routes",
+            },
+        }
+
 
 @dataclass
 class TrainingSetBuildResult:
     release_name: str
     records: list[TrainingRouteRecord]
-    summary: TrainingReleaseSummary
+    summary: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -113,145 +116,6 @@ class AdaptationStatistics:
             "skipped_routes": self.skipped_routes,
             "skipped_without_error_code": self.skipped_without_error_code,
             "failures_by_code": dict(sorted(self.failures_by_code.items())),
-        }
-
-
-@dataclass(frozen=True)
-class ReactionExcisionStatistics:
-    source_routes_with_overlap: int
-    surviving_fragments: int
-    fully_removed_source_routes: int
-
-    def to_manifest_dict(self) -> dict[str, int]:
-        return {
-            "source_routes_with_overlap": self.source_routes_with_overlap,
-            "surviving_fragments": self.surviving_fragments,
-            "fully_removed_source_routes": self.fully_removed_source_routes,
-        }
-
-
-@dataclass(frozen=True)
-class SplitCounts:
-    total: int
-    training_split: int
-    validation_split: int
-
-    def to_manifest_dict(self) -> dict[str, int]:
-        return {
-            "total": self.total,
-            "training_split": self.training_split,
-            "validation_split": self.validation_split,
-        }
-
-
-@dataclass(frozen=True)
-class OutputSummary:
-    all_records: SplitCounts
-    stock_constrained_records: SplitCounts
-
-    def to_manifest_dict(self) -> dict[str, Any]:
-        return {
-            "all_records": self.all_records.to_manifest_dict(),
-            "stock_constrained_records": self.stock_constrained_records.to_manifest_dict(),
-        }
-
-
-@dataclass(frozen=True)
-class HoldoutSummary:
-    route_signatures: int
-    reaction_signatures: int
-    exact_route_matches_excluded: int
-    reaction_excision: ReactionExcisionStatistics
-
-    def to_manifest_dict(self) -> dict[str, Any]:
-        return {
-            "route_signatures": self.route_signatures,
-            "reaction_signatures": self.reaction_signatures,
-            "excluded_routes": {"route": self.exact_route_matches_excluded},
-            "reaction_excision": self.reaction_excision.to_manifest_dict(),
-        }
-
-
-@dataclass(frozen=True)
-class AdaptationSummary:
-    all: AdaptationStatistics
-    heldout: Mapping[str, AdaptationStatistics]
-
-    def to_manifest_dict(self) -> dict[str, Any]:
-        return {
-            "all": self.all.to_manifest_dict(),
-            "heldout": {dataset: stats.to_manifest_dict() for dataset, stats in sorted(self.heldout.items())},
-        }
-
-
-@dataclass(frozen=True)
-class TrainingReleaseSummary:
-    input_all_routes: int
-    adaptation: AdaptationSummary
-    holdout: HoldoutSummary
-    duplicate_routes_removed: int
-    output: OutputSummary
-
-    def to_manifest_dict(self) -> dict[str, Any]:
-        return {
-            "input": {
-                "all_routes": self.input_all_routes,
-            },
-            "adaptation": self.adaptation.to_manifest_dict(),
-            "holdout": self.holdout.to_manifest_dict(),
-            "deduplication": {
-                "duplicate_routes_removed": self.duplicate_routes_removed,
-            },
-            "output": self.output.to_manifest_dict(),
-        }
-
-    def to_log_lines(self) -> list[str]:
-        lines = [
-            (
-                "Output: "
-                f"{self.output.all_records.total} records "
-                f"({self.output.all_records.training_split} train, {self.output.all_records.validation_split} validation); "
-                "stock-constrained: "
-                f"{self.output.stock_constrained_records.total} "
-                f"({self.output.stock_constrained_records.training_split} train, "
-                f"{self.output.stock_constrained_records.validation_split} validation)."
-            ),
-            (
-                "Holdout: "
-                f"{self.holdout.exact_route_matches_excluded} exact route matches excluded; "
-                f"{self.holdout.reaction_excision.source_routes_with_overlap} overlapping routes excised into "
-                f"{self.holdout.reaction_excision.surviving_fragments} surviving fragments "
-                f"({self.holdout.reaction_excision.fully_removed_source_routes} fully removed)."
-            ),
-        ]
-        if self.adaptation.all.failures_by_code:
-            lines.append(f"Adaptation failures by code: {self.adaptation.all.failures_by_code}")
-        return lines
-
-
-@dataclass(frozen=True)
-class TrainingReleaseParameters:
-    holdout_mode: TrainingHoldoutMode
-    val_fraction: float
-    seed: int
-    show_progress: bool
-
-    def to_manifest_dict(self) -> dict[str, Any]:
-        return {
-            "holdout_mode": self.holdout_mode,
-            "split": {
-                "val_fraction": self.val_fraction,
-                "seed": self.seed,
-            },
-            "progress": {
-                "enabled": self.show_progress,
-            },
-            "release_rules": {
-                "deduplication_key": "route.get_signature()",
-                "route_holdout": "exclude full n1 union n5 by route.get_signature()",
-                "reaction_holdout": "excise reactions present in n1 union n5 and keep surviving sub-routes",
-                "buyables_filter": "all route leaves present in buyables-stock by full inchikey",
-            },
         }
 
 
@@ -352,46 +216,11 @@ def excise_heldout_reactions(
     ], True
 
 
-def build_training_records(
-    all_routes: Sequence[dict[str, Any]],
-    heldout_routes: dict[str, Sequence[dict[str, Any]]],
-    buyables_stock: set[InchiKeyStr],
-    config: TrainingSetBuildConfig,
-) -> TrainingSetBuildResult:
-    adapted_all_routes, all_adaptation = adapt_training_routes(
-        all_routes,
-        dataset="all",
-        id_width=6,
-        collect_reactions=config.holdout_mode == "reaction",
-        show_progress=config.show_progress,
-    )
-    adapted_heldout_routes: dict[str, list[AdaptedTrainingRoute]] = {}
-    heldout_adaptation: dict[str, AdaptationStatistics] = {}
-    for dataset, routes in heldout_routes.items():
-        adapted_heldout_routes[dataset], heldout_adaptation[dataset] = adapt_training_routes(
-            routes,
-            dataset=dataset,
-            id_width=5,
-            collect_reactions=config.holdout_mode == "reaction",
-            show_progress=config.show_progress,
-        )
-
-    return build_training_records_from_adapted(
-        all_routes=adapted_all_routes,
-        all_adaptation=all_adaptation,
-        heldout_routes=adapted_heldout_routes,
-        heldout_adaptation=heldout_adaptation,
-        buyables_stock=buyables_stock,
-        config=config,
-    )
-
-
 def build_training_records_from_adapted(
     all_routes: Sequence[AdaptedTrainingRoute],
     all_adaptation: AdaptationStatistics,
     heldout_routes: Mapping[str, Sequence[AdaptedTrainingRoute]],
     heldout_adaptation: Mapping[str, AdaptationStatistics] | None,
-    buyables_stock: set[InchiKeyStr],
     config: TrainingSetBuildConfig,
 ) -> TrainingSetBuildResult:
     heldout_route_signatures, heldout_reaction_signatures = collect_heldout_signatures(
@@ -431,76 +260,68 @@ def build_training_records_from_adapted(
 
     split_by_signature = assign_train_val_splits(
         routes_by_signature,
-        buyables_stock=buyables_stock,
         val_fraction=config.val_fraction,
         seed=config.seed,
-        stock_match_level=config.stock_match_level,
     )
 
     records: list[TrainingRouteRecord] = []
     for ordinal, route_signature in enumerate(sorted(routes_by_signature), start=1):
         route = routes_by_signature[route_signature]
-        leaves = sorted(route.leaves, key=lambda leaf: leaf.inchikey)
-        missing = sorted(leaf.inchikey for leaf in leaves if leaf.inchikey not in buyables_stock)
-        n_buyable_leaves = len(leaves) - len(missing)
         records.append(
             TrainingRouteRecord(
                 id=f"{config.route_prefix}-{config.release_name}-{ordinal:06d}",
                 split=split_by_signature[route_signature],
                 route_signature=route_signature,
                 content_hash=route.get_content_hash(),
-                buyables_solved=is_route_solved(route, buyables_stock, match_level=config.stock_match_level),
-                n_leaves=len(leaves),
-                n_buyable_leaves=n_buyable_leaves,
-                missing_buyable_leaf_inchikeys=missing,
                 route=route,
                 sources=sources_by_signature[route_signature],
             )
         )
 
-    summary = TrainingReleaseSummary(
-        input_all_routes=all_adaptation.raw_routes,
-        adaptation=AdaptationSummary(
-            all=all_adaptation,
-            heldout=heldout_adaptation or {},
-        ),
-        holdout=HoldoutSummary(
-            route_signatures=len(heldout_route_signatures),
-            reaction_signatures=len(heldout_reaction_signatures),
-            exact_route_matches_excluded=skipped_route_holdout,
-            reaction_excision=ReactionExcisionStatistics(
-                source_routes_with_overlap=reaction_excision_source_routes,
-                surviving_fragments=reaction_excision_fragments,
-                fully_removed_source_routes=fully_removed_by_reaction_excision,
-            ),
-        ),
-        duplicate_routes_removed=duplicate_routes,
-        output=summarize_records(records),
-    )
-
     return TrainingSetBuildResult(
         release_name=config.release_name,
         records=records,
-        summary=summary,
+        summary={
+            "input": {
+                "all_routes": all_adaptation.raw_routes,
+            },
+            "adaptation": {
+                "all": all_adaptation.to_manifest_dict(),
+                "heldout": {
+                    dataset: stats.to_manifest_dict() for dataset, stats in sorted((heldout_adaptation or {}).items())
+                },
+            },
+            "holdout": {
+                "route_signatures": len(heldout_route_signatures),
+                "reaction_signatures": len(heldout_reaction_signatures),
+                "excluded_routes": {"route": skipped_route_holdout},
+                "reaction_excision": {
+                    "source_routes_with_overlap": reaction_excision_source_routes,
+                    "surviving_fragments": reaction_excision_fragments,
+                    "fully_removed_source_routes": fully_removed_by_reaction_excision,
+                },
+            },
+            "deduplication": {
+                "duplicate_routes_removed": duplicate_routes,
+            },
+            "output": summarize_records(records),
+        },
     )
 
 
 def assign_train_val_splits(
     routes_by_signature: dict[str, Route],
-    buyables_stock: set[InchiKeyStr],
     val_fraction: float,
     seed: int,
-    stock_match_level: InchiKeyLevel = InchiKeyLevel.FULL,
 ) -> dict[str, SplitName]:
     if not 0 < val_fraction < 1:
         raise ValueError(f"val_fraction must be between 0 and 1, got {val_fraction}")
 
-    groups: dict[tuple[int, bool, bool], list[str]] = defaultdict(list)
+    groups: dict[tuple[int, bool], list[str]] = defaultdict(list)
     for signature, route in routes_by_signature.items():
         key = (
             route.length,
             route.has_convergent_reaction,
-            is_route_solved(route, buyables_stock, match_level=stock_match_level),
         )
         groups[key].append(signature)
 
@@ -523,67 +344,56 @@ def _validation_count(n_items: int, val_fraction: float) -> int:
     return min(n_items - 1, max(1, round(n_items * val_fraction)))
 
 
-def summarize_records(records: Sequence[TrainingRouteRecord]) -> OutputSummary:
+def summarize_records(records: Sequence[TrainingRouteRecord]) -> dict[str, Any]:
     training_records = [record for record in records if record.split == "train"]
     validation_records = [record for record in records if record.split == "val"]
-    stock_constrained_training_records = [record for record in training_records if record.buyables_solved]
-    stock_constrained_validation_records = [record for record in validation_records if record.buyables_solved]
 
-    return OutputSummary(
-        all_records=SplitCounts(
+    return {
+        "all_records": split_counts(
             total=len(records),
-            training_split=len(training_records),
-            validation_split=len(validation_records),
+            train=len(training_records),
+            val=len(validation_records),
         ),
-        stock_constrained_records=SplitCounts(
-            total=len(stock_constrained_training_records) + len(stock_constrained_validation_records),
-            training_split=len(stock_constrained_training_records),
-            validation_split=len(stock_constrained_validation_records),
-        ),
-    )
+    }
+
+
+def split_counts(total: int, train: int, val: int) -> dict[str, int]:
+    return {
+        "total": total,
+        "training_split": train,
+        "validation_split": val,
+    }
 
 
 def write_training_release(
     result: TrainingSetBuildResult,
     output_dir: Path,
     source_paths: Sequence[Path],
-    parameters: TrainingReleaseParameters,
+    config: TrainingSetBuildConfig,
     source_root: Path | None = None,
 ) -> dict[str, Any]:
     release_dir = output_dir / result.release_name
-    buyables_dir = release_dir / "buyables"
     release_dir.mkdir(parents=True, exist_ok=True)
-    buyables_dir.mkdir(parents=True, exist_ok=True)
 
     files = {
         "all": release_dir / "all.jsonl.gz",
         "train": release_dir / "train.jsonl.gz",
         "val": release_dir / "val.jsonl.gz",
-        "buyables_all": buyables_dir / "all.jsonl.gz",
-        "buyables_train": buyables_dir / "train.jsonl.gz",
-        "buyables_val": buyables_dir / "val.jsonl.gz",
     }
-
-    write_jsonl_gz(result.records, files["all"])
-    write_jsonl_gz((record for record in result.records if record.split == "train"), files["train"])
-    write_jsonl_gz((record for record in result.records if record.split == "val"), files["val"])
-    write_jsonl_gz((record for record in result.records if record.buyables_solved), files["buyables_all"])
-    write_jsonl_gz(
-        (record for record in result.records if record.buyables_solved and record.split == "train"),
-        files["buyables_train"],
-    )
-    write_jsonl_gz(
-        (record for record in result.records if record.buyables_solved and record.split == "val"),
-        files["buyables_val"],
-    )
+    grouped_records = {
+        "all": result.records,
+        "train": [record for record in result.records if record.split == "train"],
+        "val": [record for record in result.records if record.split == "val"],
+    }
+    for name, records in grouped_records.items():
+        save_jsonl_gz((record.to_json_dict() for record in records), files[name])
 
     manifest = build_training_manifest(
         release_name=result.release_name,
         files=files,
         source_paths=source_paths,
         source_root=source_root,
-        output_root=release_dir,
-        parameters=parameters,
+        config=config,
         summary=result.summary,
     )
     manifest_path = release_dir / "manifest.json"
@@ -591,41 +401,23 @@ def write_training_release(
     return manifest
 
 
-def write_jsonl_gz(records: Iterable[TrainingRouteRecord], path: Path) -> int:
-    return save_jsonl_gz((record.to_json_dict() for record in records), path)
-
-
 def build_training_manifest(
     release_name: str,
     files: dict[str, Path],
     source_paths: Sequence[Path],
     source_root: Path | None,
-    output_root: Path,
-    parameters: TrainingReleaseParameters,
-    summary: TrainingReleaseSummary,
+    config: TrainingSetBuildConfig,
+    summary: Mapping[str, Any],
 ) -> dict[str, Any]:
-    def _format_path(path: Path, root: Path | None) -> str:
-        if root is None:
-            return str(path)
-        try:
-            return str(path.resolve().relative_to(root.resolve()))
-        except ValueError:
-            return str(path)
-
-    return {
-        "retrocast_version": __version__,
-        "created_at": datetime.now(UTC).isoformat(),
-        "action": "scripts/paroutes/training-set-prep/create-training-release",
-        "release_name": release_name,
-        "parameters": parameters.to_manifest_dict(),
-        "summary": summary.to_manifest_dict(),
-        "source_files": [
-            {"path": _format_path(path, source_root), "sha256": calculate_file_hash(path)}
-            for path in source_paths
-            if path.exists()
-        ],
-        "output_files": {
-            name: {"path": _format_path(path, output_root), "sha256": calculate_file_hash(path)}
-            for name, path in sorted(files.items())
-        },
-    }
+    root_dir = source_root if source_root is not None else Path.cwd()
+    manifest = create_manifest(
+        action=TRAINING_RELEASE_ACTION,
+        sources=list(source_paths),
+        outputs=[(name, path, None, ContentType.UNKNOWN) for name, path in sorted(files.items())],
+        root_dir=root_dir,
+        parameters=config.to_manifest_dict(),
+        summary=dict(summary),
+        release_name=release_name,
+        keyed_output_files=True,
+    )
+    return manifest.model_dump(mode="json", by_alias=True, exclude_none=True)

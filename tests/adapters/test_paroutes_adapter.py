@@ -4,6 +4,7 @@ import pytest
 
 from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
 from retrocast.chem import canonicalize_smiles
+from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
@@ -37,6 +38,12 @@ class TestPaRoutesAdapterUnit(BaseAdapterTest):
     @pytest.fixture
     def mismatched_target_input(self, raw_paroutes_data):
         return TargetInput(id="paroutes-ex-1", smiles="CCO")  # clearly not the same molecule
+
+    def test_adapt_handles_mismatched_smiles(self, adapter_instance, raw_valid_route_data, mismatched_target_input):
+        """tests that a smiles mismatch raises a typed adapter error."""
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter_instance.cast(raw_valid_route_data, mismatched_target_input))
+        assert exc_info.value.code == "adapter.target_mismatch"
 
 
 @pytest.mark.integration
@@ -160,10 +167,9 @@ class TestPaRoutesAdapterRegression:
         inner_reaction = raw_route["children"][0]["children"][1]["children"][0]
         inner_reaction["metadata"]["ID"] = "SOME-OTHER-PATENT;1234;56789"
 
-        # the adapter should now see two different patent ids and yield nothing.
-        routes = list(adapter.cast(raw_route, target_input))
-
-        assert len(routes) == 0
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter.cast(raw_route, target_input))
+        assert exc_info.value.code == "adapter.multiple_patents"
 
     def test_adapt_second_example_route(self, adapter, raw_paroutes_data):
         """
@@ -297,9 +303,9 @@ class TestPaRoutesAdapterCycleDetection:
 
         target_input = TargetInput(id="cycle-test-1", smiles=canonicalize_smiles(smiles_a))
 
-        # Should raise AdapterLogicError due to cycle
-        routes = list(adapter.cast(raw_route_with_cycle, target_input))
-        assert len(routes) == 0  # Cycle should cause transformation to fail
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter.cast(raw_route_with_cycle, target_input))
+        assert exc_info.value.code == "adapter.cycle_detected"
 
     def test_self_loop_cycle_detection(self, adapter):
         """
@@ -335,9 +341,9 @@ class TestPaRoutesAdapterCycleDetection:
 
         target_input = TargetInput(id="self-loop-test", smiles=canonicalize_smiles(smiles_a))
 
-        # Should raise AdapterLogicError due to self-loop
-        routes = list(adapter.cast(raw_route_with_self_loop, target_input))
-        assert len(routes) == 0
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter.cast(raw_route_with_self_loop, target_input))
+        assert exc_info.value.code == "adapter.cycle_detected"
 
     def test_deep_cycle_detection_a_to_b_to_c_to_b(self, adapter):
         """
@@ -407,9 +413,9 @@ class TestPaRoutesAdapterCycleDetection:
 
         target_input = TargetInput(id="deep-cycle-test", smiles=canonicalize_smiles(smiles_a))
 
-        # Should raise AdapterLogicError due to deep cycle
-        routes = list(adapter.cast(raw_route_with_deep_cycle, target_input))
-        assert len(routes) == 0
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter.cast(raw_route_with_deep_cycle, target_input))
+        assert exc_info.value.code == "adapter.cycle_detected"
 
     def test_valid_acyclic_route_no_false_positives(self, adapter, raw_paroutes_data):
         """

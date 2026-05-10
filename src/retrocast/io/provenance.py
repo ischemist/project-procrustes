@@ -4,7 +4,7 @@ import logging
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias, cast
 
 from retrocast import __version__
 from retrocast.models.benchmark import BenchmarkSet
@@ -40,6 +40,9 @@ class ContentType(StrEnum):
 
 
 ContentTypeHint = Literal["benchmark", "predictions", "stock", "unknown"]
+UnlabeledManifestOutput: TypeAlias = tuple[Path, Any, ContentType | ContentTypeHint]
+LabeledManifestOutput: TypeAlias = tuple[str, Path, Any, ContentType | ContentTypeHint]
+ManifestOutput: TypeAlias = UnlabeledManifestOutput | LabeledManifestOutput
 
 
 def calculate_file_hash(path: Path) -> str:
@@ -158,14 +161,28 @@ def _calculate_stock_content_hash(stock: dict[str, str]) -> str:
     return hashlib.sha256(combined.encode()).hexdigest()
 
 
+def _normalize_manifest_output(
+    output: ManifestOutput,
+) -> tuple[str | None, Path, Any, ContentType | ContentTypeHint]:
+    if len(output) == 3:
+        path, obj, content_type = cast(UnlabeledManifestOutput, output)
+        return None, path, obj, content_type
+
+    label, path, obj, content_type = cast(LabeledManifestOutput, output)
+    return label, path, obj, content_type
+
+
 def create_manifest(
     action: str,
     sources: list[Path],
-    outputs: list[tuple[Path, Any, ContentType | ContentTypeHint]],
+    outputs: list[ManifestOutput],
     root_dir: Path,
     parameters: dict[str, Any] | None = None,
     statistics: dict[str, Any] | None = None,
     directives: dict[str, Any] | None = None,
+    summary: dict[str, Any] | None = None,
+    release_name: str | None = None,
+    keyed_output_files: bool = False,
 ) -> Manifest:
     """
     Generates a Manifest object with explicit content type specification.
@@ -178,6 +195,9 @@ def create_manifest(
         parameters: Action parameters to record
         statistics: Action statistics to record
         directives: Directives for retrocast data consumption (e.g., adapter, raw_results_filename)
+        summary: Optional richer action-specific summary payload
+        release_name: Optional stable release identifier
+        keyed_output_files: Store outputs as a dict keyed by label instead of a flat list
 
     Returns:
         Manifest object with file hashes and content hashes
@@ -206,8 +226,9 @@ def create_manifest(
         else:
             logger.debug(f"Manifest source path not found on disk: {p}")
 
-    output_infos = []
-    for path, obj, content_type in outputs:
+    output_infos: list[FileInfo] = []
+    for output in outputs:
+        label, path, obj, content_type = _normalize_manifest_output(output)
         f_hash = "file-not-written"
         if path.exists():
             f_hash = calculate_file_hash(path)
@@ -222,7 +243,17 @@ def create_manifest(
 
         c_hash = hash_fn(obj) if content_type != ContentType.UNKNOWN else None
 
-        output_infos.append(FileInfo(path=_get_relative_path(path), file_hash=f_hash, content_hash=c_hash))
+        output_infos.append(FileInfo(label=label, path=_get_relative_path(path), file_hash=f_hash, content_hash=c_hash))
+
+    manifest_outputs: list[FileInfo] | dict[str, FileInfo]
+    if keyed_output_files:
+        manifest_outputs = {}
+        for file_info in output_infos:
+            if file_info.label is None:
+                raise ValueError("keyed_output_files=True requires every output to include a label")
+            manifest_outputs[file_info.label] = file_info
+    else:
+        manifest_outputs = output_infos
 
     return Manifest(
         retrocast_version=__version__,
@@ -230,7 +261,9 @@ def create_manifest(
         action=action,
         parameters=parameters or {},
         directives=directives or {},
+        release_name=release_name,
         source_files=source_infos,
-        output_files=output_infos,
+        output_files=manifest_outputs,
         statistics=statistics or {},
+        summary=summary or {},
     )
