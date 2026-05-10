@@ -1,0 +1,106 @@
+{
+  "action": "scripts/paroutes/training-set-prep/create-training-release",
+  "created_at": "2026-05-10T03:03:02.047649Z",
+  "directives": {},
+  "output_files": {
+    "all": {
+      "label": "all",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-10/reaction-heldout-n1-n5/all.jsonl.gz",
+      "sha256": "07c5106439a178a88a506210fe1f18d3a4bf5a774dc4e04139ee3b3dc4d90dc6"
+    },
+    "train": {
+      "label": "train",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-10/reaction-heldout-n1-n5/train.jsonl.gz",
+      "sha256": "33e1d7219411dc87ebc4b84df29e4d091e86438dbc16a07f0ce0e95abc35b90e"
+    },
+    "val": {
+      "label": "val",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-10/reaction-heldout-n1-n5/val.jsonl.gz",
+      "sha256": "31a81666c3e3e93a389ad82ba16cfffc0f603197a24c8e470630814a8485d6c6"
+    }
+  },
+  "parameters": {
+    "holdout_mode": "reaction",
+    "progress": {
+      "enabled": true
+    },
+    "release_rules": {
+      "deduplication_key": "route.get_signature()",
+      "reaction_holdout": "excise reactions present in n1 union n5 and keep surviving sub-routes",
+      "route_holdout": "exclude full n1 union n5 by route.get_signature()"
+    },
+    "split": {
+      "seed": 20260502,
+      "val_fraction": 0.05
+    }
+  },
+  "release_name": "reaction-heldout-n1-n5",
+  "retrocast_version": "0.5.4.dev4",
+  "schema_version": "1.1",
+  "source_files": [
+    {
+      "path": "data/retrocast/0-assets/paroutes/all-routes.json.gz",
+      "sha256": "d504e5964af1b09632d4048f6ab81d626babc5d344dff1be00ece312716f2405"
+    },
+    {
+      "path": "data/retrocast/0-assets/paroutes/n1-routes.json.gz",
+      "sha256": "49d7e209328b7cf7edc09ca827b0a21938d520a6b1d2dc0a46a65c6f392c2c89"
+    },
+    {
+      "path": "data/retrocast/0-assets/paroutes/n5-routes.json.gz",
+      "sha256": "5333b4aeb4e65a2c50e42a8f3a3701c75d76c8045280ec6cc460fbb3ebd605ad"
+    }
+  ],
+  "statistics": {},
+  "summary": {
+    "adaptation": {
+      "all_routes": {
+        "adapted_routes": 457157,
+        "failures_by_code": {
+          "adapter.cycle_detected": 3,
+          "chem.invalid_smiles": 6
+        },
+        "raw_routes": 457166,
+        "skipped_routes": 9,
+        "skipped_without_error_code": 0
+      },
+      "reference_datasets": {
+        "n1": {
+          "adapted_routes": 10000,
+          "failures_by_code": {},
+          "raw_routes": 10000,
+          "skipped_routes": 0,
+          "skipped_without_error_code": 0
+        },
+        "n5": {
+          "adapted_routes": 10000,
+          "failures_by_code": {},
+          "raw_routes": 10000,
+          "skipped_routes": 0,
+          "skipped_without_error_code": 0
+        }
+      }
+    },
+    "input": {
+      "all_routes": 457166
+    },
+    "output": {
+      "all_records": {
+        "total": 160281,
+        "training_split": 152262,
+        "validation_split": 8019
+      }
+    },
+    "postprocessing": {
+      "duplicate_routes_removed": 244625,
+      "exact_route_matches_removed": 50026,
+      "reaction_overlap": {
+        "fragments_kept_after_excision": 101379,
+        "routes_fully_removed_after_excision": 3840,
+        "routes_with_overlapping_reactions": 103604,
+        "unique_reference_reaction_signatures": 56657
+      },
+      "unique_reference_route_signatures": 17871
+    }
+  }
+}
