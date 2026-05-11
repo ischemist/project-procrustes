@@ -15,6 +15,7 @@ from retrocast.io import (
     load_stock_file,
     load_training_reaction_records,
     load_training_reaction_smiles,
+    load_training_route_records,
     load_training_routes,
 )
 from retrocast.metrics.bootstrap import compute_metric_with_ci
@@ -30,6 +31,7 @@ __all__ = [
     "load_benchmark",
     "load_routes",
     "load_stock_file",
+    "load_training_route_records",
     "load_training_reaction_records",
     "load_training_reaction_smiles",
     "load_training_routes",

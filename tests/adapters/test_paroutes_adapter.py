@@ -244,6 +244,30 @@ class TestPaRoutesAdapterRegression:
             canonicalize_smiles(token) for token in inner_condition_slot.split(".")
         )
 
+    def test_invalid_condition_slot_tokens_are_counted_without_warning(self, adapter, raw_paroutes_data, caplog):
+        """invalid middle-slot molecules should not spam route-level warnings during best-effort parsing."""
+        target_id = "paroutes-ex-1"
+        raw_route = deepcopy(raw_paroutes_data[target_id])
+        adapter.reset_condition_slot_parse_statistics()
+        raw_route["children"][0]["metadata"]["rsmi"] = (
+            "CC(C)CC1=C(CC(C)C)[AlH3]1>CC(C)CC1=C(CC(C)C)[AlH3]1>CC(C)CC1=C(CC(C)C)[AlH3]1"
+        )
+        target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
+
+        with caplog.at_level("WARNING"):
+            route = list(adapter.cast(raw_route, target_input))[0]
+
+        step = route.target.synthesis_step
+        assert step is not None
+        assert step.metadata["condition_slot"] == "CC(C)CC1=C(CC(C)C)[AlH3]1"
+        assert "condition_slot_smiles" not in step.metadata
+        assert "could not canonicalize condition-slot token" not in caplog.text
+
+        stats = adapter.get_condition_slot_parse_statistics()
+        assert stats["malformed_rsmi_count"] == 0
+        assert stats["uncanonicalizable_token_count"] == 1
+        assert stats["top_uncanonicalizable_tokens"] == [("CC(C)CC1=C(CC(C)C)[AlH3]1", 1)]
+
 
 class TestPaRoutesYearParsing:
     @pytest.mark.parametrize(

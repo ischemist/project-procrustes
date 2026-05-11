@@ -8,13 +8,14 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, TypeVar
+from typing import Any, Literal, TypeVar, cast
 
 from pydantic import BaseModel
 from pydantic import Field as PydanticField
 from tqdm.auto import tqdm
 
-from retrocast.adapters import adapt_single_route_with_diagnostics
+from retrocast.adapters import adapt_single_route_with_diagnostics, get_adapter
+from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
 from retrocast.curation.filtering import deduplicate_routes, excise_reactions_from_route
 from retrocast.io import ContentType, create_manifest, save_jsonl_gz, save_lines_gz
 from retrocast.models.chem import Molecule, ReactionSignature, ReactionStep, Route, TargetInput
@@ -56,13 +57,73 @@ class TrainingRouteRecord:
             "route_signature": self.route_signature,
             "content_hash": self.content_hash,
             "source": {
-                "dataset": "paroutes-all-routes",
+                "dataset": self.sources[0].dataset if self.sources else "unknown",
                 "raw_indices": [source.raw_index for source in self.sources],
                 "raw_route_hashes": [source.raw_route_hash for source in self.sources],
                 "patent_ids": [source.patent_id for source in self.sources],
             },
             "route": self.route.model_dump(mode="json"),
         }
+
+    @classmethod
+    def from_json_dict(cls, payload: Mapping[str, Any]) -> TrainingRouteRecord:
+        source_payload = payload.get("source")
+        if not isinstance(source_payload, Mapping):
+            raise ValueError("training route record is missing source metadata")
+
+        dataset = source_payload.get("dataset")
+        raw_indices = source_payload.get("raw_indices")
+        raw_route_hashes = source_payload.get("raw_route_hashes")
+        patent_ids = source_payload.get("patent_ids")
+        route_payload = payload.get("route")
+        split = payload.get("split")
+        record_id = payload.get("id")
+        route_signature = payload.get("route_signature")
+        content_hash = payload.get("content_hash")
+
+        if not isinstance(dataset, str):
+            raise ValueError("training route record source dataset must be a string")
+        if split not in ("training", "validation"):
+            raise ValueError("training route record split must be 'training' or 'validation'")
+        if not isinstance(record_id, str):
+            raise ValueError("training route record id must be a string")
+        if not isinstance(route_signature, str):
+            raise ValueError("training route record route_signature must be a string")
+        if not isinstance(content_hash, str):
+            raise ValueError("training route record content_hash must be a string")
+        if not isinstance(raw_indices, list) or not all(isinstance(value, int) for value in raw_indices):
+            raise ValueError("training route record raw_indices must be a list of ints")
+        if not isinstance(raw_route_hashes, list) or not all(isinstance(value, str) for value in raw_route_hashes):
+            raise ValueError("training route record raw_route_hashes must be a list of strings")
+        if not isinstance(patent_ids, list) or not all(value is None or isinstance(value, str) for value in patent_ids):
+            raise ValueError("training route record patent_ids must be a list of strings or nulls")
+        if len(raw_indices) != len(raw_route_hashes) or len(raw_indices) != len(patent_ids):
+            raise ValueError("training route record source arrays must have equal lengths")
+        if not isinstance(route_payload, Mapping):
+            raise ValueError("training route record is missing route payload")
+
+        typed_raw_indices = cast(list[int], raw_indices)
+        typed_raw_route_hashes = cast(list[str], raw_route_hashes)
+        typed_patent_ids = cast(list[str | None], patent_ids)
+
+        return cls(
+            id=record_id,
+            split=split,
+            route_signature=route_signature,
+            content_hash=content_hash,
+            route=Route.model_validate(route_payload),
+            sources=[
+                RawRouteSource(
+                    dataset=dataset,
+                    raw_index=raw_index,
+                    raw_route_hash=raw_route_hash,
+                    patent_id=patent_id,
+                )
+                for raw_index, raw_route_hash, patent_id in zip(
+                    typed_raw_indices, typed_raw_route_hashes, typed_patent_ids, strict=True
+                )
+            ],
+        )
 
 
 @dataclass(frozen=True)
@@ -172,21 +233,39 @@ class TrainingReactionBuildResult:
 
 
 @dataclass(frozen=True)
+class NonFatalConditionSlotParseStatistics:
+    malformed_rsmi_count: int = 0
+    uncanonicalizable_token_count: int = 0
+    distinct_uncanonicalizable_token_count: int = 0
+
+    def to_manifest_dict(self) -> dict[str, Any]:
+        return {
+            "malformed_rsmi_count": self.malformed_rsmi_count,
+            "uncanonicalizable_token_count": self.uncanonicalizable_token_count,
+            "distinct_uncanonicalizable_token_count": self.distinct_uncanonicalizable_token_count,
+        }
+
+
+@dataclass(frozen=True)
 class AdaptationStatistics:
     raw_routes: int
     adapted_routes: int
     skipped_routes: int
     skipped_without_error_code: int
     failures_by_code: dict[str, int]
+    non_fatal_condition_slot_parse: NonFatalConditionSlotParseStatistics | None = None
 
     def to_manifest_dict(self) -> dict[str, Any]:
-        return {
+        manifest_dict = {
             "raw_routes": self.raw_routes,
             "adapted_routes": self.adapted_routes,
             "skipped_routes": self.skipped_routes,
             "skipped_without_error_code": self.skipped_without_error_code,
             "failures_by_code": dict(sorted(self.failures_by_code.items())),
         }
+        if self.non_fatal_condition_slot_parse is not None:
+            manifest_dict["non_fatal_condition_slot_parse"] = self.non_fatal_condition_slot_parse.to_manifest_dict()
+        return manifest_dict
 
 
 def stable_raw_route_hash(raw_route: dict[str, Any]) -> str:
@@ -301,11 +380,26 @@ def get_mapped_smiles_profile(route: Route) -> tuple[str | None, ...]:
     return tuple(step.mapped_smiles for step in iter_route_steps(route))
 
 
+def get_source_patent_ids(sources: Sequence[RawRouteSource]) -> list[str]:
+    """Return deterministic unique patent ids aggregated from merged route provenance."""
+    return sorted({source.patent_id for source in sources if source.patent_id is not None})
+
+
+def sync_route_source_metadata(route: Route, sources: Sequence[RawRouteSource]) -> None:
+    """Keep released route metadata honest after provenance-preserving merges."""
+    route.metadata = route.metadata.copy()
+    route.metadata.pop("patent_id", None)
+
+    source_patent_ids = get_source_patent_ids(sources)
+    if source_patent_ids:
+        route.metadata["source_patent_ids"] = source_patent_ids
+    else:
+        route.metadata.pop("source_patent_ids", None)
+
+
 def clone_route_for_training_release(route: Route) -> Route:
-    """Clone a route and strip source-specific metadata that should not survive release merges."""
+    """Clone a route before release-specific provenance metadata is synchronized."""
     cloned_route = route.model_copy(deep=True)
-    cloned_route.metadata = cloned_route.metadata.copy()
-    cloned_route.metadata.pop("patent_id", None)
     return cloned_route
 
 
@@ -353,8 +447,10 @@ def merge_exact_chemical_duplicates(routes: Sequence[AdaptedTrainingRoute]) -> t
         exact_signature = get_exact_chemical_signature(adapted_route.route)
         existing_route = routes_by_signature.get(exact_signature)
         if existing_route is None:
+            cloned_route = clone_route_for_training_release(adapted_route.route)
+            sync_route_source_metadata(cloned_route, [adapted_route.source])
             routes_by_signature[exact_signature] = PreparedTrainingRoute(
-                route=clone_route_for_training_release(adapted_route.route),
+                route=cloned_route,
                 structural_signature=adapted_route.structural_signature,
                 sources=[adapted_route.source],
                 transform_ids_by_source_id=dict(adapted_route.transform_ids_by_source_id),
@@ -362,6 +458,7 @@ def merge_exact_chemical_duplicates(routes: Sequence[AdaptedTrainingRoute]) -> t
             continue
 
         existing_route.sources.append(adapted_route.source)
+        sync_route_source_metadata(existing_route.route, existing_route.sources)
         duplicates_removed += 1
 
     return list(routes_by_signature.values()), duplicates_removed
@@ -407,11 +504,13 @@ def merge_transform_equivalent_routes(
 
         merged_route = clone_route_for_training_release(canonical_source.route)
         merge_alternative_mapped_smiles(merged_route, [route.route for route in group])
+        merged_sources = [source for route in group for source in route.sources]
+        sync_route_source_metadata(merged_route, merged_sources)
         merged_routes.append(
             PreparedTrainingRoute(
                 route=merged_route,
                 structural_signature=canonical_source.structural_signature,
-                sources=[source for route in group for source in route.sources],
+                sources=merged_sources,
                 transform_ids_by_source_id=dict(canonical_source.transform_ids_by_source_id),
             )
         )
@@ -594,6 +693,50 @@ def flatten_prepared_routes_to_reactions(
     return flattened_reactions
 
 
+def flatten_training_route_records_to_reactions(
+    route_records: Sequence[TrainingRouteRecord],
+) -> list[PreparedTrainingReaction]:
+    """Convert released route records into flat reaction candidates while preserving route lineage."""
+    flattened_reactions: list[PreparedTrainingReaction] = []
+
+    for route_record in route_records:
+        for step_index, (product, step) in enumerate(iter_route_reactions(route_record.route), start=1):
+            if step.mapped_smiles is None:
+                raise ValueError(
+                    f"single-step release requires mapped_smiles; missing on route {route_record.id} step {step_index}"
+                )
+
+            condition_slot = step.metadata.get("condition_slot")
+            condition_slot_str = condition_slot if isinstance(condition_slot, str) and condition_slot else None
+            alternative_mapped_smiles = step.metadata.get("alternative_mapped_smiles")
+            source = TrainingReactionSource(
+                route_id=route_record.id,
+                step_index=step_index,
+                source_id=step.metadata.get("source_id") if isinstance(step.metadata.get("source_id"), str) else None,
+                dataset=route_record.sources[0].dataset if route_record.sources else "unknown",
+                raw_route_indices=[source.raw_index for source in route_record.sources],
+                raw_route_hashes=[source.raw_route_hash for source in route_record.sources],
+                patent_ids=[source.patent_id for source in route_record.sources],
+            )
+            flattened_reactions.append(
+                PreparedTrainingReaction(
+                    reactants=tuple(sorted(reactant.smiles for reactant in step.reactants)),
+                    product=product.smiles,
+                    mapped_smiles=step.mapped_smiles,
+                    alternative_mapped_smiles=sorted(
+                        mapped_smiles
+                        for mapped_smiles in (alternative_mapped_smiles or [])
+                        if isinstance(mapped_smiles, str)
+                    ),
+                    condition_slot=condition_slot_str,
+                    condition_slot_smiles=get_step_condition_slot_smiles(step),
+                    sources=[source],
+                )
+            )
+
+    return flattened_reactions
+
+
 def merge_exact_reaction_duplicates(
     reactions: Sequence[PreparedTrainingReaction],
 ) -> tuple[list[PreparedTrainingReaction], int]:
@@ -724,6 +867,116 @@ def summarize_reaction_records(records: Sequence[TrainingReactionRecord]) -> dic
     }
 
 
+def summarize_split_preserving_reaction_overlap(
+    *,
+    training_reactions: Sequence[PreparedTrainingReaction],
+    validation_reactions: Sequence[PreparedTrainingReaction],
+) -> dict[str, int]:
+    training_exact_signatures = {get_exact_reaction_signature(reaction) for reaction in training_reactions}
+    validation_exact_signatures = {get_exact_reaction_signature(reaction) for reaction in validation_reactions}
+    training_dedup_keys = {get_transform_reaction_dedup_key(reaction) for reaction in training_reactions}
+    validation_dedup_keys = {get_transform_reaction_dedup_key(reaction) for reaction in validation_reactions}
+    shared_dedup_keys = training_dedup_keys & validation_dedup_keys
+
+    return {
+        "shared_exact_reaction_signatures": len(training_exact_signatures & validation_exact_signatures),
+        "shared_reaction_identities": len(shared_dedup_keys),
+        "training_records_with_shared_identity": sum(
+            1 for reaction in training_reactions if get_transform_reaction_dedup_key(reaction) in shared_dedup_keys
+        ),
+        "validation_records_with_shared_identity": sum(
+            1 for reaction in validation_reactions if get_transform_reaction_dedup_key(reaction) in shared_dedup_keys
+        ),
+    }
+
+
+def build_training_reaction_records_from_route_records(
+    route_records: Sequence[TrainingRouteRecord],
+    config: TrainingSetBuildConfig,
+) -> TrainingReactionBuildResult:
+    if config.holdout_mode != "reaction":
+        raise ValueError("single-step training release requires TrainingSetBuildConfig(holdout_mode='reaction')")
+
+    route_records_by_split: dict[SplitName, list[TrainingRouteRecord]] = {
+        "training": [],
+        "validation": [],
+    }
+    for route_record in route_records:
+        route_records_by_split[route_record.split].append(route_record)
+
+    split_reactions: dict[SplitName, list[PreparedTrainingReaction]] = {}
+    split_postprocessing: dict[SplitName, dict[str, int]] = {}
+    for split in ("training", "validation"):
+        flattened_reactions = flatten_training_route_records_to_reactions(route_records_by_split[split])
+        chemically_unique_reactions, exact_chemical_duplicates_removed = merge_exact_reaction_duplicates(
+            flattened_reactions
+        )
+        deduplicated_reactions, mapped_smiles_variants_collapsed = merge_transform_equivalent_reactions(
+            chemically_unique_reactions
+        )
+        split_reactions[split] = deduplicated_reactions
+        split_postprocessing[split] = {
+            "input_routes": len(route_records_by_split[split]),
+            "flattened_reactions": len(flattened_reactions),
+            "chemical_duplicates_removed": exact_chemical_duplicates_removed,
+            "mapped_smiles_variants_collapsed": mapped_smiles_variants_collapsed,
+            "duplicate_reactions_removed": exact_chemical_duplicates_removed + mapped_smiles_variants_collapsed,
+        }
+
+    records: list[TrainingReactionRecord] = []
+    for split in ("training", "validation"):
+        for reaction in split_reactions[split]:
+            records.append(
+                TrainingReactionRecord(
+                    id="",
+                    split=split,
+                    reactants=list(reaction.reactants),
+                    product=reaction.product,
+                    mapped_smiles=reaction.mapped_smiles,
+                    alternative_mapped_smiles=list(reaction.alternative_mapped_smiles),
+                    condition_slot=reaction.condition_slot,
+                    condition_slot_smiles=list(reaction.condition_slot_smiles),
+                    sources=list(reaction.sources),
+                )
+            )
+
+    for ordinal, record in enumerate(records, start=1):
+        record.id = get_training_reaction_record_id(config, ordinal)
+
+    overlap = summarize_split_preserving_reaction_overlap(
+        training_reactions=split_reactions["training"],
+        validation_reactions=split_reactions["validation"],
+    )
+    summary = {
+        "input": {
+            "route_records": split_counts(
+                total=len(route_records),
+                training=len(route_records_by_split["training"]),
+                validation=len(route_records_by_split["validation"]),
+            )
+        },
+        "reaction_postprocessing": {
+            "training": split_postprocessing["training"],
+            "validation": split_postprocessing["validation"],
+            "cross_split_overlap": overlap,
+            "dedup_contract": {
+                "exact_duplicates": "collapse identical mapped_smiles + condition identity within each split",
+                "mapping_drift": (
+                    "collapse reactants + product + condition identity within each split; "
+                    "paroutes transform ids are unavailable in the released route artifact"
+                ),
+            },
+        },
+        "output": summarize_reaction_records(records),
+    }
+
+    return TrainingReactionBuildResult(
+        release_name=get_training_reaction_release_name(config),
+        records=records,
+        summary=summary,
+    )
+
+
 def build_training_reaction_records_from_adapted(
     all_routes: Sequence[AdaptedTrainingRoute],
     all_adaptation: AdaptationStatistics,
@@ -808,6 +1061,10 @@ def adapt_training_routes(
     collect_reactions: bool,
     show_progress: bool = True,
 ) -> tuple[list[AdaptedTrainingRoute], AdaptationStatistics]:
+    adapter = get_adapter("paroutes")
+    if isinstance(adapter, PaRoutesAdapter):
+        adapter.reset_condition_slot_parse_statistics()
+
     adapted_routes: list[AdaptedTrainingRoute] = []
     failures_by_code: dict[str, int] = defaultdict(int)
     skipped_adaptation = 0
@@ -845,12 +1102,40 @@ def adapt_training_routes(
                 transform_ids_by_source_id=extract_paroutes_transform_ids_by_source_id(raw_route),
             )
         )
+    non_fatal_condition_slot_parse: NonFatalConditionSlotParseStatistics | None = None
+    if isinstance(adapter, PaRoutesAdapter):
+        condition_slot_stats = adapter.get_condition_slot_parse_statistics()
+        malformed_rsmi_count = condition_slot_stats["malformed_rsmi_count"]
+        uncanonicalizable_token_count = condition_slot_stats["uncanonicalizable_token_count"]
+        distinct_uncanonicalizable_token_count = condition_slot_stats["distinct_uncanonicalizable_token_count"]
+        non_fatal_condition_slot_parse = NonFatalConditionSlotParseStatistics(
+            malformed_rsmi_count=malformed_rsmi_count,
+            uncanonicalizable_token_count=uncanonicalizable_token_count,
+            distinct_uncanonicalizable_token_count=distinct_uncanonicalizable_token_count,
+        )
+        if malformed_rsmi_count or uncanonicalizable_token_count:
+            logger.info(
+                "PaRoutes condition-slot parsing for %s skipped %s malformed rsmi slots and %s "
+                "uncanonicalizable tokens during best-effort metadata extraction. this is non-fatal "
+                "and does not affect adapted route counts.",
+                dataset,
+                malformed_rsmi_count,
+                uncanonicalizable_token_count,
+            )
+            top_examples = condition_slot_stats["top_uncanonicalizable_tokens"]
+            if top_examples:
+                logger.info(
+                    "  top uncanonicalizable condition-slot tokens for %s: %s",
+                    dataset,
+                    {token: count for token, count in top_examples},
+                )
     return adapted_routes, AdaptationStatistics(
         raw_routes=len(raw_routes),
         adapted_routes=len(adapted_routes),
         skipped_routes=skipped_adaptation,
         skipped_without_error_code=skipped_without_error_code,
         failures_by_code=dict(failures_by_code),
+        non_fatal_condition_slot_parse=non_fatal_condition_slot_parse,
     )
 
 

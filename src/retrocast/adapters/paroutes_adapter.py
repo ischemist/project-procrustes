@@ -68,6 +68,28 @@ class PaRoutesAdapter(BaseAdapter):
         """initialize the adapter with a stats counter."""
         self.year_counts: dict[str, int] = defaultdict(int)
         self.unparsed_categories: dict[str, int] = defaultdict(int)
+        self.condition_slot_rsmi_parse_failures = 0
+        self.condition_slot_token_parse_failures = 0
+        self.condition_slot_token_parse_failure_examples: dict[str, int] = defaultdict(int)
+
+    def reset_condition_slot_parse_statistics(self) -> None:
+        """reset best-effort condition-slot parsing statistics for one adaptation run."""
+        self.condition_slot_rsmi_parse_failures = 0
+        self.condition_slot_token_parse_failures = 0
+        self.condition_slot_token_parse_failure_examples.clear()
+
+    def get_condition_slot_parse_statistics(self) -> dict[str, Any]:
+        """return aggregate best-effort condition-slot parsing statistics."""
+        top_examples = sorted(
+            self.condition_slot_token_parse_failure_examples.items(),
+            key=lambda item: (-item[1], item[0]),
+        )[:5]
+        return {
+            "malformed_rsmi_count": self.condition_slot_rsmi_parse_failures,
+            "uncanonicalizable_token_count": self.condition_slot_token_parse_failures,
+            "distinct_uncanonicalizable_token_count": len(self.condition_slot_token_parse_failure_examples),
+            "top_uncanonicalizable_tokens": top_examples,
+        }
 
     def _get_patent_ids(self, node: PaRoutesMoleculeInput, visited: set[str] | None = None) -> set[str]:
         """
@@ -135,7 +157,7 @@ class PaRoutesAdapter(BaseAdapter):
 
         parts = rsmi.split(">")
         if len(parts) != 3:
-            logger.warning("could not parse condition slot from rsmi with %s sections: %s", len(parts), rsmi)
+            self.condition_slot_rsmi_parse_failures += 1
             return None
 
         condition_slot = parts[1].strip()
@@ -157,7 +179,8 @@ class PaRoutesAdapter(BaseAdapter):
                     )
                 )
             except RetroCastException:
-                logger.warning("could not canonicalize condition-slot token: %s", token)
+                self.condition_slot_token_parse_failures += 1
+                self.condition_slot_token_parse_failure_examples[token] += 1
 
         return sorted(parsed_smiles)
 

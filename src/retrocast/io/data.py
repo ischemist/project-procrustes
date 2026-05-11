@@ -26,7 +26,7 @@ from retrocast.typing import InchiKeyStr, SmilesStr
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from retrocast.curation.training_sets import TrainingReactionRecord
+    from retrocast.curation.training_sets import TrainingReactionRecord, TrainingRouteRecord
 
 # Pre-define the adapter for performance and reuse
 RoutesDict = dict[str, list[Route]]
@@ -128,6 +128,21 @@ def load_raw_paroutes_list(path: Path) -> list[dict]:
             context={"path": str(path), "expected": "list", "actual": type(data).__name__},
         )
     return data
+
+
+def load_training_route_records(path: Path) -> list[TrainingRouteRecord]:
+    """Load structured route training records from a JSONL artifact."""
+    from retrocast.curation.training_sets import TrainingRouteRecord
+
+    rows = load_jsonl_gz(path)
+    try:
+        return [TrainingRouteRecord.from_json_dict(row) for row in rows]
+    except (KeyError, TypeError, ValueError, ValidationError) as e:
+        raise ArtifactFormatError(
+            f"Invalid training route JSONL format in {path}: {e}",
+            code="io.invalid_artifact_shape",
+            context={"path": str(path), "artifact": "training_route_records"},
+        ) from e
 
 
 def load_training_routes(path: Path) -> list[Route]:

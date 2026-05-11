@@ -31,8 +31,10 @@ Each route release folder contains:
 - `validation.jsonl.gz`
 - `manifest.json`
 
-`02-create-single-step-release.py` writes the flat reaction release derived from the
-`reaction-heldout` route-prep flow.
+`02-create-single-step-release.py` writes the flat reaction release by loading the
+released `reaction-heldout-n1-n5` route artifact, preserving the route
+`training`/`validation` split, deduplicating within each split, and reporting
+cross-split reaction overlap.
 
 The single-step release folder contains:
 

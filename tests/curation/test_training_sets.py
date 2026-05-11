@@ -9,12 +9,15 @@ from retrocast.curation.training_sets import (
     TRAINING_RELEASE_ACTION,
     AdaptationStatistics,
     AdaptedTrainingRoute,
+    NonFatalConditionSlotParseStatistics,
     RawRouteSource,
+    TrainingRouteRecord,
     TrainingSetBuildConfig,
     adapt_training_routes,
     assign_train_val_splits,
     build_training_manifest,
     build_training_reaction_records_from_adapted,
+    build_training_reaction_records_from_route_records,
     build_training_records_from_adapted,
     summarize_records,
 )
@@ -87,6 +90,24 @@ def make_adapted_route(
     )
 
 
+def make_route_record(name: str, route: Route, *, split: str, patent_id: str | None = None) -> TrainingRouteRecord:
+    return TrainingRouteRecord(
+        id=f"route-{name}",
+        split=split,
+        route_signature=route.get_structural_signature(),
+        content_hash=route.get_content_hash(),
+        route=route,
+        sources=[
+            RawRouteSource(
+                dataset="all-routes",
+                raw_index=0,
+                raw_route_hash=f"hash-{name}",
+                patent_id=patent_id or f"patent-{name}",
+            )
+        ],
+    )
+
+
 @pytest.mark.unit
 class TestTrainingSetSplits:
     def test_assign_train_val_splits_is_deterministic_and_stratified(self):
@@ -117,6 +138,11 @@ class TestTrainingSetSplits:
                 skipped_routes=3,
                 skipped_without_error_code=1,
                 failures_by_code={"adapter.schema_invalid": 2},
+                non_fatal_condition_slot_parse=NonFatalConditionSlotParseStatistics(
+                    malformed_rsmi_count=4,
+                    uncanonicalizable_token_count=7,
+                    distinct_uncanonicalizable_token_count=1,
+                ),
             ),
             heldout_routes={"n1": [make_adapted_route("heldout", heldout)]},
             heldout_adaptation={
@@ -136,6 +162,11 @@ class TestTrainingSetSplits:
         assert result.summary["adaptation"]["all_routes"]["skipped_routes"] == 3
         assert result.summary["postprocessing"]["exact_route_matches_removed"] == 1
         assert result.summary["adaptation"]["all_routes"]["failures_by_code"] == {"adapter.schema_invalid": 2}
+        assert result.summary["adaptation"]["all_routes"]["non_fatal_condition_slot_parse"] == {
+            "malformed_rsmi_count": 4,
+            "uncanonicalizable_token_count": 7,
+            "distinct_uncanonicalizable_token_count": 1,
+        }
 
     def test_build_from_adapted_routes_merges_patent_only_duplicates(self):
         route_a = make_reaction_route(
@@ -174,6 +205,7 @@ class TestTrainingSetSplits:
         assert result.summary["postprocessing"]["chemical_duplicates_removed"] == 1
         assert result.summary["postprocessing"]["mapped_smiles_variants_collapsed"] == 0
         assert "patent_id" not in result.records[0].route.metadata
+        assert result.records[0].route.metadata["source_patent_ids"] == ["patent-a", "patent-b"]
         assert [source.patent_id for source in result.records[0].sources] == ["patent-a", "patent-b"]
 
         record_json = result.records[0].to_json_dict()
@@ -265,6 +297,7 @@ class TestTrainingSetSplits:
 
         step = result.records[0].route.target.synthesis_step
         assert step is not None
+        assert result.records[0].route.metadata["source_patent_ids"] == ["patent-a", "patent-b", "patent-c"]
         assert step.mapped_smiles == "C.C>O>CC"
         assert step.metadata["alternative_mapped_smiles"] == ["[CH3:1].[CH3:2]>O>[CH3:1][CH3:2]"]
 
@@ -378,6 +411,38 @@ class TestTrainingSetSplits:
                 config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
             )
 
+    def test_build_training_reaction_records_from_route_records_preserves_split_and_reports_overlap(self):
+        training_route = make_reaction_route(
+            "shared",
+            mapped_smiles="C.C>O>CC",
+            condition_slot_smiles=["O"],
+            patent_id="patent-training",
+        )
+        validation_route = make_reaction_route(
+            "shared",
+            mapped_smiles="[CH3:1].[CH3:2]>O>[CH3:1][CH3:2]",
+            condition_slot_smiles=["O"],
+            patent_id="patent-validation",
+        )
+
+        result = build_training_reaction_records_from_route_records(
+            [
+                make_route_record("training", training_route, split="training", patent_id="patent-training"),
+                make_route_record("validation", validation_route, split="validation", patent_id="patent-validation"),
+            ],
+            config=TrainingSetBuildConfig(holdout_mode="reaction", show_progress=False),
+        )
+
+        assert [record.split for record in result.records] == ["training", "validation"]
+        assert result.summary["reaction_postprocessing"]["training"]["flattened_reactions"] == 1
+        assert result.summary["reaction_postprocessing"]["validation"]["flattened_reactions"] == 1
+        assert result.summary["reaction_postprocessing"]["cross_split_overlap"] == {
+            "shared_exact_reaction_signatures": 0,
+            "shared_reaction_identities": 1,
+            "training_records_with_shared_identity": 1,
+            "validation_records_with_shared_identity": 1,
+        }
+
     def test_adapt_training_routes_tracks_failures_by_code(self):
         valid_route = {
             "type": "mol",
@@ -440,10 +505,63 @@ class TestTrainingSetSplits:
             "adapter.multiple_patents": 1,
             "adapter.schema_invalid": 1,
         }
+        assert stats.non_fatal_condition_slot_parse is not None
+        assert stats.non_fatal_condition_slot_parse.malformed_rsmi_count == 0
+        assert stats.non_fatal_condition_slot_parse.uncanonicalizable_token_count == 0
+        assert stats.non_fatal_condition_slot_parse.distinct_uncanonicalizable_token_count == 0
         assert adapted_routes[0].source.patent_id == "US20150051201A1"
         assert adapted_routes[0].transform_ids_by_source_id == {
             "US20150051201A1;outer": "outer-hash",
             "US20150051201A1;inner": "inner-hash",
+        }
+
+    def test_adapt_training_routes_aggregates_condition_slot_parse_noise(self, caplog):
+        noisy_route = {
+            "type": "mol",
+            "smiles": "CCO",
+            "in_stock": False,
+            "children": [
+                {
+                    "type": "reaction",
+                    "smiles": "CCO",
+                    "metadata": {
+                        "ID": "US20150051201A1;outer",
+                        "rsmi": "CC.O>CC(C)CC1=C(CC(C)C)[AlH3]1>CCO",
+                        "reaction_hash": "outer-hash",
+                    },
+                    "children": [
+                        {"type": "mol", "smiles": "CC", "in_stock": True, "children": []},
+                        {"type": "mol", "smiles": "O", "in_stock": True, "children": []},
+                    ],
+                }
+            ],
+        }
+
+        with caplog.at_level("INFO"):
+            adapted_routes, stats = adapt_training_routes(
+                [noisy_route],
+                dataset="all",
+                id_width=6,
+                collect_reactions=False,
+                show_progress=False,
+            )
+
+        assert len(adapted_routes) == 1
+        assert stats.adapted_routes == 1
+        assert stats.non_fatal_condition_slot_parse is not None
+        assert stats.non_fatal_condition_slot_parse.malformed_rsmi_count == 0
+        assert stats.non_fatal_condition_slot_parse.uncanonicalizable_token_count == 1
+        assert stats.non_fatal_condition_slot_parse.distinct_uncanonicalizable_token_count == 1
+        assert "could not canonicalize condition-slot token" not in caplog.text
+        assert (
+            "PaRoutes condition-slot parsing for all skipped 0 malformed rsmi slots and 1 uncanonicalizable tokens"
+        ) in caplog.text
+
+        manifest_dict = stats.to_manifest_dict()
+        assert manifest_dict["non_fatal_condition_slot_parse"] == {
+            "malformed_rsmi_count": 0,
+            "uncanonicalizable_token_count": 1,
+            "distinct_uncanonicalizable_token_count": 1,
         }
 
     def test_reaction_holdout_excises_overlapping_reactions(self):

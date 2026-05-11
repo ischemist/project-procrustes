@@ -27,6 +27,9 @@ nav = [
     "guides/benchmarks.md",
     "guides/workflows.md"
   ] },
+  { "Design" = [
+    "design/training-set-releases.md"
+  ] },
   { "Developers" = ["developers/adapters.md"] }
 ]
 # With the "extra_css" option you can add your own CSS styling to customize

@@ -17,7 +17,12 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from retrocast.curation.training_sets import TrainingReactionRecord, TrainingReactionSource
+from retrocast.curation.training_sets import (
+    RawRouteSource,
+    TrainingReactionRecord,
+    TrainingReactionSource,
+    TrainingRouteRecord,
+)
 from retrocast.exceptions import RetroCastIOError
 from retrocast.io.blob import load_json_gz, load_jsonl_gz, load_lines_gz, save_json_gz, save_jsonl_gz, save_lines_gz
 from retrocast.io.data import (
@@ -27,6 +32,7 @@ from retrocast.io.data import (
     load_stock_file,
     load_training_reaction_records,
     load_training_reaction_smiles,
+    load_training_route_records,
     load_training_routes,
     save_routes,
 )
@@ -87,6 +93,31 @@ class TestBlobWriters:
 
 @pytest.mark.unit
 class TestTrainingReleaseLoaders:
+    def test_load_training_route_records_returns_structured_records(self, tmp_path, synthetic_route_factory):
+        route = synthetic_route_factory("linear", depth=1)
+        record = TrainingRouteRecord(
+            id="paroutes-reaction-heldout-n1-n5-000001",
+            split="training",
+            route_signature=route.get_structural_signature(),
+            content_hash=route.get_content_hash(),
+            route=route,
+            sources=[
+                RawRouteSource(
+                    dataset="all-routes",
+                    raw_index=1,
+                    raw_route_hash="hash-1",
+                    patent_id="patent-1",
+                )
+            ],
+        )
+        path = tmp_path / "training.jsonl.gz"
+
+        save_jsonl_gz([record.to_json_dict()], path)
+
+        loaded = load_training_route_records(path)
+
+        assert loaded == [record]
+
     def test_load_training_routes_returns_route_objects(self, tmp_path, synthetic_route_factory):
         route = synthetic_route_factory("linear", depth=1)
         path = tmp_path / "training.jsonl.gz"
