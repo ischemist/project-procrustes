@@ -10,15 +10,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, TypeVar
 
+from pydantic import BaseModel
+from pydantic import Field as PydanticField
 from tqdm.auto import tqdm
 
 from retrocast.adapters import adapt_single_route_with_diagnostics
 from retrocast.curation.filtering import deduplicate_routes, excise_reactions_from_route
-from retrocast.io import ContentType, create_manifest, save_jsonl_gz
+from retrocast.io import ContentType, create_manifest, save_jsonl_gz, save_lines_gz
 from retrocast.models.chem import Molecule, ReactionSignature, ReactionStep, Route, TargetInput
+from retrocast.typing import ReactionSmilesStr, SmilesStr
 
 TrainingHoldoutMode = Literal["route", "reaction"]
-SplitName = Literal["train", "val"]
+SplitName = Literal["training", "validation"]
 ConditionIdentity = tuple[str, ...] | str | None
 TransformDedupStepKey = tuple[str | None, ConditionIdentity]
 TransformDedupKey = tuple[str, tuple[TransformDedupStepKey, ...]]
@@ -26,6 +29,7 @@ T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
 TRAINING_RELEASE_ACTION = "scripts/paroutes/training-set-prep/create-training-release"
+TRAINING_REACTION_RELEASE_ACTION = "scripts/paroutes/training-set-prep/create-single-step-release"
 
 
 @dataclass(frozen=True)
@@ -99,6 +103,13 @@ class TrainingSetBuildResult:
     summary: dict[str, Any]
 
 
+@dataclass
+class PreparedTrainingSetBuildResult:
+    release_name: str
+    prepared_routes: list[PreparedTrainingRoute]
+    summary: dict[str, Any]
+
+
 @dataclass(frozen=True)
 class AdaptedTrainingRoute:
     route: Route
@@ -114,6 +125,50 @@ class PreparedTrainingRoute:
     structural_signature: str
     sources: list[RawRouteSource] = field(default_factory=list)
     transform_ids_by_source_id: dict[str, str] = field(default_factory=dict)
+
+
+class TrainingReactionSource(BaseModel):
+    route_id: str
+    step_index: int
+    source_id: str | None = None
+    dataset: str
+    raw_route_indices: list[int] = PydanticField(default_factory=list)
+    raw_route_hashes: list[str] = PydanticField(default_factory=list)
+    patent_ids: list[str | None] = PydanticField(default_factory=list)
+
+
+class TrainingReactionRecord(BaseModel):
+    id: str
+    split: SplitName
+    reactants: list[SmilesStr]
+    product: SmilesStr
+    mapped_smiles: ReactionSmilesStr
+    alternative_mapped_smiles: list[ReactionSmilesStr] = PydanticField(default_factory=list)
+    condition_slot: str | None = None
+    condition_slot_smiles: list[SmilesStr] = PydanticField(default_factory=list)
+    sources: list[TrainingReactionSource] = PydanticField(default_factory=list)
+
+    def to_rsmi_line(self) -> str:
+        return self.mapped_smiles
+
+
+@dataclass
+class PreparedTrainingReaction:
+    reactants: tuple[SmilesStr, ...]
+    product: SmilesStr
+    mapped_smiles: ReactionSmilesStr
+    alternative_mapped_smiles: list[ReactionSmilesStr] = field(default_factory=list)
+    condition_slot: str | None = None
+    condition_slot_smiles: tuple[SmilesStr, ...] = field(default_factory=tuple)
+    transform_id: str | None = None
+    sources: list[TrainingReactionSource] = field(default_factory=list)
+
+
+@dataclass
+class TrainingReactionBuildResult:
+    release_name: str
+    records: list[TrainingReactionRecord]
+    summary: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -178,6 +233,33 @@ def iter_route_steps(route: Route) -> list[ReactionStep]:
     return steps
 
 
+def iter_route_reactions(route: Route) -> list[tuple[Molecule, ReactionStep]]:
+    """Return product/step pairs in deterministic root-first depth-first order."""
+    reactions: list[tuple[Molecule, ReactionStep]] = []
+
+    def _visit(node: Molecule) -> None:
+        if node.synthesis_step is None:
+            return
+        reactions.append((node, node.synthesis_step))
+        for reactant in node.synthesis_step.reactants:
+            _visit(reactant)
+
+    _visit(route.target)
+    return reactions
+
+
+def get_training_route_record_id(config: TrainingSetBuildConfig, ordinal: int) -> str:
+    return f"{config.route_prefix}-{config.release_name}-{ordinal:06d}"
+
+
+def get_training_reaction_release_name(config: TrainingSetBuildConfig) -> str:
+    return f"single-step-{config.release_name}"
+
+
+def get_training_reaction_record_id(config: TrainingSetBuildConfig, ordinal: int) -> str:
+    return f"{config.route_prefix}-rxn-{get_training_reaction_release_name(config)}-{ordinal:06d}"
+
+
 def get_exact_chemical_signature(route: Route) -> str:
     """Identity for unquestionably identical chemistry, excluding route provenance."""
     return route.get_annotated_signature(include_mapped_smiles=True)
@@ -194,6 +276,14 @@ def get_step_condition_identity(step: ReactionStep) -> ConditionIdentity:
         return condition_slot
 
     return None
+
+
+def get_step_condition_slot_smiles(step: ReactionStep) -> tuple[SmilesStr, ...]:
+    """Structured molecules parsed from the condition slot, when available."""
+    condition_slot_smiles = step.metadata.get("condition_slot_smiles")
+    if isinstance(condition_slot_smiles, list) and all(isinstance(value, str) for value in condition_slot_smiles):
+        return tuple(condition_slot_smiles)
+    return ()
 
 
 def get_transform_dedup_key(route: Route, *, transform_ids_by_source_id: Mapping[str, str]) -> TransformDedupKey:
@@ -329,6 +419,382 @@ def merge_transform_equivalent_routes(
     return merged_routes, duplicates_removed
 
 
+def prepare_training_routes_from_adapted(
+    all_routes: Sequence[AdaptedTrainingRoute],
+    all_adaptation: AdaptationStatistics,
+    heldout_routes: Mapping[str, Sequence[AdaptedTrainingRoute]],
+    heldout_adaptation: Mapping[str, AdaptationStatistics] | None,
+    config: TrainingSetBuildConfig,
+) -> PreparedTrainingSetBuildResult:
+    heldout_route_signatures, heldout_reaction_signatures = collect_heldout_signatures(
+        heldout_routes,
+        collect_reactions=config.holdout_mode == "reaction",
+    )
+
+    candidate_routes: list[AdaptedTrainingRoute] = []
+    skipped_route_holdout = 0
+    reaction_excision_source_routes = 0
+    reaction_excision_fragments = 0
+    fully_removed_by_reaction_excision = 0
+
+    for adapted_route in all_routes:
+        if adapted_route.structural_signature in heldout_route_signatures:
+            skipped_route_holdout += 1
+            continue
+
+        candidate_routes_for_route = [adapted_route]
+        if config.holdout_mode == "reaction":
+            candidate_routes_for_route, was_excised = excise_heldout_reactions(
+                adapted_route, heldout_reaction_signatures
+            )
+            if was_excised:
+                reaction_excision_source_routes += 1
+                reaction_excision_fragments += len(candidate_routes_for_route)
+                if not candidate_routes_for_route:
+                    fully_removed_by_reaction_excision += 1
+
+        candidate_routes.extend(candidate_routes_for_route)
+
+    chemically_unique_routes, exact_chemical_duplicates_removed = merge_exact_chemical_duplicates(candidate_routes)
+    prepared_routes, mapped_smiles_variants_collapsed = merge_transform_equivalent_routes(chemically_unique_routes)
+
+    postprocessing: dict[str, Any] = {
+        "unique_reference_route_signatures": len(heldout_route_signatures),
+        "exact_route_matches_removed": skipped_route_holdout,
+        "chemical_duplicates_removed": exact_chemical_duplicates_removed,
+        "mapped_smiles_variants_collapsed": mapped_smiles_variants_collapsed,
+        "duplicate_routes_removed": exact_chemical_duplicates_removed + mapped_smiles_variants_collapsed,
+    }
+    if config.holdout_mode == "reaction":
+        postprocessing["reaction_overlap"] = {
+            "unique_reference_reaction_signatures": len(heldout_reaction_signatures),
+            "routes_with_overlapping_reactions": reaction_excision_source_routes,
+            "fragments_kept_after_excision": reaction_excision_fragments,
+            "routes_fully_removed_after_excision": fully_removed_by_reaction_excision,
+        }
+
+    return PreparedTrainingSetBuildResult(
+        release_name=config.release_name,
+        prepared_routes=prepared_routes,
+        summary={
+            "input": {
+                "all_routes": all_adaptation.raw_routes,
+            },
+            "adaptation": {
+                "all_routes": all_adaptation.to_manifest_dict(),
+                "reference_datasets": {
+                    dataset: stats.to_manifest_dict() for dataset, stats in sorted((heldout_adaptation or {}).items())
+                },
+            },
+            "postprocessing": postprocessing,
+        },
+    )
+
+
+def materialize_training_route_records(
+    prepared_routes: Sequence[PreparedTrainingRoute],
+    config: TrainingSetBuildConfig,
+) -> list[TrainingRouteRecord]:
+    prepared_routes_by_key = {
+        f"route-{ordinal:09d}": prepared_route for ordinal, prepared_route in enumerate(prepared_routes, start=1)
+    }
+
+    split_by_key = assign_train_val_splits(
+        {route_key: prepared_route.route for route_key, prepared_route in prepared_routes_by_key.items()},
+        val_fraction=config.val_fraction,
+        seed=config.seed,
+    )
+
+    records: list[TrainingRouteRecord] = []
+    for ordinal, route_key in enumerate(sorted(prepared_routes_by_key), start=1):
+        prepared_route = prepared_routes_by_key[route_key]
+        route = prepared_route.route
+        records.append(
+            TrainingRouteRecord(
+                id=get_training_route_record_id(config, ordinal),
+                split=split_by_key[route_key],
+                route_signature=prepared_route.structural_signature,
+                content_hash=route.get_content_hash(),
+                route=route,
+                sources=prepared_route.sources,
+            )
+        )
+
+    return records
+
+
+def get_exact_reaction_signature(reaction: PreparedTrainingReaction) -> str:
+    """Identity for unquestionably identical flat reactions."""
+    payload = {
+        "mapped_smiles": reaction.mapped_smiles,
+        "condition_slot_smiles": list(reaction.condition_slot_smiles),
+        "condition_slot": reaction.condition_slot,
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def get_transform_reaction_dedup_key(reaction: PreparedTrainingReaction) -> tuple[Any, ...]:
+    """Identity for collapsing mapping drift between equivalent flat reactions."""
+    return (
+        reaction.reactants,
+        reaction.product,
+        reaction.condition_slot_smiles or reaction.condition_slot,
+        reaction.transform_id,
+    )
+
+
+def flatten_prepared_routes_to_reactions(
+    prepared_routes: Sequence[PreparedTrainingRoute],
+    config: TrainingSetBuildConfig,
+) -> list[PreparedTrainingReaction]:
+    """Convert prepared routes into flat reaction candidates."""
+    flattened_reactions: list[PreparedTrainingReaction] = []
+
+    for route_ordinal, prepared_route in enumerate(prepared_routes, start=1):
+        route_id = get_training_route_record_id(config, route_ordinal)
+        for step_index, (product, step) in enumerate(iter_route_reactions(prepared_route.route), start=1):
+            if step.mapped_smiles is None:
+                raise ValueError(
+                    f"single-step release requires mapped_smiles; missing on route {route_id} step {step_index}"
+                )
+
+            source_id = step.metadata.get("source_id")
+            transform_id = (
+                prepared_route.transform_ids_by_source_id.get(source_id) if isinstance(source_id, str) else None
+            )
+            condition_slot = step.metadata.get("condition_slot")
+            condition_slot_str = condition_slot if isinstance(condition_slot, str) and condition_slot else None
+            alternative_mapped_smiles = step.metadata.get("alternative_mapped_smiles")
+            source = TrainingReactionSource(
+                route_id=route_id,
+                step_index=step_index,
+                source_id=source_id if isinstance(source_id, str) else None,
+                dataset=prepared_route.sources[0].dataset if prepared_route.sources else "all",
+                raw_route_indices=[source.raw_index for source in prepared_route.sources],
+                raw_route_hashes=[source.raw_route_hash for source in prepared_route.sources],
+                patent_ids=[source.patent_id for source in prepared_route.sources],
+            )
+            flattened_reactions.append(
+                PreparedTrainingReaction(
+                    reactants=tuple(sorted(reactant.smiles for reactant in step.reactants)),
+                    product=product.smiles,
+                    mapped_smiles=step.mapped_smiles,
+                    alternative_mapped_smiles=sorted(
+                        mapped_smiles
+                        for mapped_smiles in (alternative_mapped_smiles or [])
+                        if isinstance(mapped_smiles, str)
+                    ),
+                    condition_slot=condition_slot_str,
+                    condition_slot_smiles=get_step_condition_slot_smiles(step),
+                    transform_id=transform_id,
+                    sources=[source],
+                )
+            )
+
+    return flattened_reactions
+
+
+def merge_exact_reaction_duplicates(
+    reactions: Sequence[PreparedTrainingReaction],
+) -> tuple[list[PreparedTrainingReaction], int]:
+    """Collapse exact duplicate flat reactions."""
+    reactions_by_signature: dict[str, PreparedTrainingReaction] = {}
+    duplicates_removed = 0
+
+    for reaction in reactions:
+        exact_signature = get_exact_reaction_signature(reaction)
+        existing_reaction = reactions_by_signature.get(exact_signature)
+        if existing_reaction is None:
+            reactions_by_signature[exact_signature] = PreparedTrainingReaction(
+                reactants=reaction.reactants,
+                product=reaction.product,
+                mapped_smiles=reaction.mapped_smiles,
+                alternative_mapped_smiles=sorted(
+                    {
+                        mapped_smiles
+                        for mapped_smiles in reaction.alternative_mapped_smiles
+                        if mapped_smiles != reaction.mapped_smiles
+                    }
+                ),
+                condition_slot=reaction.condition_slot,
+                condition_slot_smiles=reaction.condition_slot_smiles,
+                transform_id=reaction.transform_id,
+                sources=list(reaction.sources),
+            )
+            continue
+
+        existing_reaction.alternative_mapped_smiles = sorted(
+            {
+                *existing_reaction.alternative_mapped_smiles,
+                *reaction.alternative_mapped_smiles,
+            }
+            - {existing_reaction.mapped_smiles}
+        )
+        existing_reaction.sources.extend(reaction.sources)
+        duplicates_removed += 1
+
+    return list(reactions_by_signature.values()), duplicates_removed
+
+
+def merge_transform_equivalent_reactions(
+    reactions: Sequence[PreparedTrainingReaction],
+) -> tuple[list[PreparedTrainingReaction], int]:
+    """Collapse mapped-smiles variants for flat reactions."""
+    grouped_reactions: dict[tuple[Any, ...], list[PreparedTrainingReaction]] = defaultdict(list)
+    for reaction in reactions:
+        grouped_reactions[get_transform_reaction_dedup_key(reaction)].append(reaction)
+
+    merged_reactions: list[PreparedTrainingReaction] = []
+    duplicates_removed = 0
+
+    for group in grouped_reactions.values():
+        duplicates_removed += len(group) - 1
+        if len(group) == 1:
+            merged_reactions.append(group[0])
+            continue
+
+        mapped_smiles_weights: dict[ReactionSmilesStr, int] = defaultdict(int)
+        all_mapped_smiles: set[ReactionSmilesStr] = set()
+        for reaction in group:
+            mapped_smiles_weights[reaction.mapped_smiles] += len(reaction.sources)
+            all_mapped_smiles.add(reaction.mapped_smiles)
+            all_mapped_smiles.update(reaction.alternative_mapped_smiles)
+
+        canonical_mapped_smiles = min(
+            mapped_smiles_weights,
+            key=lambda mapped_smiles: (-mapped_smiles_weights[mapped_smiles], mapped_smiles),
+        )
+        canonical_reaction = min(
+            (reaction for reaction in group if reaction.mapped_smiles == canonical_mapped_smiles),
+            key=lambda reaction: tuple(source.route_id for source in reaction.sources),
+        )
+        merged_reactions.append(
+            PreparedTrainingReaction(
+                reactants=canonical_reaction.reactants,
+                product=canonical_reaction.product,
+                mapped_smiles=canonical_mapped_smiles,
+                alternative_mapped_smiles=sorted(
+                    mapped_smiles for mapped_smiles in all_mapped_smiles if mapped_smiles != canonical_mapped_smiles
+                ),
+                condition_slot=canonical_reaction.condition_slot,
+                condition_slot_smiles=canonical_reaction.condition_slot_smiles,
+                transform_id=canonical_reaction.transform_id,
+                sources=[source for reaction in group for source in reaction.sources],
+            )
+        )
+
+    return merged_reactions, duplicates_removed
+
+
+def assign_reaction_train_val_splits(
+    reactions_by_key: dict[str, PreparedTrainingReaction],
+    val_fraction: float,
+    seed: int,
+) -> dict[str, SplitName]:
+    if not 0 < val_fraction < 1:
+        raise ValueError(f"val_fraction must be between 0 and 1, got {val_fraction}")
+
+    groups: dict[tuple[int, bool], list[str]] = defaultdict(list)
+    for key, reaction in reactions_by_key.items():
+        groups[(len(reaction.reactants), bool(reaction.condition_slot_smiles or reaction.condition_slot))].append(key)
+
+    split_by_key: dict[str, SplitName] = {}
+    rng = random.Random(seed)
+    for group_key in sorted(groups):
+        keys = sorted(groups[group_key])
+        rng.shuffle(keys)
+        n_val = _validation_count(len(keys), val_fraction)
+        validation_keys = set(keys[:n_val])
+        for key in keys:
+            split_by_key[key] = "validation" if key in validation_keys else "training"
+
+    return split_by_key
+
+
+def summarize_reaction_records(records: Sequence[TrainingReactionRecord]) -> dict[str, Any]:
+    training_records = [record for record in records if record.split == "training"]
+    validation_records = [record for record in records if record.split == "validation"]
+
+    return {
+        "all_records": split_counts(
+            total=len(records),
+            training=len(training_records),
+            validation=len(validation_records),
+        ),
+    }
+
+
+def build_training_reaction_records_from_adapted(
+    all_routes: Sequence[AdaptedTrainingRoute],
+    all_adaptation: AdaptationStatistics,
+    heldout_routes: Mapping[str, Sequence[AdaptedTrainingRoute]],
+    heldout_adaptation: Mapping[str, AdaptationStatistics] | None,
+    config: TrainingSetBuildConfig,
+) -> TrainingReactionBuildResult:
+    if config.holdout_mode != "reaction":
+        raise ValueError("single-step training release requires TrainingSetBuildConfig(holdout_mode='reaction')")
+
+    prepared_result = prepare_training_routes_from_adapted(
+        all_routes=all_routes,
+        all_adaptation=all_adaptation,
+        heldout_routes=heldout_routes,
+        heldout_adaptation=heldout_adaptation,
+        config=config,
+    )
+    flattened_reactions = flatten_prepared_routes_to_reactions(prepared_result.prepared_routes, config)
+    chemically_unique_reactions, exact_chemical_duplicates_removed = merge_exact_reaction_duplicates(
+        flattened_reactions
+    )
+    deduplicated_reactions, mapped_smiles_variants_collapsed = merge_transform_equivalent_reactions(
+        chemically_unique_reactions
+    )
+
+    reactions_by_key = {
+        f"reaction-{ordinal:09d}": reaction for ordinal, reaction in enumerate(deduplicated_reactions, start=1)
+    }
+    split_by_key = assign_reaction_train_val_splits(
+        reactions_by_key,
+        val_fraction=config.val_fraction,
+        seed=config.seed,
+    )
+
+    records: list[TrainingReactionRecord] = []
+    for ordinal, reaction_key in enumerate(sorted(reactions_by_key), start=1):
+        reaction = reactions_by_key[reaction_key]
+        records.append(
+            TrainingReactionRecord(
+                id=get_training_reaction_record_id(config, ordinal),
+                split=split_by_key[reaction_key],
+                reactants=list(reaction.reactants),
+                product=reaction.product,
+                mapped_smiles=reaction.mapped_smiles,
+                alternative_mapped_smiles=list(reaction.alternative_mapped_smiles),
+                condition_slot=reaction.condition_slot,
+                condition_slot_smiles=list(reaction.condition_slot_smiles),
+                sources=list(reaction.sources),
+            )
+        )
+
+    summary = {
+        "input": dict(prepared_result.summary["input"]),
+        "adaptation": dict(prepared_result.summary["adaptation"]),
+        "route_preparation": dict(prepared_result.summary["postprocessing"]),
+        "reaction_postprocessing": {
+            "flattened_reactions": len(flattened_reactions),
+            "chemical_duplicates_removed": exact_chemical_duplicates_removed,
+            "mapped_smiles_variants_collapsed": mapped_smiles_variants_collapsed,
+            "duplicate_reactions_removed": exact_chemical_duplicates_removed + mapped_smiles_variants_collapsed,
+        },
+        "output": summarize_reaction_records(records),
+    }
+
+    return TrainingReactionBuildResult(
+        release_name=get_training_reaction_release_name(config),
+        records=records,
+        summary=summary,
+    )
+
+
 def progress_iter(items: Sequence[T], desc: str, enabled: bool) -> Iterable[T]:
     if not enabled:
         return items
@@ -432,92 +898,19 @@ def build_training_records_from_adapted(
     heldout_adaptation: Mapping[str, AdaptationStatistics] | None,
     config: TrainingSetBuildConfig,
 ) -> TrainingSetBuildResult:
-    heldout_route_signatures, heldout_reaction_signatures = collect_heldout_signatures(
-        heldout_routes,
-        collect_reactions=config.holdout_mode == "reaction",
+    prepared_result = prepare_training_routes_from_adapted(
+        all_routes=all_routes,
+        all_adaptation=all_adaptation,
+        heldout_routes=heldout_routes,
+        heldout_adaptation=heldout_adaptation,
+        config=config,
     )
-
-    candidate_routes: list[AdaptedTrainingRoute] = []
-    skipped_route_holdout = 0
-    reaction_excision_source_routes = 0
-    reaction_excision_fragments = 0
-    fully_removed_by_reaction_excision = 0
-
-    for adapted_route in all_routes:
-        if adapted_route.structural_signature in heldout_route_signatures:
-            skipped_route_holdout += 1
-            continue
-
-        candidate_routes_for_route = [adapted_route]
-        if config.holdout_mode == "reaction":
-            candidate_routes_for_route, was_excised = excise_heldout_reactions(
-                adapted_route, heldout_reaction_signatures
-            )
-            if was_excised:
-                reaction_excision_source_routes += 1
-                reaction_excision_fragments += len(candidate_routes_for_route)
-                if not candidate_routes_for_route:
-                    fully_removed_by_reaction_excision += 1
-
-        candidate_routes.extend(candidate_routes_for_route)
-
-    chemically_unique_routes, exact_chemical_duplicates_removed = merge_exact_chemical_duplicates(candidate_routes)
-    deduplicated_routes, mapped_smiles_variants_collapsed = merge_transform_equivalent_routes(chemically_unique_routes)
-
-    prepared_routes_by_key = {
-        f"route-{ordinal:09d}": prepared_route for ordinal, prepared_route in enumerate(deduplicated_routes, start=1)
-    }
-
-    split_by_signature = assign_train_val_splits(
-        {route_key: prepared_route.route for route_key, prepared_route in prepared_routes_by_key.items()},
-        val_fraction=config.val_fraction,
-        seed=config.seed,
-    )
-
-    records: list[TrainingRouteRecord] = []
-    for ordinal, route_key in enumerate(sorted(prepared_routes_by_key), start=1):
-        prepared_route = prepared_routes_by_key[route_key]
-        route = prepared_route.route
-        records.append(
-            TrainingRouteRecord(
-                id=f"{config.route_prefix}-{config.release_name}-{ordinal:06d}",
-                split=split_by_signature[route_key],
-                route_signature=prepared_route.structural_signature,
-                content_hash=route.get_content_hash(),
-                route=route,
-                sources=prepared_route.sources,
-            )
-        )
-
-    postprocessing: dict[str, Any] = {
-        "unique_reference_route_signatures": len(heldout_route_signatures),
-        "exact_route_matches_removed": skipped_route_holdout,
-        "chemical_duplicates_removed": exact_chemical_duplicates_removed,
-        "mapped_smiles_variants_collapsed": mapped_smiles_variants_collapsed,
-        "duplicate_routes_removed": exact_chemical_duplicates_removed + mapped_smiles_variants_collapsed,
-    }
-    if config.holdout_mode == "reaction":
-        postprocessing["reaction_overlap"] = {
-            "unique_reference_reaction_signatures": len(heldout_reaction_signatures),
-            "routes_with_overlapping_reactions": reaction_excision_source_routes,
-            "fragments_kept_after_excision": reaction_excision_fragments,
-            "routes_fully_removed_after_excision": fully_removed_by_reaction_excision,
-        }
-
+    records = materialize_training_route_records(prepared_result.prepared_routes, config)
     return TrainingSetBuildResult(
-        release_name=config.release_name,
+        release_name=prepared_result.release_name,
         records=records,
         summary={
-            "input": {
-                "all_routes": all_adaptation.raw_routes,
-            },
-            "adaptation": {
-                "all_routes": all_adaptation.to_manifest_dict(),
-                "reference_datasets": {
-                    dataset: stats.to_manifest_dict() for dataset, stats in sorted((heldout_adaptation or {}).items())
-                },
-            },
-            "postprocessing": postprocessing,
+            **prepared_result.summary,
             "output": summarize_records(records),
         },
     )
@@ -547,7 +940,7 @@ def assign_train_val_splits(
         n_val = _validation_count(len(signatures), val_fraction)
         val_signatures = set(signatures[:n_val])
         for signature in signatures:
-            split_by_signature[signature] = "val" if signature in val_signatures else "train"
+            split_by_signature[signature] = "validation" if signature in val_signatures else "training"
 
     return split_by_signature
 
@@ -559,23 +952,23 @@ def _validation_count(n_items: int, val_fraction: float) -> int:
 
 
 def summarize_records(records: Sequence[TrainingRouteRecord]) -> dict[str, Any]:
-    training_records = [record for record in records if record.split == "train"]
-    validation_records = [record for record in records if record.split == "val"]
+    training_records = [record for record in records if record.split == "training"]
+    validation_records = [record for record in records if record.split == "validation"]
 
     return {
         "all_records": split_counts(
             total=len(records),
-            train=len(training_records),
-            val=len(validation_records),
+            training=len(training_records),
+            validation=len(validation_records),
         ),
     }
 
 
-def split_counts(total: int, train: int, val: int) -> dict[str, int]:
+def split_counts(total: int, training: int, validation: int) -> dict[str, int]:
     return {
         "total": total,
-        "training_split": train,
-        "validation_split": val,
+        "training": training,
+        "validation": validation,
     }
 
 
@@ -592,13 +985,13 @@ def write_training_release(
 
     files = {
         "all": release_dir / "all.jsonl.gz",
-        "train": release_dir / "train.jsonl.gz",
-        "val": release_dir / "val.jsonl.gz",
+        "training": release_dir / "training.jsonl.gz",
+        "validation": release_dir / "validation.jsonl.gz",
     }
     grouped_records = {
         "all": result.records,
-        "train": [record for record in result.records if record.split == "train"],
-        "val": [record for record in result.records if record.split == "val"],
+        "training": [record for record in result.records if record.split == "training"],
+        "validation": [record for record in result.records if record.split == "validation"],
     }
     for name, records in grouped_records.items():
         logger.info("  writing %s (%s records)", files[name].name, f"{len(records):,}")
@@ -611,6 +1004,53 @@ def write_training_release(
         source_root=source_root,
         config=config,
         summary=result.summary,
+        action=TRAINING_RELEASE_ACTION,
+    )
+    manifest_path = release_dir / "manifest.json"
+    logger.info("  writing %s", manifest_path.name)
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return manifest
+
+
+def write_training_reaction_release(
+    result: TrainingReactionBuildResult,
+    output_dir: Path,
+    source_paths: Sequence[Path],
+    config: TrainingSetBuildConfig,
+    source_root: Path | None = None,
+) -> dict[str, Any]:
+    release_dir = output_dir / result.release_name
+    release_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("Writing single-step training release to %s", release_dir)
+
+    files = {
+        "all": release_dir / "all.jsonl.gz",
+        "training": release_dir / "training.jsonl.gz",
+        "validation": release_dir / "validation.jsonl.gz",
+        "all_rsmi": release_dir / "all.rsmi.txt.gz",
+        "training_rsmi": release_dir / "training.rsmi.txt.gz",
+        "validation_rsmi": release_dir / "validation.rsmi.txt.gz",
+    }
+    grouped_records = {
+        "all": result.records,
+        "training": [record for record in result.records if record.split == "training"],
+        "validation": [record for record in result.records if record.split == "validation"],
+    }
+    for name, records in grouped_records.items():
+        logger.info("  writing %s (%s records)", files[name].name, f"{len(records):,}")
+        save_jsonl_gz(records, files[name])
+        rsmi_key = f"{name}_rsmi"
+        logger.info("  writing %s (%s lines)", files[rsmi_key].name, f"{len(records):,}")
+        save_lines_gz((record.to_rsmi_line() for record in records), files[rsmi_key])
+
+    manifest = build_training_manifest(
+        release_name=result.release_name,
+        files=files,
+        source_paths=source_paths,
+        source_root=source_root,
+        config=config,
+        summary=result.summary,
+        action=TRAINING_REACTION_RELEASE_ACTION,
     )
     manifest_path = release_dir / "manifest.json"
     logger.info("  writing %s", manifest_path.name)
@@ -625,10 +1065,11 @@ def build_training_manifest(
     source_root: Path | None,
     config: TrainingSetBuildConfig,
     summary: Mapping[str, Any],
+    action: str,
 ) -> dict[str, Any]:
     root_dir = source_root if source_root is not None else Path.cwd()
     manifest = create_manifest(
-        action=TRAINING_RELEASE_ACTION,
+        action=action,
         sources=list(source_paths),
         outputs=[(name, path, None, ContentType.UNKNOWN) for name, path in sorted(files.items())],
         root_dir=root_dir,

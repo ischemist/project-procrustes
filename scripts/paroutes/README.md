@@ -18,11 +18,28 @@ Scripts that build public training-set release files.
 uv run scripts/paroutes/training-set-prep/01-create-training-release.py
 uv run scripts/paroutes/training-set-prep/01-create-training-release.py --mode route
 uv run scripts/paroutes/training-set-prep/01-create-training-release.py --mode reaction
+uv run scripts/paroutes/training-set-prep/02-create-single-step-release.py
 ```
 
-Each release folder contains:
+`01-create-training-release.py` writes route releases for `route-heldout-n1-n5` and/or
+`reaction-heldout-n1-n5`.
+
+Each route release folder contains:
 
 - `all.jsonl.gz`
-- `train.jsonl.gz`
-- `val.jsonl.gz`
+- `training.jsonl.gz`
+- `validation.jsonl.gz`
+- `manifest.json`
+
+`02-create-single-step-release.py` writes the flat reaction release derived from the
+`reaction-heldout` route-prep flow.
+
+The single-step release folder contains:
+
+- `all.jsonl.gz`
+- `training.jsonl.gz`
+- `validation.jsonl.gz`
+- `all.rsmi.txt.gz`
+- `training.rsmi.txt.gz`
+- `validation.rsmi.txt.gz`
 - `manifest.json`

@@ -1,5 +1,5 @@
 """
-Create public PaRoutes training-set releases.
+Create public PaRoutes route-training-set releases.
 
 Usage:
     uv run scripts/paroutes/training-set-prep/01-create-training-release.py
@@ -26,18 +26,18 @@ from retrocast.utils.logging import configure_script_logging, logger
 BASE_DIR = Path(__file__).resolve().parents[3]
 DATA_DIR = BASE_DIR / "data" / "retrocast"
 RAW_DIR = DATA_DIR / "0-assets" / "paroutes"
-RELEASE_VERSION = "v2026-05-10"
+RELEASE_VERSION = "v2026-05-11"
 DEFAULT_OUTPUT_DIR = DATA_DIR / "releases" / "paroutes-training-sets" / RELEASE_VERSION
 
 
 def main() -> None:
     configure_script_logging()
-    parser = argparse.ArgumentParser(description="Create PaRoutes training-set release files.")
+    parser = argparse.ArgumentParser(description="Create PaRoutes route-training-set release files.")
     parser.add_argument(
         "--mode",
         choices=["route", "reaction", "both"],
         default="both",
-        help="Holdout mode to build. Default: both.",
+        help="Holdout mode for the route release to build. Default: both.",
     )
     parser.add_argument(
         "--output-dir",
@@ -124,10 +124,10 @@ def main() -> None:
         all_records = output["all_records"]
         postprocessing = result.summary["postprocessing"]
         logger.info(
-            "Output: %s records (%s train, %s validation).",
+            "Output: %s records (%s training, %s validation).",
             all_records["total"],
-            all_records["training_split"],
-            all_records["validation_split"],
+            all_records["training"],
+            all_records["validation"],
         )
         logger.info(
             "Postprocessing: %s exact route matches removed; %s duplicates removed.",

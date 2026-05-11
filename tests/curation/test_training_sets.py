@@ -6,6 +6,7 @@ from typing import cast
 import pytest
 
 from retrocast.curation.training_sets import (
+    TRAINING_RELEASE_ACTION,
     AdaptationStatistics,
     AdaptedTrainingRoute,
     RawRouteSource,
@@ -13,6 +14,7 @@ from retrocast.curation.training_sets import (
     adapt_training_routes,
     assign_train_val_splits,
     build_training_manifest,
+    build_training_reaction_records_from_adapted,
     build_training_records_from_adapted,
     summarize_records,
 )
@@ -95,9 +97,9 @@ class TestTrainingSetSplits:
         second = assign_train_val_splits(routes, val_fraction=0.1, seed=17)
 
         assert first == second
-        assert sum(split == "val" for split in first.values()) == 4
-        assert sum(first[f"route-{idx}"] == "val" for idx in range(20)) == 2
-        assert sum(first[f"long-{idx}"] == "val" for idx in range(20)) == 2
+        assert sum(split == "validation" for split in first.values()) == 4
+        assert sum(first[f"route-{idx}"] == "validation" for idx in range(20)) == 2
+        assert sum(first[f"long-{idx}"] == "validation" for idx in range(20)) == 2
 
     def test_assign_train_val_splits_rejects_invalid_fraction(self):
         with pytest.raises(ValueError, match="val_fraction"):
@@ -266,6 +268,116 @@ class TestTrainingSetSplits:
         assert step.mapped_smiles == "C.C>O>CC"
         assert step.metadata["alternative_mapped_smiles"] == ["[CH3:1].[CH3:2]>O>[CH3:1][CH3:2]"]
 
+    def test_build_training_reaction_records_flattens_and_deduplicates(self):
+        canonical_route = make_reaction_route(
+            "single-step",
+            mapped_smiles="C.C>O>CC",
+            condition_slot_smiles=["O"],
+            patent_id="patent-a",
+        )
+        variant_route = make_reaction_route(
+            "single-step",
+            mapped_smiles="[CH3:1].[CH3:2]>O>[CH3:1][CH3:2]",
+            condition_slot_smiles=["O"],
+            patent_id="patent-b",
+        )
+
+        result = build_training_reaction_records_from_adapted(
+            all_routes=[
+                make_adapted_route(
+                    "single-step-a",
+                    canonical_route,
+                    patent_id="patent-a",
+                    transform_ids_by_source_id={"rxn-1": "hash-1"},
+                ),
+                make_adapted_route(
+                    "single-step-b",
+                    variant_route,
+                    patent_id="patent-b",
+                    transform_ids_by_source_id={"rxn-1": "hash-1"},
+                ),
+            ],
+            all_adaptation=AdaptationStatistics(
+                raw_routes=2,
+                adapted_routes=2,
+                skipped_routes=0,
+                skipped_without_error_code=0,
+                failures_by_code={},
+            ),
+            heldout_routes={},
+            heldout_adaptation={},
+            config=TrainingSetBuildConfig(holdout_mode="reaction", show_progress=False),
+        )
+
+        assert result.release_name == "single-step-reaction-heldout-n1-n5"
+        assert len(result.records) == 1
+        assert result.summary["route_preparation"]["mapped_smiles_variants_collapsed"] == 1
+        assert result.summary["reaction_postprocessing"]["flattened_reactions"] == 1
+        assert result.summary["reaction_postprocessing"]["chemical_duplicates_removed"] == 0
+        assert result.summary["reaction_postprocessing"]["mapped_smiles_variants_collapsed"] == 0
+
+        record = result.records[0]
+        assert record.reactants == ["single-step-leaf"]
+        assert record.product == "single-step-target"
+        assert record.mapped_smiles == "C.C>O>CC"
+        assert record.alternative_mapped_smiles == ["[CH3:1].[CH3:2]>O>[CH3:1][CH3:2]"]
+        assert record.condition_slot_smiles == ["O"]
+        assert len(record.sources) == 1
+        assert record.sources[0].patent_ids == ["patent-a", "patent-b"]
+
+    def test_build_training_reaction_records_keeps_condition_variants_separate(self):
+        route_a = make_reaction_route(
+            "single-step-cond",
+            mapped_smiles="C.C>O>CC",
+            condition_slot_smiles=["O"],
+        )
+        route_b = make_reaction_route(
+            "single-step-cond",
+            mapped_smiles="C.C>N>CC",
+            condition_slot_smiles=["N"],
+        )
+
+        result = build_training_reaction_records_from_adapted(
+            all_routes=[
+                make_adapted_route("single-step-cond-a", route_a, transform_ids_by_source_id={"rxn-1": "hash-1"}),
+                make_adapted_route("single-step-cond-b", route_b, transform_ids_by_source_id={"rxn-1": "hash-1"}),
+            ],
+            all_adaptation=AdaptationStatistics(
+                raw_routes=2,
+                adapted_routes=2,
+                skipped_routes=0,
+                skipped_without_error_code=0,
+                failures_by_code={},
+            ),
+            heldout_routes={},
+            heldout_adaptation={},
+            config=TrainingSetBuildConfig(holdout_mode="reaction", show_progress=False),
+        )
+
+        assert len(result.records) == 2
+        assert result.summary["reaction_postprocessing"]["mapped_smiles_variants_collapsed"] == 0
+
+    def test_build_training_reaction_records_requires_reaction_holdout_config(self):
+        route = make_reaction_route(
+            "single-step",
+            mapped_smiles="C.C>O>CC",
+        )
+
+        with pytest.raises(ValueError, match="holdout_mode='reaction'"):
+            build_training_reaction_records_from_adapted(
+                all_routes=[make_adapted_route("single-step", route, transform_ids_by_source_id={"rxn-1": "hash-1"})],
+                all_adaptation=AdaptationStatistics(
+                    raw_routes=1,
+                    adapted_routes=1,
+                    skipped_routes=0,
+                    skipped_without_error_code=0,
+                    failures_by_code={},
+                ),
+                heldout_routes={},
+                heldout_adaptation={},
+                config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
+            )
+
     def test_adapt_training_routes_tracks_failures_by_code(self):
         valid_route = {
             "type": "mol",
@@ -416,29 +528,29 @@ class TestTrainingSetSummary:
             cast(
                 list,
                 [
-                    Record("train"),
-                    Record("train"),
-                    Record("val"),
+                    Record("training"),
+                    Record("training"),
+                    Record("validation"),
                 ],
             )
         )
 
         assert summary["all_records"] == {
             "total": 3,
-            "training_split": 2,
-            "validation_split": 1,
+            "training": 2,
+            "validation": 1,
         }
 
     def test_build_training_manifest_preserves_release_summary_shape(self, tmp_path):
         source_file = tmp_path / "input.json.gz"
         source_file.write_text("source", encoding="utf-8")
-        output_file = tmp_path / "release" / "train.jsonl.gz"
+        output_file = tmp_path / "release" / "training.jsonl.gz"
         output_file.parent.mkdir(parents=True)
         output_file.write_text("output", encoding="utf-8")
 
         manifest = build_training_manifest(
             release_name="route-heldout-n1-n5",
-            files={"train": output_file},
+            files={"training": output_file},
             source_paths=[source_file],
             source_root=tmp_path,
             config=TrainingSetBuildConfig(
@@ -448,10 +560,11 @@ class TestTrainingSetSummary:
                 show_progress=False,
             ),
             summary={"output": {"all_records": {"total": 1}}},
+            action=TRAINING_RELEASE_ACTION,
         )
 
         assert manifest["release_name"] == "route-heldout-n1-n5"
         assert manifest["summary"]["output"]["all_records"]["total"] == 1
         assert manifest["source_files"][0]["sha256"]
-        assert manifest["output_files"]["train"]["path"] == "release/train.jsonl.gz"
-        assert manifest["output_files"]["train"]["sha256"]
+        assert manifest["output_files"]["training"]["path"] == "release/training.jsonl.gz"
+        assert manifest["output_files"]["training"]["sha256"]
