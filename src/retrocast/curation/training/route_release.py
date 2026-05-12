@@ -26,6 +26,7 @@ from retrocast.curation.training.records import (
     TrainingSetBuildConfig,
     TrainingSetBuildResult,
 )
+from retrocast.exceptions import TrainingReleaseError
 from retrocast.io import ContentType, create_manifest, save_jsonl_gz
 from retrocast.models.chem import ReactionSignature, Route, TargetInput
 from retrocast.typing import SmilesStr
@@ -136,20 +137,23 @@ def adapt_training_routes(
 class TrainingRouteReleaseBuilder:
     all_routes: Sequence[AdaptedTrainingRoute]
     all_adaptation: AdaptationStatistics
-    heldout_routes: Mapping[str, Sequence[AdaptedTrainingRoute]]
-    heldout_adaptation: Mapping[str, AdaptationStatistics]
+    holdout_routes: Mapping[str, Sequence[AdaptedTrainingRoute]]
+    holdout_adaptation: Mapping[str, AdaptationStatistics]
     config: TrainingSetBuildConfig
-    heldout_route_signatures: set[str] = dataclass_field(default_factory=set, init=False)
-    heldout_reaction_signatures: set[ReactionSignature] = dataclass_field(default_factory=set, init=False)
+    holdout_route_signatures: set[str] = dataclass_field(default_factory=set, init=False)
+    holdout_reaction_signatures: set[ReactionSignature] = dataclass_field(default_factory=set, init=False)
     skipped_route_holdout: int = dataclass_field(default=0, init=False)
     reaction_excision_source_routes: int = dataclass_field(default=0, init=False)
     reaction_excision_fragments: int = dataclass_field(default=0, init=False)
     fully_removed_by_reaction_excision: int = dataclass_field(default=0, init=False)
     exact_chemical_duplicates_removed: int = dataclass_field(default=0, init=False)
     mapped_smiles_variants_collapsed: int = dataclass_field(default=0, init=False)
+    _started: bool = dataclass_field(default=False, init=False)
 
     def build(self) -> TrainingSetBuildResult:
-        self.collect_heldout_signatures()
+        self.assert_not_started()
+        self._started = True
+        self.collect_holdout_signatures()
         candidates = self.apply_holdout()
         chemically_unique_routes, self.exact_chemical_duplicates_removed = merge_exact_chemical_duplicates(candidates)
         prepared_routes, self.mapped_smiles_variants_collapsed = merge_transform_equivalent_routes(
@@ -165,26 +169,41 @@ class TrainingRouteReleaseBuilder:
             },
         )
 
-    def collect_heldout_signatures(self) -> None:
-        for routes in self.heldout_routes.values():
+    def assert_not_started(self) -> None:
+        if (
+            self._started
+            or self.holdout_route_signatures
+            or self.holdout_reaction_signatures
+            or self.skipped_route_holdout
+            or self.reaction_excision_source_routes
+            or self.reaction_excision_fragments
+            or self.fully_removed_by_reaction_excision
+            or self.exact_chemical_duplicates_removed
+            or self.mapped_smiles_variants_collapsed
+        ):
+            raise RuntimeError("TrainingRouteReleaseBuilder instances are single-use")
+
+    def collect_holdout_signatures(self) -> None:
+        for routes in self.holdout_routes.values():
             for route in routes:
-                self.heldout_route_signatures.add(route.structural_signature)
+                self.holdout_route_signatures.add(route.structural_signature)
                 if self.config.holdout_mode == "reaction":
-                    self.heldout_reaction_signatures.update(route.reaction_signatures)
+                    self.holdout_reaction_signatures.update(route.reaction_signatures)
 
     def apply_holdout(self) -> list[AdaptedTrainingRoute]:
         candidates: list[AdaptedTrainingRoute] = []
         for route in self.all_routes:
-            if route.structural_signature in self.heldout_route_signatures:
+            if route.structural_signature in self.holdout_route_signatures:
                 self.skipped_route_holdout += 1
                 continue
-            candidates.extend(
-                self.excise_heldout_reactions(route) if self.config.holdout_mode == "reaction" else [route]
-            )
+            if self.config.holdout_mode == "reaction":
+                candidates.extend(self.excise_holdout_reactions(route))
+            else:
+                candidates.append(route)
         return candidates
 
-    def excise_heldout_reactions(self, route: AdaptedTrainingRoute) -> list[AdaptedTrainingRoute]:
-        overlapping_signatures = route.reaction_signatures & self.heldout_reaction_signatures
+    def excise_holdout_reactions(self, route: AdaptedTrainingRoute) -> list[AdaptedTrainingRoute]:
+        overlapping_signatures = route.reaction_signatures & self.holdout_reaction_signatures
         if not overlapping_signatures:
             return [route]
 
@@ -234,7 +253,7 @@ class TrainingRouteReleaseBuilder:
 
     def summary(self) -> dict[str, Any]:
         postprocessing: dict[str, Any] = {
-            "unique_reference_route_signatures": len(self.heldout_route_signatures),
+            "unique_reference_route_signatures": len(self.holdout_route_signatures),
             "exact_route_matches_removed": self.skipped_route_holdout,
             "chemical_duplicates_removed": self.exact_chemical_duplicates_removed,
             "mapped_smiles_variants_collapsed": self.mapped_smiles_variants_collapsed,
@@ -242,7 +261,7 @@ class TrainingRouteReleaseBuilder:
         }
         if self.config.holdout_mode == "reaction":
             postprocessing["reaction_overlap"] = {
-                "unique_reference_reaction_signatures": len(self.heldout_reaction_signatures),
+                "unique_reference_reaction_signatures": len(self.holdout_reaction_signatures),
                 "routes_with_overlapping_reactions": self.reaction_excision_source_routes,
                 "fragments_kept_after_excision": self.reaction_excision_fragments,
                 "routes_fully_removed_after_excision": self.fully_removed_by_reaction_excision,
@@ -252,7 +271,7 @@ class TrainingRouteReleaseBuilder:
             "adaptation": {
                 "all_routes": self.all_adaptation.to_manifest_dict(),
                 "reference_datasets": {
-                    dataset: stats.to_manifest_dict() for dataset, stats in sorted(self.heldout_adaptation.items())
+                    dataset: stats.to_manifest_dict() for dataset, stats in sorted(self.holdout_adaptation.items())
                 },
             },
             "postprocessing": postprocessing,
@@ -265,13 +284,13 @@ def collect_reaction_hash_sanity(
     reaction_hash_signature_pairs: set[tuple[str, ReactionSignature]],
 ) -> None:
     reaction_hash_by_source_id = extract_paroutes_reaction_hash_by_source_id(raw_route)
-    for product, step in route.iter_reactions():
+    for route_reaction in route.iter_reactions():
+        step = route_reaction.step
         source_id = step.metadata.get("source_id")
         reaction_hash = reaction_hash_by_source_id.get(source_id) if isinstance(source_id, str) else None
         if reaction_hash is None:
             continue
-        signature: ReactionSignature = (frozenset(reactant.inchikey for reactant in step.reactants), product.inchikey)
-        reaction_hash_signature_pairs.add((reaction_hash, signature))
+        reaction_hash_signature_pairs.add((reaction_hash, route_reaction.signature))
 
 
 def assert_paroutes_reaction_hash_matches_retrocast_signature(
@@ -281,9 +300,11 @@ def assert_paroutes_reaction_hash_matches_retrocast_signature(
     n_hashes = len({reaction_hash for reaction_hash, _ in reaction_hash_signature_pairs})
     n_signatures = len({signature for _, signature in reaction_hash_signature_pairs})
     if n_pairs != n_hashes or n_pairs != n_signatures:
-        raise ValueError(
+        raise TrainingReleaseError(
             "PaRoutes reaction_hash is not equivalent to RetroCast reaction signatures: "
-            f"{n_pairs} unique pairs, {n_hashes} unique hashes, {n_signatures} unique signatures"
+            f"{n_pairs} unique pairs, {n_hashes} unique hashes, {n_signatures} unique signatures",
+            code="workflow.paroutes_reaction_hash_mismatch",
+            context={"unique_pairs": n_pairs, "unique_hashes": n_hashes, "unique_signatures": n_signatures},
         )
 
 
@@ -294,9 +315,9 @@ def extract_paroutes_reaction_hash_by_source_id(raw_route: Mapping[str, Any]) ->
 
         {"metadata": {"ID": "US20150051201A1;outer", "reaction_hash": "outer-hash"}}
 
-    In the source data, `reaction_hash` is PaRoutes' reaction identity: the reaction SMILES rebuilt from molecule InChIKeys. RetroCast's equivalent is ``ReactionSignature`, the `(frozenset(reactant.inchikey), product.inchikey)` tuple produced by `Route.get_reaction_signatures()` and reconstructed from ``Route.iter_reactions()` in the adaptation sanity check.
+    In the source data, `reaction_hash` is PaRoutes' reaction identity: the reaction SMILES rebuilt from molecule InChIKeys. RetroCast's equivalent is `ReactionSignature`, the `(frozenset(reactant.inchikey), product.inchikey)` tuple produced by `Route.get_reaction_signatures()` and reconstructed from `Route.iter_reactions()` in the adaptation sanity check.
 
-    This helper exists only for that check. If each PaRoutes hash maps one-to-one with one RetroCast signature, the release pipeline drops the raw hash instead of carrying a PaRoutes-specific identity sidecar throug deduplication.
+    This helper exists only for that check. If each PaRoutes hash maps one-to-one with one RetroCast signature, the release pipeline drops the raw hash instead of carrying a PaRoutes-specific identity sidecar through deduplication.
     """
     reaction_hash_by_source_id: dict[str, str] = {}
     stack: list[Mapping[str, Any]] = [raw_route]
@@ -349,7 +370,14 @@ def merge_alternative_mapped_smiles(canonical_route: Route, routes: Sequence[Rou
     canonical_steps = canonical_route.iter_steps()
     route_steps = [route.iter_steps() for route in routes]
     if any(len(steps) != len(canonical_steps) for steps in route_steps):
-        raise ValueError("cannot merge mapped smiles for routes with different step counts")
+        raise TrainingReleaseError(
+            "cannot merge mapped smiles for routes with different step counts",
+            code="workflow.route_mapped_smiles_merge_step_count_mismatch",
+            context={
+                "canonical_step_count": len(canonical_steps),
+                "candidate_step_counts": [len(steps) for steps in route_steps],
+            },
+        )
     for step_index, canonical_step in enumerate(canonical_steps):
         variants = {
             value
@@ -492,9 +520,11 @@ def assert_no_cross_split_route_signature_overlap(records: Sequence[TrainingRout
             overlapping_signatures.add(record.route_signature)
 
     if overlapping_signatures:
-        raise ValueError(
+        raise TrainingReleaseError(
             "training route release has route_signature overlap across training and validation splits: "
-            f"{len(overlapping_signatures)} overlapping signatures"
+            f"{len(overlapping_signatures)} overlapping signatures",
+            code="workflow.route_split_signature_overlap",
+            context={"overlapping_signature_count": len(overlapping_signatures)},
         )
 
 

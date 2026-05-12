@@ -11,6 +11,7 @@ from retrocast.curation.training import (
     AdaptationStatistics,
     AdaptedTrainingRoute,
     RawRouteSource,
+    TrainingReactionReleaseBuilder,
     TrainingRouteRecord,
     TrainingRouteReleaseBuilder,
     TrainingSetBuildConfig,
@@ -18,10 +19,10 @@ from retrocast.curation.training import (
     assign_train_val_splits,
     build_route_release_split_audit,
     build_training_manifest,
-    build_training_reaction_records_from_route_records,
     render_route_release_split_audit_markdown,
     summarize_records,
 )
+from retrocast.exceptions import TrainingReleaseError
 from retrocast.models.chem import Molecule, ReactionStep, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
 
@@ -158,7 +159,7 @@ class TestTrainingSetSplits:
         )
 
         audit = build_route_release_split_audit(
-            release_name="reaction-heldout-n1-n5",
+            release_name="reaction-holdout-n1-n5",
             route_records=[linear_training, linear_validation, convergent_training],
         )
 
@@ -181,7 +182,7 @@ class TestTrainingSetSplits:
 
         markdown = render_route_release_split_audit_markdown(release_root_name="v2026-05-11", audits=[audit])
         assert "# release audit" in markdown
-        assert "## `reaction-heldout-n1-n5`" in markdown
+        assert "## `reaction-holdout-n1-n5`" in markdown
         assert "| `false` | 1 | 1 | 2 | 50.0000% | 66.6667% |" in markdown
         assert (
             "| length | non-conv train | non-conv val | non-conv all | non-conv val% | conv train | conv val | conv all | conv val% |"
@@ -191,10 +192,10 @@ class TestTrainingSetSplits:
 
     def test_build_from_adapted_routes_reuses_adapted_inputs(self):
         route = make_route("keep", depth=1)
-        heldout = make_route("heldout", depth=1)
+        holdout = make_route("holdout", depth=1)
 
         result = TrainingRouteReleaseBuilder(
-            all_routes=[make_adapted_route("keep", route), make_adapted_route("heldout", heldout)],
+            all_routes=[make_adapted_route("keep", route), make_adapted_route("holdout", holdout)],
             all_adaptation=AdaptationStatistics(
                 raw_routes=2,
                 adapted_routes=2,
@@ -207,8 +208,8 @@ class TestTrainingSetSplits:
                     uncanonicalizable_tokens={"noise": 1},
                 ),
             ),
-            heldout_routes={"n1": [make_adapted_route("heldout", heldout)]},
-            heldout_adaptation={
+            holdout_routes={"n1": [make_adapted_route("holdout", holdout)]},
+            holdout_adaptation={
                 "n1": AdaptationStatistics(
                     raw_routes=1,
                     adapted_routes=1,
@@ -230,6 +231,26 @@ class TestTrainingSetSplits:
             "uncanonicalizable_token_count": 7,
             "distinct_uncanonicalizable_token_count": 1,
         }
+
+    def test_route_release_builder_is_single_use(self):
+        builder = TrainingRouteReleaseBuilder(
+            all_routes=[],
+            all_adaptation=AdaptationStatistics(
+                raw_routes=0,
+                adapted_routes=0,
+                skipped_routes=0,
+                skipped_without_error_code=0,
+                failures_by_code={},
+            ),
+            holdout_routes={},
+            holdout_adaptation={},
+            config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
+        )
+
+        builder.build()
+
+        with pytest.raises(RuntimeError, match="single-use"):
+            builder.build()
 
     def test_build_from_adapted_routes_merges_patent_only_duplicates(self):
         route_a = make_reaction_route(
@@ -255,8 +276,8 @@ class TestTrainingSetSplits:
                 skipped_without_error_code=0,
                 failures_by_code={},
             ),
-            heldout_routes={},
-            heldout_adaptation={},
+            holdout_routes={},
+            holdout_adaptation={},
             config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
         ).build()
 
@@ -294,8 +315,8 @@ class TestTrainingSetSplits:
                 skipped_without_error_code=0,
                 failures_by_code={},
             ),
-            heldout_routes={},
-            heldout_adaptation={},
+            holdout_routes={},
+            holdout_adaptation={},
             config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
         ).build()
 
@@ -341,8 +362,8 @@ class TestTrainingSetSplits:
                 skipped_without_error_code=0,
                 failures_by_code={},
             ),
-            heldout_routes={},
-            heldout_adaptation={},
+            holdout_routes={},
+            holdout_adaptation={},
             config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
         ).build()
 
@@ -370,15 +391,15 @@ class TestTrainingSetSplits:
             patent_id="patent-b",
         )
 
-        result = build_training_reaction_records_from_route_records(
+        result = TrainingReactionReleaseBuilder(
             [
                 make_route_record("single-step-a", canonical_route, split="training", patent_id="patent-a"),
                 make_route_record("single-step-b", variant_route, split="training", patent_id="patent-b"),
             ],
             config=TrainingSetBuildConfig(holdout_mode="reaction", show_progress=False),
-        )
+        ).build()
 
-        assert result.release_name == "single-step-reaction-heldout-n1-n5"
+        assert result.release_name == "single-step-reaction-holdout-n1-n5"
         assert len(result.records) == 1
         assert result.summary["reaction_postprocessing"]["training"]["flattened_reactions"] == 2
         assert result.summary["reaction_postprocessing"]["training"]["chemical_duplicates_removed"] == 0
@@ -391,7 +412,10 @@ class TestTrainingSetSplits:
         assert record.alternative_mapped_smiles == ["[CH3:1].[CH3:2]>O>[CH3:1][CH3:2]"]
         assert record.condition_slot_smiles == ["O"]
         assert len(record.sources) == 2
-        assert [source.patent_ids for source in record.sources] == [["patent-a"], ["patent-b"]]
+        assert [(source.route_id, source.step_index) for source in record.sources] == [
+            ("route-single-step-a", 1),
+            ("route-single-step-b", 1),
+        ]
 
     def test_build_training_reaction_records_keeps_condition_variants_separate(self):
         route_a = make_reaction_route(
@@ -405,13 +429,13 @@ class TestTrainingSetSplits:
             condition_slot_smiles=["N"],
         )
 
-        result = build_training_reaction_records_from_route_records(
+        result = TrainingReactionReleaseBuilder(
             [
                 make_route_record("single-step-cond-a", route_a, split="training"),
                 make_route_record("single-step-cond-b", route_b, split="training"),
             ],
             config=TrainingSetBuildConfig(holdout_mode="reaction", show_progress=False),
-        )
+        ).build()
 
         assert len(result.records) == 2
         assert result.summary["reaction_postprocessing"]["training"]["mapped_smiles_variants_collapsed"] == 0
@@ -422,13 +446,30 @@ class TestTrainingSetSplits:
             mapped_smiles="C.C>O>CC",
         )
 
-        with pytest.raises(ValueError, match="holdout_mode='reaction'"):
-            build_training_reaction_records_from_route_records(
+        with pytest.raises(TrainingReleaseError) as exc_info:
+            TrainingReactionReleaseBuilder(
                 [make_route_record("single-step", route, split="training")],
                 config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
-            )
+            ).build()
+        assert exc_info.value.code == "workflow.single_step_requires_reaction_holdout"
+        assert exc_info.value.context == {"holdout_mode": "route"}
 
-    def test_build_training_reaction_records_from_route_records_removes_validation_overlap(self):
+    def test_training_reaction_release_builder_is_single_use(self):
+        route = make_reaction_route(
+            "single-step",
+            mapped_smiles="C.C>O>CC",
+        )
+        builder = TrainingReactionReleaseBuilder(
+            [make_route_record("single-step", route, split="training")],
+            config=TrainingSetBuildConfig(holdout_mode="reaction", show_progress=False),
+        )
+
+        builder.build()
+
+        with pytest.raises(RuntimeError, match="single-use"):
+            builder.build()
+
+    def test_training_reaction_release_builder_removes_validation_overlap(self):
         training_route = make_reaction_route(
             "shared",
             mapped_smiles="C.C>O>CC",
@@ -448,7 +489,7 @@ class TestTrainingSetSplits:
             patent_id="patent-unique",
         )
 
-        result = build_training_reaction_records_from_route_records(
+        result = TrainingReactionReleaseBuilder(
             [
                 make_route_record("training", training_route, split="training", patent_id="patent-training"),
                 make_route_record("validation", validation_route, split="validation", patent_id="patent-validation"),
@@ -457,7 +498,7 @@ class TestTrainingSetSplits:
                 ),
             ],
             config=TrainingSetBuildConfig(holdout_mode="reaction", show_progress=False),
-        )
+        ).build()
 
         assert [record.split for record in result.records] == ["training", "validation"]
         assert result.records[1].product == validation_unique_route.target.smiles
@@ -618,7 +659,7 @@ class TestTrainingSetSplits:
         )
 
         full_route = Route(target=mol_d, rank=1)
-        heldout_route = Route(
+        holdout_route = Route(
             target=Molecule(
                 smiles=SmilesStr("c"),
                 inchikey=InchiKeyStr("INCHI-c"),
@@ -642,8 +683,8 @@ class TestTrainingSetSplits:
                 skipped_without_error_code=0,
                 failures_by_code={},
             ),
-            heldout_routes={"n1": [make_adapted_route("heldout", heldout_route)]},
-            heldout_adaptation={
+            holdout_routes={"n1": [make_adapted_route("holdout", holdout_route)]},
+            holdout_adaptation={
                 "n1": AdaptationStatistics(
                     raw_routes=1,
                     adapted_routes=1,
@@ -665,7 +706,7 @@ class TestTrainingSetSplits:
             "fragments_kept_after_excision": 2,
             "routes_fully_removed_after_excision": 0,
         }
-        assert heldout_route.get_structural_signature() not in record_signatures
+        assert holdout_route.get_structural_signature() not in record_signatures
         assert full_route.get_structural_signature() not in record_signatures
         assert record_targets == {"INCHI-d", "INCHI-b"}
 
@@ -702,7 +743,7 @@ class TestTrainingSetSummary:
         output_file.write_text("output", encoding="utf-8")
 
         manifest = build_training_manifest(
-            release_name="route-heldout-n1-n5",
+            release_name="route-holdout-n1-n5",
             files={"training": output_file},
             source_paths=[source_file],
             source_root=tmp_path,
@@ -716,7 +757,7 @@ class TestTrainingSetSummary:
             action=TRAINING_RELEASE_ACTION,
         )
 
-        assert manifest["release_name"] == "route-heldout-n1-n5"
+        assert manifest["release_name"] == "route-holdout-n1-n5"
         assert manifest["summary"]["output"]["all_records"]["total"] == 1
         assert manifest["source_files"][0]["sha256"]
         assert manifest["output_files"]["training"]["path"] == "release/training.jsonl.gz"

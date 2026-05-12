@@ -26,7 +26,7 @@ from retrocast.utils.logging import configure_script_logging, logger
 BASE_DIR = Path(__file__).resolve().parents[3]
 DATA_DIR = BASE_DIR / "data" / "retrocast"
 RAW_DIR = DATA_DIR / "0-assets" / "paroutes"
-RELEASE_VERSION = "v2026-05-11"
+RELEASE_VERSION = "v2026-05-12"
 DEFAULT_OUTPUT_DIR = DATA_DIR / "releases" / "paroutes-training-sets" / RELEASE_VERSION
 
 
@@ -109,8 +109,8 @@ def main() -> None:
         result = TrainingRouteReleaseBuilder(
             all_routes=all_routes,
             all_adaptation=all_adaptation,
-            heldout_routes={"n1": n1_routes, "n5": n5_routes},
-            heldout_adaptation={"n1": n1_adaptation, "n5": n5_adaptation},
+            holdout_routes={"n1": n1_routes, "n5": n5_routes},
+            holdout_adaptation={"n1": n1_adaptation, "n5": n5_adaptation},
             config=config,
         ).build()
         write_training_release(

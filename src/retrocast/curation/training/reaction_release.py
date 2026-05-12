@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 from collections import defaultdict
 from collections.abc import Sequence
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from typing import Any
 
 from retrocast.curation.training.records import (
-    PreparedTrainingReaction,
     ReactionIdentityKey,
     SplitName,
     TrainingReactionBuildResult,
+    TrainingReactionCandidate,
     TrainingReactionRecord,
     TrainingReactionSource,
     TrainingRouteRecord,
@@ -23,32 +24,21 @@ from retrocast.curation.training.route_release import (
     get_step_condition_slot_smiles,
     split_counts,
 )
+from retrocast.exceptions import TrainingReleaseError
 from retrocast.io import save_jsonl_gz, save_lines_gz
 from retrocast.typing import ReactionSmilesStr
 
 logger = logging.getLogger(__name__)
 TRAINING_REACTION_RELEASE_ACTION = "scripts/paroutes/training-set-prep/create-single-step-release"
+ReactionExactKey = tuple[ReactionSmilesStr, tuple[str, ...], str | None]
 
 
-def get_training_reaction_release_name(config: TrainingSetBuildConfig) -> str:
-    return f"single-step-{config.release_name}"
-
-
-def get_training_reaction_record_id(config: TrainingSetBuildConfig, ordinal: int) -> str:
-    return f"{config.route_prefix}-rxn-{get_training_reaction_release_name(config)}-{ordinal:06d}"
-
-
-def get_exact_reaction_signature(reaction: PreparedTrainingReaction) -> str:
+def exact_reaction_key(reaction: TrainingReactionCandidate) -> ReactionExactKey:
     """Identity for unquestionably identical flat reactions."""
-    payload = {
-        "mapped_smiles": reaction.mapped_smiles,
-        "condition_slot_smiles": list(reaction.condition_slot_smiles),
-        "condition_slot": reaction.condition_slot,
-    }
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return (reaction.mapped_smiles, tuple(reaction.condition_slot_smiles), reaction.condition_slot)
 
 
-def get_reaction_identity_key(reaction: PreparedTrainingReaction) -> ReactionIdentityKey:
+def reaction_identity_key(reaction: TrainingReactionCandidate) -> ReactionIdentityKey:
     """Identity for flat-reaction leakage checks and transform-agnostic grouping."""
     return (
         reaction.reactants,
@@ -59,15 +49,19 @@ def get_reaction_identity_key(reaction: PreparedTrainingReaction) -> ReactionIde
 
 def flatten_training_route_records_to_reactions(
     route_records: Sequence[TrainingRouteRecord],
-) -> list[PreparedTrainingReaction]:
+) -> list[TrainingReactionCandidate]:
     """Convert released route records into flat reaction candidates while preserving route lineage."""
-    flattened_reactions: list[PreparedTrainingReaction] = []
+    flattened_reactions: list[TrainingReactionCandidate] = []
 
     for route_record in route_records:
-        for step_index, (product, step) in enumerate(route_record.route.iter_reactions(), start=1):
+        for step_index, route_reaction in enumerate(route_record.route.iter_reactions(), start=1):
+            product = route_reaction.product
+            step = route_reaction.step
             if step.mapped_smiles is None:
-                raise ValueError(
-                    f"single-step release requires mapped_smiles; missing on route {route_record.id} step {step_index}"
+                raise TrainingReleaseError(
+                    f"single-step release requires mapped_smiles; missing on route {route_record.id} step {step_index}",
+                    code="workflow.single_step_missing_mapped_smiles",
+                    context={"route_id": route_record.id, "step_index": step_index},
                 )
 
             condition_slot = step.metadata.get("condition_slot")
@@ -77,13 +71,9 @@ def flatten_training_route_records_to_reactions(
                 route_id=route_record.id,
                 step_index=step_index,
                 source_id=step.metadata.get("source_id") if isinstance(step.metadata.get("source_id"), str) else None,
-                dataset=route_record.sources[0].dataset if route_record.sources else "unknown",
-                raw_route_indices=[source.raw_index for source in route_record.sources],
-                raw_route_hashes=[source.raw_route_hash for source in route_record.sources],
-                patent_ids=[source.patent_id for source in route_record.sources],
             )
             flattened_reactions.append(
-                PreparedTrainingReaction(
+                TrainingReactionCandidate(
                     reactants=tuple(sorted(reactant.smiles for reactant in step.reactants)),
                     product=product.smiles,
                     mapped_smiles=step.mapped_smiles,
@@ -102,17 +92,17 @@ def flatten_training_route_records_to_reactions(
 
 
 def merge_exact_reaction_duplicates(
-    reactions: Sequence[PreparedTrainingReaction],
-) -> tuple[list[PreparedTrainingReaction], int]:
+    reactions: Sequence[TrainingReactionCandidate],
+) -> tuple[list[TrainingReactionCandidate], int]:
     """Collapse exact duplicate flat reactions."""
-    reactions_by_signature: dict[str, PreparedTrainingReaction] = {}
+    reactions_by_signature: dict[ReactionExactKey, TrainingReactionCandidate] = {}
     duplicates_removed = 0
 
     for reaction in reactions:
-        exact_signature = get_exact_reaction_signature(reaction)
+        exact_signature = exact_reaction_key(reaction)
         existing_reaction = reactions_by_signature.get(exact_signature)
         if existing_reaction is None:
-            reactions_by_signature[exact_signature] = PreparedTrainingReaction(
+            reactions_by_signature[exact_signature] = TrainingReactionCandidate(
                 reactants=reaction.reactants,
                 product=reaction.product,
                 mapped_smiles=reaction.mapped_smiles,
@@ -125,7 +115,6 @@ def merge_exact_reaction_duplicates(
                 ),
                 condition_slot=reaction.condition_slot,
                 condition_slot_smiles=reaction.condition_slot_smiles,
-                transform_id=reaction.transform_id,
                 sources=list(reaction.sources),
             )
             continue
@@ -144,14 +133,14 @@ def merge_exact_reaction_duplicates(
 
 
 def merge_transform_equivalent_reactions(
-    reactions: Sequence[PreparedTrainingReaction],
-) -> tuple[list[PreparedTrainingReaction], int]:
+    reactions: Sequence[TrainingReactionCandidate],
+) -> tuple[list[TrainingReactionCandidate], int]:
     """Collapse mapped-smiles variants for flat reactions."""
-    grouped_reactions: dict[tuple[Any, ...], list[PreparedTrainingReaction]] = defaultdict(list)
+    grouped_reactions: dict[ReactionIdentityKey, list[TrainingReactionCandidate]] = defaultdict(list)
     for reaction in reactions:
-        grouped_reactions[(*get_reaction_identity_key(reaction), reaction.transform_id)].append(reaction)
+        grouped_reactions[reaction_identity_key(reaction)].append(reaction)
 
-    merged_reactions: list[PreparedTrainingReaction] = []
+    merged_reactions: list[TrainingReactionCandidate] = []
     duplicates_removed = 0
 
     for group in grouped_reactions.values():
@@ -176,7 +165,7 @@ def merge_transform_equivalent_reactions(
             key=lambda reaction: tuple(source.route_id for source in reaction.sources),
         )
         merged_reactions.append(
-            PreparedTrainingReaction(
+            TrainingReactionCandidate(
                 reactants=canonical_reaction.reactants,
                 product=canonical_reaction.product,
                 mapped_smiles=canonical_mapped_smiles,
@@ -185,7 +174,6 @@ def merge_transform_equivalent_reactions(
                 ),
                 condition_slot=canonical_reaction.condition_slot,
                 condition_slot_smiles=canonical_reaction.condition_slot_smiles,
-                transform_id=canonical_reaction.transform_id,
                 sources=[source for reaction in group for source in reaction.sources],
             )
         )
@@ -206,152 +194,176 @@ def summarize_reaction_records(records: Sequence[TrainingReactionRecord]) -> dic
     }
 
 
-def summarize_cross_split_reaction_overlap(
-    *,
-    training_reactions: Sequence[PreparedTrainingReaction],
-    validation_reactions: Sequence[PreparedTrainingReaction],
-) -> dict[str, int]:
-    training_exact_signatures = {get_exact_reaction_signature(reaction) for reaction in training_reactions}
-    validation_exact_signatures = {get_exact_reaction_signature(reaction) for reaction in validation_reactions}
-    training_identity_keys = {get_reaction_identity_key(reaction) for reaction in training_reactions}
-    validation_identity_keys = {get_reaction_identity_key(reaction) for reaction in validation_reactions}
-    shared_identity_keys = training_identity_keys & validation_identity_keys
+@dataclass
+class TrainingReactionReleaseBuilder:
+    route_records: Sequence[TrainingRouteRecord]
+    config: TrainingSetBuildConfig
+    route_records_by_split: dict[SplitName, list[TrainingRouteRecord]] = dataclass_field(init=False)
+    split_reactions: dict[SplitName, list[TrainingReactionCandidate]] = dataclass_field(
+        default_factory=dict, init=False
+    )
+    split_postprocessing: dict[SplitName, dict[str, int]] = dataclass_field(default_factory=dict, init=False)
+    overlap_before_cleanup: dict[str, int] = dataclass_field(default_factory=dict, init=False)
+    overlap_after_cleanup: dict[str, int] = dataclass_field(default_factory=dict, init=False)
+    overlap_removed_from_validation: int = dataclass_field(default=0, init=False)
+    _started: bool = dataclass_field(default=False, init=False)
 
-    return {
-        "shared_exact_reaction_signatures": len(training_exact_signatures & validation_exact_signatures),
-        "shared_reaction_identities": len(shared_identity_keys),
-        "training_records_with_shared_identity": sum(
-            1 for reaction in training_reactions if get_reaction_identity_key(reaction) in shared_identity_keys
-        ),
-        "validation_records_with_shared_identity": sum(
-            1 for reaction in validation_reactions if get_reaction_identity_key(reaction) in shared_identity_keys
-        ),
-    }
+    def __post_init__(self) -> None:
+        self.route_records_by_split = {"training": [], "validation": []}
 
-
-def drop_cross_split_validation_overlap(
-    *,
-    training_reactions: Sequence[PreparedTrainingReaction],
-    validation_reactions: Sequence[PreparedTrainingReaction],
-) -> tuple[list[PreparedTrainingReaction], int]:
-    """Remove validation reactions whose identity already appears in training."""
-    training_identity_keys = {get_reaction_identity_key(reaction) for reaction in training_reactions}
-    filtered_validation_reactions = [
-        reaction
-        for reaction in validation_reactions
-        if get_reaction_identity_key(reaction) not in training_identity_keys
-    ]
-    return filtered_validation_reactions, len(validation_reactions) - len(filtered_validation_reactions)
-
-
-def build_training_reaction_records_from_route_records(
-    route_records: Sequence[TrainingRouteRecord],
-    config: TrainingSetBuildConfig,
-) -> TrainingReactionBuildResult:
-    if config.holdout_mode != "reaction":
-        raise ValueError("single-step training release requires TrainingSetBuildConfig(holdout_mode='reaction')")
-
-    route_records_by_split: dict[SplitName, list[TrainingRouteRecord]] = {
-        "training": [],
-        "validation": [],
-    }
-    for route_record in route_records:
-        route_records_by_split[route_record.split].append(route_record)
-
-    split_reactions: dict[SplitName, list[PreparedTrainingReaction]] = {}
-    split_postprocessing: dict[SplitName, dict[str, int]] = {}
-    for split in ("training", "validation"):
-        flattened_reactions = flatten_training_route_records_to_reactions(route_records_by_split[split])
-        chemically_unique_reactions, exact_chemical_duplicates_removed = merge_exact_reaction_duplicates(
-            flattened_reactions
+    def build(self) -> TrainingReactionBuildResult:
+        self.assert_valid_config()
+        self.assert_not_started()
+        self._started = True
+        self.group_route_records_by_split()
+        for split in ("training", "validation"):
+            self.build_split(split)
+        self.remove_validation_overlap()
+        records = self.materialize_records()
+        return TrainingReactionBuildResult(
+            release_name=f"single-step-{self.config.release_name}",
+            records=records,
+            summary={**self.summary(), "output": summarize_reaction_records(records)},
         )
-        deduplicated_reactions, mapped_smiles_variants_collapsed = merge_transform_equivalent_reactions(
+
+    def assert_valid_config(self) -> None:
+        if self.config.holdout_mode != "reaction":
+            raise TrainingReleaseError(
+                "single-step training release requires TrainingSetBuildConfig(holdout_mode='reaction')",
+                code="workflow.single_step_requires_reaction_holdout",
+                context={"holdout_mode": self.config.holdout_mode},
+            )
+
+    def assert_not_started(self) -> None:
+        if (
+            self._started
+            or self.route_records_by_split["training"]
+            or self.route_records_by_split["validation"]
+            or self.split_reactions
+            or self.split_postprocessing
+            or self.overlap_before_cleanup
+            or self.overlap_after_cleanup
+            or self.overlap_removed_from_validation
+        ):
+            raise RuntimeError("TrainingReactionReleaseBuilder instances are single-use")
+
+    def group_route_records_by_split(self) -> None:
+        for route_record in self.route_records:
+            self.route_records_by_split[route_record.split].append(route_record)
+
+    def build_split(self, split: SplitName) -> None:
+        """Flatten and deduplicate one split without looking across split boundaries."""
+        flattened_reactions = flatten_training_route_records_to_reactions(self.route_records_by_split[split])
+        chemically_unique_reactions, exact_duplicates_removed = merge_exact_reaction_duplicates(flattened_reactions)
+        deduplicated_reactions, mapped_variants_collapsed = merge_transform_equivalent_reactions(
             chemically_unique_reactions
         )
-        split_reactions[split] = deduplicated_reactions
-        split_postprocessing[split] = {
-            "input_routes": len(route_records_by_split[split]),
+        self.split_reactions[split] = deduplicated_reactions
+        self.split_postprocessing[split] = {
+            "input_routes": len(self.route_records_by_split[split]),
             "flattened_reactions": len(flattened_reactions),
-            "chemical_duplicates_removed": exact_chemical_duplicates_removed,
-            "mapped_smiles_variants_collapsed": mapped_smiles_variants_collapsed,
-            "duplicate_reactions_removed": exact_chemical_duplicates_removed + mapped_smiles_variants_collapsed,
+            "chemical_duplicates_removed": exact_duplicates_removed,
+            "mapped_smiles_variants_collapsed": mapped_variants_collapsed,
+            "duplicate_reactions_removed": exact_duplicates_removed + mapped_variants_collapsed,
         }
 
-    overlap_before_cleanup = summarize_cross_split_reaction_overlap(
-        training_reactions=split_reactions["training"],
-        validation_reactions=split_reactions["validation"],
-    )
-    cleaned_validation_reactions, overlap_removed_from_validation = drop_cross_split_validation_overlap(
-        training_reactions=split_reactions["training"],
-        validation_reactions=split_reactions["validation"],
-    )
-    split_reactions["validation"] = cleaned_validation_reactions
-    overlap_after_cleanup = summarize_cross_split_reaction_overlap(
-        training_reactions=split_reactions["training"],
-        validation_reactions=split_reactions["validation"],
-    )
-    if overlap_after_cleanup["shared_reaction_identities"] != 0:
-        raise ValueError("single-step release validation split still overlaps with training after cleanup")
-    if overlap_after_cleanup["shared_exact_reaction_signatures"] != 0:
-        raise ValueError(
-            "single-step release validation split still shares exact reactions with training after cleanup"
-        )
+    def remove_validation_overlap(self) -> None:
+        """Make validation strict by dropping reactions whose identity appears in training."""
+        self.overlap_before_cleanup = self.summarize_cross_split_overlap()
+        training_keys = {reaction_identity_key(reaction) for reaction in self.split_reactions["training"]}
+        validation_reactions = self.split_reactions["validation"]
+        self.split_reactions["validation"] = [
+            reaction for reaction in validation_reactions if reaction_identity_key(reaction) not in training_keys
+        ]
+        self.overlap_removed_from_validation = len(validation_reactions) - len(self.split_reactions["validation"])
+        self.overlap_after_cleanup = self.summarize_cross_split_overlap()
+        self.assert_no_cross_split_overlap()
 
-    records: list[TrainingReactionRecord] = []
-    for split in ("training", "validation"):
-        for reaction in split_reactions[split]:
-            records.append(
-                TrainingReactionRecord(
-                    id="",
-                    split=split,
-                    reactants=list(reaction.reactants),
-                    product=reaction.product,
-                    mapped_smiles=reaction.mapped_smiles,
-                    alternative_mapped_smiles=list(reaction.alternative_mapped_smiles),
-                    condition_slot=reaction.condition_slot,
-                    condition_slot_smiles=list(reaction.condition_slot_smiles),
-                    sources=list(reaction.sources),
+    def summarize_cross_split_overlap(self) -> dict[str, int]:
+        training_reactions = self.split_reactions["training"]
+        validation_reactions = self.split_reactions["validation"]
+        training_exact_keys = {exact_reaction_key(reaction) for reaction in training_reactions}
+        validation_exact_keys = {exact_reaction_key(reaction) for reaction in validation_reactions}
+        training_identity_keys = {reaction_identity_key(reaction) for reaction in training_reactions}
+        validation_identity_keys = {reaction_identity_key(reaction) for reaction in validation_reactions}
+        shared_identity_keys = training_identity_keys & validation_identity_keys
+
+        return {
+            "shared_exact_reaction_signatures": len(training_exact_keys & validation_exact_keys),
+            "shared_reaction_identities": len(shared_identity_keys),
+            "training_records_with_shared_identity": sum(
+                1 for reaction in training_reactions if reaction_identity_key(reaction) in shared_identity_keys
+            ),
+            "validation_records_with_shared_identity": sum(
+                1 for reaction in validation_reactions if reaction_identity_key(reaction) in shared_identity_keys
+            ),
+        }
+
+    def assert_no_cross_split_overlap(self) -> None:
+        if self.overlap_after_cleanup["shared_reaction_identities"] != 0:
+            raise TrainingReleaseError(
+                "single-step release validation split still overlaps with training after cleanup",
+                code="workflow.single_step_validation_overlap",
+                context=self.overlap_after_cleanup,
+            )
+        if self.overlap_after_cleanup["shared_exact_reaction_signatures"] != 0:
+            raise TrainingReleaseError(
+                "single-step release validation split still shares exact reactions with training after cleanup",
+                code="workflow.single_step_exact_validation_overlap",
+                context=self.overlap_after_cleanup,
+            )
+
+    def materialize_records(self) -> list[TrainingReactionRecord]:
+        """Attach release ids and split names after all deduplication and cleanup are final."""
+        records: list[TrainingReactionRecord] = []
+        for split in ("training", "validation"):
+            for reaction in self.split_reactions[split]:
+                records.append(
+                    TrainingReactionRecord(
+                        id=f"{self.config.route_prefix}-rxn-{len(records) + 1:06d}",
+                        split=split,
+                        reactants=list(reaction.reactants),
+                        product=reaction.product,
+                        mapped_smiles=reaction.mapped_smiles,
+                        alternative_mapped_smiles=list(reaction.alternative_mapped_smiles),
+                        condition_slot=reaction.condition_slot,
+                        condition_slot_smiles=list(reaction.condition_slot_smiles),
+                        sources=list(reaction.sources),
+                    )
                 )
-            )
+        return records
 
-    for ordinal, record in enumerate(records, start=1):
-        record.id = get_training_reaction_record_id(config, ordinal)
-
-    summary = {
-        "input": {
-            "route_records": split_counts(
-                total=len(route_records),
-                training=len(route_records_by_split["training"]),
-                validation=len(route_records_by_split["validation"]),
-            )
-        },
-        "reaction_postprocessing": {
-            "training": split_postprocessing["training"],
-            "validation": {
-                **split_postprocessing["validation"],
-                "overlap_removed_from_validation": overlap_removed_from_validation,
-            },
-            "cross_split_overlap_before_cleanup": overlap_before_cleanup,
-            "cross_split_overlap_after_cleanup": overlap_after_cleanup,
-            "dedup_contract": {
-                "exact_duplicates": "collapse identical mapped_smiles + condition identity within each split",
-                "mapping_drift": (
-                    "collapse reactants + product + condition identity within each split; "
-                    "paroutes transform ids are unavailable in the released route artifact"
+    def summary(self) -> dict[str, Any]:
+        return {
+            "input": {
+                "parent_route_release": self.config.release_name,
+                "route_records": split_counts(
+                    total=len(self.route_records),
+                    training=len(self.route_records_by_split["training"]),
+                    validation=len(self.route_records_by_split["validation"]),
                 ),
-                "validation_cleanup": (
-                    "drop validation reactions whose reactants + product + condition identity already appears in training"
+                "provenance": (
+                    "reaction sources store route_id, step_index, and optional source_id; "
+                    "raw route hashes and patent ids live in the parent route release"
                 ),
             },
-        },
-        "output": summarize_reaction_records(records),
-    }
-
-    return TrainingReactionBuildResult(
-        release_name=get_training_reaction_release_name(config),
-        records=records,
-        summary=summary,
-    )
+            "reaction_postprocessing": {
+                "training": self.split_postprocessing["training"],
+                "validation": {
+                    **self.split_postprocessing["validation"],
+                    "overlap_removed_from_validation": self.overlap_removed_from_validation,
+                },
+                "cross_split_overlap_before_cleanup": self.overlap_before_cleanup,
+                "cross_split_overlap_after_cleanup": self.overlap_after_cleanup,
+                "dedup_contract": {
+                    "exact_duplicates": "collapse identical mapped_smiles + condition identity within each split",
+                    "mapping_drift": ("collapse reactants + product + condition identity within each split"),
+                    "validation_cleanup": (
+                        "drop validation reactions whose reactants + product + condition identity already appears in training"
+                    ),
+                },
+            },
+        }
 
 
 def write_training_reaction_release(

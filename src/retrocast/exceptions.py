@@ -65,6 +65,12 @@ class WorkflowError(RetroCastException):
     default_code = "workflow.error"
 
 
+class TrainingReleaseError(WorkflowError):
+    """Raised when training release construction violates a release contract."""
+
+    default_code = "workflow.training_release_error"
+
+
 class BenchmarkError(RetroCastException, ValueError):
     """Raised when benchmark construction or validation fails."""
 

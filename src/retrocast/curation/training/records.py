@@ -97,7 +97,7 @@ class TrainingSetBuildConfig:
 
     @property
     def release_name(self) -> str:
-        return f"{self.holdout_mode}-heldout-n1-n5"
+        return f"{self.holdout_mode}-holdout-n1-n5"
 
     def to_manifest_dict(self) -> dict[str, Any]:
         return {
@@ -144,10 +144,6 @@ class TrainingReactionSource(BaseModel):
     route_id: str
     step_index: int
     source_id: str | None = None
-    dataset: str
-    raw_route_indices: list[int] = PydanticField(default_factory=list)
-    raw_route_hashes: list[str] = PydanticField(default_factory=list)
-    patent_ids: list[str | None] = PydanticField(default_factory=list)
 
 
 class TrainingReactionRecord(BaseModel):
@@ -166,14 +162,13 @@ class TrainingReactionRecord(BaseModel):
 
 
 @dataclass
-class PreparedTrainingReaction:
+class TrainingReactionCandidate:
     reactants: tuple[SmilesStr, ...]
     product: SmilesStr
     mapped_smiles: ReactionSmilesStr
     alternative_mapped_smiles: list[ReactionSmilesStr] = field(default_factory=list)
     condition_slot: str | None = None
     condition_slot_smiles: tuple[SmilesStr, ...] = field(default_factory=tuple)
-    transform_id: str | None = None
     sources: list[TrainingReactionSource] = field(default_factory=list)
 
 

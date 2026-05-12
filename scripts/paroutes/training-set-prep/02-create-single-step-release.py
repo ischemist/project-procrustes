@@ -1,10 +1,10 @@
 """
 create public paroutes single-step training-set release files from the released
-reaction-heldout route artifact.
+reaction-holdout route artifact.
 
 usage:
     uv run scripts/paroutes/training-set-prep/02-create-single-step-release.py
-    uv run scripts/paroutes/training-set-prep/02-create-single-step-release.py --route-release-dir path/to/reaction-heldout-n1-n5
+    uv run scripts/paroutes/training-set-prep/02-create-single-step-release.py --route-release-dir path/to/reaction-holdout-n1-n5
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ import argparse
 from pathlib import Path
 
 from retrocast.curation.training import (
+    TrainingReactionReleaseBuilder,
     TrainingSetBuildConfig,
-    build_training_reaction_records_from_route_records,
     write_training_reaction_release,
 )
 from retrocast.io import load_training_route_records
@@ -24,19 +24,19 @@ BASE_DIR = Path(__file__).resolve().parents[3]
 DATA_DIR = BASE_DIR / "data" / "retrocast"
 RELEASE_VERSION = "v2026-05-11"
 DEFAULT_RELEASE_ROOT = DATA_DIR / "releases" / "paroutes-training-sets" / RELEASE_VERSION
-DEFAULT_ROUTE_RELEASE_DIR = DEFAULT_RELEASE_ROOT / "reaction-heldout-n1-n5"
+DEFAULT_ROUTE_RELEASE_DIR = DEFAULT_RELEASE_ROOT / "reaction-holdout-n1-n5"
 
 
 def main() -> None:
     configure_script_logging()
     parser = argparse.ArgumentParser(
-        description="create paroutes single-step training-set release files from the reaction-heldout route release."
+        description="create paroutes single-step training-set release files from the reaction-holdout route release."
     )
     parser.add_argument(
         "--route-release-dir",
         type=Path,
         default=DEFAULT_ROUTE_RELEASE_DIR,
-        help=f"reaction-heldout route release directory. default: {DEFAULT_ROUTE_RELEASE_DIR}",
+        help=f"reaction-holdout route release directory. default: {DEFAULT_ROUTE_RELEASE_DIR}",
     )
     parser.add_argument(
         "--output-dir",
@@ -62,7 +62,7 @@ def main() -> None:
     logger.info("  validation routes: %s", f"{len(validation_routes):,}")
 
     config = TrainingSetBuildConfig(holdout_mode="reaction", show_progress=False)
-    result = build_training_reaction_records_from_route_records(route_records, config=config)
+    result = TrainingReactionReleaseBuilder(route_records=route_records, config=config).build()
     source_paths = [training_path, validation_path]
     if route_manifest_path.exists():
         source_paths.append(route_manifest_path)

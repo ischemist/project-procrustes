@@ -22,8 +22,8 @@ uv run scripts/paroutes/training-set-prep/02-create-single-step-release.py
 uv run scripts/paroutes/training-set-prep/03-audit-release.py
 ```
 
-`01-create-training-release.py` writes route releases for `route-heldout-n1-n5` and/or
-`reaction-heldout-n1-n5`.
+`01-create-training-release.py` writes route releases for `route-holdout-n1-n5` and/or
+`reaction-holdout-n1-n5`.
 
 Each route release folder contains:
 
@@ -33,7 +33,7 @@ Each route release folder contains:
 - `manifest.json`
 
 `02-create-single-step-release.py` writes the flat reaction release by loading the
-released `reaction-heldout-n1-n5` route artifact, flattening and deduplicating
+released `reaction-holdout-n1-n5` route artifact, flattening and deduplicating
 each split separately, then removing validation reactions whose reaction
 identity also appears in training.
 

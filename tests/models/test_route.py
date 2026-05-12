@@ -94,9 +94,13 @@ class TestRoute:
         route = Route(target=target, rank=1)
 
         assert [step.mapped_smiles for step in route.iter_steps()] == ["CO>>COC", "C>>CO"]
-        assert [(product.smiles, step.mapped_smiles) for product, step in route.iter_reactions()] == [
+        assert [(reaction.product.smiles, reaction.step.mapped_smiles) for reaction in route.iter_reactions()] == [
             ("COC", "CO>>COC"),
             ("CO", "C>>CO"),
+        ]
+        assert [reaction.signature for reaction in route.iter_reactions()] == [
+            (frozenset(["OKKJLVBELUTLKV-UHFFFAOYSA-N"]), "FAKE-KEY-1"),
+            (frozenset(["VNWKTOKETHGBQD-UHFFFAOYSA-N"]), "OKKJLVBELUTLKV-UHFFFAOYSA-N"),
         ]
 
     def test_depth_branched_route(self):

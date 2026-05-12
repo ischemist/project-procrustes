@@ -96,7 +96,7 @@ class TestTrainingReleaseLoaders:
     def test_load_training_route_records_returns_structured_records(self, tmp_path, synthetic_route_factory):
         route = synthetic_route_factory("linear", depth=1)
         record = TrainingRouteRecord(
-            id="paroutes-reaction-heldout-n1-n5-000001",
+            id="paroutes-reaction-holdout-n1-n5-000001",
             split="training",
             route_signature=route.get_structural_signature(),
             content_hash=route.get_content_hash(),
@@ -131,7 +131,7 @@ class TestTrainingReleaseLoaders:
 
     def test_load_training_reaction_records_returns_validated_models(self, tmp_path):
         record = TrainingReactionRecord(
-            id="paroutes-rxn-single-step-reaction-heldout-n1-n5-000001",
+            id="paroutes-rxn-000001",
             split="training",
             reactants=["c"],
             product="cc",
@@ -141,13 +141,9 @@ class TestTrainingReleaseLoaders:
             condition_slot_smiles=["o"],
             sources=[
                 TrainingReactionSource(
-                    route_id="paroutes-reaction-heldout-n1-n5-000001",
+                    route_id="paroutes-reaction-holdout-n1-n5-000001",
                     step_index=1,
                     source_id="rxn-1",
-                    dataset="all",
-                    raw_route_indices=[1],
-                    raw_route_hashes=["hash-1"],
-                    patent_ids=["patent-1"],
                 )
             ],
         )

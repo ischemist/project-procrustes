@@ -23,7 +23,7 @@ DATA_DIR = BASE_DIR / "data" / "retrocast"
 RELEASE_VERSION = "v2026-05-11"
 DEFAULT_RELEASE_ROOT = DATA_DIR / "releases" / "paroutes-training-sets" / RELEASE_VERSION
 DEFAULT_OUTPUT_PATH = DEFAULT_RELEASE_ROOT / "release-audit.md"
-ROUTE_RELEASE_NAMES = ("route-heldout-n1-n5", "reaction-heldout-n1-n5")
+ROUTE_RELEASE_NAMES = ("route-holdout-n1-n5", "reaction-holdout-n1-n5")
 
 
 def main() -> None:

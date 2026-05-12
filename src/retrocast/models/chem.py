@@ -105,6 +105,17 @@ class ReactionStep(BaseModel):
         return intermediate_count >= 2
 
 
+class RouteReaction(BaseModel):
+    """A reaction step paired with the route molecule it produces."""
+
+    product: Molecule
+    step: ReactionStep
+
+    @property
+    def signature(self) -> ReactionSignature:
+        return (frozenset(reactant.inchikey for reactant in self.step.reactants), self.product.inchikey)
+
+
 @runtime_checkable
 class TargetIdentity(Protocol):
     """
@@ -218,20 +229,20 @@ class Route(BaseModel):
         _visit(self.target)
         return steps
 
-    def iter_reactions(self) -> Iterator[tuple[Molecule, ReactionStep]]:
-        """Yield product/step pairs in deterministic root-first depth-first order."""
+    def iter_reactions(self) -> Iterator[RouteReaction]:
+        """Yield reaction/product pairs in deterministic root-first depth-first order."""
 
-        def _visit(node: Molecule) -> Iterator[tuple[Molecule, ReactionStep]]:
+        def _visit(node: Molecule) -> Iterator[RouteReaction]:
             if node.synthesis_step is None:
                 return
-            yield node, node.synthesis_step
+            yield RouteReaction(product=node, step=node.synthesis_step)
             for reactant in node.synthesis_step.reactants:
                 yield from _visit(reactant)
 
         yield from _visit(self.target)
 
-    def get_reactions(self) -> list[tuple[Molecule, ReactionStep]]:
-        """Return product/step pairs in deterministic root-first depth-first order."""
+    def get_reactions(self) -> list[RouteReaction]:
+        """Return reaction/product pairs in deterministic root-first depth-first order."""
         return list(self.iter_reactions())
 
     def _build_route_signature(
@@ -371,27 +382,7 @@ class Route(BaseModel):
             route2_reactions = route2.get_reaction_signatures()
             overlapping = route1_reactions & route2_reactions
         """
-        signatures: set[ReactionSignature] = set()
-
-        def _collect_reactions(node: Molecule) -> None:
-            if node.is_leaf:
-                return
-
-            # Non-leaf node must have a synthesis_step
-            assert node.synthesis_step is not None, "Non-leaf node without synthesis_step"
-
-            # Create signature for this reaction
-            reactant_keys = frozenset(r.inchikey for r in node.synthesis_step.reactants)
-            product_key = node.inchikey
-            sig: ReactionSignature = (reactant_keys, product_key)
-            signatures.add(sig)
-
-            # Recursively collect from reactants
-            for reactant in node.synthesis_step.reactants:
-                _collect_reactions(reactant)
-
-        _collect_reactions(self.target)
-        return signatures
+        return {reaction.signature for reaction in self.iter_reactions()}
 
 
 # We need to tell Pydantic to rebuild the forward references
