@@ -15,10 +15,12 @@ from retrocast.curation.training_sets import (
     TrainingSetBuildConfig,
     adapt_training_routes,
     assign_train_val_splits,
+    build_route_release_split_audit,
     build_training_manifest,
     build_training_reaction_records_from_adapted,
     build_training_reaction_records_from_route_records,
     build_training_records_from_adapted,
+    render_route_release_split_audit_markdown,
     summarize_records,
 )
 from retrocast.models.chem import Molecule, ReactionStep, Route
@@ -41,6 +43,27 @@ def make_route(name: str, depth: int) -> Route:
             synthesis_step=ReactionStep(reactants=[current]),
         )
     return Route(target=current, rank=1)
+
+
+def make_convergent_route(name: str) -> Route:
+    left_leaf = make_leaf(f"{name}-left-leaf")
+    right_leaf = make_leaf(f"{name}-right-leaf")
+    left_intermediate = Molecule(
+        smiles=SmilesStr(f"{name}-left"),
+        inchikey=InchiKeyStr(f"INCHI-{name}-left"),
+        synthesis_step=ReactionStep(reactants=[left_leaf]),
+    )
+    right_intermediate = Molecule(
+        smiles=SmilesStr(f"{name}-right"),
+        inchikey=InchiKeyStr(f"INCHI-{name}-right"),
+        synthesis_step=ReactionStep(reactants=[right_leaf]),
+    )
+    target = Molecule(
+        smiles=SmilesStr(f"{name}-target"),
+        inchikey=InchiKeyStr(f"INCHI-{name}-target"),
+        synthesis_step=ReactionStep(reactants=[left_intermediate, right_intermediate]),
+    )
+    return Route(target=target, rank=1)
 
 
 def make_reaction_route(
@@ -125,6 +148,45 @@ class TestTrainingSetSplits:
     def test_assign_train_val_splits_rejects_invalid_fraction(self):
         with pytest.raises(ValueError, match="val_fraction"):
             assign_train_val_splits({}, val_fraction=0, seed=1)
+
+    def test_build_route_release_split_audit_and_render_markdown(self):
+        linear_training = make_route_record("linear-training", make_route("linear", depth=2), split="training")
+        linear_validation = make_route_record(
+            "linear-validation", make_route("linear-val", depth=2), split="validation"
+        )
+        convergent_training = make_route_record(
+            "convergent-training",
+            make_convergent_route("conv"),
+            split="training",
+        )
+
+        audit = build_route_release_split_audit(
+            release_name="reaction-heldout-n1-n5",
+            route_records=[linear_training, linear_validation, convergent_training],
+        )
+
+        assert audit.total_counts.training == 2
+        assert audit.total_counts.validation == 1
+        assert [(row.length, row.counts.training, row.counts.validation) for row in audit.by_length] == [(2, 2, 1)]
+        assert [
+            (row.has_convergent_reaction, row.counts.training, row.counts.validation) for row in audit.by_convergence
+        ] == [
+            (False, 1, 1),
+            (True, 1, 0),
+        ]
+        assert [
+            (row.length, row.has_convergent_reaction, row.counts.training, row.counts.validation)
+            for row in audit.by_length_and_convergence
+        ] == [
+            (2, False, 1, 1),
+            (2, True, 1, 0),
+        ]
+
+        markdown = render_route_release_split_audit_markdown(release_root_name="v2026-05-11", audits=[audit])
+        assert "# release audit" in markdown
+        assert "## `reaction-heldout-n1-n5`" in markdown
+        assert "| `false` | 1 | 1 | 2 | 50.0000% | 66.6667% |" in markdown
+        assert "| 2 | `true` | 1 | 0 | 1 | 0.0000% |" in markdown
 
     def test_build_from_adapted_routes_reuses_adapted_inputs(self):
         route = make_route("keep", depth=1)
@@ -411,7 +473,7 @@ class TestTrainingSetSplits:
                 config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
             )
 
-    def test_build_training_reaction_records_from_route_records_preserves_split_and_reports_overlap(self):
+    def test_build_training_reaction_records_from_route_records_removes_validation_overlap(self):
         training_route = make_reaction_route(
             "shared",
             mapped_smiles="C.C>O>CC",
@@ -424,23 +486,45 @@ class TestTrainingSetSplits:
             condition_slot_smiles=["O"],
             patent_id="patent-validation",
         )
+        validation_unique_route = make_reaction_route(
+            "unique",
+            mapped_smiles="N.N>S>NN",
+            condition_slot_smiles=["S"],
+            patent_id="patent-unique",
+        )
 
         result = build_training_reaction_records_from_route_records(
             [
                 make_route_record("training", training_route, split="training", patent_id="patent-training"),
                 make_route_record("validation", validation_route, split="validation", patent_id="patent-validation"),
+                make_route_record(
+                    "validation-unique", validation_unique_route, split="validation", patent_id="patent-unique"
+                ),
             ],
             config=TrainingSetBuildConfig(holdout_mode="reaction", show_progress=False),
         )
 
         assert [record.split for record in result.records] == ["training", "validation"]
+        assert result.records[1].product == validation_unique_route.target.smiles
         assert result.summary["reaction_postprocessing"]["training"]["flattened_reactions"] == 1
-        assert result.summary["reaction_postprocessing"]["validation"]["flattened_reactions"] == 1
-        assert result.summary["reaction_postprocessing"]["cross_split_overlap"] == {
+        assert result.summary["reaction_postprocessing"]["validation"]["flattened_reactions"] == 2
+        assert result.summary["reaction_postprocessing"]["validation"]["overlap_removed_from_validation"] == 1
+        assert result.summary["reaction_postprocessing"]["cross_split_overlap_before_cleanup"] == {
             "shared_exact_reaction_signatures": 0,
             "shared_reaction_identities": 1,
             "training_records_with_shared_identity": 1,
             "validation_records_with_shared_identity": 1,
+        }
+        assert result.summary["reaction_postprocessing"]["cross_split_overlap_after_cleanup"] == {
+            "shared_exact_reaction_signatures": 0,
+            "shared_reaction_identities": 0,
+            "training_records_with_shared_identity": 0,
+            "validation_records_with_shared_identity": 0,
+        }
+        assert result.summary["output"]["all_records"] == {
+            "total": 2,
+            "training": 1,
+            "validation": 1,
         }
 
     def test_adapt_training_routes_tracks_failures_by_code(self):

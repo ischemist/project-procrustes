@@ -1,0 +1,121 @@
+{
+  "action": "scripts/paroutes/training-set-prep/create-single-step-release",
+  "created_at": "2026-05-12T16:10:50.538764Z",
+  "directives": {},
+  "output_files": {
+    "all": {
+      "label": "all",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/single-step-reaction-heldout-n1-n5/all.jsonl.gz",
+      "sha256": "2056eb7108dc90b0f183d80dbc0923603f9131ddf19f2df96b76f2474369dee5"
+    },
+    "all_rsmi": {
+      "label": "all_rsmi",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/single-step-reaction-heldout-n1-n5/all.rsmi.txt.gz",
+      "sha256": "4f1e0909f101bb2ab314b9289fe4f9e8125ac7930e131764a712f3d51ea3913c"
+    },
+    "training": {
+      "label": "training",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/single-step-reaction-heldout-n1-n5/training.jsonl.gz",
+      "sha256": "315fd6d05bc8aa93ab1a131bac6ec5e274d54a8ed04a105f70805269ca0557cb"
+    },
+    "training_rsmi": {
+      "label": "training_rsmi",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/single-step-reaction-heldout-n1-n5/training.rsmi.txt.gz",
+      "sha256": "e1b1306a84cc3334a322cef37b0c33019f99f98787c236600fde17e8685d6727"
+    },
+    "validation": {
+      "label": "validation",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/single-step-reaction-heldout-n1-n5/validation.jsonl.gz",
+      "sha256": "93b3bc259168a766c95d92d89fc2c9908dfe2cd3802f6fd93261ecf8f7c494ad"
+    },
+    "validation_rsmi": {
+      "label": "validation_rsmi",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/single-step-reaction-heldout-n1-n5/validation.rsmi.txt.gz",
+      "sha256": "27c36dcccfd7859b083f1f5eb7846099990fdbc7a3e4e1f4a7ced62ce9b31bf1"
+    }
+  },
+  "parameters": {
+    "holdout_mode": "reaction",
+    "progress": {
+      "enabled": false
+    },
+    "release_rules": {
+      "chemical_exact_dedup": "collapse exact route duplicates by route.get_annotated_signature(include_mapped_smiles=True)",
+      "reaction_holdout": "excise reactions present in n1 union n5 and keep surviving sub-routes",
+      "route_holdout": "exclude full n1 union n5 by route.get_structural_signature()",
+      "transform_dedup": "collapse mapped-smiles variants by structure + condition identity + raw paroutes reaction_hash sidecar"
+    },
+    "split": {
+      "seed": 20260502,
+      "val_fraction": 0.05
+    }
+  },
+  "release_name": "single-step-reaction-heldout-n1-n5",
+  "retrocast_version": "0.5.4.dev4",
+  "schema_version": "1.1",
+  "source_files": [
+    {
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/reaction-heldout-n1-n5/training.jsonl.gz",
+      "sha256": "be1a058ce9346c63bf68acc358a77e176999eddd0ae3df2792e60b0285ebc8be"
+    },
+    {
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/reaction-heldout-n1-n5/validation.jsonl.gz",
+      "sha256": "3905c696e8d72394a0c88b25d9c8a28a16d0baa5ef9ff086f90a623c07a9c2cf"
+    },
+    {
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/reaction-heldout-n1-n5/manifest.json",
+      "sha256": "91e82ed285f64f783429851befef770a10875fd2ed1b29a318a429405bc28728"
+    }
+  ],
+  "statistics": {},
+  "summary": {
+    "input": {
+      "route_records": {
+        "total": 164973,
+        "training": 156718,
+        "validation": 8255
+      }
+    },
+    "output": {
+      "all_records": {
+        "total": 299427,
+        "training": 286193,
+        "validation": 13234
+      }
+    },
+    "reaction_postprocessing": {
+      "cross_split_overlap_after_cleanup": {
+        "shared_exact_reaction_signatures": 0,
+        "shared_reaction_identities": 0,
+        "training_records_with_shared_identity": 0,
+        "validation_records_with_shared_identity": 0
+      },
+      "cross_split_overlap_before_cleanup": {
+        "shared_exact_reaction_signatures": 5044,
+        "shared_reaction_identities": 5056,
+        "training_records_with_shared_identity": 5056,
+        "validation_records_with_shared_identity": 5056
+      },
+      "dedup_contract": {
+        "exact_duplicates": "collapse identical mapped_smiles + condition identity within each split",
+        "mapping_drift": "collapse reactants + product + condition identity within each split; paroutes transform ids are unavailable in the released route artifact",
+        "validation_cleanup": "drop validation reactions whose reactants + product + condition identity already appears in training"
+      },
+      "training": {
+        "chemical_duplicates_removed": 72587,
+        "duplicate_reactions_removed": 72661,
+        "flattened_reactions": 358854,
+        "input_routes": 156718,
+        "mapped_smiles_variants_collapsed": 74
+      },
+      "validation": {
+        "chemical_duplicates_removed": 673,
+        "duplicate_reactions_removed": 673,
+        "flattened_reactions": 18963,
+        "input_routes": 8255,
+        "mapped_smiles_variants_collapsed": 0,
+        "overlap_removed_from_validation": 5056
+      }
+    }
+  }
+}

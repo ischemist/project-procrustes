@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 import random
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,6 +24,7 @@ from retrocast.typing import ReactionSmilesStr, SmilesStr
 TrainingHoldoutMode = Literal["route", "reaction"]
 SplitName = Literal["training", "validation"]
 ConditionIdentity = tuple[str, ...] | str | None
+ReactionIdentityKey = tuple[tuple[SmilesStr, ...], SmilesStr, ConditionIdentity]
 TransformDedupStepKey = tuple[str | None, ConditionIdentity]
 TransformDedupKey = tuple[str, tuple[TransformDedupStepKey, ...]]
 T = TypeVar("T")
@@ -230,6 +231,55 @@ class TrainingReactionBuildResult:
     release_name: str
     records: list[TrainingReactionRecord]
     summary: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class SplitAuditCounts:
+    training: int
+    validation: int
+
+    @property
+    def total(self) -> int:
+        return self.training + self.validation
+
+    @property
+    def validation_fraction(self) -> float:
+        if self.total == 0:
+            return 0.0
+        return self.validation / self.total
+
+    def all_fraction(self, grand_total: int) -> float:
+        if grand_total == 0:
+            return 0.0
+        return self.total / grand_total
+
+
+@dataclass(frozen=True)
+class RouteLengthSplitAuditRow:
+    length: int
+    counts: SplitAuditCounts
+
+
+@dataclass(frozen=True)
+class RouteConvergenceSplitAuditRow:
+    has_convergent_reaction: bool
+    counts: SplitAuditCounts
+
+
+@dataclass(frozen=True)
+class RouteLengthConvergenceSplitAuditRow:
+    length: int
+    has_convergent_reaction: bool
+    counts: SplitAuditCounts
+
+
+@dataclass(frozen=True)
+class RouteReleaseSplitAudit:
+    release_name: str
+    total_counts: SplitAuditCounts
+    by_length: tuple[RouteLengthSplitAuditRow, ...]
+    by_convergence: tuple[RouteConvergenceSplitAuditRow, ...]
+    by_length_and_convergence: tuple[RouteLengthConvergenceSplitAuditRow, ...]
 
 
 @dataclass(frozen=True)
@@ -632,14 +682,18 @@ def get_exact_reaction_signature(reaction: PreparedTrainingReaction) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def get_transform_reaction_dedup_key(reaction: PreparedTrainingReaction) -> tuple[Any, ...]:
-    """Identity for collapsing mapping drift between equivalent flat reactions."""
+def get_reaction_identity_key(reaction: PreparedTrainingReaction) -> ReactionIdentityKey:
+    """Identity for flat-reaction leakage checks and transform-agnostic grouping."""
     return (
         reaction.reactants,
         reaction.product,
         reaction.condition_slot_smiles or reaction.condition_slot,
-        reaction.transform_id,
     )
+
+
+def get_transform_reaction_dedup_key(reaction: PreparedTrainingReaction) -> tuple[Any, ...]:
+    """Identity for collapsing mapping drift between equivalent flat reactions."""
+    return (*get_reaction_identity_key(reaction), reaction.transform_id)
 
 
 def flatten_prepared_routes_to_reactions(
@@ -867,27 +921,42 @@ def summarize_reaction_records(records: Sequence[TrainingReactionRecord]) -> dic
     }
 
 
-def summarize_split_preserving_reaction_overlap(
+def summarize_cross_split_reaction_overlap(
     *,
     training_reactions: Sequence[PreparedTrainingReaction],
     validation_reactions: Sequence[PreparedTrainingReaction],
 ) -> dict[str, int]:
     training_exact_signatures = {get_exact_reaction_signature(reaction) for reaction in training_reactions}
     validation_exact_signatures = {get_exact_reaction_signature(reaction) for reaction in validation_reactions}
-    training_dedup_keys = {get_transform_reaction_dedup_key(reaction) for reaction in training_reactions}
-    validation_dedup_keys = {get_transform_reaction_dedup_key(reaction) for reaction in validation_reactions}
-    shared_dedup_keys = training_dedup_keys & validation_dedup_keys
+    training_identity_keys = {get_reaction_identity_key(reaction) for reaction in training_reactions}
+    validation_identity_keys = {get_reaction_identity_key(reaction) for reaction in validation_reactions}
+    shared_identity_keys = training_identity_keys & validation_identity_keys
 
     return {
         "shared_exact_reaction_signatures": len(training_exact_signatures & validation_exact_signatures),
-        "shared_reaction_identities": len(shared_dedup_keys),
+        "shared_reaction_identities": len(shared_identity_keys),
         "training_records_with_shared_identity": sum(
-            1 for reaction in training_reactions if get_transform_reaction_dedup_key(reaction) in shared_dedup_keys
+            1 for reaction in training_reactions if get_reaction_identity_key(reaction) in shared_identity_keys
         ),
         "validation_records_with_shared_identity": sum(
-            1 for reaction in validation_reactions if get_transform_reaction_dedup_key(reaction) in shared_dedup_keys
+            1 for reaction in validation_reactions if get_reaction_identity_key(reaction) in shared_identity_keys
         ),
     }
+
+
+def drop_cross_split_validation_overlap(
+    *,
+    training_reactions: Sequence[PreparedTrainingReaction],
+    validation_reactions: Sequence[PreparedTrainingReaction],
+) -> tuple[list[PreparedTrainingReaction], int]:
+    """Remove validation reactions whose identity already appears in training."""
+    training_identity_keys = {get_reaction_identity_key(reaction) for reaction in training_reactions}
+    filtered_validation_reactions = [
+        reaction
+        for reaction in validation_reactions
+        if get_reaction_identity_key(reaction) not in training_identity_keys
+    ]
+    return filtered_validation_reactions, len(validation_reactions) - len(filtered_validation_reactions)
 
 
 def build_training_reaction_records_from_route_records(
@@ -923,6 +992,26 @@ def build_training_reaction_records_from_route_records(
             "duplicate_reactions_removed": exact_chemical_duplicates_removed + mapped_smiles_variants_collapsed,
         }
 
+    overlap_before_cleanup = summarize_cross_split_reaction_overlap(
+        training_reactions=split_reactions["training"],
+        validation_reactions=split_reactions["validation"],
+    )
+    cleaned_validation_reactions, overlap_removed_from_validation = drop_cross_split_validation_overlap(
+        training_reactions=split_reactions["training"],
+        validation_reactions=split_reactions["validation"],
+    )
+    split_reactions["validation"] = cleaned_validation_reactions
+    overlap_after_cleanup = summarize_cross_split_reaction_overlap(
+        training_reactions=split_reactions["training"],
+        validation_reactions=split_reactions["validation"],
+    )
+    if overlap_after_cleanup["shared_reaction_identities"] != 0:
+        raise ValueError("single-step release validation split still overlaps with training after cleanup")
+    if overlap_after_cleanup["shared_exact_reaction_signatures"] != 0:
+        raise ValueError(
+            "single-step release validation split still shares exact reactions with training after cleanup"
+        )
+
     records: list[TrainingReactionRecord] = []
     for split in ("training", "validation"):
         for reaction in split_reactions[split]:
@@ -943,10 +1032,6 @@ def build_training_reaction_records_from_route_records(
     for ordinal, record in enumerate(records, start=1):
         record.id = get_training_reaction_record_id(config, ordinal)
 
-    overlap = summarize_split_preserving_reaction_overlap(
-        training_reactions=split_reactions["training"],
-        validation_reactions=split_reactions["validation"],
-    )
     summary = {
         "input": {
             "route_records": split_counts(
@@ -957,13 +1042,20 @@ def build_training_reaction_records_from_route_records(
         },
         "reaction_postprocessing": {
             "training": split_postprocessing["training"],
-            "validation": split_postprocessing["validation"],
-            "cross_split_overlap": overlap,
+            "validation": {
+                **split_postprocessing["validation"],
+                "overlap_removed_from_validation": overlap_removed_from_validation,
+            },
+            "cross_split_overlap_before_cleanup": overlap_before_cleanup,
+            "cross_split_overlap_after_cleanup": overlap_after_cleanup,
             "dedup_contract": {
                 "exact_duplicates": "collapse identical mapped_smiles + condition identity within each split",
                 "mapping_drift": (
                     "collapse reactants + product + condition identity within each split; "
                     "paroutes transform ids are unavailable in the released route artifact"
+                ),
+                "validation_cleanup": (
+                    "drop validation reactions whose reactants + product + condition identity already appears in training"
                 ),
             },
         },
@@ -1255,6 +1347,147 @@ def split_counts(total: int, training: int, validation: int) -> dict[str, int]:
         "training": training,
         "validation": validation,
     }
+
+
+def build_route_release_split_audit(
+    *,
+    release_name: str,
+    route_records: Sequence[TrainingRouteRecord],
+) -> RouteReleaseSplitAudit:
+    training_length_counts: Counter[int] = Counter()
+    validation_length_counts: Counter[int] = Counter()
+    training_convergence_counts: Counter[bool] = Counter()
+    validation_convergence_counts: Counter[bool] = Counter()
+    training_joint_counts: Counter[tuple[int, bool]] = Counter()
+    validation_joint_counts: Counter[tuple[int, bool]] = Counter()
+
+    for record in route_records:
+        length = record.route.length
+        has_convergent_reaction = record.route.has_convergent_reaction
+        if record.split == "training":
+            training_length_counts[length] += 1
+            training_convergence_counts[has_convergent_reaction] += 1
+            training_joint_counts[(length, has_convergent_reaction)] += 1
+        elif record.split == "validation":
+            validation_length_counts[length] += 1
+            validation_convergence_counts[has_convergent_reaction] += 1
+            validation_joint_counts[(length, has_convergent_reaction)] += 1
+        else:
+            raise ValueError(f"unexpected split on training route record: {record.split}")
+
+    total_counts = SplitAuditCounts(
+        training=sum(training_length_counts.values()),
+        validation=sum(validation_length_counts.values()),
+    )
+    by_length = tuple(
+        RouteLengthSplitAuditRow(
+            length=length,
+            counts=SplitAuditCounts(
+                training=training_length_counts[length],
+                validation=validation_length_counts[length],
+            ),
+        )
+        for length in sorted(set(training_length_counts) | set(validation_length_counts))
+    )
+    by_convergence = tuple(
+        RouteConvergenceSplitAuditRow(
+            has_convergent_reaction=has_convergent_reaction,
+            counts=SplitAuditCounts(
+                training=training_convergence_counts[has_convergent_reaction],
+                validation=validation_convergence_counts[has_convergent_reaction],
+            ),
+        )
+        for has_convergent_reaction in (False, True)
+    )
+    by_length_and_convergence = tuple(
+        RouteLengthConvergenceSplitAuditRow(
+            length=length,
+            has_convergent_reaction=has_convergent_reaction,
+            counts=SplitAuditCounts(
+                training=training_joint_counts[(length, has_convergent_reaction)],
+                validation=validation_joint_counts[(length, has_convergent_reaction)],
+            ),
+        )
+        for length, has_convergent_reaction in sorted(set(training_joint_counts) | set(validation_joint_counts))
+    )
+
+    return RouteReleaseSplitAudit(
+        release_name=release_name,
+        total_counts=total_counts,
+        by_length=by_length,
+        by_convergence=by_convergence,
+        by_length_and_convergence=by_length_and_convergence,
+    )
+
+
+def render_route_release_split_audit_markdown(
+    *,
+    release_root_name: str,
+    audits: Sequence[RouteReleaseSplitAudit],
+) -> str:
+    def _format_percent(value: float) -> str:
+        return f"{value:.4%}"
+
+    def _format_bool(value: bool) -> str:
+        return "true" if value else "false"
+
+    lines = [
+        "# release audit",
+        "",
+        f"release root: `{release_root_name}`",
+        "",
+        "this report summarizes `training` / `validation` split balance for the released route artifacts.",
+        "",
+    ]
+
+    for audit in audits:
+        lines.extend(
+            [
+                f"## `{audit.release_name}`",
+                "",
+                f"totals: `{audit.total_counts.training:,}` training, `{audit.total_counts.validation:,}` validation, "
+                f"`{audit.total_counts.total:,}` overall, validation fraction `{_format_percent(audit.total_counts.validation_fraction)}`.",
+                "",
+                "| convergent | train | val | all | val% | all% |",
+                "| --- | ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for row in audit.by_convergence:
+            lines.append(
+                f"| `{_format_bool(row.has_convergent_reaction)}` | "
+                f"{row.counts.training:,} | {row.counts.validation:,} | {row.counts.total:,} | "
+                f"{_format_percent(row.counts.validation_fraction)} | {_format_percent(row.counts.all_fraction(audit.total_counts.total))} |"
+            )
+
+        lines.extend(
+            [
+                "",
+                "| length | train | val | all | val% |",
+                "| ---: | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for row in audit.by_length:
+            lines.append(
+                f"| {row.length} | {row.counts.training:,} | {row.counts.validation:,} | {row.counts.total:,} | "
+                f"{_format_percent(row.counts.validation_fraction)} |"
+            )
+
+        lines.extend(
+            [
+                "",
+                "| length | convergent | train | val | all | val% |",
+                "| ---: | --- | ---: | ---: | ---: | ---: |",
+            ]
+        )
+        for row in audit.by_length_and_convergence:
+            lines.append(
+                f"| {row.length} | `{_format_bool(row.has_convergent_reaction)}` | "
+                f"{row.counts.training:,} | {row.counts.validation:,} | {row.counts.total:,} | "
+                f"{_format_percent(row.counts.validation_fraction)} |"
+            )
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 def write_training_release(

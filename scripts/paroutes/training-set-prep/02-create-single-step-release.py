@@ -79,7 +79,8 @@ def main() -> None:
     reaction_postprocessing = result.summary["reaction_postprocessing"]
     training_postprocessing = reaction_postprocessing["training"]
     validation_postprocessing = reaction_postprocessing["validation"]
-    overlap = reaction_postprocessing["cross_split_overlap"]
+    overlap_before_cleanup = reaction_postprocessing["cross_split_overlap_before_cleanup"]
+    overlap_after_cleanup = reaction_postprocessing["cross_split_overlap_after_cleanup"]
 
     logger.info(
         "output: %s reactions (%s training, %s validation).",
@@ -94,18 +95,25 @@ def main() -> None:
         training_postprocessing["mapped_smiles_variants_collapsed"],
     )
     logger.info(
-        "validation split: %s flattened; %s exact duplicates removed; %s mapping variants collapsed.",
+        "validation split: %s flattened; %s exact duplicates removed; %s mapping variants collapsed; "
+        "%s overlaps removed from validation.",
         validation_postprocessing["flattened_reactions"],
         validation_postprocessing["chemical_duplicates_removed"],
         validation_postprocessing["mapped_smiles_variants_collapsed"],
+        validation_postprocessing["overlap_removed_from_validation"],
     )
     logger.info(
-        "cross-split overlap: %s shared reaction identities; %s shared exact mapped reactions "
+        "cross-split overlap before cleanup: %s shared reaction identities; %s shared exact mapped reactions "
         "(training records affected: %s, validation records affected: %s).",
-        overlap["shared_reaction_identities"],
-        overlap["shared_exact_reaction_signatures"],
-        overlap["training_records_with_shared_identity"],
-        overlap["validation_records_with_shared_identity"],
+        overlap_before_cleanup["shared_reaction_identities"],
+        overlap_before_cleanup["shared_exact_reaction_signatures"],
+        overlap_before_cleanup["training_records_with_shared_identity"],
+        overlap_before_cleanup["validation_records_with_shared_identity"],
+    )
+    logger.info(
+        "cross-split overlap after cleanup: %s shared reaction identities; %s shared exact mapped reactions.",
+        overlap_after_cleanup["shared_reaction_identities"],
+        overlap_after_cleanup["shared_exact_reaction_signatures"],
     )
 
 

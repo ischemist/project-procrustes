@@ -4,145 +4,106 @@ icon: lucide/package-open
 
 # Training Set Releases
 
-this page explains how retrocast creates the public paroutes training releases.
-
-the point is to give a compact mental model of the pipeline:
+This page explains how retrocast creates the public PaRoutes training releases. This doc aims to give a compact mental model of the pipeline:
 
 - what artifacts we produce
 - what problem each artifact solves
 - which functions own each stage
 - which tradeoffs the current design makes
 
-this is about **training-set release prep**, not benchmark curation or model
-evaluation.
+## Historical Context
 
-## overview
+[PaRoutes](https://pubs.rsc.org/en/content/articlelanding/2022/dd/d2dd00015f) ([Github](https://github.com/MolecularAI/PaRoutes)) is a landmark first-in-class effort to curate a large-scale, high-quality dataset of multistep synthesis plans extracted from patent literature. The original paper provided three artifacts: full set of multistep routes (`all-routes`) and two carefully constructed test subsets `n1-routes` and `n5-routes`. Unfortunately, the authors did not provide a canonical training set split, which results in either refusal to adopt PaRoutes as training/test set (e.g. [DESP](https://arxiv.org/abs/2407.06334)) or inconsistent splitting:
 
-retrocast currently produces three paroutes-derived training artifacts:
+- [DirectMultiStep](https://directmultistep.com) performs a _route heldout_: removing n1 and n5 routes from the `all-routes`
+- [TempRe](https://arxiv.org/abs/2507.21762) performs a _reaction heldout_: removing all single step reactions from n1 and n5 from `all-routes`
+
+Given the recent inclusion of [synthesis planning in the list of Grand Challenges in Drug Discovery](https://chemrxiv.org/doi/full/10.26434/chemrxiv.15000615/v1) and the subsequent [proposal of synthesis planning as a pretraining objective](https://chemrxiv.org/doi/full/10.26434/chemrxiv.15001278/v3), one might reasonably expect an influx of new researchers to the field, and so standardization of the training set preparation is a top priority.
+
+RetroCast is an open-source effort, so we do not release this as an authoritative final say, but rather we invite scrutiny and feedback from the community.
+
+!!! info "Why does standardization of implementation of the split matters?"
+
+    Separating test routes from the `all-routes` is not as straightforward as it might seem because the correct procedure depends on the representation of the data. For example, if you represent routes as nested/bigraph dictionaries, you need to come up with serialization strategy if you want to exclude by containment check (you can't put dictionary in a set). Or even if you're willing to pay the price of O(n) comparison, you still need to make sure your equality check is permutation-invariant (a route A + B -> C (+ D) -> E is the same regardless of whether C or D is the left child). [DirectMultiStep](https://directmultistep.com) implemented generator of all permutations of routes and used flattening serialization. In RetroCast, we utilize route signatures (see more below). The point here is not that this is an unusually algorithmically hard problem, but rather that it requires careful consideration and there's no reason for every single model developer to have to implement this themselves.
+
+
+## Overview
+
+RetroCast currently produces three paroutes-derived training artifacts:
 
 1. `route-heldout-n1-n5`
 2. `reaction-heldout-n1-n5`
 3. `single-step-reaction-heldout-n1-n5`
 
-the first two are **route releases**. the third is a **flat reaction release**.
-
-all three ultimately come from the same raw paroutes assets:
+The first two are **route releases**, and the third is a **flat reaction release**. All three ultimately come from the same raw paroutes assets:
 
 - `all-routes.json.gz`
 - `n1-routes.json.gz`
 - `n5-routes.json.gz`
 
-the main question is not how to serialize them. the main question is **what we
-want the released dataset to mean**.
+### `route-heldout-n1-n5`
 
-### artifact semantics
+This is a DirectMultiStep-style dataset that removes route structures that appear in the `n1 ∪ n5` reference union.
 
-#### `route-heldout-n1-n5`
+Internally, this is achieved by comparing `Route.get_structural_signature()` of each route to the heldout signature set.
 
-this artifact solves a simple multistep leakage problem: if a route structure
-already appears in the paroutes `n1 ∪ n5` reference union, it should not remain
-in the released training set.
+### `reaction-heldout-n1-n5`
 
-core rule:
+This is a TempRe-style dataset that implements a stricter holdout: no single-step reaction contained in any route of `n1 ∪ n5` can be present in any route of the training set.
 
-- hold out by `Route.get_structural_signature()`
+Internally, this is achieved by:
 
-#### `reaction-heldout-n1-n5`
+- removing exact heldout routes first (`Route.get_structural_signature()`)
+- then excising heldout reactions from surviving routes
+- keeping surviving route fragments
 
-this artifact solves the stricter version of the same problem: route-level
-holdout is not enough if a training route contains an embedded heldout
-reaction.
+### `single-step-reaction-heldout-n1-n5`
 
-core rule:
+A dominant approach to multistep planning explicitly separates a single-step reaction predictor from a multistep planner. This dataset is derived from the released `reaction-heldout-n1-n5` route artifact by flattening the `training` and `validation` splits into single-step reaction sets.
 
-- remove exact heldout routes first
-- then excise heldout reactions from surviving routes
-- keep surviving route fragments
+We intentionally decide to derive this dataset from the route-based release rather than a separate curation pipeline because single-step prediction problem is primarily a problem we're interested in in the context of multistep planning, so having a separate curation pipeline would present unnecessary challenges in the construction of the multistep routes for subsequent training of the planner.
 
-#### `single-step-reaction-heldout-n1-n5`
+This route-derived starting point is useful because it keeps the single-step release visibly connected to the route release that planners are trained from. The cost is that route splits are not automatically safe single-step splits: the same flat reaction identity can appear in both `training` and `validation`.
 
-this artifact solves a product problem more than a chemistry problem: we want a
-single-step release that is obviously derived from the released multistep
-dataset, rather than a totally separate curation pipeline with its own split.
+For the public single-step release, RetroCast resolves that tradeoff in favor of clean validation. We still start from the released route artifact, but we remove any validation reaction whose flat reaction identity already appears in training.
 
-core rule:
+Release preparation workflow:
 
-- start from the released `reaction-heldout-n1-n5` route artifact
+- start from the released `reaction-heldout-n1-n5` route dataset
 - preserve its `training` / `validation` split
 - flatten each split separately
 - deduplicate reactions within each split
-- report cross-split overlap instead of silently inventing a new split
+- remove validation reactions that still overlap with training
+- report overlap before and after cleanup
 
 tradeoff:
 
-- this preserves lineage and gives a coherent artifact family
-- but it does **not** guarantee zero flat-reaction overlap across
-  `training` and `validation`
+- this keeps the release family coherent and gives a leakage-resistant
+  single-step validation set by default
+- but the final single-step validation split is no longer a perfect projection
+  of the route validation split
 
-that tradeoff is deliberate. for the shipped public artifact, preserving the
-route-release partition was judged more important than creating a completely new
-reaction-only split.
 
-## core data shapes
+## Core Data Shapes
 
 the release code lives mainly in
-`src/retrocast/curation/training_sets.py`.
+`src/retrocast/curation/training_sets.py`. the important in-memory / persisted record types are:
 
-the important in-memory / persisted record types are:
+- `RawRouteSource` provenance for one raw paroutes route
+- `AdaptedTrainingRoute` adapted route plus route/reaction signatures and raw transform sidecar
+- `PreparedTrainingRoute` post-holdout, post-dedup route ready for split assignment
+- `TrainingRouteRecord` persisted route-release row
+- `TrainingReactionSource` provenance for one flattened reaction row
+- `PreparedTrainingReaction` in-memory flat reaction candidate
+- `TrainingReactionRecord` persisted single-step release row
 
-- `RawRouteSource`
-  - provenance for one raw paroutes route
-- `AdaptedTrainingRoute`
-  - adapted route plus route/reaction signatures and raw transform sidecar
-- `PreparedTrainingRoute`
-  - post-holdout, post-dedup route ready for split assignment
-- `TrainingRouteRecord`
-  - persisted route-release row
-- `TrainingReactionSource`
-  - provenance for one flattened reaction row
-- `PreparedTrainingReaction`
-  - in-memory flat reaction candidate
-- `TrainingReactionRecord`
-  - persisted single-step release row
+## Mental Model: Running `01-create-training-release.py`
 
-## adapter contract
-
-some release behavior only makes sense if the paroutes adapter contract is
-clear.
-
-for paroutes reaction steps:
-
-- `ReactionStep.mapped_smiles` stores the full mapped `rsmi`
-- `ReactionStep.template` stays unset
-- `ReactionStep.reagents` stays unset
-- `ReactionStep.solvents` stays unset
-- the ambiguous middle `rsmi` slot is stored in metadata:
-  - `metadata["condition_slot"]`
-  - `metadata["condition_slot_smiles"]`
-
-this is solving a trust problem.
-
-we want top-level schema fields to be reliable. paroutes does **not** tell us
-which middle-slot molecules are solvents vs reagents, and it does **not**
-provide a real generalized template. so that information stays in metadata
-instead of being forced into misleading schema fields.
-
-one more important detail:
-
-- paroutes `reaction_hash` is not stored on the public `Route`
-- it is used only as a temporary sidecar during raw route curation
-
-that gives us a cleaner public artifact, but it also means some later
-split-preserving reaction dedup has to work without access to raw
-`reaction_hash`.
-
-## mental model: running `01-create-training-release.py`
-
-entrypoint:
+Entrypoint:
 
 - `scripts/paroutes/training-set-prep/01-create-training-release.py`
 
-main functions involved:
+Main functions involved:
 
 - `load_raw_paroutes_list()`
 - `adapt_training_routes()`
@@ -183,11 +144,9 @@ for each route it stores:
 `extract_paroutes_transform_ids_by_source_id()`, which extracts raw paroutes
 `reaction_hash` values keyed by reaction `source_id`.
 
-this is the compromise point in the pipeline:
+!!! note
 
-- the public `Route` object stays schema-honest
-- we still retain enough raw provenance to do stronger route-level dedup during
-  release prep
+    in v2026-05-11 release, `all-routes` contains 457 166 entries, of which 457 157 are succesfully adapted into RetroCast schema (failures by error: 3 `adapter.cycle_detected` and 6 `chem.invalid_smiles`)
 
 ### step 3: apply holdout
 
@@ -198,36 +157,35 @@ then it handles the two route-release modes differently.
 
 #### if `holdout_mode="route"`
 
-the rule is simple:
-
-- drop any candidate route whose `structural_signature` is in the heldout route
-  signature set
+the rule is simple: drop any candidate route whose `structural_signature` is in the heldout route signature set
 
 this produces `route-heldout-n1-n5`.
+
+!!! note
+
+    in v2026-05-11 release, this step removes 50 026 entries
 
 #### if `holdout_mode="reaction"`
 
 the rule is stricter:
 
 - drop exact heldout routes first
-- then call `excise_heldout_reactions()`
-- `excise_heldout_reactions()` delegates to
-  `retrocast.curation.filtering.excise_reactions_from_route()`
-- if a heldout reaction is inside a route, cut it out and keep any surviving
-  fragments
+- then call `excise_heldout_reactions()` which relies on `retrocast.curation.filtering.excise_reactions_from_route()`
+- if a heldout reaction is inside a route, cut it out and keep any surviving fragments
 - deduplicate those fragments with `deduplicate_routes()`
 
 this produces the candidate pool for `reaction-heldout-n1-n5`.
 
-tradeoff:
+!!! note
 
-- reaction holdout is more useful for leakage control
-- but the resulting route release is no longer just a filtered subset of raw
-  paroutes; it can contain excision fragments
+    in v2026-05-11 release, after 50 026 exact matches are removed, 103 604 routes are subject to excision, which results in complete removal of 3 840 routes and produces 101 379 fragmented routes. 
 
 ### step 4: deduplicate routes
 
-after holdout, route dedup happens in two stages.
+There are two sources of duplication in the original PaRoutes. 
+
+1. Some routes are chemical duplicates that were extracted from different patents, and as such differ in the patent ID associated with them. We merge these in stage 4a.
+2. Some routes are structurally identical but contain reactions that are atom mapped (annotated) differently. 
 
 #### stage 4a: exact chemistry duplicates
 
@@ -241,13 +199,11 @@ today that exact signature is:
 when duplicates are merged:
 
 - raw provenance is preserved in `PreparedTrainingRoute.sources`
-- singular `metadata["patent_id"]` is removed because it becomes misleading
-  after merges
-- honest aggregate provenance is written back onto the released route as
-  `metadata["source_patent_ids"]` by `sync_route_source_metadata()`
+- `metadata["patent_id"]` is replaced with `metadata["source_patent_ids"]` by `sync_route_source_metadata()`. after dedup, the released route is no longer "from patent x", it is "supported by patents x, y, z".
 
-that last point matters. after dedup, the released route is no longer “from
-patent x”. it is “supported by patents x, y, z”.
+!!! note
+
+    in v2026-05-11 release, this step removes 237 923 and 239 862 duplicates from route and reaction holdout releases respectively
 
 #### stage 4b: transform-equivalent route collapse
 
@@ -256,7 +212,7 @@ patent x”. it is “supported by patents x, y, z”.
 
 that key includes:
 
-- route structural signature
+- route structural signature `route.get_structural_signature()`
 - per-step condition identity from `get_step_condition_identity()`
 - raw paroutes transform ids from `transform_ids_by_source_id`
 
@@ -267,9 +223,11 @@ canonical mapped reactions are chosen by:
 3. raw-route-hash tie-break between equally weighted candidates
 
 non-canonical mapped variants are preserved on the kept route step via
-`merge_alternative_mapped_smiles()`, which writes:
+`merge_alternative_mapped_smiles()`, which writes to `ReactionStep.metadata["alternative_mapped_smiles"]`
 
-- `ReactionStep.metadata["alternative_mapped_smiles"]`
+!!! note
+
+    in v2026-05-11 release, this step merges 82 and 71 duplicates from route and reaction holdout releases respectively
 
 ### step 5: assign route split
 
@@ -281,9 +239,9 @@ the stratification key is:
 - `route.length`
 - `route.has_convergent_reaction`
 
-the point of assigning the split here, rather than earlier, is that we only
-split the final released route population, not raw candidates that may later be
-removed or merged.
+!!! tip
+
+    you can verify that the training and validation splits are distributionally similar by running `scripts/paroutes/training-set-prep/03-audit-release.py`
 
 ### step 6: write the route release
 
@@ -309,11 +267,11 @@ main functions involved:
 - `flatten_training_route_records_to_reactions()`
 - `merge_exact_reaction_duplicates()`
 - `merge_transform_equivalent_reactions()`
-- `summarize_split_preserving_reaction_overlap()`
+- `summarize_cross_split_reaction_overlap()`
+- `drop_cross_split_validation_overlap()`
 - `write_training_reaction_release()`
 
-the key point is that `02` does **not** re-adapt raw paroutes. it starts from
-the already released `reaction-heldout-n1-n5` route artifact.
+the key point is that `02` does **not** re-adapt raw paroutes. it starts from the already released `reaction-heldout-n1-n5` route artifact.
 
 you can think about `02` as a 5-step pipeline.
 
@@ -324,17 +282,7 @@ the script loads:
 - `reaction-heldout-n1-n5/training.jsonl.gz`
 - `reaction-heldout-n1-n5/validation.jsonl.gz`
 
-using `load_training_route_records()`, which reconstructs
-`TrainingRouteRecord` with:
-
-- the `Route`
-- the split
-- route signature
-- content hash
-- route provenance
-
-this keeps the single-step release visibly derived from the route release,
-rather than from a second hidden curation pass over raw paroutes.
+using `load_training_route_records()`, which reconstructs `TrainingRouteRecord`
 
 ### step 2: flatten routes into reactions, split by split
 
@@ -355,10 +303,7 @@ each flattened reaction keeps:
 - `alternative_mapped_smiles`
 - `condition_slot`
 - `condition_slot_smiles`
-- `TrainingReactionSource`
-
-that provenance shape matters because every released reaction row can still be
-traced back to the route record that produced it.
+- `TrainingReactionSource` (every released reaction row can still be traced back to the route record that produced it)
 
 ### step 3: deduplicate reactions within each split
 
@@ -380,41 +325,46 @@ that exact signature includes:
 `merge_transform_equivalent_reactions()` groups by
 `get_transform_reaction_dedup_key()`.
 
-for the split-preserving route-derived release, that key is effectively:
+for the route-release-derived public single-step release, that key is effectively:
 
 - `reactants`
 - `product`
 - condition identity
 
-note the limitation here:
-
-- raw paroutes `reaction_hash` is not present in the released route artifact
-- so `02` cannot use it for flat-reaction dedup
-
-tradeoff:
-
-- the split-preserving single-step release has a weaker mapping-drift collapse
-  rule than the experimental raw-adapted reaction builder
-
-### step 4: measure cross-split overlap
+### step 4: remove cross-split validation overlap
 
 after within-split dedup,
-`summarize_split_preserving_reaction_overlap()` computes:
+`summarize_cross_split_reaction_overlap()` computes the overlap snapshot before
+cleanup:
 
 - `shared_exact_reaction_signatures`
 - `shared_reaction_identities`
 - `training_records_with_shared_identity`
 - `validation_records_with_shared_identity`
 
+then `drop_cross_split_validation_overlap()` removes validation reactions whose
+identity already appears in training.
+
+the identity used for this cleanup is:
+
+- `reactants`
+- `product`
+- condition identity
+
+after cleanup, `summarize_cross_split_reaction_overlap()` runs again and the
+public release expects zero remaining shared reaction identities.
+
 tradeoff:
 
-- this release is easier to reason about as a projection of the route release
-- but it is not a strict leakage-free single-step benchmark
+- this is a stricter and safer default for single-step model development
+- but it means the released validation split is not simply “whatever reactions
+  happened to come from route-validation records”
 
 if strict reaction-level split hygiene is the goal, the other builder,
 `build_training_reaction_records_from_adapted()`, is the more appropriate
-starting point. that builder exists for experiments, but it is **not** the
-public single-step release path.
+starting point for experiments that want to rebuild single-step data directly
+from raw-adapted routes. that builder exists for experiments, but it is **not**
+the public single-step release path.
 
 ### step 5: write the single-step release
 
@@ -454,7 +404,7 @@ touch:
 - `merge_exact_chemical_duplicates()`
 - `merge_transform_equivalent_routes()`
 
-### change single-step split-preserving dedup behavior
+### change single-step release dedup behavior
 
 touch:
 
@@ -491,9 +441,9 @@ when you run `02-create-single-step-release.py`, retrocast:
 2. preserves its split
 3. flattens each split into reactions
 4. deduplicates within each split
-5. reports cross-split overlap
+5. removes validation reactions that overlap with training
 6. writes the single-step release
 
 that is the current intended model. it keeps the route releases strict where
-they need to be, and keeps the public single-step release understandable as a
-projection of the released route dataset.
+they need to be, and makes the public single-step release safer to use as an
+actual training/validation artifact.
