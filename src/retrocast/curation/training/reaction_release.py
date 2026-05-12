@@ -21,7 +21,6 @@ from retrocast.curation.training.records import (
 from retrocast.curation.training.route_release import (
     build_training_manifest,
     get_step_condition_slot_smiles,
-    iter_route_reactions,
     split_counts,
 )
 from retrocast.io import save_jsonl_gz, save_lines_gz
@@ -65,7 +64,7 @@ def flatten_training_route_records_to_reactions(
     flattened_reactions: list[PreparedTrainingReaction] = []
 
     for route_record in route_records:
-        for step_index, (product, step) in enumerate(iter_route_reactions(route_record.route), start=1):
+        for step_index, (product, step) in enumerate(route_record.route.iter_reactions(), start=1):
             if step.mapped_smiles is None:
                 raise ValueError(
                     f"single-step release requires mapped_smiles; missing on route {route_record.id} step {step_index}"

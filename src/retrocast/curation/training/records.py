@@ -14,8 +14,6 @@ TrainingHoldoutMode = Literal["route", "reaction"]
 SplitName = Literal["training", "validation"]
 ConditionIdentity = tuple[str, ...] | str | None
 ReactionIdentityKey = tuple[tuple[SmilesStr, ...], SmilesStr, ConditionIdentity]
-TransformDedupStepKey = tuple[str | None, ConditionIdentity]
-TransformDedupKey = tuple[str, tuple[TransformDedupStepKey, ...]]
 
 
 @dataclass(frozen=True)
@@ -146,13 +144,6 @@ class TrainingSetBuildConfig:
 class TrainingSetBuildResult:
     release_name: str
     records: list[TrainingRouteRecord]
-    summary: dict[str, Any]
-
-
-@dataclass
-class PreparedTrainingSetBuildResult:
-    release_name: str
-    prepared_routes: list[PreparedTrainingRoute]
     summary: dict[str, Any]
 
 

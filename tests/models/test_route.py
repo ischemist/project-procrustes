@@ -79,6 +79,26 @@ class TestRoute:
         route = Route(target=target, rank=1)
         assert route.length == 3
 
+    def test_iter_steps_and_reactions_are_root_first(self):
+        leaf = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"))
+        intermediate = Molecule(
+            smiles=SmilesStr("CO"),
+            inchikey=InchiKeyStr("OKKJLVBELUTLKV-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf], mapped_smiles="C>>CO"),
+        )
+        target = Molecule(
+            smiles=SmilesStr("COC"),
+            inchikey=InchiKeyStr("FAKE-KEY-1"),
+            synthesis_step=ReactionStep(reactants=[intermediate], mapped_smiles="CO>>COC"),
+        )
+        route = Route(target=target, rank=1)
+
+        assert [step.mapped_smiles for step in route.iter_steps()] == ["CO>>COC", "C>>CO"]
+        assert [(product.smiles, step.mapped_smiles) for product, step in route.iter_reactions()] == [
+            ("COC", "CO>>COC"),
+            ("CO", "C>>CO"),
+        ]
+
     def test_depth_branched_route(self):
         """Test depth calculation for branched route (should return max depth)."""
         # Left branch: depth 2

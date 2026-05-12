@@ -204,6 +204,34 @@ class Route(BaseModel):
         """Canonical signature of the labeled route structure."""
         return self.get_structural_signature()
 
+    def iter_steps(self) -> list[ReactionStep]:
+        """Return reaction steps in deterministic root-first depth-first order."""
+        steps: list[ReactionStep] = []
+
+        def _visit(node: Molecule) -> None:
+            if node.synthesis_step is None:
+                return
+            steps.append(node.synthesis_step)
+            for reactant in node.synthesis_step.reactants:
+                _visit(reactant)
+
+        _visit(self.target)
+        return steps
+
+    def iter_reactions(self) -> list[tuple[Molecule, ReactionStep]]:
+        """Return product/step pairs in deterministic root-first depth-first order."""
+        reactions: list[tuple[Molecule, ReactionStep]] = []
+
+        def _visit(node: Molecule) -> None:
+            if node.synthesis_step is None:
+                return
+            reactions.append((node, node.synthesis_step))
+            for reactant in node.synthesis_step.reactants:
+                _visit(reactant)
+
+        _visit(self.target)
+        return reactions
+
     def _build_route_signature(
         self,
         *,
