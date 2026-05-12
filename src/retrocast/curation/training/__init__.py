@@ -30,10 +30,10 @@ from retrocast.curation.training.records import (
 )
 from retrocast.curation.training.route_release import (
     TRAINING_RELEASE_ACTION,
+    TrainingRouteReleaseBuilder,
     adapt_training_routes,
     assign_train_val_splits,
     build_training_manifest,
-    build_training_records_from_adapted,
     summarize_records,
     write_training_release,
 )
@@ -56,6 +56,7 @@ __all__ = [
     "TrainingReactionRecord",
     "TrainingReactionSource",
     "TrainingRouteRecord",
+    "TrainingRouteReleaseBuilder",
     "TrainingSetBuildConfig",
     "TrainingSetBuildResult",
     "adapt_training_routes",
@@ -63,7 +64,6 @@ __all__ = [
     "build_route_release_split_audit",
     "build_training_manifest",
     "build_training_reaction_records_from_route_records",
-    "build_training_records_from_adapted",
     "render_route_release_split_audit_markdown",
     "summarize_records",
     "write_training_reaction_release",

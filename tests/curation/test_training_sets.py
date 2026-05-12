@@ -12,13 +12,13 @@ from retrocast.curation.training import (
     AdaptedTrainingRoute,
     RawRouteSource,
     TrainingRouteRecord,
+    TrainingRouteReleaseBuilder,
     TrainingSetBuildConfig,
     adapt_training_routes,
     assign_train_val_splits,
     build_route_release_split_audit,
     build_training_manifest,
     build_training_reaction_records_from_route_records,
-    build_training_records_from_adapted,
     render_route_release_split_audit_markdown,
     summarize_records,
 )
@@ -193,7 +193,7 @@ class TestTrainingSetSplits:
         route = make_route("keep", depth=1)
         heldout = make_route("heldout", depth=1)
 
-        result = build_training_records_from_adapted(
+        result = TrainingRouteReleaseBuilder(
             all_routes=[make_adapted_route("keep", route), make_adapted_route("heldout", heldout)],
             all_adaptation=AdaptationStatistics(
                 raw_routes=2,
@@ -218,7 +218,7 @@ class TestTrainingSetSplits:
                 )
             },
             config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
-        )
+        ).build()
 
         assert [record.route_signature for record in result.records] == [route.get_structural_signature()]
         assert result.summary["input"]["all_routes"] == 2
@@ -243,7 +243,7 @@ class TestTrainingSetSplits:
             patent_id="patent-b",
         )
 
-        result = build_training_records_from_adapted(
+        result = TrainingRouteReleaseBuilder(
             all_routes=[
                 make_adapted_route("dup-a", route_a, patent_id="patent-a"),
                 make_adapted_route("dup-b", route_b, patent_id="patent-b"),
@@ -258,7 +258,7 @@ class TestTrainingSetSplits:
             heldout_routes={},
             heldout_adaptation={},
             config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
-        )
+        ).build()
 
         assert len(result.records) == 1
         assert result.summary["postprocessing"]["chemical_duplicates_removed"] == 1
@@ -282,7 +282,7 @@ class TestTrainingSetSplits:
             condition_slot_smiles=["N"],
         )
 
-        result = build_training_records_from_adapted(
+        result = TrainingRouteReleaseBuilder(
             all_routes=[
                 make_adapted_route("cond-a", route_a),
                 make_adapted_route("cond-b", route_b),
@@ -297,7 +297,7 @@ class TestTrainingSetSplits:
             heldout_routes={},
             heldout_adaptation={},
             config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
-        )
+        ).build()
 
         assert len(result.records) == 2
         assert len({record.split for record in result.records}) == 1
@@ -324,7 +324,7 @@ class TestTrainingSetSplits:
             patent_id="patent-c",
         )
 
-        result = build_training_records_from_adapted(
+        result = TrainingRouteReleaseBuilder(
             all_routes=[
                 make_adapted_route("mapped-a", canonical_route, patent_id="patent-a"),
                 make_adapted_route(
@@ -344,7 +344,7 @@ class TestTrainingSetSplits:
             heldout_routes={},
             heldout_adaptation={},
             config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
-        )
+        ).build()
 
         assert len(result.records) == 1
         assert result.summary["postprocessing"]["chemical_duplicates_removed"] == 1
@@ -633,7 +633,7 @@ class TestTrainingSetSplits:
             ),
             rank=1,
         )
-        result = build_training_records_from_adapted(
+        result = TrainingRouteReleaseBuilder(
             all_routes=[make_adapted_route("full", full_route)],
             all_adaptation=AdaptationStatistics(
                 raw_routes=1,
@@ -653,7 +653,7 @@ class TestTrainingSetSplits:
                 )
             },
             config=TrainingSetBuildConfig(holdout_mode="reaction", show_progress=False),
-        )
+        ).build()
 
         record_signatures = {record.route_signature for record in result.records}
         record_targets = {record.route.target.inchikey for record in result.records}

@@ -15,9 +15,9 @@ from typing import cast
 
 from retrocast.curation.training import (
     TrainingHoldoutMode,
+    TrainingRouteReleaseBuilder,
     TrainingSetBuildConfig,
     adapt_training_routes,
-    build_training_records_from_adapted,
     write_training_release,
 )
 from retrocast.io import load_raw_paroutes_list
@@ -106,13 +106,13 @@ def main() -> None:
             show_progress=show_progress,
         )
 
-        result = build_training_records_from_adapted(
+        result = TrainingRouteReleaseBuilder(
             all_routes=all_routes,
             all_adaptation=all_adaptation,
             heldout_routes={"n1": n1_routes, "n5": n5_routes},
             heldout_adaptation={"n1": n1_adaptation, "n5": n5_adaptation},
             config=config,
-        )
+        ).build()
         write_training_release(
             result=result,
             output_dir=args.output_dir,

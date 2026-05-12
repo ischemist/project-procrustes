@@ -7,6 +7,7 @@ import random
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from typing import Any
 
@@ -131,29 +132,131 @@ def adapt_training_routes(
     )
 
 
-def build_training_records_from_adapted(
-    all_routes: Sequence[AdaptedTrainingRoute],
-    all_adaptation: AdaptationStatistics,
-    heldout_routes: Mapping[str, Sequence[AdaptedTrainingRoute]],
-    heldout_adaptation: Mapping[str, AdaptationStatistics] | None,
-    config: TrainingSetBuildConfig,
-) -> TrainingSetBuildResult:
-    prepared_routes, summary = prepare_training_routes_from_adapted(
-        all_routes=all_routes,
-        all_adaptation=all_adaptation,
-        heldout_routes=heldout_routes,
-        heldout_adaptation=heldout_adaptation,
-        config=config,
-    )
-    records = materialize_training_route_records(prepared_routes, config)
-    return TrainingSetBuildResult(
-        release_name=config.release_name,
-        records=records,
-        summary={
-            **summary,
-            "output": summarize_records(records),
-        },
-    )
+@dataclass
+class TrainingRouteReleaseBuilder:
+    all_routes: Sequence[AdaptedTrainingRoute]
+    all_adaptation: AdaptationStatistics
+    heldout_routes: Mapping[str, Sequence[AdaptedTrainingRoute]]
+    heldout_adaptation: Mapping[str, AdaptationStatistics]
+    config: TrainingSetBuildConfig
+    heldout_route_signatures: set[str] = dataclass_field(default_factory=set, init=False)
+    heldout_reaction_signatures: set[ReactionSignature] = dataclass_field(default_factory=set, init=False)
+    skipped_route_holdout: int = dataclass_field(default=0, init=False)
+    reaction_excision_source_routes: int = dataclass_field(default=0, init=False)
+    reaction_excision_fragments: int = dataclass_field(default=0, init=False)
+    fully_removed_by_reaction_excision: int = dataclass_field(default=0, init=False)
+    exact_chemical_duplicates_removed: int = dataclass_field(default=0, init=False)
+    mapped_smiles_variants_collapsed: int = dataclass_field(default=0, init=False)
+
+    def build(self) -> TrainingSetBuildResult:
+        self.collect_heldout_signatures()
+        candidates = self.apply_holdout()
+        chemically_unique_routes, self.exact_chemical_duplicates_removed = merge_exact_chemical_duplicates(candidates)
+        prepared_routes, self.mapped_smiles_variants_collapsed = merge_transform_equivalent_routes(
+            chemically_unique_routes
+        )
+        records = self.materialize_records(prepared_routes)
+        return TrainingSetBuildResult(
+            release_name=self.config.release_name,
+            records=records,
+            summary={
+                **self.summary(),
+                "output": summarize_records(records),
+            },
+        )
+
+    def collect_heldout_signatures(self) -> None:
+        for routes in self.heldout_routes.values():
+            for route in routes:
+                self.heldout_route_signatures.add(route.structural_signature)
+                if self.config.holdout_mode == "reaction":
+                    self.heldout_reaction_signatures.update(route.reaction_signatures)
+
+    def apply_holdout(self) -> list[AdaptedTrainingRoute]:
+        candidates: list[AdaptedTrainingRoute] = []
+        for route in self.all_routes:
+            if route.structural_signature in self.heldout_route_signatures:
+                self.skipped_route_holdout += 1
+                continue
+            candidates.extend(
+                self.excise_heldout_reactions(route) if self.config.holdout_mode == "reaction" else [route]
+            )
+        return candidates
+
+    def excise_heldout_reactions(self, route: AdaptedTrainingRoute) -> list[AdaptedTrainingRoute]:
+        overlapping_signatures = route.reaction_signatures & self.heldout_reaction_signatures
+        if not overlapping_signatures:
+            return [route]
+
+        fragments = deduplicate_routes(excise_reactions_from_route(route.route, overlapping_signatures))
+        self.reaction_excision_source_routes += 1
+        self.reaction_excision_fragments += len(fragments)
+        if not fragments:
+            self.fully_removed_by_reaction_excision += 1
+        return [
+            AdaptedTrainingRoute(
+                route=fragment,
+                structural_signature=fragment.get_structural_signature(),
+                reaction_signatures=fragment.get_reaction_signatures(),
+                source=route.source,
+            )
+            for fragment in fragments
+        ]
+
+    def materialize_records(self, prepared_routes: Sequence[PreparedTrainingRoute]) -> list[TrainingRouteRecord]:
+        routes_by_signature: dict[str, Route] = {}
+        for route in prepared_routes:
+            routes_by_signature.setdefault(route.structural_signature, route.route)
+
+        split_by_signature = assign_train_val_splits(
+            routes_by_signature,
+            val_fraction=self.config.val_fraction,
+            seed=self.config.seed,
+        )
+
+        records: list[TrainingRouteRecord] = []
+        for ordinal, prepared_route in enumerate(prepared_routes, start=1):
+            route = prepared_route.route.model_copy(deep=True)
+            route.metadata = build_release_route_metadata(route, prepared_route.sources)
+            records.append(
+                TrainingRouteRecord(
+                    id=f"{self.config.route_prefix}-{self.config.release_name}-{ordinal:06d}",
+                    split=split_by_signature[prepared_route.structural_signature],
+                    route_signature=prepared_route.structural_signature,
+                    content_hash=route.get_content_hash(),
+                    route=route,
+                    sources=prepared_route.sources,
+                )
+            )
+
+        assert_no_cross_split_route_signature_overlap(records)
+        return records
+
+    def summary(self) -> dict[str, Any]:
+        postprocessing: dict[str, Any] = {
+            "unique_reference_route_signatures": len(self.heldout_route_signatures),
+            "exact_route_matches_removed": self.skipped_route_holdout,
+            "chemical_duplicates_removed": self.exact_chemical_duplicates_removed,
+            "mapped_smiles_variants_collapsed": self.mapped_smiles_variants_collapsed,
+            "duplicate_routes_removed": self.exact_chemical_duplicates_removed + self.mapped_smiles_variants_collapsed,
+        }
+        if self.config.holdout_mode == "reaction":
+            postprocessing["reaction_overlap"] = {
+                "unique_reference_reaction_signatures": len(self.heldout_reaction_signatures),
+                "routes_with_overlapping_reactions": self.reaction_excision_source_routes,
+                "fragments_kept_after_excision": self.reaction_excision_fragments,
+                "routes_fully_removed_after_excision": self.fully_removed_by_reaction_excision,
+            }
+        return {
+            "input": {"all_routes": self.all_adaptation.raw_routes},
+            "adaptation": {
+                "all_routes": self.all_adaptation.to_manifest_dict(),
+                "reference_datasets": {
+                    dataset: stats.to_manifest_dict() for dataset, stats in sorted(self.heldout_adaptation.items())
+                },
+            },
+            "postprocessing": postprocessing,
+        }
 
 
 def collect_reaction_hash_sanity(
@@ -333,142 +436,6 @@ def merge_transform_equivalent_routes(
         )
 
     return merged_routes, duplicates_removed
-
-
-def prepare_training_routes_from_adapted(
-    all_routes: Sequence[AdaptedTrainingRoute],
-    all_adaptation: AdaptationStatistics,
-    heldout_routes: Mapping[str, Sequence[AdaptedTrainingRoute]],
-    heldout_adaptation: Mapping[str, AdaptationStatistics] | None,
-    config: TrainingSetBuildConfig,
-) -> tuple[list[PreparedTrainingRoute], dict[str, Any]]:
-    heldout_route_signatures, heldout_reaction_signatures = collect_heldout_signatures(
-        heldout_routes,
-        collect_reactions=config.holdout_mode == "reaction",
-    )
-
-    candidate_routes: list[AdaptedTrainingRoute] = []
-    skipped_route_holdout = 0
-    reaction_excision_source_routes = 0
-    reaction_excision_fragments = 0
-    fully_removed_by_reaction_excision = 0
-
-    for adapted_route in all_routes:
-        if adapted_route.structural_signature in heldout_route_signatures:
-            skipped_route_holdout += 1
-            continue
-
-        candidate_routes_for_route = [adapted_route]
-        if config.holdout_mode == "reaction":
-            candidate_routes_for_route, was_excised = excise_heldout_reactions(
-                adapted_route, heldout_reaction_signatures
-            )
-            if was_excised:
-                reaction_excision_source_routes += 1
-                reaction_excision_fragments += len(candidate_routes_for_route)
-                if not candidate_routes_for_route:
-                    fully_removed_by_reaction_excision += 1
-
-        candidate_routes.extend(candidate_routes_for_route)
-
-    chemically_unique_routes, exact_chemical_duplicates_removed = merge_exact_chemical_duplicates(candidate_routes)
-    prepared_routes, mapped_smiles_variants_collapsed = merge_transform_equivalent_routes(chemically_unique_routes)
-
-    postprocessing: dict[str, Any] = {
-        "unique_reference_route_signatures": len(heldout_route_signatures),
-        "exact_route_matches_removed": skipped_route_holdout,
-        "chemical_duplicates_removed": exact_chemical_duplicates_removed,
-        "mapped_smiles_variants_collapsed": mapped_smiles_variants_collapsed,
-        "duplicate_routes_removed": exact_chemical_duplicates_removed + mapped_smiles_variants_collapsed,
-    }
-    if config.holdout_mode == "reaction":
-        postprocessing["reaction_overlap"] = {
-            "unique_reference_reaction_signatures": len(heldout_reaction_signatures),
-            "routes_with_overlapping_reactions": reaction_excision_source_routes,
-            "fragments_kept_after_excision": reaction_excision_fragments,
-            "routes_fully_removed_after_excision": fully_removed_by_reaction_excision,
-        }
-
-    return prepared_routes, {
-        "input": {
-            "all_routes": all_adaptation.raw_routes,
-        },
-        "adaptation": {
-            "all_routes": all_adaptation.to_manifest_dict(),
-            "reference_datasets": {
-                dataset: stats.to_manifest_dict() for dataset, stats in sorted((heldout_adaptation or {}).items())
-            },
-        },
-        "postprocessing": postprocessing,
-    }
-
-
-def materialize_training_route_records(
-    prepared_routes: Sequence[PreparedTrainingRoute],
-    config: TrainingSetBuildConfig,
-) -> list[TrainingRouteRecord]:
-    routes_by_signature: dict[str, Route] = {}
-    for prepared_route in prepared_routes:
-        routes_by_signature.setdefault(prepared_route.structural_signature, prepared_route.route)
-
-    split_by_signature = assign_train_val_splits(
-        routes_by_signature,
-        val_fraction=config.val_fraction,
-        seed=config.seed,
-    )
-
-    records: list[TrainingRouteRecord] = []
-    for ordinal, prepared_route in enumerate(prepared_routes, start=1):
-        route = prepared_route.route.model_copy(deep=True)
-        route.metadata = build_release_route_metadata(route, prepared_route.sources)
-        records.append(
-            TrainingRouteRecord(
-                id=f"{config.route_prefix}-{config.release_name}-{ordinal:06d}",
-                split=split_by_signature[prepared_route.structural_signature],
-                route_signature=prepared_route.structural_signature,
-                content_hash=route.get_content_hash(),
-                route=route,
-                sources=prepared_route.sources,
-            )
-        )
-
-    assert_no_cross_split_route_signature_overlap(records)
-    return records
-
-
-def collect_heldout_signatures(
-    routes_by_dataset: Mapping[str, Sequence[AdaptedTrainingRoute]],
-    collect_reactions: bool,
-) -> tuple[set[str], set[ReactionSignature]]:
-    route_signatures: set[str] = set()
-    reaction_signatures: set[ReactionSignature] = set()
-    for routes in routes_by_dataset.values():
-        for route in routes:
-            route_signatures.add(route.structural_signature)
-            if collect_reactions:
-                reaction_signatures.update(route.reaction_signatures)
-    return route_signatures, reaction_signatures
-
-
-def excise_heldout_reactions(
-    adapted_route: AdaptedTrainingRoute,
-    heldout_reaction_signatures: set[ReactionSignature],
-) -> tuple[list[AdaptedTrainingRoute], bool]:
-    overlapping_signatures = adapted_route.reaction_signatures & heldout_reaction_signatures
-    if not overlapping_signatures:
-        return [adapted_route], False
-
-    excised_routes = excise_reactions_from_route(adapted_route.route, overlapping_signatures)
-    unique_excised_routes = deduplicate_routes(excised_routes)
-    return [
-        AdaptedTrainingRoute(
-            route=route,
-            structural_signature=route.get_structural_signature(),
-            reaction_signatures=route.get_reaction_signatures(),
-            source=adapted_route.source,
-        )
-        for route in unique_excised_routes
-    ], True
 
 
 def assign_train_val_splits(
