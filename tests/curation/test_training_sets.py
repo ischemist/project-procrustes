@@ -5,11 +5,11 @@ from typing import cast
 
 import pytest
 
+from retrocast.adapters.paroutes_adapter import ConditionSlotParseStatistics
 from retrocast.curation.training import (
     TRAINING_RELEASE_ACTION,
     AdaptationStatistics,
     AdaptedTrainingRoute,
-    NonFatalConditionSlotParseStatistics,
     RawRouteSource,
     TrainingRouteRecord,
     TrainingSetBuildConfig,
@@ -95,7 +95,6 @@ def make_adapted_route(
     route: Route,
     *,
     patent_id: str | None = None,
-    transform_ids_by_source_id: dict[str, str] | None = None,
 ) -> AdaptedTrainingRoute:
     patent_id = patent_id or f"patent-{name}"
     return AdaptedTrainingRoute(
@@ -108,7 +107,6 @@ def make_adapted_route(
             raw_route_hash=f"hash-{name}",
             patent_id=patent_id,
         ),
-        transform_ids_by_source_id=transform_ids_by_source_id or {},
     )
 
 
@@ -203,10 +201,10 @@ class TestTrainingSetSplits:
                 skipped_routes=3,
                 skipped_without_error_code=1,
                 failures_by_code={"adapter.schema_invalid": 2},
-                non_fatal_condition_slot_parse=NonFatalConditionSlotParseStatistics(
+                non_fatal_condition_slot_parse=ConditionSlotParseStatistics(
                     malformed_rsmi_count=4,
                     uncanonicalizable_token_count=7,
-                    distinct_uncanonicalizable_token_count=1,
+                    uncanonicalizable_tokens={"noise": 1},
                 ),
             ),
             heldout_routes={"n1": [make_adapted_route("heldout", heldout)]},
@@ -247,12 +245,8 @@ class TestTrainingSetSplits:
 
         result = build_training_records_from_adapted(
             all_routes=[
-                make_adapted_route(
-                    "dup-a", route_a, patent_id="patent-a", transform_ids_by_source_id={"rxn-1": "hash-1"}
-                ),
-                make_adapted_route(
-                    "dup-b", route_b, patent_id="patent-b", transform_ids_by_source_id={"rxn-1": "hash-1"}
-                ),
+                make_adapted_route("dup-a", route_a, patent_id="patent-a"),
+                make_adapted_route("dup-b", route_b, patent_id="patent-b"),
             ],
             all_adaptation=AdaptationStatistics(
                 raw_routes=2,
@@ -290,8 +284,8 @@ class TestTrainingSetSplits:
 
         result = build_training_records_from_adapted(
             all_routes=[
-                make_adapted_route("cond-a", route_a, transform_ids_by_source_id={"rxn-1": "hash-1"}),
-                make_adapted_route("cond-b", route_b, transform_ids_by_source_id={"rxn-1": "hash-1"}),
+                make_adapted_route("cond-a", route_a),
+                make_adapted_route("cond-b", route_b),
             ],
             all_adaptation=AdaptationStatistics(
                 raw_routes=2,
@@ -332,18 +326,13 @@ class TestTrainingSetSplits:
 
         result = build_training_records_from_adapted(
             all_routes=[
-                make_adapted_route(
-                    "mapped-a", canonical_route, patent_id="patent-a", transform_ids_by_source_id={"rxn-1": "hash-1"}
-                ),
+                make_adapted_route("mapped-a", canonical_route, patent_id="patent-a"),
                 make_adapted_route(
                     "mapped-b",
                     duplicate_canonical_route,
                     patent_id="patent-b",
-                    transform_ids_by_source_id={"rxn-1": "hash-1"},
                 ),
-                make_adapted_route(
-                    "mapped-c", variant_route, patent_id="patent-c", transform_ids_by_source_id={"rxn-1": "hash-1"}
-                ),
+                make_adapted_route("mapped-c", variant_route, patent_id="patent-c"),
             ],
             all_adaptation=AdaptationStatistics(
                 raw_routes=3,
@@ -560,10 +549,6 @@ class TestTrainingSetSplits:
         assert stats.non_fatal_condition_slot_parse.uncanonicalizable_token_count == 0
         assert stats.non_fatal_condition_slot_parse.distinct_uncanonicalizable_token_count == 0
         assert adapted_routes[0].source.patent_id == "US20150051201A1"
-        assert adapted_routes[0].transform_ids_by_source_id == {
-            "US20150051201A1;outer": "outer-hash",
-            "US20150051201A1;inner": "inner-hash",
-        }
 
     def test_adapt_training_routes_aggregates_condition_slot_parse_noise(self, caplog):
         noisy_route = {

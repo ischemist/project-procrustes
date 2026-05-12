@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import pytest
 
-from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
+from retrocast.adapters.paroutes_adapter import ConditionSlotParseStatistics, PaRoutesAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import TargetInput
@@ -248,14 +248,14 @@ class TestPaRoutesAdapterRegression:
         """invalid middle-slot molecules should not spam route-level warnings during best-effort parsing."""
         target_id = "paroutes-ex-1"
         raw_route = deepcopy(raw_paroutes_data[target_id])
-        adapter.reset_condition_slot_parse_statistics()
+        stats = ConditionSlotParseStatistics()
         raw_route["children"][0]["metadata"]["rsmi"] = (
             "CC(C)CC1=C(CC(C)C)[AlH3]1>CC(C)CC1=C(CC(C)C)[AlH3]1>CC(C)CC1=C(CC(C)C)[AlH3]1"
         )
         target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
 
         with caplog.at_level("WARNING"):
-            route = list(adapter.cast(raw_route, target_input))[0]
+            route = list(adapter.cast(raw_route, target_input, condition_slot_parse_statistics=stats))[0]
 
         step = route.target.synthesis_step
         assert step is not None
@@ -263,10 +263,9 @@ class TestPaRoutesAdapterRegression:
         assert "condition_slot_smiles" not in step.metadata
         assert "could not canonicalize condition-slot token" not in caplog.text
 
-        stats = adapter.get_condition_slot_parse_statistics()
-        assert stats["malformed_rsmi_count"] == 0
-        assert stats["uncanonicalizable_token_count"] == 1
-        assert stats["top_uncanonicalizable_tokens"] == [("CC(C)CC1=C(CC(C)C)[AlH3]1", 1)]
+        assert stats.malformed_rsmi_count == 0
+        assert stats.uncanonicalizable_token_count == 1
+        assert stats.top_uncanonicalizable_tokens == [("CC(C)CC1=C(CC(C)C)[AlH3]1", 1)]
 
 
 class TestPaRoutesYearParsing:

@@ -17,7 +17,6 @@ from retrocast.curation.training.reaction_release import (
 from retrocast.curation.training.records import (
     AdaptationStatistics,
     AdaptedTrainingRoute,
-    NonFatalConditionSlotParseStatistics,
     PreparedTrainingReaction,
     PreparedTrainingRoute,
     RawRouteSource,
@@ -44,7 +43,6 @@ __all__ = [
     "TRAINING_RELEASE_ACTION",
     "AdaptationStatistics",
     "AdaptedTrainingRoute",
-    "NonFatalConditionSlotParseStatistics",
     "PreparedTrainingReaction",
     "PreparedTrainingRoute",
     "RawRouteSource",

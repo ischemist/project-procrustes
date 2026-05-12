@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, model_validator
 from pydantic import Field as PydanticField
 
+from retrocast.adapters.paroutes_adapter import ConditionSlotParseStatistics
 from retrocast.models.chem import ReactionSignature, Route
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -16,22 +17,55 @@ ConditionIdentity = tuple[str, ...] | str | None
 ReactionIdentityKey = tuple[tuple[SmilesStr, ...], SmilesStr, ConditionIdentity]
 
 
-@dataclass(frozen=True)
-class RawRouteSource:
+class RawRouteSource(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     dataset: str
     raw_index: int
     raw_route_hash: str
     patent_id: str | None = None
 
 
-@dataclass
-class TrainingRouteRecord:
+class TrainingRouteRecord(BaseModel):
     id: str
     split: SplitName
     route_signature: str
     content_hash: str
     route: Route
-    sources: list[RawRouteSource] = field(default_factory=list)
+    sources: list[RawRouteSource] = PydanticField(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_release_source_shape(cls, data: Any) -> Any:
+        if not isinstance(data, Mapping) or "sources" in data or "source" not in data:
+            return data
+
+        source = data["source"]
+        if not isinstance(source, Mapping):
+            return data
+
+        raw_indices = source.get("raw_indices")
+        raw_route_hashes = source.get("raw_route_hashes")
+        patent_ids = source.get("patent_ids")
+        if not isinstance(raw_indices, Sequence) or isinstance(raw_indices, (str, bytes)):
+            return data
+        if not isinstance(raw_route_hashes, Sequence) or isinstance(raw_route_hashes, (str, bytes)):
+            return data
+        if not isinstance(patent_ids, Sequence) or isinstance(patent_ids, (str, bytes)):
+            return data
+
+        return {
+            **data,
+            "sources": [
+                {
+                    "dataset": source.get("dataset"),
+                    "raw_index": raw_index,
+                    "raw_route_hash": raw_route_hash,
+                    "patent_id": patent_id,
+                }
+                for raw_index, raw_route_hash, patent_id in zip(raw_indices, raw_route_hashes, patent_ids, strict=True)
+            ],
+        }
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -50,63 +84,7 @@ class TrainingRouteRecord:
 
     @classmethod
     def from_json_dict(cls, payload: Mapping[str, Any]) -> TrainingRouteRecord:
-        source_payload = payload.get("source")
-        if not isinstance(source_payload, Mapping):
-            raise ValueError("training route record is missing source metadata")
-
-        dataset = source_payload.get("dataset")
-        raw_indices = source_payload.get("raw_indices")
-        raw_route_hashes = source_payload.get("raw_route_hashes")
-        patent_ids = source_payload.get("patent_ids")
-        route_payload = payload.get("route")
-        split = payload.get("split")
-        record_id = payload.get("id")
-        route_signature = payload.get("route_signature")
-        content_hash = payload.get("content_hash")
-
-        if not isinstance(dataset, str):
-            raise ValueError("training route record source dataset must be a string")
-        if split not in ("training", "validation"):
-            raise ValueError("training route record split must be 'training' or 'validation'")
-        if not isinstance(record_id, str):
-            raise ValueError("training route record id must be a string")
-        if not isinstance(route_signature, str):
-            raise ValueError("training route record route_signature must be a string")
-        if not isinstance(content_hash, str):
-            raise ValueError("training route record content_hash must be a string")
-        if not isinstance(raw_indices, list) or not all(isinstance(value, int) for value in raw_indices):
-            raise ValueError("training route record raw_indices must be a list of ints")
-        if not isinstance(raw_route_hashes, list) or not all(isinstance(value, str) for value in raw_route_hashes):
-            raise ValueError("training route record raw_route_hashes must be a list of strings")
-        if not isinstance(patent_ids, list) or not all(value is None or isinstance(value, str) for value in patent_ids):
-            raise ValueError("training route record patent_ids must be a list of strings or nulls")
-        if len(raw_indices) != len(raw_route_hashes) or len(raw_indices) != len(patent_ids):
-            raise ValueError("training route record source arrays must have equal lengths")
-        if not isinstance(route_payload, Mapping):
-            raise ValueError("training route record is missing route payload")
-
-        typed_raw_indices = cast(list[int], raw_indices)
-        typed_raw_route_hashes = cast(list[str], raw_route_hashes)
-        typed_patent_ids = cast(list[str | None], patent_ids)
-
-        return cls(
-            id=record_id,
-            split=split,
-            route_signature=route_signature,
-            content_hash=content_hash,
-            route=Route.model_validate(route_payload),
-            sources=[
-                RawRouteSource(
-                    dataset=dataset,
-                    raw_index=raw_index,
-                    raw_route_hash=raw_route_hash,
-                    patent_id=patent_id,
-                )
-                for raw_index, raw_route_hash, patent_id in zip(
-                    typed_raw_indices, typed_raw_route_hashes, typed_patent_ids, strict=True
-                )
-            ],
-        )
+        return cls.model_validate(payload)
 
 
 @dataclass(frozen=True)
@@ -135,7 +113,7 @@ class TrainingSetBuildConfig:
                 "route_holdout": "exclude full n1 union n5 by route.get_structural_signature()",
                 "reaction_holdout": "excise reactions present in n1 union n5 and keep surviving sub-routes",
                 "chemical_exact_dedup": "collapse exact route duplicates by route.get_annotated_signature(include_mapped_smiles=True)",
-                "transform_dedup": "collapse mapped-smiles variants by structure + condition identity + raw paroutes reaction_hash sidecar",
+                "transform_dedup": "collapse mapped-smiles variants by structure + condition identity",
             },
         }
 
@@ -153,7 +131,6 @@ class AdaptedTrainingRoute:
     structural_signature: str
     reaction_signatures: set[ReactionSignature]
     source: RawRouteSource
-    transform_ids_by_source_id: dict[str, str]
 
 
 @dataclass
@@ -161,7 +138,6 @@ class PreparedTrainingRoute:
     route: Route
     structural_signature: str
     sources: list[RawRouteSource] = field(default_factory=list)
-    transform_ids_by_source_id: dict[str, str] = field(default_factory=dict)
 
 
 class TrainingReactionSource(BaseModel):
@@ -208,28 +184,15 @@ class TrainingReactionBuildResult:
     summary: dict[str, Any]
 
 
-@dataclass(frozen=True)
-class NonFatalConditionSlotParseStatistics:
-    malformed_rsmi_count: int = 0
-    uncanonicalizable_token_count: int = 0
-    distinct_uncanonicalizable_token_count: int = 0
+class AdaptationStatistics(BaseModel):
+    model_config = ConfigDict(frozen=True)
 
-    def to_manifest_dict(self) -> dict[str, Any]:
-        return {
-            "malformed_rsmi_count": self.malformed_rsmi_count,
-            "uncanonicalizable_token_count": self.uncanonicalizable_token_count,
-            "distinct_uncanonicalizable_token_count": self.distinct_uncanonicalizable_token_count,
-        }
-
-
-@dataclass(frozen=True)
-class AdaptationStatistics:
     raw_routes: int
     adapted_routes: int
     skipped_routes: int
     skipped_without_error_code: int
     failures_by_code: dict[str, int]
-    non_fatal_condition_slot_parse: NonFatalConditionSlotParseStatistics | None = None
+    non_fatal_condition_slot_parse: ConditionSlotParseStatistics | None = None
 
     def to_manifest_dict(self) -> dict[str, Any]:
         manifest_dict = {

@@ -5,20 +5,19 @@ import json
 import logging
 import random
 from collections import defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 from tqdm.auto import tqdm
 
-from retrocast.adapters import adapt_single_route_with_diagnostics, get_adapter
-from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
+from retrocast.adapters.paroutes_adapter import ConditionSlotParseStatistics, PaRoutesAdapter
 from retrocast.curation.filtering import deduplicate_routes, excise_reactions_from_route
 from retrocast.curation.training.records import (
     AdaptationStatistics,
     AdaptedTrainingRoute,
     ConditionIdentity,
-    NonFatalConditionSlotParseStatistics,
     PreparedTrainingRoute,
     RawRouteSource,
     SplitName,
@@ -27,13 +26,28 @@ from retrocast.curation.training.records import (
     TrainingSetBuildResult,
 )
 from retrocast.io import ContentType, create_manifest, save_jsonl_gz
-from retrocast.models.chem import ReactionSignature, ReactionStep, Route, TargetInput
+from retrocast.models.chem import ReactionSignature, Route, TargetInput
 from retrocast.typing import SmilesStr
-
-T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
 TRAINING_RELEASE_ACTION = "scripts/paroutes/training-set-prep/create-training-release"
+
+
+@dataclass(frozen=True, slots=True)
+class ReleaseStep:
+    mapped_smiles: str | None
+    condition_slot: str | None
+    condition_slot_smiles: tuple[SmilesStr, ...]
+    alternative_mapped_smiles: tuple[str, ...]
+
+    @property
+    def condition_identity(self) -> ConditionIdentity:
+        return self.condition_slot_smiles or self.condition_slot
+
+
+def stable_raw_route_hash(raw_route: dict[str, Any]) -> str:
+    payload = json.dumps(raw_route, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def adapt_training_routes(
@@ -43,15 +57,18 @@ def adapt_training_routes(
     collect_reactions: bool,
     show_progress: bool = True,
 ) -> tuple[list[AdaptedTrainingRoute], AdaptationStatistics]:
-    adapter = get_adapter("paroutes")
-    if isinstance(adapter, PaRoutesAdapter):
-        adapter.reset_condition_slot_parse_statistics()
-
+    adapter = PaRoutesAdapter()
+    parse_stats = ConditionSlotParseStatistics()
     adapted_routes: list[AdaptedTrainingRoute] = []
     failures_by_code: dict[str, int] = defaultdict(int)
+    reaction_hash_signature_pairs: set[tuple[str, ReactionSignature]] = set()
     skipped_adaptation = 0
     skipped_without_error_code = 0
-    routes = progress_iter(raw_routes, desc=f"adapt {dataset}", enabled=show_progress)
+    routes = (
+        tqdm(raw_routes, desc=f"adapt {dataset}", unit="route", dynamic_ncols=True, leave=False)
+        if show_progress
+        else raw_routes
+    )
     for idx, raw_route in enumerate(routes):
         target_id = f"{dataset}-{idx + 1:0{id_width}d}"
         raw_smiles = raw_route.get("smiles") if isinstance(raw_route, Mapping) else None
@@ -59,17 +76,22 @@ def adapt_training_routes(
             skipped_adaptation += 1
             failures_by_code["adapter.schema_invalid"] += 1
             continue
+
         target = TargetInput(id=target_id, smiles=raw_smiles)
-        adaptation = adapt_single_route_with_diagnostics(raw_route, target, "paroutes")
-        if adaptation.route is None:
+        adaptation = adapter.adapt_route_with_diagnostics(
+            raw_route,
+            target,
+            condition_slot_parse_statistics=parse_stats,
+        )
+        if (route := adaptation.route) is None:
             skipped_adaptation += 1
             if adaptation.error is None:
                 skipped_without_error_code += 1
             else:
                 failures_by_code[adaptation.error.code] += 1
             continue
-        route = adaptation.route
         patent_id = route.metadata.get("patent_id") if isinstance(route.metadata.get("patent_id"), str) else None
+        collect_reaction_hash_sanity(route, raw_route, reaction_hash_signature_pairs)
         adapted_routes.append(
             AdaptedTrainingRoute(
                 route=route,
@@ -81,43 +103,31 @@ def adapt_training_routes(
                     raw_route_hash=stable_raw_route_hash(raw_route),
                     patent_id=patent_id,
                 ),
-                transform_ids_by_source_id=extract_paroutes_transform_ids_by_source_id(raw_route),
             )
         )
-    non_fatal_condition_slot_parse: NonFatalConditionSlotParseStatistics | None = None
-    if isinstance(adapter, PaRoutesAdapter):
-        condition_slot_stats = adapter.get_condition_slot_parse_statistics()
-        malformed_rsmi_count = condition_slot_stats["malformed_rsmi_count"]
-        uncanonicalizable_token_count = condition_slot_stats["uncanonicalizable_token_count"]
-        distinct_uncanonicalizable_token_count = condition_slot_stats["distinct_uncanonicalizable_token_count"]
-        non_fatal_condition_slot_parse = NonFatalConditionSlotParseStatistics(
-            malformed_rsmi_count=malformed_rsmi_count,
-            uncanonicalizable_token_count=uncanonicalizable_token_count,
-            distinct_uncanonicalizable_token_count=distinct_uncanonicalizable_token_count,
+    assert_paroutes_reaction_hash_matches_retrocast_signature(reaction_hash_signature_pairs)
+    if parse_stats.malformed_rsmi_count or parse_stats.uncanonicalizable_token_count:
+        logger.info(
+            "PaRoutes condition-slot parsing for %s skipped %s malformed rsmi slots and %s "
+            "uncanonicalizable tokens during best-effort metadata extraction. this is non-fatal "
+            "and does not affect adapted route counts.",
+            dataset,
+            parse_stats.malformed_rsmi_count,
+            parse_stats.uncanonicalizable_token_count,
         )
-        if malformed_rsmi_count or uncanonicalizable_token_count:
+        if top_examples := parse_stats.top_uncanonicalizable_tokens:
             logger.info(
-                "PaRoutes condition-slot parsing for %s skipped %s malformed rsmi slots and %s "
-                "uncanonicalizable tokens during best-effort metadata extraction. this is non-fatal "
-                "and does not affect adapted route counts.",
+                "  top uncanonicalizable condition-slot tokens for %s: %s",
                 dataset,
-                malformed_rsmi_count,
-                uncanonicalizable_token_count,
+                {token: count for token, count in top_examples},
             )
-            top_examples = condition_slot_stats["top_uncanonicalizable_tokens"]
-            if top_examples:
-                logger.info(
-                    "  top uncanonicalizable condition-slot tokens for %s: %s",
-                    dataset,
-                    {token: count for token, count in top_examples},
-                )
     return adapted_routes, AdaptationStatistics(
         raw_routes=len(raw_routes),
         adapted_routes=len(adapted_routes),
         skipped_routes=skipped_adaptation,
         skipped_without_error_code=skipped_without_error_code,
         failures_by_code=dict(failures_by_code),
-        non_fatal_condition_slot_parse=non_fatal_condition_slot_parse,
+        non_fatal_condition_slot_parse=parse_stats,
     )
 
 
@@ -146,95 +156,106 @@ def build_training_records_from_adapted(
     )
 
 
-def stable_raw_route_hash(raw_route: dict[str, Any]) -> str:
-    payload = json.dumps(raw_route, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode()).hexdigest()
+def collect_reaction_hash_sanity(
+    route: Route,
+    raw_route: Mapping[str, Any],
+    reaction_hash_signature_pairs: set[tuple[str, ReactionSignature]],
+) -> None:
+    reaction_hash_by_source_id = extract_paroutes_reaction_hash_by_source_id(raw_route)
+    for product, step in route.iter_reactions():
+        source_id = step.metadata.get("source_id")
+        reaction_hash = reaction_hash_by_source_id.get(source_id) if isinstance(source_id, str) else None
+        if reaction_hash is None:
+            continue
+        signature: ReactionSignature = (frozenset(reactant.inchikey for reactant in step.reactants), product.inchikey)
+        reaction_hash_signature_pairs.add((reaction_hash, signature))
 
 
-def extract_paroutes_transform_ids_by_source_id(raw_route: Mapping[str, Any]) -> dict[str, str]:
-    """Collect raw paroutes reaction_hash values keyed by reaction source id."""
-    transform_ids_by_source_id: dict[str, str] = {}
+def assert_paroutes_reaction_hash_matches_retrocast_signature(
+    reaction_hash_signature_pairs: set[tuple[str, ReactionSignature]],
+) -> None:
+    n_pairs = len(reaction_hash_signature_pairs)
+    n_hashes = len({reaction_hash for reaction_hash, _ in reaction_hash_signature_pairs})
+    n_signatures = len({signature for _, signature in reaction_hash_signature_pairs})
+    if n_pairs != n_hashes or n_pairs != n_signatures:
+        raise ValueError(
+            "PaRoutes reaction_hash is not equivalent to RetroCast reaction signatures: "
+            f"{n_pairs} unique pairs, {n_hashes} unique hashes, {n_signatures} unique signatures"
+        )
 
-    def _visit(node: Mapping[str, Any]) -> None:
+
+def extract_paroutes_reaction_hash_by_source_id(raw_route: Mapping[str, Any]) -> dict[str, str]:
+    """Return raw PaRoutes reaction hashes keyed by reaction source id.
+
+    PaRoutes reaction nodes carry side metadata like:
+
+        {"metadata": {"ID": "US20150051201A1;outer", "reaction_hash": "outer-hash"}}
+
+    In the source data, `reaction_hash` is PaRoutes' reaction identity: the reaction SMILES rebuilt from molecule InChIKeys. RetroCast's equivalent is ``ReactionSignature`, the `(frozenset(reactant.inchikey), product.inchikey)` tuple produced by `Route.get_reaction_signatures()` and reconstructed from ``Route.iter_reactions()` in the adaptation sanity check.
+
+    This helper exists only for that check. If each PaRoutes hash maps one-to-one with one RetroCast signature, the release pipeline drops the raw hash instead of carrying a PaRoutes-specific identity sidecar throug deduplication.
+    """
+    reaction_hash_by_source_id: dict[str, str] = {}
+    stack: list[Mapping[str, Any]] = [raw_route]
+    while stack:
+        node = stack.pop()
         metadata = node.get("metadata")
         if isinstance(metadata, Mapping):
             source_id = metadata.get("ID")
-            transform_id = metadata.get("reaction_hash")
-            if isinstance(source_id, str) and isinstance(transform_id, str) and transform_id:
-                transform_ids_by_source_id[source_id] = transform_id
+            reaction_hash = metadata.get("reaction_hash")
+            if isinstance(source_id, str) and isinstance(reaction_hash, str) and reaction_hash:
+                reaction_hash_by_source_id[source_id] = reaction_hash
 
-        children = node.get("children")
-        if not isinstance(children, list):
-            return
-
-        for child in children:
-            if isinstance(child, Mapping):
-                _visit(child)
-
-    _visit(raw_route)
-    return transform_ids_by_source_id
+        if isinstance(children := node.get("children"), list):
+            stack.extend(child for child in children if isinstance(child, Mapping))
+    return reaction_hash_by_source_id
 
 
-def get_step_condition_identity(step: ReactionStep) -> ConditionIdentity:
-    """Condition identity used for transform-level deduplication."""
-    condition_slot_smiles = step.metadata.get("condition_slot_smiles")
-    if isinstance(condition_slot_smiles, list) and all(isinstance(value, str) for value in condition_slot_smiles):
-        return tuple(condition_slot_smiles)
-
-    condition_slot = step.metadata.get("condition_slot")
-    if isinstance(condition_slot, str) and condition_slot:
-        return condition_slot
-
-    return None
+def release_steps(route: Route) -> tuple[ReleaseStep, ...]:
+    return tuple(release_step(step) for step in route.iter_steps())
 
 
-def get_step_condition_slot_smiles(step: ReactionStep) -> tuple[SmilesStr, ...]:
-    """Structured molecules parsed from the condition slot, when available."""
-    condition_slot_smiles = step.metadata.get("condition_slot_smiles")
-    if isinstance(condition_slot_smiles, list) and all(isinstance(value, str) for value in condition_slot_smiles):
-        return tuple(condition_slot_smiles)
-    return ()
+def release_step(step: Any) -> ReleaseStep:
+    metadata = step.metadata
+    condition_slot = metadata.get("condition_slot")
+    raw_smiles = metadata.get("condition_slot_smiles")
+    raw_alternatives = metadata.get("alternative_mapped_smiles")
+    return ReleaseStep(
+        mapped_smiles=step.mapped_smiles,
+        condition_slot=condition_slot if isinstance(condition_slot, str) and condition_slot else None,
+        condition_slot_smiles=tuple(raw_smiles)
+        if isinstance(raw_smiles, list) and all(isinstance(value, str) for value in raw_smiles)
+        else (),
+        alternative_mapped_smiles=tuple(sorted(value for value in (raw_alternatives or []) if isinstance(value, str))),
+    )
 
 
-def sync_route_source_metadata(route: Route, sources: Sequence[RawRouteSource]) -> None:
-    """Keep released route metadata honest after provenance-preserving merges."""
-    route.metadata = route.metadata.copy()
-    route.metadata.pop("patent_id", None)
+def get_step_condition_slot_smiles(step: Any) -> tuple[SmilesStr, ...]:
+    return release_step(step).condition_slot_smiles
 
-    source_patent_ids = sorted({source.patent_id for source in sources if source.patent_id is not None})
-    if source_patent_ids:
-        route.metadata["source_patent_ids"] = source_patent_ids
-    else:
-        route.metadata.pop("source_patent_ids", None)
+
+def build_release_route_metadata(route: Route, sources: Sequence[RawRouteSource]) -> dict[str, Any]:
+    patent_ids = sorted({source.patent_id for source in sources if source.patent_id is not None})
+    return {
+        **{key: value for key, value in route.metadata.items() if key not in ("patent_id", "source_patent_ids")},
+        **({"source_patent_ids": patent_ids} if patent_ids else {}),
+    }
 
 
 def merge_alternative_mapped_smiles(canonical_route: Route, routes: Sequence[Route]) -> None:
-    """Record non-canonical mapped-smiles variants on the kept route."""
     canonical_steps = canonical_route.iter_steps()
     route_steps = [route.iter_steps() for route in routes]
+    if any(len(steps) != len(canonical_steps) for steps in route_steps):
+        raise ValueError("cannot merge mapped smiles for routes with different step counts")
     for step_index, canonical_step in enumerate(canonical_steps):
-        variant_smiles: set[str] = set()
-        if canonical_step.mapped_smiles is not None:
-            variant_smiles.add(canonical_step.mapped_smiles)
-
-        existing_alternatives = canonical_step.metadata.get("alternative_mapped_smiles")
-        if isinstance(existing_alternatives, list):
-            variant_smiles.update(value for value in existing_alternatives if isinstance(value, str))
-
-        for steps in route_steps:
-            if len(steps) != len(canonical_steps):
-                raise ValueError("cannot merge mapped smiles for routes with different step counts")
-
-            mapped_smiles = steps[step_index].mapped_smiles
-            if mapped_smiles is not None:
-                variant_smiles.add(mapped_smiles)
-
-            step_alternatives = steps[step_index].metadata.get("alternative_mapped_smiles")
-            if isinstance(step_alternatives, list):
-                variant_smiles.update(value for value in step_alternatives if isinstance(value, str))
-
+        variants = {
+            value
+            for step in (steps[step_index] for steps in [canonical_steps, *route_steps])
+            for value in (*release_step(step).alternative_mapped_smiles, step.mapped_smiles)
+            if value is not None
+        }
         alternatives = sorted(
-            mapped_smiles for mapped_smiles in variant_smiles if mapped_smiles != canonical_step.mapped_smiles
+            mapped_smiles for mapped_smiles in variants if mapped_smiles != canonical_step.mapped_smiles
         )
         canonical_step.metadata = canonical_step.metadata.copy()
         if alternatives:
@@ -244,7 +265,6 @@ def merge_alternative_mapped_smiles(canonical_route: Route, routes: Sequence[Rou
 
 
 def merge_exact_chemical_duplicates(routes: Sequence[AdaptedTrainingRoute]) -> tuple[list[PreparedTrainingRoute], int]:
-    """Collapse exact duplicate chemistry while preserving all raw sources."""
     routes_by_signature: dict[str, PreparedTrainingRoute] = {}
     duplicates_removed = 0
 
@@ -252,18 +272,14 @@ def merge_exact_chemical_duplicates(routes: Sequence[AdaptedTrainingRoute]) -> t
         exact_signature = adapted_route.route.get_annotated_signature(include_mapped_smiles=True)
         existing_route = routes_by_signature.get(exact_signature)
         if existing_route is None:
-            cloned_route = adapted_route.route.model_copy(deep=True)
-            sync_route_source_metadata(cloned_route, [adapted_route.source])
             routes_by_signature[exact_signature] = PreparedTrainingRoute(
-                route=cloned_route,
+                route=adapted_route.route.model_copy(deep=True),
                 structural_signature=adapted_route.structural_signature,
                 sources=[adapted_route.source],
-                transform_ids_by_source_id=dict(adapted_route.transform_ids_by_source_id),
             )
             continue
 
         existing_route.sources.append(adapted_route.source)
-        sync_route_source_metadata(existing_route.route, existing_route.sources)
         duplicates_removed += 1
 
     return list(routes_by_signature.values()), duplicates_removed
@@ -272,16 +288,9 @@ def merge_exact_chemical_duplicates(routes: Sequence[AdaptedTrainingRoute]) -> t
 def merge_transform_equivalent_routes(
     routes: Sequence[PreparedTrainingRoute],
 ) -> tuple[list[PreparedTrainingRoute], int]:
-    """Collapse mapped-smiles variants that share structure, condition identity, and transform ids."""
-    grouped_routes: dict[tuple[str, tuple[tuple[str | None, ConditionIdentity], ...]], list[PreparedTrainingRoute]] = (
-        defaultdict(list)
-    )
+    grouped_routes: dict[tuple[str, tuple[ConditionIdentity, ...]], list[PreparedTrainingRoute]] = defaultdict(list)
     for route in routes:
-        step_keys = []
-        for step in route.route.iter_steps():
-            source_id = step.metadata.get("source_id")
-            transform_id = route.transform_ids_by_source_id.get(source_id) if isinstance(source_id, str) else None
-            step_keys.append((transform_id, get_step_condition_identity(step)))
+        step_keys = tuple(step.condition_identity for step in release_steps(route.route))
         grouped_routes[(route.structural_signature, tuple(step_keys))].append(route)
 
     merged_routes: list[PreparedTrainingRoute] = []
@@ -296,7 +305,7 @@ def merge_transform_equivalent_routes(
         profile_weights: dict[tuple[str | None, ...], int] = defaultdict(int)
         routes_by_profile: dict[tuple[str | None, ...], list[PreparedTrainingRoute]] = defaultdict(list)
         for route in group:
-            profile = tuple(step.mapped_smiles for step in route.route.iter_steps())
+            profile = tuple(step.mapped_smiles for step in release_steps(route.route))
             profile_weights[profile] += len(route.sources)
             routes_by_profile[profile].append(route)
 
@@ -315,13 +324,11 @@ def merge_transform_equivalent_routes(
         merged_route = canonical_source.route.model_copy(deep=True)
         merge_alternative_mapped_smiles(merged_route, [route.route for route in group])
         merged_sources = [source for route in group for source in route.sources]
-        sync_route_source_metadata(merged_route, merged_sources)
         merged_routes.append(
             PreparedTrainingRoute(
                 route=merged_route,
                 structural_signature=canonical_source.structural_signature,
                 sources=merged_sources,
-                transform_ids_by_source_id=dict(canonical_source.transform_ids_by_source_id),
             )
         )
 
@@ -412,7 +419,8 @@ def materialize_training_route_records(
 
     records: list[TrainingRouteRecord] = []
     for ordinal, prepared_route in enumerate(prepared_routes, start=1):
-        route = prepared_route.route
+        route = prepared_route.route.model_copy(deep=True)
+        route.metadata = build_release_route_metadata(route, prepared_route.sources)
         records.append(
             TrainingRouteRecord(
                 id=f"{config.route_prefix}-{config.release_name}-{ordinal:06d}",
@@ -426,12 +434,6 @@ def materialize_training_route_records(
 
     assert_no_cross_split_route_signature_overlap(records)
     return records
-
-
-def progress_iter(items: Sequence[T], desc: str, enabled: bool) -> Iterable[T]:
-    if not enabled:
-        return items
-    return tqdm(items, desc=desc, unit="route", dynamic_ncols=True, leave=False)
 
 
 def collect_heldout_signatures(
@@ -452,7 +454,6 @@ def excise_heldout_reactions(
     adapted_route: AdaptedTrainingRoute,
     heldout_reaction_signatures: set[ReactionSignature],
 ) -> tuple[list[AdaptedTrainingRoute], bool]:
-    """Excise heldout reactions from one route and return surviving unique fragments."""
     overlapping_signatures = adapted_route.reaction_signatures & heldout_reaction_signatures
     if not overlapping_signatures:
         return [adapted_route], False
@@ -465,7 +466,6 @@ def excise_heldout_reactions(
             structural_signature=route.get_structural_signature(),
             reaction_signatures=route.get_reaction_signatures(),
             source=adapted_route.source,
-            transform_ids_by_source_id=dict(adapted_route.transform_ids_by_source_id),
         )
         for route in unique_excised_routes
     ], True
@@ -481,11 +481,7 @@ def assign_train_val_splits(
 
     groups: dict[tuple[int, bool], list[str]] = defaultdict(list)
     for signature, route in routes_by_signature.items():
-        key = (
-            route.length,
-            route.has_convergent_reaction,
-        )
-        groups[key].append(signature)
+        groups[(route.length, route.has_convergent_reaction)].append(signature)
 
     split_by_signature: dict[str, SplitName] = {}
     rng = random.Random(seed)
@@ -507,24 +503,17 @@ def _validation_count(n_items: int, val_fraction: float) -> int:
 
 
 def summarize_records(records: Sequence[TrainingRouteRecord]) -> dict[str, Any]:
-    training_records = [record for record in records if record.split == "training"]
-    validation_records = [record for record in records if record.split == "validation"]
-
     return {
         "all_records": split_counts(
             total=len(records),
-            training=len(training_records),
-            validation=len(validation_records),
+            training=sum(record.split == "training" for record in records),
+            validation=sum(record.split == "validation" for record in records),
         ),
     }
 
 
 def split_counts(total: int, training: int, validation: int) -> dict[str, int]:
-    return {
-        "total": total,
-        "training": training,
-        "validation": validation,
-    }
+    return {"total": total, "training": training, "validation": validation}
 
 
 def assert_no_cross_split_route_signature_overlap(records: Sequence[TrainingRouteRecord]) -> None:

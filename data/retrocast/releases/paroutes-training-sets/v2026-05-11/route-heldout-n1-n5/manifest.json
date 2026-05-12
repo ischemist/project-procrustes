@@ -1,22 +1,22 @@
 {
   "action": "scripts/paroutes/training-set-prep/create-training-release",
-  "created_at": "2026-05-11T18:49:18.238881Z",
+  "created_at": "2026-05-12T19:42:09.810813Z",
   "directives": {},
   "output_files": {
     "all": {
       "label": "all",
       "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/route-heldout-n1-n5/all.jsonl.gz",
-      "sha256": "ed4742aec7502e32fced376cfc8f384049e3c17086c1f39382406862d3509794"
+      "sha256": "44e37c4c411f35404861737852f40fd641be0c92d46fb45750c2711840238b29"
     },
     "training": {
       "label": "training",
       "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/route-heldout-n1-n5/training.jsonl.gz",
-      "sha256": "2c0a2510d0ff9ed3bb6750fe39429be8711a32d51cdd72d4e5b9512fb5a63c82"
+      "sha256": "1d6004d3b29d16bff84f47a6e57a4d1115ff14aefd7403f74d62a45afc0d1a25"
     },
     "validation": {
       "label": "validation",
       "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/route-heldout-n1-n5/validation.jsonl.gz",
-      "sha256": "39bab159cb55ee0adfeb09d968fb7e38900493411c39be3a005bb6fc99719124"
+      "sha256": "61d0eb3601fce22b1ccc3df40af54ffd0059a0325e608ae0c46a7fe0bc8c0535"
     }
   },
   "parameters": {
@@ -28,7 +28,7 @@
       "chemical_exact_dedup": "collapse exact route duplicates by route.get_annotated_signature(include_mapped_smiles=True)",
       "reaction_holdout": "excise reactions present in n1 union n5 and keep surviving sub-routes",
       "route_holdout": "exclude full n1 union n5 by route.get_structural_signature()",
-      "transform_dedup": "collapse mapped-smiles variants by structure + condition identity + raw paroutes reaction_hash sidecar"
+      "transform_dedup": "collapse mapped-smiles variants by structure + condition identity"
     },
     "split": {
       "seed": 20260502,
@@ -36,7 +36,7 @@
     }
   },
   "release_name": "route-heldout-n1-n5",
-  "retrocast_version": "0.5.4.dev4",
+  "retrocast_version": "0.5.4.dev18",
   "schema_version": "1.1",
   "source_files": [
     {
@@ -103,8 +103,8 @@
     "output": {
       "all_records": {
         "total": 169126,
-        "training": 160668,
-        "validation": 8458
+        "training": 160653,
+        "validation": 8473
       }
     },
     "postprocessing": {

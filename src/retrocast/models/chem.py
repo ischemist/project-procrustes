@@ -4,7 +4,7 @@ import hashlib
 import json
 import statistics
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
@@ -218,19 +218,21 @@ class Route(BaseModel):
         _visit(self.target)
         return steps
 
-    def iter_reactions(self) -> list[tuple[Molecule, ReactionStep]]:
-        """Return product/step pairs in deterministic root-first depth-first order."""
-        reactions: list[tuple[Molecule, ReactionStep]] = []
+    def iter_reactions(self) -> Iterator[tuple[Molecule, ReactionStep]]:
+        """Yield product/step pairs in deterministic root-first depth-first order."""
 
-        def _visit(node: Molecule) -> None:
+        def _visit(node: Molecule) -> Iterator[tuple[Molecule, ReactionStep]]:
             if node.synthesis_step is None:
                 return
-            reactions.append((node, node.synthesis_step))
+            yield node, node.synthesis_step
             for reactant in node.synthesis_step.reactants:
-                _visit(reactant)
+                yield from _visit(reactant)
 
-        _visit(self.target)
-        return reactions
+        yield from _visit(self.target)
+
+    def get_reactions(self) -> list[tuple[Molecule, ReactionStep]]:
+        """Return product/step pairs in deterministic root-first depth-first order."""
+        return list(self.iter_reactions())
 
     def _build_route_signature(
         self,

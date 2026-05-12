@@ -35,17 +35,11 @@ RetroCast currently produces three paroutes-derived training artifacts:
 2. `reaction-heldout-n1-n5`
 3. `single-step-reaction-heldout-n1-n5`
 
-The first two are **route releases**, and the third is a **flat reaction release**. All three ultimately come from the same raw paroutes assets:
-
-- `all-routes.json.gz`
-- `n1-routes.json.gz`
-- `n5-routes.json.gz`
+The first two are **route releases**, and the third is a **flat reaction release**. All three ultimately come from the same raw paroutes assets `all-routes.json.gz`, `n1-routes.json.gz`, and `n5-routes.json.gz`.
 
 ### `route-heldout-n1-n5`
 
-This is a DirectMultiStep-style dataset that removes route structures that appear in the `n1 ∪ n5` reference union.
-
-Internally, this is achieved by comparing `Route.get_structural_signature()` of each route to the heldout signature set.
+This is a DirectMultiStep-style dataset that removes route structures that appear in the `n1 ∪ n5` reference union. Internally, this is achieved by comparing `Route.get_structural_signature()` of each route to the heldout signature set.
 
 ### `reaction-heldout-n1-n5`
 
@@ -55,17 +49,12 @@ Internally, this is achieved by:
 
 - removing exact heldout routes first (`Route.get_structural_signature()`)
 - then excising heldout reactions from surviving routes
-- keeping surviving route fragments
 
 ### `single-step-reaction-heldout-n1-n5`
 
-A dominant approach to multistep planning explicitly separates a single-step reaction predictor from a multistep planner. This dataset is derived from the released `reaction-heldout-n1-n5` route artifact by flattening the `training` and `validation` splits into single-step reaction sets.
+A prevalent approach to multistep planning explicitly separates a single-step reaction predictor from a multistep planner. This dataset is derived from the released `reaction-heldout-n1-n5` route artifact by flattening the `training` and `validation` splits into single-step reaction sets.
 
 We intentionally decide to derive this dataset from the route-based release rather than a separate curation pipeline because single-step prediction problem is primarily a problem we're interested in in the context of multistep planning, so having a separate curation pipeline would present unnecessary challenges in the construction of the multistep routes for subsequent training of the planner.
-
-This route-derived starting point is useful because it keeps the single-step release visibly connected to the route release that planners are trained from. The cost is that route splits are not automatically safe single-step splits: the same flat reaction identity can appear in both `training` and `validation`.
-
-For the public single-step release, RetroCast resolves that tradeoff in favor of clean validation. We still start from the released route artifact, but we remove any validation reaction whose flat reaction identity already appears in training.
 
 Release preparation workflow:
 
@@ -75,13 +64,6 @@ Release preparation workflow:
 - deduplicate reactions within each split
 - remove validation reactions that still overlap with training
 - report overlap before and after cleanup
-
-tradeoff:
-
-- this keeps the release family coherent and gives a leakage-resistant
-  single-step validation set by default
-- but the final single-step validation split is no longer a perfect projection
-  of the route validation split
 
 
 ## Core Data Shapes
@@ -138,11 +120,12 @@ for each route it stores:
 - `structural_signature`
 - `reaction_signatures` when reaction holdout is needed
 - `RawRouteSource`
-- `transform_ids_by_source_id`
 
-`transform_ids_by_source_id` comes from
-`extract_paroutes_transform_ids_by_source_id()`, which extracts raw paroutes
-`reaction_hash` values keyed by reaction `source_id`.
+During adaptation, RetroCast sanity-checks PaRoutes `reaction_hash` values against
+RetroCast reaction signatures. PaRoutes hashes are reaction identities composed from
+InChIKeys, so they should be equivalent to our `(reactant inchikeys, product inchikey)`
+signature. If that equivalence fails, release prep raises instead of carrying a
+PaRoutes-specific identity sidecar through the pipeline.
 
 !!! note
 
@@ -214,7 +197,6 @@ that key includes:
 
 - route structural signature `route.get_structural_signature()`
 - per-step condition identity from `get_step_condition_identity()`
-- raw paroutes transform ids from `transform_ids_by_source_id`
 
 canonical mapped reactions are chosen by:
 
