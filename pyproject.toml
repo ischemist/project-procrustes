@@ -101,5 +101,9 @@ local_scheme = "no-local-version"
 [tool.ty.src]
 exclude = ["tests", "scripts"]
 
+[tool.uv]
+# Require a short cooling-off window before newly uploaded artifacts are eligible.
+required-version = ">=0.9.17"
+exclude-newer = "7 days"
 [tool.uv.extra-build-dependencies]
 torch-scatter = ["torch"]
