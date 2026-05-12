@@ -98,8 +98,6 @@ class TestTrainingReleaseLoaders:
         record = TrainingRouteRecord(
             id="paroutes-reaction-holdout-n1-n5-000001",
             split="training",
-            route_signature=route.get_structural_signature(),
-            content_hash=route.get_content_hash(),
             route=route,
             sources=[
                 RawRouteSource(

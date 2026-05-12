@@ -29,10 +29,12 @@ class RawRouteSource(BaseModel):
 class TrainingRouteRecord(BaseModel):
     id: str
     split: SplitName
-    route_signature: str
-    content_hash: str
     route: Route
     sources: list[RawRouteSource] = PydanticField(default_factory=list)
+
+    @property
+    def route_signature(self) -> str:
+        return self.route.get_structural_signature()
 
     @model_validator(mode="before")
     @classmethod
@@ -71,8 +73,6 @@ class TrainingRouteRecord(BaseModel):
         return {
             "id": self.id,
             "split": self.split,
-            "route_signature": self.route_signature,
-            "content_hash": self.content_hash,
             "source": {
                 "dataset": self.sources[0].dataset if self.sources else "unknown",
                 "raw_indices": [source.raw_index for source in self.sources],

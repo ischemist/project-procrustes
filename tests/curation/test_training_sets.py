@@ -115,8 +115,6 @@ def make_route_record(name: str, route: Route, *, split: str, patent_id: str | N
     return TrainingRouteRecord(
         id=f"route-{name}",
         split=split,
-        route_signature=route.get_structural_signature(),
-        content_hash=route.get_content_hash(),
         route=route,
         sources=[
             RawRouteSource(
@@ -289,6 +287,8 @@ class TestTrainingSetSplits:
         assert [source.patent_id for source in result.records[0].sources] == ["patent-a", "patent-b"]
 
         record_json = result.records[0].to_json_dict()
+        assert "route_signature" not in record_json
+        assert "content_hash" not in record_json
         assert record_json["source"]["patent_ids"] == ["patent-a", "patent-b"]
 
     def test_build_from_adapted_routes_keeps_condition_variants_separate(self):

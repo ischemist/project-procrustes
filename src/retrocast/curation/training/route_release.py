@@ -241,8 +241,6 @@ class TrainingRouteReleaseBuilder:
                 TrainingRouteRecord(
                     id=f"{self.config.route_prefix}-{self.config.release_name}-{ordinal:06d}",
                     split=split_by_signature[prepared_route.structural_signature],
-                    route_signature=prepared_route.structural_signature,
-                    content_hash=route.get_content_hash(),
                     route=route,
                     sources=prepared_route.sources,
                 )
