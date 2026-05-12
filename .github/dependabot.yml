@@ -5,22 +5,23 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 0
+    cooldown:
+      default-days: 7
     labels:
-      - "type/security"
+      - "scope/ci-cd"
 
   - package-ecosystem: "uv"
     directory: "/scripts/planning/run-synplanner"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 0
+    cooldown:
+      default-days: 7
     labels:
-      - "type/security"
+      - "scope/ci-cd"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 0
     labels:
-      - "type/security"
+      - "scope/ci-cd"
