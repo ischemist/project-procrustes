@@ -65,6 +65,30 @@ class WorkflowError(RetroCastException):
     default_code = "workflow.error"
 
 
+class DatasetError(RetroCastException):
+    """Raised for expected hosted dataset resolution, download, or verification failures."""
+
+    default_code = "dataset.error"
+
+
+class DatasetResolutionError(DatasetError):
+    """Raised when a hosted dataset release or artifact cannot be resolved."""
+
+    default_code = "dataset.resolution_failed"
+
+
+class DatasetDownloadError(DatasetError):
+    """Raised when a hosted dataset file cannot be downloaded."""
+
+    default_code = "dataset.download_failed"
+
+
+class DatasetVerificationError(DatasetError):
+    """Raised when a downloaded dataset file fails integrity verification."""
+
+    default_code = "dataset.verification_failed"
+
+
 class TrainingReleaseError(WorkflowError):
     """Raised when training release construction violates a release contract."""
 

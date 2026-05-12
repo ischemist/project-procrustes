@@ -1,6 +1,6 @@
 {
   "action": "scripts/paroutes/training-set-prep/create-single-step-release",
-  "created_at": "2026-05-12T21:22:51.278161Z",
+  "created_at": "2026-05-12T22:05:44.079317Z",
   "directives": {},
   "output_files": {
     "all": {
@@ -51,20 +51,20 @@
     }
   },
   "release_name": "single-step-reaction-holdout-n1-n5",
-  "retrocast_version": "0.5.4.dev21",
+  "retrocast_version": "0.5.4.dev22",
   "schema_version": "1.1",
   "source_files": [
     {
       "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/training.jsonl.gz",
-      "sha256": "e87119ba5c2a4ff9af62e94cb2aa427a2975b410f027ce703e3a52a500703c46"
+      "sha256": "baf7cad9da709764d99dd9fa6e44d2e2d5ff0faef0f14681b3ab4f335676db94"
     },
     {
       "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/validation.jsonl.gz",
-      "sha256": "3f0248d22a7231b4f24091ac25be94996fde429d2756557bc00675706adeff43"
+      "sha256": "ffee611ecd0d70a3e8ddb7c2bee78b62f7ab1dada3ebd0e7cccd5be5258d7045"
     },
     {
       "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/manifest.json",
-      "sha256": "5c38d16e52504d4b6f71cef1b252af37ac937ff0904b0241645d131ce176bcca"
+      "sha256": "b2bbe3ef1e9f7ff1d9ab53c86e4046d3ab70c264beaf6d8734b9b33a1fcd9092"
     }
   ],
   "statistics": {},

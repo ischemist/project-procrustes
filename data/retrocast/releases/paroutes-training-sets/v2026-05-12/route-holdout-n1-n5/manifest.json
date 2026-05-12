@@ -1,22 +1,22 @@
 {
   "action": "scripts/paroutes/training-set-prep/create-training-release",
-  "created_at": "2026-05-12T21:17:26.044621Z",
+  "created_at": "2026-05-12T22:01:28.007899Z",
   "directives": {},
   "output_files": {
     "all": {
       "label": "all",
       "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/all.jsonl.gz",
-      "sha256": "1c85b4a93a01d5124e2cfd58d67a34843215cdc59ec35b622cdb3ccf27fbaffd"
+      "sha256": "1bd74997e530bc3caf30c9fe3c347e4ec8a7bd2feae906948e30220e3396dbfb"
     },
     "training": {
       "label": "training",
       "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/training.jsonl.gz",
-      "sha256": "3624a1fba41cf4b35abee0e893b63587b11490201bae296bf6c4bfa69906a49a"
+      "sha256": "fad292e468e1eb9bc531130a9f92e388f39797fb14e3514ede2b035fa40e6ecb"
     },
     "validation": {
       "label": "validation",
       "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/validation.jsonl.gz",
-      "sha256": "de638d2acbf7c2409d94d6cb58c079d63dc233a4e8ccd0cddd04e2e12830dfc0"
+      "sha256": "f0649d55d3285785300af7fe32020ae47d4349b1e66e3f661342ff27141c0257"
     }
   },
   "parameters": {
@@ -36,7 +36,7 @@
     }
   },
   "release_name": "route-holdout-n1-n5",
-  "retrocast_version": "0.5.4.dev20",
+  "retrocast_version": "0.5.4.dev22",
   "schema_version": "1.1",
   "source_files": [
     {
