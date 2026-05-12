@@ -3,7 +3,8 @@ revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
-    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and platform_machine != 'arm64' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-syntheseus'",
@@ -1146,18 +1147,19 @@ name = "dgl"
 version = "2.2.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
+    "python_full_version < '3.12' and platform_machine != 'arm64' and sys_platform == 'darwin'",
     "python_full_version >= '3.12' and sys_platform != 'darwin'",
     "python_full_version < '3.12' and sys_platform != 'darwin'",
 ]
 dependencies = [
-    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin'" },
-    { name = "numpy", marker = "sys_platform != 'darwin'" },
-    { name = "pandas", marker = "sys_platform != 'darwin'" },
-    { name = "psutil", marker = "sys_platform != 'darwin'" },
-    { name = "requests", marker = "sys_platform != 'darwin'" },
-    { name = "scipy", marker = "sys_platform != 'darwin'" },
-    { name = "torchdata", marker = "sys_platform != 'darwin'" },
-    { name = "tqdm", marker = "sys_platform != 'darwin'" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.12' and platform_machine != 'arm64') or sys_platform != 'darwin'" },
+    { name = "numpy", marker = "(python_full_version < '3.12' and platform_machine != 'arm64') or sys_platform != 'darwin'" },
+    { name = "pandas", marker = "(python_full_version < '3.12' and platform_machine != 'arm64') or sys_platform != 'darwin'" },
+    { name = "psutil", marker = "(python_full_version < '3.12' and platform_machine != 'arm64') or sys_platform != 'darwin'" },
+    { name = "requests", marker = "(python_full_version < '3.12' and platform_machine != 'arm64') or sys_platform != 'darwin'" },
+    { name = "scipy", marker = "(python_full_version < '3.12' and platform_machine != 'arm64') or sys_platform != 'darwin'" },
+    { name = "torchdata", marker = "(python_full_version < '3.12' and platform_machine != 'arm64') or sys_platform != 'darwin'" },
+    { name = "tqdm", marker = "(python_full_version < '3.12' and platform_machine != 'arm64') or sys_platform != 'darwin'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/90/c8/72de38a32f1f95634c5eaabecb4656c6796a9aadfe7764939d8350136e9c/dgl-2.2.1-cp311-cp311-win_amd64.whl", hash = "sha256:343ca8d375a15aa6b50a72314ec11529b9f9467a34c29281c76a4762e6b326fe", size = 5332859, upload-time = "2024-05-13T01:10:43.796Z" },
@@ -1169,17 +1171,17 @@ name = "dgl"
 version = "2.2.1"
 source = { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl" }
 resolution-markers = [
-    "python_full_version < '3.12' and sys_platform == 'darwin'",
+    "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' and sys_platform == 'darwin'" },
-    { name = "numpy", marker = "python_full_version < '3.12' and sys_platform == 'darwin'" },
-    { name = "pandas", marker = "python_full_version < '3.12' and sys_platform == 'darwin'" },
-    { name = "psutil", marker = "python_full_version < '3.12' and sys_platform == 'darwin'" },
-    { name = "requests", marker = "python_full_version < '3.12' and sys_platform == 'darwin'" },
-    { name = "scipy", marker = "python_full_version < '3.12' and sys_platform == 'darwin'" },
-    { name = "torchdata", marker = "python_full_version < '3.12' and sys_platform == 'darwin'" },
-    { name = "tqdm", marker = "python_full_version < '3.12' and sys_platform == 'darwin'" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "numpy", marker = "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "pandas", marker = "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "psutil", marker = "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "requests", marker = "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "scipy", marker = "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "torchdata", marker = "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "tqdm", marker = "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin'" },
 ]
 wheels = [
     { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:3cb5a2a5645ea36e7c25d69976a2ea95d2fe404499cbad7c30fdd4ef978b5156" },
@@ -2889,7 +2891,8 @@ name = "networkx"
 version = "3.6.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and platform_machine != 'arm64' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-syntheseus'",
@@ -3670,7 +3673,8 @@ version = "12.0.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
-    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and platform_machine != 'arm64' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-syntheseus'",
@@ -4650,7 +4654,8 @@ version = "2025.9.3"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
-    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and platform_machine != 'arm64' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-syntheseus'",
@@ -4790,8 +4795,8 @@ retro-star = [
     { name = "torch", version = "2.9.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus')" },
 ]
 syntheseus = [
-    { name = "dgl", version = "2.2.1", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'darwin' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus')" },
-    { name = "dgl", version = "2.2.1", source = { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl" }, marker = "(python_full_version < '3.12' and sys_platform == 'darwin' and extra == 'extra-9-retrocast-syntheseus') or (python_full_version >= '3.12' and extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (sys_platform != 'darwin' and extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "dgl", version = "2.2.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.12' and platform_machine != 'arm64' and extra == 'extra-9-retrocast-syntheseus') or (sys_platform != 'darwin' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus')" },
+    { name = "dgl", version = "2.2.1", source = { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl" }, marker = "(python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'extra-9-retrocast-syntheseus') or (python_full_version >= '3.12' and extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (platform_machine != 'arm64' and extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (sys_platform != 'darwin' and extra == 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-dms') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-aizyn' and extra == 'extra-9-retrocast-syntheseus') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star') or (extra == 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-syntheseus')" },
     { name = "faiss-cpu", marker = "python_full_version < '3.12' or sys_platform != 'darwin'" },
     { name = "numpy", marker = "python_full_version < '3.12' or sys_platform != 'darwin'" },
     { name = "pandas", marker = "python_full_version < '3.12' or sys_platform != 'darwin'" },
@@ -4827,8 +4832,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aizynthfinder", marker = "extra == 'aizyn'", specifier = "==4.4.0" },
-    { name = "dgl", marker = "python_full_version < '3.12' and sys_platform == 'darwin' and extra == 'syntheseus'", url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl" },
-    { name = "dgl", marker = "sys_platform != 'darwin' and extra == 'syntheseus'" },
+    { name = "dgl", marker = "python_full_version == '3.11.*' and platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'syntheseus'", url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl" },
+    { name = "dgl", marker = "(python_full_version < '3.12' and platform_machine != 'arm64' and extra == 'syntheseus') or (python_full_version < '3.11' and platform_machine == 'arm64' and extra == 'syntheseus') or (sys_platform != 'darwin' and extra == 'syntheseus')" },
     { name = "directmultistep", marker = "extra == 'dms'" },
     { name = "faiss-cpu", marker = "(python_full_version < '3.12' and extra == 'syntheseus') or (sys_platform != 'darwin' and extra == 'syntheseus')" },
     { name = "ischemist", marker = "extra == 'viz'", specifier = ">=0.2.0" },
@@ -5525,7 +5530,8 @@ name = "torch"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version < '3.12' and sys_platform == 'darwin'",
+    "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin'",
+    "python_full_version < '3.12' and platform_machine != 'arm64' and sys_platform == 'darwin'",
     "python_full_version >= '3.12' and sys_platform != 'darwin'",
     "python_full_version < '3.12' and sys_platform != 'darwin'",
 ]
@@ -5899,7 +5905,8 @@ version = "2.32.4.20250913"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
-    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and platform_machine != 'arm64' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-syntheseus'",
@@ -6005,7 +6012,8 @@ version = "2.6.2"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "python_full_version >= '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
-    "python_full_version < '3.12' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and platform_machine == 'arm64' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
+    "python_full_version < '3.12' and platform_machine != 'arm64' and sys_platform == 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version < '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra != 'extra-9-retrocast-retro-star' and extra == 'extra-9-retrocast-syntheseus'",
     "python_full_version >= '3.12' and sys_platform != 'darwin' and extra != 'extra-9-retrocast-aizyn' and extra != 'extra-9-retrocast-dms' and extra == 'extra-9-retrocast-retro-star' and extra != 'extra-9-retrocast-syntheseus'",
