@@ -4,7 +4,7 @@ import logging
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal, TypeAlias, cast
+from typing import Any, Literal, TypeAlias
 
 from retrocast import __version__
 from retrocast.models.benchmark import BenchmarkSet
@@ -164,11 +164,27 @@ def _calculate_stock_content_hash(stock: dict[str, str]) -> str:
 def _normalize_manifest_output(
     output: ManifestOutput,
 ) -> tuple[str | None, Path, Any, ContentType | ContentTypeHint]:
-    if len(output) == 3:
-        path, obj, content_type = cast(UnlabeledManifestOutput, output)
+    items: tuple[Any, ...] = tuple(output)
+    if len(items) == 3:
+        path = items[0]
+        obj = items[1]
+        content_type = items[2]
+        if not isinstance(path, Path):
+            raise TypeError(f"manifest output path must be Path, got {type(path).__name__}")
         return None, path, obj, content_type
 
-    label, path, obj, content_type = cast(LabeledManifestOutput, output)
+    if len(items) != 4:
+        raise ValueError(f"manifest output must have 3 or 4 items, got {len(items)}")
+
+    assert len(items) == 4
+    label = items[0]
+    path = items[1]
+    obj = items[2]
+    content_type = items[3]
+    if not isinstance(label, str):
+        raise TypeError(f"manifest output label must be str, got {type(label).__name__}")
+    if not isinstance(path, Path):
+        raise TypeError(f"manifest output path must be Path, got {type(path).__name__}")
     return label, path, obj, content_type
 
 

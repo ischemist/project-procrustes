@@ -146,7 +146,7 @@ def download_training_set(
 
     actual_hash = sha256_file(local_path)
     if actual_hash != expected_hash:
-        local_path.unlink(missing_ok=True)
+        invalidate_cached_download(local_path=local_path, checksums_path=checksums_path)
         raise DatasetVerificationError(
             f"downloaded dataset file failed integrity verification: {filename}",
             code="dataset.hash_mismatch",
@@ -480,7 +480,7 @@ def download_hosted_data_file(
 
     actual_hash = sha256_file(local_path)
     if actual_hash != expected_hash:
-        local_path.unlink(missing_ok=True)
+        invalidate_cached_download(local_path=local_path, checksums_path=checksums_path)
         raise DatasetVerificationError(
             f"downloaded hosted data file failed integrity verification: {relative_path.name}",
             code="dataset.hash_mismatch",
@@ -499,6 +499,11 @@ def load_or_download_checksums(*, checksums_path: Path, checksums_url: str) -> d
         if checksums_path.exists()
         else download_sha256sums(checksums_url, checksums_path)
     )
+
+
+def invalidate_cached_download(*, local_path: Path, checksums_path: Path) -> None:
+    local_path.unlink(missing_ok=True)
+    checksums_path.unlink(missing_ok=True)
 
 
 def load_sha256sums(path: Path) -> dict[str, str]:
@@ -562,8 +567,12 @@ def download_url_to_path(url: str, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = destination.with_suffix(f"{destination.suffix}.tmp")
     try:
-        with urlopen(Request(url, headers={"User-Agent": DEFAULT_DATASET_USER_AGENT})) as response:
-            data = response.read()
+        with (
+            urlopen(Request(url, headers={"User-Agent": DEFAULT_DATASET_USER_AGENT})) as response,
+            tmp_path.open("wb") as handle,
+        ):
+            while chunk := response.read(8192):
+                handle.write(chunk)
     except HTTPError as exc:
         raise DatasetResolutionError(
             f"failed to download hosted file from {url}: HTTP {exc.code}",
@@ -577,9 +586,15 @@ def download_url_to_path(url: str, destination: Path) -> None:
             context={"url": url},
             retryable=True,
         ) from exc
+    except OSError as exc:
+        tmp_path.unlink(missing_ok=True)
+        raise DatasetDownloadError(
+            f"failed to write downloaded hosted file to {destination}",
+            code="dataset.cache_write_failed",
+            context={"path": str(destination), "url": url},
+        ) from exc
 
     try:
-        tmp_path.write_bytes(data)
         tmp_path.replace(destination)
     except OSError as exc:
         tmp_path.unlink(missing_ok=True)

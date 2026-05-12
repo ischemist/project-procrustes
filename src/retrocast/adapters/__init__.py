@@ -57,13 +57,10 @@ def adapt_single_route(
 ) -> Route | None:
     """Adapt a single raw route to the unified Route format."""
     adapter = get_adapter(adapter_name)
-    raw_data = (
-        raw_route
-        if adapter_name in TARGET_CENTRIC_ADAPTERS
-        else [raw_route]
-        if not isinstance(raw_route, list)
-        else raw_route
-    )
+    if adapter_name in TARGET_CENTRIC_ADAPTERS or isinstance(raw_route, list):
+        raw_data = raw_route
+    else:
+        raw_data = [raw_route]
 
     try:
         return next(adapter.cast(raw_data, target), None)

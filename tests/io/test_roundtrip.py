@@ -23,7 +23,7 @@ from retrocast.curation.training import (
     TrainingReactionSource,
     TrainingRouteRecord,
 )
-from retrocast.exceptions import RetroCastIOError
+from retrocast.exceptions import ArtifactDecodeError, RetroCastIOError
 from retrocast.io.blob import load_json_gz, load_jsonl_gz, load_lines_gz, save_json_gz, save_jsonl_gz, save_lines_gz
 from retrocast.io.data import (
     BenchmarkResultsLoader,
@@ -81,6 +81,14 @@ class TestBlobWriters:
         save_jsonl_gz([{"a": 1}, {"b": 2}], out_path)
 
         assert load_jsonl_gz(out_path) == [{"a": 1}, {"b": 2}]
+
+    def test_load_jsonl_gz_can_reject_empty_rows(self, tmp_path):
+        out_path = tmp_path / "rows.jsonl.gz"
+        with gzip.open(out_path, "wt", encoding="utf-8") as f:
+            f.write('{"a":1}\n\n')
+
+        with pytest.raises(ArtifactDecodeError, match="Empty JSONL row 2"):
+            load_jsonl_gz(out_path, skip_empty=False)
 
     def test_save_lines_gz_writes_and_loads_lines(self, tmp_path):
         out_path = tmp_path / "rows.rsmi.txt.gz"

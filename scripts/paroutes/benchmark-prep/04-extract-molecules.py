@@ -17,8 +17,9 @@ from tqdm import tqdm
 
 from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
 from retrocast.chem import canonicalize_smiles
+from retrocast.exceptions import RetroCastException
 from retrocast.io import load_benchmark, load_raw_paroutes_list
-from retrocast.models.chem import Molecule, Route, TargetInput
+from retrocast.models.chem import Molecule, TargetInput
 from retrocast.typing import InchiKeyStr
 from retrocast.utils.logging import configure_script_logging, logger
 
@@ -81,9 +82,15 @@ def main():
         smiles = canonicalize_smiles(raw_item["smiles"])
 
         target_input = TargetInput(id=target_id, smiles=smiles)
-        route: Route | None = next(adapter.cast(raw_item, target_input), None)
+        try:
+            route = next(adapter.cast(raw_item, target_input), None)
+        except RetroCastException as exc:
+            logger.warning("failed to cast route %s: %s [%s]", target_id, exc, exc.code)
+            failures += 1
+            continue
 
         if route is None:
+            logger.warning("adapter returned no route for %s", target_id)
             failures += 1
             continue
 
@@ -111,7 +118,7 @@ def main():
 
     # --- Step 3: Write CSV ---
     logger.info(f"Writing {len(molecules)} molecules to {out_path}...")
-    with open(out_path, "w", newline="") as f:
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["inchikey", "smiles"] + tag_columns)
 

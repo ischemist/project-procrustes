@@ -13,7 +13,7 @@ This page explains how retrocast creates the public PaRoutes training releases. 
 
 ## Historical Context
 
-[PaRoutes](https://pubs.rsc.org/en/content/articlelanding/2022/dd/d2dd00015f) ([Github](https://github.com/MolecularAI/PaRoutes)) is a landmark first-in-class effort to curate a large-scale, high-quality dataset of multistep synthesis plans extracted from patent literature. The original paper provided three artifacts: full set of multistep routes (`all-routes`) and two carefully constructed test subsets `n1-routes` and `n5-routes`. Unfortunately, the authors did not provide a canonical training set split, which results in either refusal to adopt PaRoutes as training/test set (e.g. [DESP](https://arxiv.org/abs/2407.06334)) or inconsistent splitting:
+[PaRoutes](https://pubs.rsc.org/en/content/articlelanding/2022/dd/d2dd00015f) ([GitHub](https://github.com/MolecularAI/PaRoutes)) is a landmark first-in-class effort to curate a large-scale, high-quality dataset of multistep synthesis plans extracted from patent literature. The original paper provided three artifacts: full set of multistep routes (`all-routes`) and two carefully constructed test subsets `n1-routes` and `n5-routes`. Unfortunately, the authors did not provide a canonical training set split, which results in either refusal to adopt PaRoutes as training/test set (e.g. [DESP](https://arxiv.org/abs/2407.06334)) or inconsistent splitting:
 
 - [DirectMultiStep](https://directmultistep.com) performs a _route holdout_: removing n1 and n5 routes from the `all-routes`
 - [TempRe](https://arxiv.org/abs/2507.21762) performs a _reaction holdout_: removing all single step reactions from n1 and n5 from `all-routes`

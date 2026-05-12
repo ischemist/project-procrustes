@@ -194,7 +194,7 @@ class PaRoutesAdapter(BaseAdapter):
                         ignore_stereo=ignore_stereo,
                     )
                 )
-            except RetroCastException:
+            except ChemError:
                 condition_slot_parse_statistics.uncanonicalizable_token_count += 1
                 condition_slot_parse_statistics.uncanonicalizable_tokens[token] += 1
 

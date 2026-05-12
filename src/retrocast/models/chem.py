@@ -337,7 +337,7 @@ class Route(BaseModel):
                 annotations["solvents"] = _normalize_signature_value(step.solvents)
             if include_step_metadata_keys:
                 selected_metadata = {
-                    key: _normalize_signature_value(step.metadata[key])
+                    key: _normalize_signature_value(step.metadata.get(key))
                     for key in include_step_metadata_keys
                     if key in step.metadata
                 }

@@ -122,7 +122,7 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
     save_json_gz(benchmark, out_path)
 
     manifest_path = DEF_DIR / f"paroutes-{name}-full{suffix}.manifest.json"
-    statistics = {"n_targets": len(benchmark.targets), "n_failures": failures}
+    statistics: dict[str, int | float] = {"n_targets": len(benchmark.targets), "n_failures": failures}
     if check_buyables:
         statistics["n_unsolved"] = unsolved
     if prune_intermediates:
@@ -136,12 +136,12 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
         action="scripts/paroutes/benchmark-prep/01-cast-paroutes",
         sources=[raw_path],
         outputs=[(out_path, benchmark, "benchmark")],
-        root_dir=BASE_DIR / "data",
+        root_dir=BASE_DIR,
         parameters={"dataset": name, "check_buyables": check_buyables, "prune_intermediates": prune_intermediates},
         statistics=statistics,
     )
     # Save Manifest (plain JSON, not gzipped, so it's readable)
-    with open(manifest_path, "w") as f:
+    with open(manifest_path, "w", encoding="utf-8") as f:
         f.write(manifest.model_dump_json(indent=2))
 
     logger.info(f"Manifest saved to {manifest_path}")

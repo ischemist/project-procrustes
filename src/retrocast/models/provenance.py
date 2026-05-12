@@ -28,6 +28,7 @@ class Manifest(BaseModel):
     Provenance record for any data artifact produced by retrocast.
     """
 
+    # manifests may carry extra fields from older scripts or newer producers; keep them round-trippable.
     model_config = ConfigDict(extra="allow")
 
     schema_version: str = "1.1"
@@ -52,7 +53,10 @@ class Manifest(BaseModel):
     source_files: list[FileInfo] = Field(default_factory=list)
 
     # Outputs
-    output_files: list[FileInfo] | dict[str, FileInfo] = Field(default_factory=list)
+    output_files: list[FileInfo] | dict[str, FileInfo] = Field(
+        default_factory=list,
+        description="Tracked outputs as either a flat list or a label-keyed dict. Prefer iter_output_files().",
+    )
 
     # Optional stats (e.g., "n_targets_saved": 600)
     statistics: dict[str, Any] = Field(default_factory=dict)

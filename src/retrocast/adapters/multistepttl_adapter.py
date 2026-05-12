@@ -90,7 +90,7 @@ class TtlRetroAdapter(BaseAdapter):
         """
         precursor_map: dict[str, list[str]] = {}
         for reaction in route.reactions:
-            canon_product = canonicalize_smiles(reaction.product, ignore_stereo=ignore_stereo)
+            canon_product = str(canonicalize_smiles(reaction.product, ignore_stereo=ignore_stereo))
             canon_reactants = [str(canonicalize_smiles(r, ignore_stereo=ignore_stereo)) for r in reaction.reactants]
             precursor_map[canon_product] = canon_reactants
         return precursor_map

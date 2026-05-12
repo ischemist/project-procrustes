@@ -12,8 +12,8 @@ inputs audited:
 
 release manifests audited:
 
-- `data/retrocast/releases/paroutes-training-sets/v2026-05-10/route-heldout-n1-n5/manifest.json`
-- `data/retrocast/releases/paroutes-training-sets/v2026-05-10/reaction-heldout-n1-n5/manifest.json`
+- `data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-heldout-n1-n5/manifest.json`
+- `data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-heldout-n1-n5/manifest.json`
 
 ## definitions
 

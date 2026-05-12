@@ -55,9 +55,12 @@ def save_jsonl_gz(rows: Iterable[Any], path: Path) -> int:
                 n_rows += 1
         logger.debug(f"Saved {n_rows} rows to {path}")
         return n_rows
-    except Exception as e:
-        logger.error(f"Failed to save {path}: {e}")
-        raise
+    except (OSError, TypeError, ValueError) as e:
+        raise ArtifactWriteError(
+            f"Failed to save {path}: {e}",
+            code="io.write_failed",
+            context={"path": str(path)},
+        ) from e
 
 
 def save_lines_gz(lines: Iterable[str], path: Path) -> int:
@@ -74,9 +77,12 @@ def save_lines_gz(lines: Iterable[str], path: Path) -> int:
                 n_lines += 1
         logger.debug(f"Saved {n_lines} lines to {path}")
         return n_lines
-    except Exception as e:
-        logger.error(f"Failed to save {path}: {e}")
-        raise
+    except (OSError, AttributeError, TypeError, ValueError) as e:
+        raise ArtifactWriteError(
+            f"Failed to save {path}: {e}",
+            code="io.write_failed",
+            context={"path": str(path)},
+        ) from e
 
 
 def load_json_gz(path: Path) -> Any:
@@ -100,8 +106,8 @@ def load_json_gz(path: Path) -> Any:
         ) from e
 
 
-def load_jsonl_gz(path: Path) -> list[Any]:
-    """Loads JSON rows from a gzipped JSONL file."""
+def load_jsonl_gz(path: Path, skip_empty: bool = True) -> list[Any]:
+    """Loads JSON rows from a gzipped JSONL file, optionally rejecting empty lines."""
     path = Path(path)
     if not path.exists():
         raise ArtifactNotFoundError(
@@ -115,6 +121,12 @@ def load_jsonl_gz(path: Path) -> list[Any]:
         with gzip.open(path, "rt", encoding="utf-8") as f:
             for line_number, line in enumerate(f, start=1):
                 if not line.strip():
+                    if not skip_empty:
+                        raise ArtifactDecodeError(
+                            f"Empty JSONL row {line_number} in {path}",
+                            code="io.decode_failed",
+                            context={"path": str(path), "line_number": line_number},
+                        )
                     continue
                 try:
                     rows.append(json.loads(line))

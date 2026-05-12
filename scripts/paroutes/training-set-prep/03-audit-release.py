@@ -28,7 +28,6 @@ DATA_DIR = BASE_DIR / "data" / "retrocast"
 RAW_DIR = DATA_DIR / "0-assets" / "paroutes"
 RELEASE_VERSION = "v2026-05-12"
 DEFAULT_RELEASE_ROOT = DATA_DIR / "releases" / "paroutes-training-sets" / RELEASE_VERSION
-DEFAULT_OUTPUT_PATH = DEFAULT_RELEASE_ROOT / "release-audit.md"
 ROUTE_RELEASE_NAMES = ("route-holdout-n1-n5", "reaction-holdout-n1-n5")
 
 
@@ -44,8 +43,8 @@ def main() -> None:
     parser.add_argument(
         "--output-path",
         type=Path,
-        default=DEFAULT_OUTPUT_PATH,
-        help=f"markdown report path. default: {DEFAULT_OUTPUT_PATH}",
+        default=None,
+        help="markdown report path. default: <release-root>/release-audit.md",
     )
     parser.add_argument(
         "--raw-dir",
@@ -54,6 +53,7 @@ def main() -> None:
         help=f"raw paroutes asset directory for holdout leak checks. default: {RAW_DIR}",
     )
     args = parser.parse_args()
+    output_path = args.output_path or args.release_root / "release-audit.md"
 
     release_dirs = {
         name: args.release_root / name
@@ -94,9 +94,9 @@ def main() -> None:
     if single_step_checks is not None:
         report = f"{report}\n{render_single_step_sanity_markdown(single_step_checks)}"
 
-    args.output_path.parent.mkdir(parents=True, exist_ok=True)
-    args.output_path.write_text(report, encoding="utf-8")
-    logger.info("wrote release audit to %s", args.output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(report, encoding="utf-8")
+    logger.info("wrote release audit to %s", output_path)
 
 
 def missing_route_files(release_dir: Path) -> list[Path]:

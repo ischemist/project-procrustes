@@ -1,4 +1,4 @@
 [practices]
-source = "/Users/morgunov/Developer/engineering-practices"
+source = "../engineering-practices"
 profile = "python-library"
 output = ".practices/docs"

@@ -18,7 +18,7 @@ from retrocast.datasets import (
     download_training_set,
     load_training_set,
 )
-from retrocast.exceptions import ConfigurationError
+from retrocast.exceptions import ConfigurationError, DatasetVerificationError
 from retrocast.io import save_json_gz, save_jsonl_gz, save_lines_gz, save_stock_files
 from retrocast.io.provenance import calculate_file_hash
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
@@ -206,6 +206,52 @@ class TestTrainingDatasets:
 
         assert restored_path.read_bytes() == original_bytes
 
+    def test_redownloads_checksums_after_remote_artifact_changes(self, tmp_path):
+        remote_root = tmp_path / "remote"
+        write_latest_pointer(remote_root)
+        write_training_reaction_artifact(remote_root)
+        cache_dir = tmp_path / "cache"
+
+        first_path = download_training_set(
+            "paroutes",
+            artifact="single-step-reaction-holdout-n1-n5",
+            split="training",
+            as_="reaction_smiles",
+            release="latest",
+            base_url=remote_root.resolve().as_uri(),
+            cache_dir=cache_dir,
+        )
+        original_bytes = first_path.read_bytes()
+
+        assert first_path.exists()
+        artifact_dir = remote_root / "paroutes" / "v2026-05-12" / "single-step-reaction-holdout-n1-n5"
+        save_lines_gz(["c>n>cc"], artifact_dir / "training.rsmi.txt.gz")
+        write_manifest_and_checksums(artifact_dir)
+        first_path.unlink()
+
+        with pytest.raises(DatasetVerificationError):
+            download_training_set(
+                "paroutes",
+                artifact="single-step-reaction-holdout-n1-n5",
+                split="training",
+                as_="reaction_smiles",
+                release="latest",
+                base_url=remote_root.resolve().as_uri(),
+                cache_dir=cache_dir,
+            )
+
+        second_path = download_training_set(
+            "paroutes",
+            artifact="single-step-reaction-holdout-n1-n5",
+            split="training",
+            as_="reaction_smiles",
+            release="latest",
+            base_url=remote_root.resolve().as_uri(),
+            cache_dir=cache_dir,
+        )
+
+        assert second_path.read_bytes() != original_bytes
+
     def test_download_training_set_to_explicit_output_dir(self, tmp_path, synthetic_route_factory):
         remote_root = tmp_path / "remote"
         write_latest_pointer(remote_root)
@@ -264,6 +310,41 @@ class TestTrainingDatasets:
 
         assert path == tmp_path / "cache" / "1-benchmarks" / "stocks" / "test-stock.csv.gz"
         assert path.exists()
+
+    def test_redownloads_hosted_data_checksums_after_remote_file_changes(self, tmp_path):
+        remote_root = tmp_path / "remote-data"
+        write_hosted_data_tree(remote_root)
+        cache_dir = tmp_path / "cache"
+
+        first_path = download_stock(
+            "test-stock",
+            base_url=remote_root.resolve().as_uri(),
+            cache_dir=cache_dir,
+        )
+        original_bytes = first_path.read_bytes()
+
+        save_stock_files(
+            stock={InchiKeyStr(_synthetic_inchikey("cc")): SmilesStr("cc")},
+            stock_name="test-stock",
+            output_dir=remote_root / "1-benchmarks" / "stocks",
+        )
+        write_data_checksums(remote_root)
+        first_path.unlink()
+
+        with pytest.raises(DatasetVerificationError):
+            download_stock(
+                "test-stock",
+                base_url=remote_root.resolve().as_uri(),
+                cache_dir=cache_dir,
+            )
+
+        second_path = download_stock(
+            "test-stock",
+            base_url=remote_root.resolve().as_uri(),
+            cache_dir=cache_dir,
+        )
+
+        assert second_path.read_bytes() != original_bytes
 
     def test_download_benchmark_assets_downloads_declared_stock(self, tmp_path):
         remote_root = tmp_path / "remote-data"
