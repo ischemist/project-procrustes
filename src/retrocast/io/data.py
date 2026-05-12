@@ -26,7 +26,7 @@ from retrocast.typing import InchiKeyStr, SmilesStr
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from retrocast.curation.training_sets import TrainingReactionRecord, TrainingRouteRecord
+    from retrocast.curation.training import TrainingReactionRecord, TrainingRouteRecord
 
 # Pre-define the adapter for performance and reuse
 RoutesDict = dict[str, list[Route]]
@@ -132,7 +132,7 @@ def load_raw_paroutes_list(path: Path) -> list[dict]:
 
 def load_training_route_records(path: Path) -> list[TrainingRouteRecord]:
     """Load structured route training records from a JSONL artifact."""
-    from retrocast.curation.training_sets import TrainingRouteRecord
+    from retrocast.curation.training import TrainingRouteRecord
 
     rows = load_jsonl_gz(path)
     try:
@@ -160,7 +160,7 @@ def load_training_routes(path: Path) -> list[Route]:
 
 def load_training_reaction_records(path: Path) -> list[TrainingReactionRecord]:
     """Load structured single-step training records from a JSONL artifact."""
-    from retrocast.curation.training_sets import TrainingReactionRecord
+    from retrocast.curation.training import TrainingReactionRecord
 
     rows = load_jsonl_gz(path)
     try:

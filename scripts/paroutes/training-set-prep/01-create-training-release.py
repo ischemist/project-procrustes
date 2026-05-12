@@ -13,7 +13,7 @@ import argparse
 from pathlib import Path
 from typing import cast
 
-from retrocast.curation.training_sets import (
+from retrocast.curation.training import (
     TrainingHoldoutMode,
     TrainingSetBuildConfig,
     adapt_training_routes,

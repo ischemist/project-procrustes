@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from retrocast.curation.training_sets import (
+from retrocast.curation.training import (
     TrainingSetBuildConfig,
     build_training_reaction_records_from_route_records,
     write_training_reaction_release,

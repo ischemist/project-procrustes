@@ -17,7 +17,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from retrocast.curation.training_sets import (
+from retrocast.curation.training import (
     RawRouteSource,
     TrainingReactionRecord,
     TrainingReactionSource,

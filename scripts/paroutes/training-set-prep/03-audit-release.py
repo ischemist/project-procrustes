@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from retrocast.curation.training_sets import (
+from retrocast.curation.training import (
     build_route_release_split_audit,
     render_route_release_split_audit_markdown,
 )

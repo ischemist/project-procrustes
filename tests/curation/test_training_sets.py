@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 
-from retrocast.curation.training_sets import (
+from retrocast.curation.training import (
     TRAINING_RELEASE_ACTION,
     AdaptationStatistics,
     AdaptedTrainingRoute,
@@ -17,7 +17,6 @@ from retrocast.curation.training_sets import (
     assign_train_val_splits,
     build_route_release_split_audit,
     build_training_manifest,
-    build_training_reaction_records_from_adapted,
     build_training_reaction_records_from_route_records,
     build_training_records_from_adapted,
     render_route_release_split_audit_markdown,
@@ -186,7 +185,11 @@ class TestTrainingSetSplits:
         assert "# release audit" in markdown
         assert "## `reaction-heldout-n1-n5`" in markdown
         assert "| `false` | 1 | 1 | 2 | 50.0000% | 66.6667% |" in markdown
-        assert "| 2 | `true` | 1 | 0 | 1 | 0.0000% |" in markdown
+        assert (
+            "| length | non-conv train | non-conv val | non-conv all | non-conv val% | conv train | conv val | conv all | conv val% |"
+            in markdown
+        )
+        assert "| 2 | 1 | 1 | 2 | 50.0000% | 1 | 0 | 1 | 0.0000% |" in markdown
 
     def test_build_from_adapted_routes_reuses_adapted_inputs(self):
         route = make_route("keep", depth=1)
@@ -303,6 +306,7 @@ class TestTrainingSetSplits:
         )
 
         assert len(result.records) == 2
+        assert len({record.split for record in result.records}) == 1
         assert result.summary["postprocessing"]["chemical_duplicates_removed"] == 0
         assert result.summary["postprocessing"]["mapped_smiles_variants_collapsed"] == 0
 
@@ -377,39 +381,19 @@ class TestTrainingSetSplits:
             patent_id="patent-b",
         )
 
-        result = build_training_reaction_records_from_adapted(
-            all_routes=[
-                make_adapted_route(
-                    "single-step-a",
-                    canonical_route,
-                    patent_id="patent-a",
-                    transform_ids_by_source_id={"rxn-1": "hash-1"},
-                ),
-                make_adapted_route(
-                    "single-step-b",
-                    variant_route,
-                    patent_id="patent-b",
-                    transform_ids_by_source_id={"rxn-1": "hash-1"},
-                ),
+        result = build_training_reaction_records_from_route_records(
+            [
+                make_route_record("single-step-a", canonical_route, split="training", patent_id="patent-a"),
+                make_route_record("single-step-b", variant_route, split="training", patent_id="patent-b"),
             ],
-            all_adaptation=AdaptationStatistics(
-                raw_routes=2,
-                adapted_routes=2,
-                skipped_routes=0,
-                skipped_without_error_code=0,
-                failures_by_code={},
-            ),
-            heldout_routes={},
-            heldout_adaptation={},
             config=TrainingSetBuildConfig(holdout_mode="reaction", show_progress=False),
         )
 
         assert result.release_name == "single-step-reaction-heldout-n1-n5"
         assert len(result.records) == 1
-        assert result.summary["route_preparation"]["mapped_smiles_variants_collapsed"] == 1
-        assert result.summary["reaction_postprocessing"]["flattened_reactions"] == 1
-        assert result.summary["reaction_postprocessing"]["chemical_duplicates_removed"] == 0
-        assert result.summary["reaction_postprocessing"]["mapped_smiles_variants_collapsed"] == 0
+        assert result.summary["reaction_postprocessing"]["training"]["flattened_reactions"] == 2
+        assert result.summary["reaction_postprocessing"]["training"]["chemical_duplicates_removed"] == 0
+        assert result.summary["reaction_postprocessing"]["training"]["mapped_smiles_variants_collapsed"] == 1
 
         record = result.records[0]
         assert record.reactants == ["single-step-leaf"]
@@ -417,8 +401,8 @@ class TestTrainingSetSplits:
         assert record.mapped_smiles == "C.C>O>CC"
         assert record.alternative_mapped_smiles == ["[CH3:1].[CH3:2]>O>[CH3:1][CH3:2]"]
         assert record.condition_slot_smiles == ["O"]
-        assert len(record.sources) == 1
-        assert record.sources[0].patent_ids == ["patent-a", "patent-b"]
+        assert len(record.sources) == 2
+        assert [source.patent_ids for source in record.sources] == [["patent-a"], ["patent-b"]]
 
     def test_build_training_reaction_records_keeps_condition_variants_separate(self):
         route_a = make_reaction_route(
@@ -432,25 +416,16 @@ class TestTrainingSetSplits:
             condition_slot_smiles=["N"],
         )
 
-        result = build_training_reaction_records_from_adapted(
-            all_routes=[
-                make_adapted_route("single-step-cond-a", route_a, transform_ids_by_source_id={"rxn-1": "hash-1"}),
-                make_adapted_route("single-step-cond-b", route_b, transform_ids_by_source_id={"rxn-1": "hash-1"}),
+        result = build_training_reaction_records_from_route_records(
+            [
+                make_route_record("single-step-cond-a", route_a, split="training"),
+                make_route_record("single-step-cond-b", route_b, split="training"),
             ],
-            all_adaptation=AdaptationStatistics(
-                raw_routes=2,
-                adapted_routes=2,
-                skipped_routes=0,
-                skipped_without_error_code=0,
-                failures_by_code={},
-            ),
-            heldout_routes={},
-            heldout_adaptation={},
             config=TrainingSetBuildConfig(holdout_mode="reaction", show_progress=False),
         )
 
         assert len(result.records) == 2
-        assert result.summary["reaction_postprocessing"]["mapped_smiles_variants_collapsed"] == 0
+        assert result.summary["reaction_postprocessing"]["training"]["mapped_smiles_variants_collapsed"] == 0
 
     def test_build_training_reaction_records_requires_reaction_holdout_config(self):
         route = make_reaction_route(
@@ -459,17 +434,8 @@ class TestTrainingSetSplits:
         )
 
         with pytest.raises(ValueError, match="holdout_mode='reaction'"):
-            build_training_reaction_records_from_adapted(
-                all_routes=[make_adapted_route("single-step", route, transform_ids_by_source_id={"rxn-1": "hash-1"})],
-                all_adaptation=AdaptationStatistics(
-                    raw_routes=1,
-                    adapted_routes=1,
-                    skipped_routes=0,
-                    skipped_without_error_code=0,
-                    failures_by_code={},
-                ),
-                heldout_routes={},
-                heldout_adaptation={},
+            build_training_reaction_records_from_route_records(
+                [make_route_record("single-step", route, split="training")],
                 config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
             )
 
