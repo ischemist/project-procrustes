@@ -6,6 +6,10 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 
+[options]
+exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
+exclude-newer-span = "P7D"
+
 [[package]]
 name = "adabelief-pytorch"
 version = "0.2.1"
@@ -1949,8 +1953,8 @@ wheels = [
 
 [[package]]
 name = "retrocast"
-version = "0.5.3.dev9"
-source = { git = "https://github.com/ischemist/project-procrustes?branch=idk%2Freally#ee70bc66741bc85c46fcd08666c9b5a0c6d656db" }
+version = "0.5.3"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "packaging" },
     { name = "pydantic" },
@@ -1958,6 +1962,10 @@ dependencies = [
     { name = "rdkit" },
     { name = "rich" },
     { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/03/59/20b428897743baa817a608565923846771ef67a11cb4e6f1fe4a2a49cf4f/retrocast-0.5.3.tar.gz", hash = "sha256:8fe4a65c43b29f64c89ef58ee06100b741d86274bb931bfe80343a361ff5a8ba", size = 800724, upload-time = "2026-01-17T03:35:08.632Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/31/26/22298ec5a26f557ff8f23228581c0a26064a7ea38c22f8822cc2adff118c/retrocast-0.5.3-py3-none-any.whl", hash = "sha256:9c25eb3edd56978fcd5bc1389e01fcb451353d76f3a8bcb61e5925adea149454", size = 122170, upload-time = "2026-01-17T03:35:06.888Z" },
 ]
 
 [[package]]
@@ -2198,7 +2206,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "retrocast", git = "https://github.com/ischemist/project-procrustes?branch=idk%2Freally" },
+    { name = "retrocast", specifier = ">=0.5.2" },
     { name = "synplanner", specifier = ">=1.3.2" },
 ]
 

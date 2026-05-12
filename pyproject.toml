@@ -30,14 +30,15 @@ aizyn = [
 dms = ["directmultistep"]
 retro-star = ["retro-star>=0.1.0", "torch"]
 syntheseus = [
-  "syntheseus[local-retro]>=0.5.0",
-  "numpy<2",
-  "pandas<2.2",
-  "dgl",
-  "torch<=2.1",
-  "torchdata<=0.7.0",
-  "faiss-cpu",
-  "torch-scatter"
+  # dgl does not publish compatible macOS Python 3.12 wheels for this stack yet.
+  "syntheseus[local-retro]>=0.5.0; sys_platform != 'darwin' or python_full_version < '3.12'",
+  "numpy<2; sys_platform != 'darwin' or python_full_version < '3.12'",
+  "pandas<2.2; sys_platform != 'darwin' or python_full_version < '3.12'",
+  "dgl; sys_platform != 'darwin' or python_full_version < '3.12'",
+  "torch<=2.1; sys_platform != 'darwin' or python_full_version < '3.12'",
+  "torchdata<=0.7.0; sys_platform != 'darwin' or python_full_version < '3.12'",
+  "faiss-cpu; sys_platform != 'darwin' or python_full_version < '3.12'",
+  "torch-scatter; sys_platform != 'darwin' or python_full_version < '3.12'"
 ]
 viz = [
   "ischemist>=0.2.0",
@@ -122,6 +123,9 @@ local_scheme = "no-local-version"
 exclude = ["tests", "scripts"]
 
 [tool.uv]
+# Require a short cooling-off window before newly uploaded artifacts are eligible.
+required-version = ">=0.9.17"
+exclude-newer = "7 days"
 conflicts = [
   [
     { extra = "dms" },
@@ -143,7 +147,7 @@ explicit = true
 
 [tool.uv.sources]
 dgl = [
-  { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin'" },
+  { url = "https://data.dgl.ai/wheels/dgl-2.2.1-cp311-cp311-macosx_11_0_arm64.whl", marker = "sys_platform == 'darwin' and platform_machine == 'arm64' and python_version == '3.11'" },
 ]
 retro_star = { git = "https://github.com/anmorgunov/retro_star", branch = "master" }
 torch = [
