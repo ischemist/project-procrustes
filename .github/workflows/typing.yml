@@ -30,7 +30,7 @@ jobs:
 
       # this is the same caching logic from your tests workflow. big speed up.
       - name: Cache dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cache/uv
