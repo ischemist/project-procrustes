@@ -1,26 +1,26 @@
 {
   "action": "scripts/paroutes/training-set-prep/create-training-release",
-  "created_at": "2026-05-12T19:43:29.812044Z",
+  "created_at": "2026-05-12T21:17:26.044621Z",
   "directives": {},
   "output_files": {
     "all": {
       "label": "all",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/reaction-heldout-n1-n5/all.jsonl.gz",
-      "sha256": "b9a9ff2e142c9f007becbec286c625ccec179646f02dcfe588e979c7814fabfb"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/all.jsonl.gz",
+      "sha256": "1c85b4a93a01d5124e2cfd58d67a34843215cdc59ec35b622cdb3ccf27fbaffd"
     },
     "training": {
       "label": "training",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/reaction-heldout-n1-n5/training.jsonl.gz",
-      "sha256": "ed5ce54971864ec47eb74ffe69e87232f3f608e83bb0f68de436a3c0e8cd0430"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/training.jsonl.gz",
+      "sha256": "3624a1fba41cf4b35abee0e893b63587b11490201bae296bf6c4bfa69906a49a"
     },
     "validation": {
       "label": "validation",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-11/reaction-heldout-n1-n5/validation.jsonl.gz",
-      "sha256": "5bd7c281d804d3698484a1beab01467cd4df085a9f6cab6e3946a07eecec04b9"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/validation.jsonl.gz",
+      "sha256": "de638d2acbf7c2409d94d6cb58c079d63dc233a4e8ccd0cddd04e2e12830dfc0"
     }
   },
   "parameters": {
-    "holdout_mode": "reaction",
+    "holdout_mode": "route",
     "progress": {
       "enabled": true
     },
@@ -35,8 +35,8 @@
       "val_fraction": 0.05
     }
   },
-  "release_name": "reaction-heldout-n1-n5",
-  "retrocast_version": "0.5.4.dev18",
+  "release_name": "route-holdout-n1-n5",
+  "retrocast_version": "0.5.4.dev20",
   "schema_version": "1.1",
   "source_files": [
     {
@@ -102,22 +102,16 @@
     },
     "output": {
       "all_records": {
-        "total": 164973,
-        "training": 156701,
-        "validation": 8272
+        "total": 169126,
+        "training": 160653,
+        "validation": 8473
       }
     },
     "postprocessing": {
-      "chemical_duplicates_removed": 239862,
-      "duplicate_routes_removed": 239933,
+      "chemical_duplicates_removed": 237923,
+      "duplicate_routes_removed": 238005,
       "exact_route_matches_removed": 50026,
-      "mapped_smiles_variants_collapsed": 71,
-      "reaction_overlap": {
-        "fragments_kept_after_excision": 101379,
-        "routes_fully_removed_after_excision": 3840,
-        "routes_with_overlapping_reactions": 103604,
-        "unique_reference_reaction_signatures": 56657
-      },
+      "mapped_smiles_variants_collapsed": 82,
       "unique_reference_route_signatures": 17871
     }
   }
