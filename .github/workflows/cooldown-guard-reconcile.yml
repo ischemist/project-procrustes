@@ -31,7 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           # Avoid inheriting the repo's own uv cooldown policy while bootstrapping cooldown-guard itself.
-          uvx --no-config --from "cooldown-guard==${COOLDOWN_GUARD_VERSION}" cooldown-guard cleanup --project . --apply | tee cleanup.txt
+          uvx --no-config --from "cooldown-guard==${COOLDOWN_GUARD_VERSION}" cooldown-guard cleanup --project . --apply
           if git diff --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
