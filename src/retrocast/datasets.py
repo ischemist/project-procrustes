@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from retrocast.curation.training.records import TrainingReactionRecord, TrainingRouteRecord
 from retrocast.exceptions import (
     ArtifactFormatError,
     ConfigurationError,
@@ -29,7 +30,6 @@ from retrocast.io import (
 from retrocast.paths import validate_filename
 
 if TYPE_CHECKING:
-    from retrocast.curation.training import TrainingReactionRecord, TrainingRouteRecord
     from retrocast.models.chem import Route
 
 TrainingDatasetName = Literal["paroutes"]
@@ -81,6 +81,20 @@ class DownloadedBenchmarkAssets:
     stock_path: Path | None = None
 
 
+@dataclass(frozen=True)
+class DownloadedTrainingSet:
+    dataset: TrainingDatasetName
+    artifact: TrainingArtifactName
+    split: TrainingSplitName
+    format: TrainingSetFormat
+    requested_release: str
+    resolved_release: str
+    filename: str
+    path: Path
+    checksums_path: Path
+    sha256: str
+
+
 def download_training_set(
     dataset: TrainingDatasetName,
     *,
@@ -92,33 +106,60 @@ def download_training_set(
     output_dir: Path | None = None,
     base_url: str = DEFAULT_TRAINING_SET_BASE_URL,
 ) -> Path:
+    return download_training_set_info(
+        dataset,
+        artifact=artifact,
+        split=split,
+        release=release,
+        as_=as_,
+        cache_dir=cache_dir,
+        output_dir=output_dir,
+        base_url=base_url,
+    ).path
+
+
+def download_training_set_info(
+    dataset: TrainingDatasetName,
+    *,
+    artifact: TrainingArtifactName,
+    split: TrainingSplitName,
+    release: str = "latest",
+    as_: TrainingSetFormat,
+    cache_dir: Path | None = None,
+    output_dir: Path | None = None,
+    base_url: str = DEFAULT_TRAINING_SET_BASE_URL,
+) -> DownloadedTrainingSet:
     validate_training_dataset_request(dataset=dataset, artifact=artifact, split=split, as_=as_)
     resolved_release = resolve_training_set_release(dataset=dataset, release=release, base_url=base_url)
     filename = resolve_training_set_filename(artifact=artifact, split=split, as_=as_)
-    artifact_cache_dir = (
-        resolve_training_set_root(cache_dir=cache_dir, output_dir=output_dir) / dataset / resolved_release / artifact
+    release_cache_dir = resolve_training_set_root(
+        dataset=dataset,
+        release=resolved_release,
+        cache_dir=cache_dir,
+        output_dir=output_dir,
     )
+    artifact_cache_dir = release_cache_dir / artifact
     artifact_cache_dir.mkdir(parents=True, exist_ok=True)
 
     local_path = artifact_cache_dir / filename
-    checksums_path = artifact_cache_dir / "SHA256SUMS"
+    checksums_path = release_cache_dir / "SHA256SUMS"
     checksums_url = build_training_set_url(
         base_url=base_url,
         dataset=dataset,
         release=resolved_release,
-        artifact=artifact,
         filename="SHA256SUMS",
     )
+    checksum_key = build_training_set_checksum_key(artifact=artifact, filename=filename)
 
     expected_hashes = (
         load_sha256sums(checksums_path)
         if checksums_path.exists()
         else download_sha256sums(checksums_url, checksums_path)
     )
-    expected_hash = expected_hashes.get(filename)
+    expected_hash = expected_hashes.get(checksum_key)
     if expected_hash is None:
         expected_hashes = download_sha256sums(checksums_url, checksums_path)
-        expected_hash = expected_hashes.get(filename)
+        expected_hash = expected_hashes.get(checksum_key)
     if expected_hash is None:
         raise DatasetResolutionError(
             f"artifact '{artifact}' release '{resolved_release}' does not publish '{filename}'",
@@ -128,12 +169,24 @@ def download_training_set(
                 "artifact": artifact,
                 "release": resolved_release,
                 "filename": filename,
+                "checksum_key": checksum_key,
                 "checksums_url": checksums_url,
             },
         )
 
     if local_path.exists() and sha256_file(local_path) == expected_hash:
-        return local_path
+        return DownloadedTrainingSet(
+            dataset=dataset,
+            artifact=artifact,
+            split=split,
+            format=as_,
+            requested_release=release,
+            resolved_release=resolved_release,
+            filename=filename,
+            path=local_path,
+            checksums_path=checksums_path,
+            sha256=expected_hash,
+        )
 
     download_url = build_training_set_url(
         base_url=base_url,
@@ -159,7 +212,18 @@ def download_training_set(
                 "actual_sha256": actual_hash,
             },
         )
-    return local_path
+    return DownloadedTrainingSet(
+        dataset=dataset,
+        artifact=artifact,
+        split=split,
+        format=as_,
+        requested_release=release,
+        resolved_release=resolved_release,
+        filename=filename,
+        path=local_path,
+        checksums_path=checksums_path,
+        sha256=expected_hash,
+    )
 
 
 @overload
@@ -377,7 +441,20 @@ def validate_training_dataset_request(
         )
 
 
-def resolve_training_set_release(*, dataset: str, release: str, base_url: str) -> str:
+def resolve_latest_training_set_release(
+    dataset: TrainingDatasetName,
+    *,
+    base_url: str = DEFAULT_TRAINING_SET_BASE_URL,
+) -> str:
+    return resolve_training_set_release(dataset=dataset, release="latest", base_url=base_url)
+
+
+def resolve_training_set_release(
+    *,
+    dataset: str,
+    release: str = "latest",
+    base_url: str = DEFAULT_TRAINING_SET_BASE_URL,
+) -> str:
     if release != "latest":
         return release
 
@@ -409,12 +486,18 @@ def resolve_training_set_filename(*, artifact: str, split: str, as_: str) -> str
     return f"{split}.rsmi.txt.gz"
 
 
-def resolve_training_set_root(*, cache_dir: Path | None, output_dir: Path | None) -> Path:
+def resolve_training_set_root(
+    *,
+    dataset: TrainingDatasetName,
+    release: str,
+    cache_dir: Path | None,
+    output_dir: Path | None,
+) -> Path:
     if output_dir is not None:
-        return Path(output_dir)
+        return Path(output_dir) / release
     if cache_dir is not None:
-        return Path(cache_dir)
-    return DEFAULT_TRAINING_SET_CACHE_DIR
+        return Path(cache_dir) / dataset / release
+    return DEFAULT_TRAINING_SET_CACHE_DIR / dataset / release
 
 
 def resolve_hosted_data_root(*, cache_dir: Path | None, output_dir: Path | None) -> Path:
@@ -440,6 +523,10 @@ def build_training_set_url(
         parts.append(quote(artifact, safe=""))
     parts.append(quote(filename, safe="."))
     return "/".join(parts)
+
+
+def build_training_set_checksum_key(*, artifact: str, filename: str) -> str:
+    return f"{artifact}/{filename}"
 
 
 def download_sha256sums(url: str, destination: Path) -> dict[str, str]:
@@ -618,14 +705,20 @@ __all__ = [
     "DEFAULT_HOSTED_DATA_BASE_URL",
     "DEFAULT_DATASET_USER_AGENT",
     "DownloadedBenchmarkAssets",
+    "DownloadedTrainingSet",
     "StockFormat",
     "TrainingArtifactName",
     "TrainingDatasetName",
+    "TrainingReactionRecord",
+    "TrainingRouteRecord",
     "TrainingSetFormat",
     "TrainingSplitName",
     "download_benchmark",
     "download_benchmark_assets",
     "download_stock",
     "download_training_set",
+    "download_training_set_info",
     "load_training_set",
+    "resolve_latest_training_set_release",
+    "resolve_training_set_release",
 ]

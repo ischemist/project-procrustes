@@ -1,7 +1,7 @@
 import gzip
 import json
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -108,6 +108,11 @@ def load_json_gz(path: Path) -> Any:
 
 def load_jsonl_gz(path: Path, skip_empty: bool = True) -> list[Any]:
     """Loads JSON rows from a gzipped JSONL file, optionally rejecting empty lines."""
+    return list(iter_jsonl_gz(path, skip_empty=skip_empty))
+
+
+def iter_jsonl_gz(path: Path, skip_empty: bool = True) -> Iterator[Any]:
+    """Streams JSON rows from a gzipped JSONL file."""
     path = Path(path)
     if not path.exists():
         raise ArtifactNotFoundError(
@@ -116,7 +121,6 @@ def load_jsonl_gz(path: Path, skip_empty: bool = True) -> list[Any]:
             context={"path": str(path)},
         )
 
-    rows: list[Any] = []
     try:
         with gzip.open(path, "rt", encoding="utf-8") as f:
             for line_number, line in enumerate(f, start=1):
@@ -129,7 +133,7 @@ def load_jsonl_gz(path: Path, skip_empty: bool = True) -> list[Any]:
                         )
                     continue
                 try:
-                    rows.append(json.loads(line))
+                    yield json.loads(line)
                 except json.JSONDecodeError as e:
                     raise ArtifactDecodeError(
                         f"Failed to decode JSONL row {line_number} from {path}: {e}",
@@ -143,11 +147,14 @@ def load_jsonl_gz(path: Path, skip_empty: bool = True) -> list[Any]:
             context={"path": str(path)},
         ) from e
 
-    return rows
-
 
 def load_lines_gz(path: Path) -> list[str]:
     """Loads newline-delimited text lines from a gzip file."""
+    return list(iter_lines_gz(path))
+
+
+def iter_lines_gz(path: Path) -> Iterator[str]:
+    """Streams newline-delimited text lines from a gzip file."""
     path = Path(path)
     if not path.exists():
         raise ArtifactNotFoundError(
@@ -158,7 +165,8 @@ def load_lines_gz(path: Path) -> list[str]:
 
     try:
         with gzip.open(path, "rt", encoding="utf-8") as f:
-            return [line.rstrip("\n") for line in f]
+            for line in f:
+                yield line.rstrip("\n")
     except OSError as e:
         raise ArtifactDecodeError(
             f"Failed to load {path}: {e}",

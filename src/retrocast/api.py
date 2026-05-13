@@ -10,11 +10,17 @@ from pathlib import Path
 
 from retrocast.chem import InchiKeyLevel
 from retrocast.datasets import (
+    DownloadedTrainingSet,
+    TrainingReactionRecord,
+    TrainingRouteRecord,
     download_benchmark,
     download_benchmark_assets,
     download_stock,
     download_training_set,
+    download_training_set_info,
     load_training_set,
+    resolve_latest_training_set_release,
+    resolve_training_set_release,
 )
 from retrocast.io import (
     load_benchmark,
@@ -46,7 +52,13 @@ __all__ = [
     "download_benchmark_assets",
     "download_stock",
     "download_training_set",
+    "download_training_set_info",
     "load_training_set",
+    "resolve_training_set_release",
+    "resolve_latest_training_set_release",
+    "DownloadedTrainingSet",
+    "TrainingRouteRecord",
+    "TrainingReactionRecord",
     "score_predictions",
     "compute_model_statistics",
     "compute_metric_with_ci",
