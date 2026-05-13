@@ -25,10 +25,11 @@ nav = [
     "guides/cli.md",
     "guides/library.md",
     "guides/benchmarks.md",
-    "guides/workflows.md"
+    "guides/workflows.md",
+    "guides/training-sets.md"
   ] },
-  { "Design" = [
-    "design/training-set-releases.md"
+  { "Rationale" = [
+    "rationale/training-set-releases.md"
   ] },
   { "Developers" = ["developers/adapters.md"] }
 ]
