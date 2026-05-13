@@ -133,6 +133,8 @@ Some models have unique structures that don't fit the above patterns (e.g., grap
 
 Adapter error `code` values are lowercase machine contracts. Keep adapter names in `context["adapter"]` lowercase so callers can aggregate by `ADAPTER_MAP` key. Human-facing messages should use proper model capitalization, such as `DreamRetro`, `DMS`, or `MolBuilder`.
 
+For the shared exception shape, wrapping rules, and workflow-level failure accounting, see [Error Handling](errors.md).
+
 An adapter may raise these expected errors from `cast`:
 
 | exception | code | when it is raised | caller policy |
@@ -151,6 +153,8 @@ An adapter may raise these expected errors from `cast`:
 Adapter resolution happens before `cast` and raises `AdapterResolutionError` (`adapter.unknown` or `adapter.resolution_missing`) when the CLI or manifest cannot select an adapter.
 
 Use `retrocast.adapters.errors.adapter_schema_error()` and `adapter_target_mismatch()` where they fit; they keep messages, codes, and context consistent.
+
+During `ingest`, workflow boundaries aggregate target-level `AdapterError` and `ChemError` failures by `error.code`. In the ingest CLI path, that summary is persisted in manifest `statistics.failures_by_code`.
 
 ### Adapter Error Examples
 
