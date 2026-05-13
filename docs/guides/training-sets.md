@@ -11,7 +11,7 @@ helper when you need a download path outside Python.
 !!! warning "Requires the hosted training-set API"
 
     This guide assumes a RetroCast build that includes
-    `retrocast.datasets.load_training_set`. That surface landed after `v0.5.3`
+    `retrocast.datasets.download_training_set`. That surface landed after `v0.5.3`
     in commit `2c6387a`.
 
     If your install does not expose `retrocast.datasets`, upgrade before
@@ -21,21 +21,24 @@ helper when you need a download path outside Python.
 
 Pick one of two workflows:
 
-=== "managed cache (recommended)"
+=== "managed cache"
 
     use this when you do not care where the files live beyond “some verified local cache”.
 
     python:
 
     ```python
-    from retrocast.datasets import load_training_set
+    from retrocast.datasets import download_training_set
+    from retrocast.io import iter_training_routes
 
-    train_routes = load_training_set(
+    path = download_training_set(
         "paroutes",
         artifact="reaction-holdout-n1-n5",
         split="training",
-        as_="routes",
     )
+
+    for route in iter_training_routes(path):
+        ...
     ```
 
     shell fallback:
@@ -48,6 +51,7 @@ Pick one of two workflows:
 
     ```text
     ~/.cache/retrocast/training-sets/paroutes/<release>/SHA256SUMS
+    ~/.cache/retrocast/training-sets/paroutes/<release>/<artifact>/manifest.json
     ~/.cache/retrocast/training-sets/paroutes/<release>/<artifact>/<file>
     ```
 
@@ -61,14 +65,17 @@ Pick one of two workflows:
     from pathlib import Path
 
     from retrocast.datasets import download_training_set
+    from retrocast.io import iter_training_routes
 
     path = download_training_set(
         "paroutes",
         artifact="reaction-holdout-n1-n5",
         split="training",
-        as_="routes",
         output_dir=Path("data/datasets/paroutes"),
     )
+
+    for route in iter_training_routes(path):
+        ...
     ```
 
     shell fallback:
@@ -81,23 +88,23 @@ Pick one of two workflows:
 
     ```text
     data/datasets/paroutes/<release>/SHA256SUMS
+    data/datasets/paroutes/<release>/<artifact>/manifest.json
     data/datasets/paroutes/<release>/<artifact>/<file>
     ```
 
-One-step reaction training uses the same flow with `artifact="single-step-reaction-holdout-n1-n5"` and `as_="reaction_records"` or `as_="reaction_smiles"`.
+One-step reaction training uses the same flow with `artifact="single-step-reaction-holdout-n1-n5"`. By default that downloads the canonical `jsonl` artifact. Pass `format="rsmi"` if you specifically want the plain reaction-smiles text file.
+
+When a real download happens in an interactive terminal, RetroCast shows a progress bar automatically. Pass `show_progress=False` to suppress it or `show_progress=True` to force it.
 
 ## Public Imports
 
-The stable public import path for training-set models and helpers is
-`retrocast.datasets`:
+The stable public import path for training-set models and helpers is `retrocast.datasets`:
 
 ```python
 from retrocast.datasets import (
     TrainingReactionRecord,
     TrainingRouteRecord,
     download_training_set,
-    download_training_set_info,
-    load_training_set,
     resolve_latest_training_set_release,
 )
 ```
@@ -109,11 +116,11 @@ You do not need to import these models from `retrocast.curation.training`.
 Use `reaction-holdout-n1-n5` unless you specifically need a route-holdout
 baseline.
 
-| artifact | intended training target | holdout rule | valid `as_` values | files published per split |
+| artifact | intended training target | holdout rule | valid `format` values | files published per split |
 | --- | --- | --- | --- | --- |
-| `route-holdout-n1-n5` | multistep route models | remove exact `n1 ∪ n5` routes | `routes`, `route_records` | `all.jsonl.gz`, `training.jsonl.gz`, `validation.jsonl.gz` |
-| `reaction-holdout-n1-n5` | multistep route models | remove exact holdout routes, then excise holdout reactions | `routes`, `route_records` | `all.jsonl.gz`, `training.jsonl.gz`, `validation.jsonl.gz` |
-| `single-step-reaction-holdout-n1-n5` | one-step reaction models | flatten `reaction-holdout-n1-n5` routes into deduplicated reactions | `reaction_records`, `reaction_smiles` | `all.jsonl.gz`, `training.jsonl.gz`, `validation.jsonl.gz`, `all.rsmi.txt.gz`, `training.rsmi.txt.gz`, `validation.rsmi.txt.gz` |
+| `route-holdout-n1-n5` | multistep route models | remove exact `n1 ∪ n5` routes | `jsonl` | `all.jsonl.gz`, `training.jsonl.gz`, `validation.jsonl.gz` |
+| `reaction-holdout-n1-n5` | multistep route models | remove exact holdout routes, then excise holdout reactions | `jsonl` | `all.jsonl.gz`, `training.jsonl.gz`, `validation.jsonl.gz` |
+| `single-step-reaction-holdout-n1-n5` | one-step reaction models | flatten `reaction-holdout-n1-n5` routes into deduplicated reactions | `jsonl`, `rsmi` | `all.jsonl.gz`, `training.jsonl.gz`, `validation.jsonl.gz`, `all.rsmi.txt.gz`, `training.rsmi.txt.gz`, `validation.rsmi.txt.gz` |
 
 Each artifact directory includes:
 
@@ -125,30 +132,15 @@ Each release directory includes:
 
 ## Python API
 
-`load_training_set()` is the high-level entrypoint:
+`download_training_set()` gives you the verified local artifact path.
+it also materializes sibling `manifest.json` and release-level `SHA256SUMS`.
+`format` describes which wire file you want:
 
-```python
-from retrocast.datasets import load_training_set
+- `jsonl` -> structured JSONL artifact
+- `rsmi` -> plain reaction-smiles text artifact
 
-val_records = load_training_set(
-    "paroutes",
-    artifact="reaction-holdout-n1-n5",
-    split="validation",
-    as_="route_records",
-    release="latest",
-)
-```
-
-Supported `as_` values:
-
-- `routes` -> `list[Route]`
-- `route_records` -> `list[TrainingRouteRecord]`
-- `reaction_records` -> `list[TrainingReactionRecord]`
-- `reaction_smiles` -> `list[str]`
-
-`routes` is a validated view over the route-record artifact. For route artifacts,
-`as_="routes"` and `as_="route_records"` both read the same `*.jsonl.gz` file;
-the former returns `row["route"]` validated as `Route`.
+Use `jsonl` unless you explicitly want the single-step reaction-smiles text
+projection. route artifacts only support `jsonl`.
 
 ### Streaming
 
@@ -156,17 +148,12 @@ Use `retrocast.io` when you want to stream a verified local artifact without
 loading the full file into memory:
 
 ```python
-from retrocast.datasets import download_training_set_info
+from retrocast.datasets import download_training_set
 from retrocast.io import iter_training_reaction_records
 
-info = download_training_set_info(
-    "paroutes",
-    artifact="single-step-reaction-holdout-n1-n5",
-    split="training",
-    as_="reaction_records",
-)
+path = download_training_set("paroutes", artifact="single-step-reaction-holdout-n1-n5", split="training")
 
-for record in iter_training_reaction_records(info.path):
+for record in iter_training_reaction_records(path):
     ...
 ```
 
@@ -177,6 +164,13 @@ Available local streaming helpers:
 - `retrocast.io.iter_training_reaction_records(path)`
 - `retrocast.io.iter_training_reaction_smiles(path)`
 
+Available local eager helpers:
+
+- `retrocast.io.load_training_routes(path)`
+- `retrocast.io.load_training_route_records(path)`
+- `retrocast.io.load_training_reaction_records(path)`
+- `retrocast.io.load_training_reaction_smiles(path)`
+
 The intended split is:
 
 - `retrocast.datasets` resolves releases, downloads artifacts, and verifies checksums
@@ -185,7 +179,7 @@ The intended split is:
 That keeps the local artifact path explicit, which is usually useful in real
 training pipelines.
 
-### Download Metadata
+### Local Metadata
 
 `download_training_set()` returns the verified local `Path`:
 
@@ -196,34 +190,33 @@ path = download_training_set(
     "paroutes",
     artifact="reaction-holdout-n1-n5",
     split="training",
-    as_="routes",
 )
 ```
 
-If you also want structured metadata about what was resolved and where it was
-materialized, use `download_training_set_info()`:
+The sibling artifact manifest and release checksum file are always there:
 
 ```python
-from retrocast.datasets import download_training_set_info
+from retrocast.datasets import download_training_set
 
-info = download_training_set_info(
+path = download_training_set(
     "paroutes",
     artifact="reaction-holdout-n1-n5",
     split="training",
-    as_="route_records",
 )
 
-print(info.path)
-print(info.resolved_release)
-print(info.artifact)
-print(info.split)
-print(info.format)
-print(info.checksums_path)
-print(info.sha256)
+manifest_path = path.parent / "manifest.json"
+checksums_path = path.parent.parent / "SHA256SUMS"
+
+print(path)
+print(manifest_path)
+print(checksums_path)
 ```
 
-`info.checksums_path` points at the release-level checksum manifest, e.g.
-`~/.cache/retrocast/training-sets/paroutes/v2026-05-12/SHA256SUMS`.
+That is usually enough for downstream training pipelines:
+
+- keep `path` as the canonical downloaded artifact
+- inspect `manifest.json` later for release provenance and build metadata
+- compare a local `sha256` against `SHA256SUMS` if you need an explicit audit step
 
 ### Release Resolution
 
@@ -260,7 +253,6 @@ path = download_training_set(
     "paroutes",
     artifact="reaction-holdout-n1-n5",
     split="training",
-    as_="routes",
     output_dir=Path("data/datasets/paroutes"),
 )
 ```
@@ -377,6 +369,7 @@ Shared cache layout:
 
 ```text
 ~/.cache/retrocast/training-sets/paroutes/<release>/SHA256SUMS
+~/.cache/retrocast/training-sets/paroutes/<release>/<artifact>/manifest.json
 ~/.cache/retrocast/training-sets/paroutes/<release>/<artifact>/<file>
 ```
 
@@ -384,13 +377,15 @@ Concrete example:
 
 ```text
 ~/.cache/retrocast/training-sets/paroutes/v2026-05-12/SHA256SUMS
+~/.cache/retrocast/training-sets/paroutes/v2026-05-12/reaction-holdout-n1-n5/manifest.json
 ~/.cache/retrocast/training-sets/paroutes/v2026-05-12/reaction-holdout-n1-n5/training.jsonl.gz
 ```
 
-When you pass `output_dir=Path("data/training")`, the resulting path is:
+When you pass `output_dir=Path("data/datasets/paroutes")`, the resulting path is:
 
 ```text
 data/datasets/paroutes/v2026-05-12/SHA256SUMS
+data/datasets/paroutes/v2026-05-12/reaction-holdout-n1-n5/manifest.json
 data/datasets/paroutes/v2026-05-12/reaction-holdout-n1-n5/training.jsonl.gz
 ```
 
@@ -408,7 +403,7 @@ to own the dataset root yourself.
 The shell helper mirrors the Python surface, but it is the fallback story, not
 the primary one.
 
-Download route records:
+Download route JSONL:
 
 ```bash
 curl -fsSL https://files.ischemist.com/retrocast/get-training-set.sh | bash -s -- reaction-holdout-n1-n5 --split training
@@ -423,7 +418,7 @@ curl -fsSL https://files.ischemist.com/retrocast/get-training-set.sh | bash -s -
 Download single-step mapped reaction SMILES:
 
 ```bash
-curl -fsSL https://files.ischemist.com/retrocast/get-training-set.sh | bash -s -- single-step-reaction-holdout-n1-n5 --split training --format reaction-smiles
+curl -fsSL https://files.ischemist.com/retrocast/get-training-set.sh | bash -s -- single-step-reaction-holdout-n1-n5 --split training --format rsmi
 ```
 
 Materialize into a project directory instead of the default cache:

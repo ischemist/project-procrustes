@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+import retrocast.datasets as datasets_module
 from retrocast.curation.training import (
     TrainingReactionRecord,
     TrainingRouteRecord,
@@ -17,14 +18,13 @@ from retrocast.datasets import (
     download_benchmark_assets,
     download_stock,
     download_training_set,
-    download_training_set_info,
-    load_training_set,
     resolve_latest_training_set_release,
 )
 from retrocast.exceptions import ConfigurationError, DatasetVerificationError
 from retrocast.io import (
     iter_training_reaction_smiles,
     iter_training_route_records,
+    load_training_routes,
     save_lines_gz,
     save_stock_files,
 )
@@ -42,6 +42,28 @@ from tests.helpers_training_datasets import (
 
 @pytest.mark.integration
 class TestTrainingDatasets:
+    def test_show_download_progress_honors_explicit_flag(self):
+        assert datasets_module.should_show_download_progress(True) is True
+        assert datasets_module.should_show_download_progress(False) is False
+
+    def test_show_download_progress_auto_detects_tty(self, monkeypatch):
+        class FakeStderr:
+            def isatty(self) -> bool:
+                return True
+
+        monkeypatch.setattr(datasets_module.sys, "stderr", FakeStderr())
+
+        assert datasets_module.should_show_download_progress(None) is True
+
+    def test_show_download_progress_auto_disables_without_tty(self, monkeypatch):
+        class FakeStderr:
+            def isatty(self) -> bool:
+                return False
+
+        monkeypatch.setattr(datasets_module.sys, "stderr", FakeStderr())
+
+        assert datasets_module.should_show_download_progress(None) is False
+
     def test_public_dataset_module_reexports_training_record_models(self):
         assert PublicTrainingRouteRecord is TrainingRouteRecord
         assert PublicTrainingReactionRecord is TrainingReactionRecord
@@ -52,14 +74,14 @@ class TestTrainingDatasets:
         route = synthetic_route_factory("linear", depth=1)
         write_training_route_artifact(remote_root, route)
 
-        routes = load_training_set(
+        path = download_training_set(
             "paroutes",
             artifact="reaction-holdout-n1-n5",
             split="training",
-            as_="routes",
             base_url=remote_root.resolve().as_uri(),
             cache_dir=tmp_path / "cache",
         )
+        routes = load_training_routes(path)
 
         assert len(routes) == 1
         assert routes[0].get_structural_signature() == route.get_structural_signature()
@@ -70,62 +92,80 @@ class TestTrainingDatasets:
         route = synthetic_route_factory("linear", depth=1)
         write_training_route_artifact(remote_root, route)
 
-        records = load_training_set(
+        path = download_training_set(
             "paroutes",
             artifact="reaction-holdout-n1-n5",
             split="training",
-            as_="route_records",
             release="v2026-05-12",
             base_url=remote_root.resolve().as_uri(),
             cache_dir=tmp_path / "cache",
         )
+        records = list(iter_training_route_records(path))
 
         assert len(records) == 1
         assert records[0].id == "paroutes-reaction-holdout-n1-n5-000001"
         assert records[0].route_signature == route.get_structural_signature()
 
-    def test_download_training_set_info_returns_metadata(self, tmp_path, synthetic_route_factory):
+    def test_download_training_set_downloads_manifest_and_checksums(self, tmp_path, synthetic_route_factory):
         remote_root = tmp_path / "remote"
         write_latest_pointer(remote_root)
         route = synthetic_route_factory("linear", depth=1)
         write_training_route_artifact(remote_root, route)
 
-        info = download_training_set_info(
+        path = download_training_set(
             "paroutes",
             artifact="reaction-holdout-n1-n5",
             split="training",
-            as_="route_records",
             release="latest",
             base_url=remote_root.resolve().as_uri(),
             cache_dir=tmp_path / "cache",
         )
 
-        assert info.dataset == "paroutes"
-        assert info.artifact == "reaction-holdout-n1-n5"
-        assert info.split == "training"
-        assert info.format == "route_records"
-        assert info.requested_release == "latest"
-        assert info.resolved_release == "v2026-05-12"
-        assert info.filename == "training.jsonl.gz"
-        assert info.path.name == "training.jsonl.gz"
-        assert info.checksums_path == tmp_path / "cache" / "paroutes" / "v2026-05-12" / "SHA256SUMS"
-        assert len(info.sha256) == 64
+        assert path == tmp_path / "cache" / "paroutes" / "v2026-05-12" / "reaction-holdout-n1-n5" / "training.jsonl.gz"
+        assert (path.parent / "manifest.json").exists()
+        assert (path.parent.parent / "SHA256SUMS").exists()
 
-    def test_download_training_set_info_path_can_be_streamed_with_io_loader(self, tmp_path, synthetic_route_factory):
+    def test_download_training_set_restores_missing_manifest(self, tmp_path, synthetic_route_factory):
         remote_root = tmp_path / "remote"
         write_latest_pointer(remote_root)
         route = synthetic_route_factory("linear", depth=1)
         write_training_route_artifact(remote_root, route)
 
-        info = download_training_set_info(
+        path = download_training_set(
             "paroutes",
             artifact="reaction-holdout-n1-n5",
             split="training",
-            as_="route_records",
             base_url=remote_root.resolve().as_uri(),
             cache_dir=tmp_path / "cache",
         )
-        records = list(iter_training_route_records(info.path))
+        manifest_path = path.parent / "manifest.json"
+        manifest_path.unlink()
+
+        restored_path = download_training_set(
+            "paroutes",
+            artifact="reaction-holdout-n1-n5",
+            split="training",
+            base_url=remote_root.resolve().as_uri(),
+            cache_dir=tmp_path / "cache",
+        )
+
+        assert restored_path == path
+        assert manifest_path.exists()
+
+    def test_download_training_set_path_can_be_streamed_with_io_loader(self, tmp_path, synthetic_route_factory):
+        remote_root = tmp_path / "remote"
+        write_latest_pointer(remote_root)
+        route = synthetic_route_factory("linear", depth=1)
+        write_training_route_artifact(remote_root, route)
+
+        path = download_training_set(
+            "paroutes",
+            artifact="reaction-holdout-n1-n5",
+            split="training",
+            base_url=remote_root.resolve().as_uri(),
+            cache_dir=tmp_path / "cache",
+        )
+        records = list(iter_training_route_records(path))
 
         assert len(records) == 1
         assert records[0].route_signature == route.get_structural_signature()
@@ -139,7 +179,7 @@ class TestTrainingDatasets:
             "paroutes",
             artifact="single-step-reaction-holdout-n1-n5",
             split="training",
-            as_="reaction_smiles",
+            format="rsmi",
             release="latest",
             base_url=remote_root.resolve().as_uri(),
             cache_dir=tmp_path / "cache",
@@ -151,7 +191,7 @@ class TestTrainingDatasets:
             "paroutes",
             artifact="single-step-reaction-holdout-n1-n5",
             split="training",
-            as_="reaction_smiles",
+            format="rsmi",
             release="latest",
             base_url=remote_root.resolve().as_uri(),
             cache_dir=tmp_path / "cache",
@@ -169,7 +209,7 @@ class TestTrainingDatasets:
             "paroutes",
             artifact="single-step-reaction-holdout-n1-n5",
             split="training",
-            as_="reaction_smiles",
+            format="rsmi",
             release="latest",
             base_url=remote_root.resolve().as_uri(),
             cache_dir=cache_dir,
@@ -183,7 +223,7 @@ class TestTrainingDatasets:
             "paroutes",
             artifact="single-step-reaction-holdout-n1-n5",
             split="training",
-            as_="reaction_smiles",
+            format="rsmi",
             release="latest",
             base_url=remote_root.resolve().as_uri(),
             cache_dir=cache_dir,
@@ -204,7 +244,7 @@ class TestTrainingDatasets:
             "paroutes",
             artifact="single-step-reaction-holdout-n1-n5",
             split="training",
-            as_="reaction_smiles",
+            format="rsmi",
             release="latest",
             base_url=remote_root.resolve().as_uri(),
             cache_dir=cache_dir,
@@ -222,7 +262,7 @@ class TestTrainingDatasets:
                 "paroutes",
                 artifact="single-step-reaction-holdout-n1-n5",
                 split="training",
-                as_="reaction_smiles",
+                format="rsmi",
                 release="latest",
                 base_url=remote_root.resolve().as_uri(),
                 cache_dir=cache_dir,
@@ -232,7 +272,7 @@ class TestTrainingDatasets:
             "paroutes",
             artifact="single-step-reaction-holdout-n1-n5",
             split="training",
-            as_="reaction_smiles",
+            format="rsmi",
             release="latest",
             base_url=remote_root.resolve().as_uri(),
             cache_dir=cache_dir,
@@ -251,7 +291,6 @@ class TestTrainingDatasets:
             "paroutes",
             artifact="reaction-holdout-n1-n5",
             split="training",
-            as_="routes",
             release="latest",
             base_url=remote_root.resolve().as_uri(),
             output_dir=output_dir,
@@ -272,7 +311,6 @@ class TestTrainingDatasets:
             "paroutes",
             artifact="reaction-holdout-n1-n5",
             split="training",
-            as_="routes",
             release="latest",
             base_url=remote_root.resolve().as_uri(),
             cache_dir=cache_dir,
@@ -288,11 +326,11 @@ class TestTrainingDatasets:
 
     def test_rejects_incompatible_artifact_format_combo(self, tmp_path):
         with pytest.raises(ConfigurationError, match="does not support format"):
-            load_training_set(
+            download_training_set(
                 "paroutes",
                 artifact="reaction-holdout-n1-n5",
                 split="training",
-                as_="reaction_smiles",
+                format="rsmi",
                 release="v2026-05-12",
                 base_url=(tmp_path / "remote").resolve().as_uri(),
                 cache_dir=tmp_path / "cache",
