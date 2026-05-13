@@ -4,6 +4,7 @@ import csv
 import gzip
 import json
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, overload
 
@@ -135,7 +136,7 @@ def load_training_route_records(path: Path) -> list[TrainingRouteRecord]:
     return list(iter_training_route_records(path))
 
 
-def iter_training_route_records(path: Path):
+def iter_training_route_records(path: Path) -> Iterator[TrainingRouteRecord]:
     """Stream structured route training records from a JSONL artifact."""
     from retrocast.curation.training.records import TrainingRouteRecord
 
@@ -155,7 +156,7 @@ def load_training_routes(path: Path) -> list[Route]:
     return list(iter_training_routes(path))
 
 
-def iter_training_routes(path: Path):
+def iter_training_routes(path: Path) -> Iterator[Route]:
     """Stream route objects directly from a training-release JSONL artifact."""
     for row_index, row in enumerate(iter_jsonl_gz(path), start=1):
         try:
@@ -173,7 +174,7 @@ def load_training_reaction_records(path: Path) -> list[TrainingReactionRecord]:
     return list(iter_training_reaction_records(path))
 
 
-def iter_training_reaction_records(path: Path):
+def iter_training_reaction_records(path: Path) -> Iterator[TrainingReactionRecord]:
     """Stream structured single-step training records from a JSONL artifact."""
     from retrocast.curation.training.records import TrainingReactionRecord
 
@@ -193,7 +194,7 @@ def load_training_reaction_smiles(path: Path) -> list[str]:
     return list(iter_training_reaction_smiles(path))
 
 
-def iter_training_reaction_smiles(path: Path):
+def iter_training_reaction_smiles(path: Path) -> Iterator[str]:
     """Stream canonical mapped reaction smiles lines from a single-step release text artifact."""
     yield from iter_lines_gz(path)
 

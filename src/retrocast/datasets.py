@@ -5,8 +5,9 @@ import json
 import os
 import sys
 from dataclasses import dataclass
+from io import BufferedWriter
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -651,7 +652,7 @@ def download_url_to_path(
         ) from exc
 
 
-def write_response_with_progress(*, response, handle, description: str) -> None:
+def write_response_with_progress(*, response: Any, handle: BufferedWriter, description: str) -> None:
     from rich.console import Console
     from rich.progress import (
         BarColumn,
