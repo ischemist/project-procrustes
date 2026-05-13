@@ -17,20 +17,25 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     env:
-      COOLDOWN_GUARD_VERSION: "0.1.1"
+      COOLDOWN_GUARD_VERSION: "0.1.2"
+      COOLDOWN_GUARD_SHA256: "644f2dd532a116f2b4ade67ab3f8fd407c72f4a294bc347a7bd653cfdb66b33c"
     steps:
       - name: checkout
         uses: actions/checkout@v6
 
-      - name: install uv
-        uses: astral-sh/setup-uv@v7
-
-      - name: install python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
+      - name: download cooldown-guard release binary
+        env:
+          GH_TOKEN: ${{ secrets.COOLDOWN_GUARD_DOWNLOAD_TOKEN }}
+        run: |
+          test -n "${GH_TOKEN}" || {
+            echo "COOLDOWN_GUARD_DOWNLOAD_TOKEN secret is required to download private release assets." >&2
+            exit 1
+          }
+          gh release download "v${COOLDOWN_GUARD_VERSION}" \
+            --repo ischemist/cooldown-guard \
+            --pattern "cooldown-guard-linux-x86_64"
+          echo "${COOLDOWN_GUARD_SHA256}  cooldown-guard-linux-x86_64" | sha256sum -c -
+          chmod +x cooldown-guard-linux-x86_64
 
       - name: validate cooldown guard ledger
-        run: |
-          # Avoid inheriting the repo's own uv cooldown policy while bootstrapping cooldown-guard itself.
-          uvx --no-config --from "cooldown-guard==${COOLDOWN_GUARD_VERSION}" cooldown-guard validate --project .
+        run: ./cooldown-guard-linux-x86_64 validate --project .
