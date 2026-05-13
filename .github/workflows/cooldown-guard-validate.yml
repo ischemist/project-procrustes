@@ -24,16 +24,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: download cooldown-guard release binary
-        env:
-          GH_TOKEN: ${{ secrets.COOLDOWN_GUARD_DOWNLOAD_TOKEN }}
         run: |
-          test -n "${GH_TOKEN}" || {
-            echo "COOLDOWN_GUARD_DOWNLOAD_TOKEN secret is required to download private release assets." >&2
-            exit 1
-          }
-          gh release download "v${COOLDOWN_GUARD_VERSION}" \
-            --repo ischemist/cooldown-guard \
-            --pattern "cooldown-guard-linux-x86_64"
+          curl -fsSL -o cooldown-guard-linux-x86_64 \
+            "https://github.com/ischemist/cooldown-guard/releases/download/v${COOLDOWN_GUARD_VERSION}/cooldown-guard-linux-x86_64"
           echo "${COOLDOWN_GUARD_SHA256}  cooldown-guard-linux-x86_64" | sha256sum -c -
           chmod +x cooldown-guard-linux-x86_64
 
