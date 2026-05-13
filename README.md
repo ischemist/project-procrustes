@@ -106,6 +106,8 @@ retrocast score-file \
 ### 2. The Project Workflow
 For full-scale benchmarking, RetroCast enforces a structured data lifecycle: `Ingest` $\to$ `Score` $\to$ `Analyze`.
 
+model-specific prediction runners were extracted from this repo and now live in [project-pandora](https://github.com/ischemist/project-pandora). use RetroCast here for standardization, scoring, and analysis; use pandora when you need the upstream model-runner scripts.
+
 **Initialize a project:**
 ```bash
 retrocast init

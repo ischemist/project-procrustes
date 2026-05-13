@@ -12,6 +12,12 @@ RetroCast includes a suite of analysis scripts designed for rigorous statistical
     - Execute using `uv run scripts/<script-name>.py`
     - Requires scored predictions in `data/4-scored/`
 
+!!! note "prediction runners moved"
+
+    this page documents the in-repo **analysis** scripts only.
+
+    model-specific prediction runners for tools such as aizynthfinder, directmultistep, retrostar, synplanner, syntheseus, askcos, retrochimera, dreamretro, multistepttl, and synllama now live in [project-pandora](https://github.com/ischemist/project-pandora).
+
 ## Quick Reference
 
 | Script | Purpose | Key Output |
