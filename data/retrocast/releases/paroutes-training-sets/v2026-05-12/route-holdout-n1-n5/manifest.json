@@ -1,0 +1,118 @@
+{
+  "action": "scripts/paroutes/training-set-prep/create-training-release",
+  "created_at": "2026-05-12T22:01:28.007899Z",
+  "directives": {},
+  "output_files": {
+    "all": {
+      "label": "all",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/all.jsonl.gz",
+      "sha256": "1bd74997e530bc3caf30c9fe3c347e4ec8a7bd2feae906948e30220e3396dbfb"
+    },
+    "training": {
+      "label": "training",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/training.jsonl.gz",
+      "sha256": "fad292e468e1eb9bc531130a9f92e388f39797fb14e3514ede2b035fa40e6ecb"
+    },
+    "validation": {
+      "label": "validation",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/validation.jsonl.gz",
+      "sha256": "f0649d55d3285785300af7fe32020ae47d4349b1e66e3f661342ff27141c0257"
+    }
+  },
+  "parameters": {
+    "holdout_mode": "route",
+    "progress": {
+      "enabled": true
+    },
+    "release_rules": {
+      "chemical_exact_dedup": "collapse exact route duplicates by route.get_annotated_signature(include_mapped_smiles=True)",
+      "reaction_holdout": "excise reactions present in n1 union n5 and keep surviving sub-routes",
+      "route_holdout": "exclude full n1 union n5 by route.get_structural_signature()",
+      "transform_dedup": "collapse mapped-smiles variants by structure + condition identity"
+    },
+    "split": {
+      "seed": 20260502,
+      "val_fraction": 0.05
+    }
+  },
+  "release_name": "route-holdout-n1-n5",
+  "retrocast_version": "0.5.4.dev22",
+  "schema_version": "1.1",
+  "source_files": [
+    {
+      "path": "data/retrocast/0-assets/paroutes/all-routes.json.gz",
+      "sha256": "d504e5964af1b09632d4048f6ab81d626babc5d344dff1be00ece312716f2405"
+    },
+    {
+      "path": "data/retrocast/0-assets/paroutes/n1-routes.json.gz",
+      "sha256": "49d7e209328b7cf7edc09ca827b0a21938d520a6b1d2dc0a46a65c6f392c2c89"
+    },
+    {
+      "path": "data/retrocast/0-assets/paroutes/n5-routes.json.gz",
+      "sha256": "5333b4aeb4e65a2c50e42a8f3a3701c75d76c8045280ec6cc460fbb3ebd605ad"
+    }
+  ],
+  "statistics": {},
+  "summary": {
+    "adaptation": {
+      "all_routes": {
+        "adapted_routes": 457157,
+        "failures_by_code": {
+          "adapter.cycle_detected": 3,
+          "chem.invalid_smiles": 6
+        },
+        "non_fatal_condition_slot_parse": {
+          "distinct_uncanonicalizable_token_count": 5,
+          "malformed_rsmi_count": 0,
+          "uncanonicalizable_token_count": 25634
+        },
+        "raw_routes": 457166,
+        "skipped_routes": 9,
+        "skipped_without_error_code": 0
+      },
+      "reference_datasets": {
+        "n1": {
+          "adapted_routes": 10000,
+          "failures_by_code": {},
+          "non_fatal_condition_slot_parse": {
+            "distinct_uncanonicalizable_token_count": 1,
+            "malformed_rsmi_count": 0,
+            "uncanonicalizable_token_count": 452
+          },
+          "raw_routes": 10000,
+          "skipped_routes": 0,
+          "skipped_without_error_code": 0
+        },
+        "n5": {
+          "adapted_routes": 10000,
+          "failures_by_code": {},
+          "non_fatal_condition_slot_parse": {
+            "distinct_uncanonicalizable_token_count": 1,
+            "malformed_rsmi_count": 0,
+            "uncanonicalizable_token_count": 663
+          },
+          "raw_routes": 10000,
+          "skipped_routes": 0,
+          "skipped_without_error_code": 0
+        }
+      }
+    },
+    "input": {
+      "all_routes": 457166
+    },
+    "output": {
+      "all_records": {
+        "total": 169126,
+        "training": 160653,
+        "validation": 8473
+      }
+    },
+    "postprocessing": {
+      "chemical_duplicates_removed": 237923,
+      "duplicate_routes_removed": 238005,
+      "exact_route_matches_removed": 50026,
+      "mapped_smiles_variants_collapsed": 82,
+      "unique_reference_route_signatures": 17871
+    }
+  }
+}

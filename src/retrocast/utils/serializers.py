@@ -201,6 +201,11 @@ def serialize_multistepttl_directory(target_dir: Path) -> list[dict[str, Any]] |
 
         tree_df = pd.read_pickle(tree_pkl)
         predictions_df = pd.read_pickle(predictions_pkl)
+        if not isinstance(tree_df, pd.DataFrame) or not isinstance(predictions_df, pd.DataFrame):
+            raise TtlRetroSerializationError(
+                f"expected dataframe pickles in {target_dir}, got "
+                f"{type(tree_df).__name__} and {type(predictions_df).__name__}"
+            )
 
         return serialize_multistepttl_target(tree_df, predictions_df)
 

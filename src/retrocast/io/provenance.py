@@ -2,9 +2,9 @@ import hashlib
 import json
 import logging
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 from retrocast import __version__
 from retrocast.models.benchmark import BenchmarkSet
@@ -14,7 +14,7 @@ from retrocast.models.provenance import FileInfo, Manifest
 logger = logging.getLogger(__name__)
 
 
-class ContentType(str, Enum):
+class ContentType(StrEnum):
     """
     Content types for manifest hashing.
 
@@ -40,6 +40,9 @@ class ContentType(str, Enum):
 
 
 ContentTypeHint = Literal["benchmark", "predictions", "stock", "unknown"]
+UnlabeledManifestOutput: TypeAlias = tuple[Path, Any, ContentType | ContentTypeHint]
+LabeledManifestOutput: TypeAlias = tuple[str, Path, Any, ContentType | ContentTypeHint]
+ManifestOutput: TypeAlias = UnlabeledManifestOutput | LabeledManifestOutput
 
 
 def calculate_file_hash(path: Path) -> str:
@@ -158,14 +161,44 @@ def _calculate_stock_content_hash(stock: dict[str, str]) -> str:
     return hashlib.sha256(combined.encode()).hexdigest()
 
 
+def _normalize_manifest_output(
+    output: ManifestOutput,
+) -> tuple[str | None, Path, Any, ContentType | ContentTypeHint]:
+    items: tuple[Any, ...] = tuple(output)
+    if len(items) == 3:
+        path = items[0]
+        obj = items[1]
+        content_type = items[2]
+        if not isinstance(path, Path):
+            raise TypeError(f"manifest output path must be Path, got {type(path).__name__}")
+        return None, path, obj, content_type
+
+    if len(items) != 4:
+        raise ValueError(f"manifest output must have 3 or 4 items, got {len(items)}")
+
+    assert len(items) == 4
+    label = items[0]
+    path = items[1]
+    obj = items[2]
+    content_type = items[3]
+    if not isinstance(label, str):
+        raise TypeError(f"manifest output label must be str, got {type(label).__name__}")
+    if not isinstance(path, Path):
+        raise TypeError(f"manifest output path must be Path, got {type(path).__name__}")
+    return label, path, obj, content_type
+
+
 def create_manifest(
     action: str,
     sources: list[Path],
-    outputs: list[tuple[Path, Any, ContentType | ContentTypeHint]],
+    outputs: list[ManifestOutput],
     root_dir: Path,
     parameters: dict[str, Any] | None = None,
     statistics: dict[str, Any] | None = None,
     directives: dict[str, Any] | None = None,
+    summary: dict[str, Any] | None = None,
+    release_name: str | None = None,
+    keyed_output_files: bool = False,
 ) -> Manifest:
     """
     Generates a Manifest object with explicit content type specification.
@@ -178,6 +211,9 @@ def create_manifest(
         parameters: Action parameters to record
         statistics: Action statistics to record
         directives: Directives for retrocast data consumption (e.g., adapter, raw_results_filename)
+        summary: Optional richer action-specific summary payload
+        release_name: Optional stable release identifier
+        keyed_output_files: Store outputs as a dict keyed by label instead of a flat list
 
     Returns:
         Manifest object with file hashes and content hashes
@@ -206,8 +242,9 @@ def create_manifest(
         else:
             logger.debug(f"Manifest source path not found on disk: {p}")
 
-    output_infos = []
-    for path, obj, content_type in outputs:
+    output_infos: list[FileInfo] = []
+    for output in outputs:
+        label, path, obj, content_type = _normalize_manifest_output(output)
         f_hash = "file-not-written"
         if path.exists():
             f_hash = calculate_file_hash(path)
@@ -222,7 +259,17 @@ def create_manifest(
 
         c_hash = hash_fn(obj) if content_type != ContentType.UNKNOWN else None
 
-        output_infos.append(FileInfo(path=_get_relative_path(path), file_hash=f_hash, content_hash=c_hash))
+        output_infos.append(FileInfo(label=label, path=_get_relative_path(path), file_hash=f_hash, content_hash=c_hash))
+
+    manifest_outputs: list[FileInfo] | dict[str, FileInfo]
+    if keyed_output_files:
+        manifest_outputs = {}
+        for file_info in output_infos:
+            if file_info.label is None:
+                raise ValueError("keyed_output_files=True requires every output to include a label")
+            manifest_outputs[file_info.label] = file_info
+    else:
+        manifest_outputs = output_infos
 
     return Manifest(
         retrocast_version=__version__,
@@ -230,7 +277,9 @@ def create_manifest(
         action=action,
         parameters=parameters or {},
         directives=directives or {},
+        release_name=release_name,
         source_files=source_infos,
-        output_files=output_infos,
+        output_files=manifest_outputs,
         statistics=statistics or {},
+        summary=summary or {},
     )

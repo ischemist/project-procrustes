@@ -7,7 +7,7 @@ Loads processed n1 and n5 routes and creates a comparison figure with:
 - Target molecular weight by depth
 
 Usage:
-    uv run scripts/paroutes/03-visualize-routes.py
+    uv run scripts/paroutes/benchmark-prep/03-visualize-routes.py
 """
 
 from pathlib import Path
@@ -16,7 +16,7 @@ from retrocast.io import load_benchmark
 from retrocast.utils.logging import logger
 from retrocast.visualization.routes import create_route_comparison_figure, extract_route_stats
 
-BASE_DIR = Path(__file__).resolve().parents[2]
+BASE_DIR = Path(__file__).resolve().parents[3]
 PROCESSED_DIR = BASE_DIR / "data" / "retrocast" / "1-benchmarks" / "definitions"
 OUTPUT_DIR = BASE_DIR / "data" / "retrocast" / "5-results" / "paroutes"
 

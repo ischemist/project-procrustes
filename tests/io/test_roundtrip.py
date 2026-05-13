@@ -9,6 +9,7 @@ Philosophy: Data persistence is not optional. Content hashes must be:
 
 import csv
 import gzip
+import json
 import tempfile
 from pathlib import Path
 
@@ -16,13 +17,23 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from retrocast.exceptions import RetroCastIOError
-from retrocast.io.blob import load_json_gz, save_json_gz
+from retrocast.curation.training import (
+    RawRouteSource,
+    TrainingReactionRecord,
+    TrainingReactionSource,
+    TrainingRouteRecord,
+)
+from retrocast.exceptions import ArtifactDecodeError, RetroCastIOError
+from retrocast.io.blob import load_json_gz, load_jsonl_gz, load_lines_gz, save_json_gz, save_jsonl_gz, save_lines_gz
 from retrocast.io.data import (
     BenchmarkResultsLoader,
     load_benchmark,
     load_routes,
     load_stock_file,
+    load_training_reaction_records,
+    load_training_reaction_smiles,
+    load_training_route_records,
+    load_training_routes,
     save_routes,
 )
 from retrocast.io.provenance import (
@@ -39,6 +50,122 @@ from tests.helpers import _synthetic_inchikey
 # =============================================================================
 # Tests for calculate_file_hash
 # =============================================================================
+
+
+@pytest.mark.unit
+class TestBlobWriters:
+    def test_save_json_gz_is_reproducible(self, tmp_path):
+        payload = {"b": [2, 1], "a": "same"}
+        first = tmp_path / "first.json.gz"
+        second = tmp_path / "second.json.gz"
+
+        save_json_gz(payload, first)
+        save_json_gz(payload, second)
+
+        assert first.read_bytes() == second.read_bytes()
+        assert load_json_gz(first) == payload
+
+    def test_save_jsonl_gz_writes_rows_and_count(self, tmp_path):
+        out_path = tmp_path / "rows.jsonl.gz"
+
+        n_rows = save_jsonl_gz([{"b": 2, "a": 1}, {"c": 3}], out_path)
+
+        assert n_rows == 2
+        with gzip.open(out_path, "rt", encoding="utf-8") as f:
+            rows = [json.loads(line) for line in f]
+
+        assert rows == [{"a": 1, "b": 2}, {"c": 3}]
+
+    def test_load_jsonl_gz_reads_rows(self, tmp_path):
+        out_path = tmp_path / "rows.jsonl.gz"
+        save_jsonl_gz([{"a": 1}, {"b": 2}], out_path)
+
+        assert load_jsonl_gz(out_path) == [{"a": 1}, {"b": 2}]
+
+    def test_load_jsonl_gz_can_reject_empty_rows(self, tmp_path):
+        out_path = tmp_path / "rows.jsonl.gz"
+        with gzip.open(out_path, "wt", encoding="utf-8") as f:
+            f.write('{"a":1}\n\n')
+
+        with pytest.raises(ArtifactDecodeError, match="Empty JSONL row 2"):
+            load_jsonl_gz(out_path, skip_empty=False)
+
+    def test_save_lines_gz_writes_and_loads_lines(self, tmp_path):
+        out_path = tmp_path / "rows.rsmi.txt.gz"
+
+        n_lines = save_lines_gz(["a>>b", "c>>d"], out_path)
+
+        assert n_lines == 2
+        assert load_lines_gz(out_path) == ["a>>b", "c>>d"]
+
+
+@pytest.mark.unit
+class TestTrainingReleaseLoaders:
+    def test_load_training_route_records_returns_structured_records(self, tmp_path, synthetic_route_factory):
+        route = synthetic_route_factory("linear", depth=1)
+        record = TrainingRouteRecord(
+            id="paroutes-reaction-holdout-n1-n5-000001",
+            split="training",
+            route=route,
+            sources=[
+                RawRouteSource(
+                    dataset="all-routes",
+                    raw_index=1,
+                    raw_route_hash="hash-1",
+                    patent_id="patent-1",
+                )
+            ],
+        )
+        path = tmp_path / "training.jsonl.gz"
+
+        save_jsonl_gz([record.to_json_dict()], path)
+
+        loaded = load_training_route_records(path)
+
+        assert loaded == [record]
+
+    def test_load_training_routes_returns_route_objects(self, tmp_path, synthetic_route_factory):
+        route = synthetic_route_factory("linear", depth=1)
+        path = tmp_path / "training.jsonl.gz"
+
+        save_jsonl_gz([{"route": route.model_dump(mode="json")}], path)
+
+        loaded = load_training_routes(path)
+
+        assert len(loaded) == 1
+        assert loaded[0].get_content_hash() == route.get_content_hash()
+
+    def test_load_training_reaction_records_returns_validated_models(self, tmp_path):
+        record = TrainingReactionRecord(
+            id="paroutes-rxn-000001",
+            split="training",
+            reactants=["c"],
+            product="cc",
+            mapped_smiles="c>o>cc",
+            alternative_mapped_smiles=["[ch4:1]>o>[ch3:1][ch3:2]"],
+            condition_slot="o",
+            condition_slot_smiles=["o"],
+            sources=[
+                TrainingReactionSource(
+                    route_id="paroutes-reaction-holdout-n1-n5-000001",
+                    step_index=1,
+                    source_id="rxn-1",
+                )
+            ],
+        )
+        path = tmp_path / "training.jsonl.gz"
+
+        save_jsonl_gz([record], path)
+
+        loaded = load_training_reaction_records(path)
+
+        assert loaded == [record]
+
+    def test_load_training_reaction_smiles_reads_rsmi_lines(self, tmp_path):
+        path = tmp_path / "training.rsmi.txt.gz"
+        save_lines_gz(["c>o>cc", "cc>n>ccc"], path)
+
+        assert load_training_reaction_smiles(path) == ["c>o>cc", "cc>n>ccc"]
 
 
 @pytest.mark.unit

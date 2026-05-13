@@ -2,10 +2,10 @@
 Casts raw PaRoutes n1/n5 JSON files into the canonical BenchmarkSet format.
 
 Usage:
-    uv run scripts/paroutes/01-cast-paroutes.py
-    uv run scripts/paroutes/01-cast-paroutes.py --check-buyables
-    uv run scripts/paroutes/01-cast-paroutes.py --prune-intermediates
-    uv run scripts/paroutes/01-cast-paroutes.py --check-buyables --prune-intermediates
+    uv run scripts/paroutes/benchmark-prep/01-cast-paroutes.py
+    uv run scripts/paroutes/benchmark-prep/01-cast-paroutes.py --check-buyables
+    uv run scripts/paroutes/benchmark-prep/01-cast-paroutes.py --prune-intermediates
+    uv run scripts/paroutes/benchmark-prep/01-cast-paroutes.py --check-buyables --prune-intermediates
 """
 
 import argparse
@@ -22,10 +22,10 @@ from retrocast.models.benchmark import create_benchmark, create_benchmark_target
 from retrocast.models.chem import TargetInput
 from retrocast.utils.logging import configure_script_logging, logger
 
-BASE_DIR = Path(__file__).resolve().parents[2]
-RAW_DIR = BASE_DIR / "data" / "0-assets" / "paroutes"
-DEF_DIR = BASE_DIR / "data" / "1-benchmarks" / "definitions"
-stock_dir = BASE_DIR / "data" / "1-benchmarks" / "stocks"
+BASE_DIR = Path(__file__).resolve().parents[3] / "data" / "retrocast"
+RAW_DIR = BASE_DIR / "0-assets" / "paroutes"
+DEF_DIR = BASE_DIR / "1-benchmarks" / "definitions"
+stock_dir = BASE_DIR / "1-benchmarks" / "stocks"
 
 DATASETS = ["n1", "n5"]
 
@@ -122,7 +122,7 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
     save_json_gz(benchmark, out_path)
 
     manifest_path = DEF_DIR / f"paroutes-{name}-full{suffix}.manifest.json"
-    statistics = {"n_targets": len(benchmark.targets), "n_failures": failures}
+    statistics: dict[str, int | float] = {"n_targets": len(benchmark.targets), "n_failures": failures}
     if check_buyables:
         statistics["n_unsolved"] = unsolved
     if prune_intermediates:
@@ -133,15 +133,15 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
         )
 
     manifest = create_manifest(
-        action="scripts/paroutes/01-cast-paroutes",
+        action="scripts/paroutes/benchmark-prep/01-cast-paroutes",
         sources=[raw_path],
         outputs=[(out_path, benchmark, "benchmark")],
-        root_dir=BASE_DIR / "data",
+        root_dir=BASE_DIR,
         parameters={"dataset": name, "check_buyables": check_buyables, "prune_intermediates": prune_intermediates},
         statistics=statistics,
     )
     # Save Manifest (plain JSON, not gzipped, so it's readable)
-    with open(manifest_path, "w") as f:
+    with open(manifest_path, "w", encoding="utf-8") as f:
         f.write(manifest.model_dump_json(indent=2))
 
     logger.info(f"Manifest saved to {manifest_path}")

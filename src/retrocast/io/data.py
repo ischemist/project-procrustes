@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import csv
 import gzip
 import json
 import logging
 from pathlib import Path
-from typing import Literal, overload
+from typing import TYPE_CHECKING, Literal, overload
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -13,7 +15,7 @@ from retrocast.exceptions import (
     ArtifactNotFoundError,
     ArtifactWriteError,
 )
-from retrocast.io.blob import load_json_gz, save_json_gz
+from retrocast.io.blob import load_json_gz, load_jsonl_gz, load_lines_gz, save_json_gz
 from retrocast.io.provenance import create_manifest
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
 from retrocast.models.chem import Route, StockStatistics
@@ -22,6 +24,9 @@ from retrocast.models.stats import ModelStatistics
 from retrocast.typing import InchiKeyStr, SmilesStr
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from retrocast.curation.training import TrainingReactionRecord, TrainingRouteRecord
 
 # Pre-define the adapter for performance and reuse
 RoutesDict = dict[str, list[Route]]
@@ -114,7 +119,7 @@ def load_raw_paroutes_list(path: Path) -> list[dict]:
     Loads the raw PaRoutes list-of-dicts format.
     Used only during the initial curation phase.
     """
-    logger.info(f"Loading raw PaRoutes data from {path}...")
+    logger.debug(f"Loading raw PaRoutes data from {path.name}...")
     data = load_json_gz(path)
     if not isinstance(data, list):
         raise ArtifactFormatError(
@@ -123,6 +128,54 @@ def load_raw_paroutes_list(path: Path) -> list[dict]:
             context={"path": str(path), "expected": "list", "actual": type(data).__name__},
         )
     return data
+
+
+def load_training_route_records(path: Path) -> list[TrainingRouteRecord]:
+    """Load structured route training records from a JSONL artifact."""
+    from retrocast.curation.training import TrainingRouteRecord
+
+    rows = load_jsonl_gz(path)
+    try:
+        return [TrainingRouteRecord.from_json_dict(row) for row in rows]
+    except (KeyError, TypeError, ValueError, ValidationError) as e:
+        raise ArtifactFormatError(
+            f"Invalid training route JSONL format in {path}: {e}",
+            code="io.invalid_artifact_shape",
+            context={"path": str(path), "artifact": "training_route_records"},
+        ) from e
+
+
+def load_training_routes(path: Path) -> list[Route]:
+    """Load route objects directly from a training-release JSONL artifact."""
+    rows = load_jsonl_gz(path)
+    try:
+        return [Route.model_validate(row["route"]) for row in rows]
+    except (KeyError, TypeError, ValidationError) as e:
+        raise ArtifactFormatError(
+            f"Invalid training route JSONL format in {path}: {e}",
+            code="io.invalid_artifact_shape",
+            context={"path": str(path), "artifact": "training_routes"},
+        ) from e
+
+
+def load_training_reaction_records(path: Path) -> list[TrainingReactionRecord]:
+    """Load structured single-step training records from a JSONL artifact."""
+    from retrocast.curation.training import TrainingReactionRecord
+
+    rows = load_jsonl_gz(path)
+    try:
+        return [TrainingReactionRecord.model_validate(row) for row in rows]
+    except ValidationError as e:
+        raise ArtifactFormatError(
+            f"Invalid training reaction JSONL format in {path}: {e}",
+            code="io.invalid_artifact_shape",
+            context={"path": str(path), "artifact": "training_reactions"},
+        ) from e
+
+
+def load_training_reaction_smiles(path: Path) -> list[str]:
+    """Load canonical mapped reaction smiles lines from a single-step release text artifact."""
+    return load_lines_gz(path)
 
 
 @overload
@@ -195,7 +248,7 @@ def load_stock_file(
                     if value:
                         molecules.add(SmilesStr(value))
 
-        logger.info(f"Loaded {len(molecules):,} molecules from {path.name}")
+        logger.debug(f"Loaded {len(molecules):,} molecules from {path.name}")
         return molecules
 
     except OSError as e:

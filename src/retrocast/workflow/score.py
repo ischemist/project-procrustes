@@ -71,7 +71,9 @@ def score_model(
         predicted_routes = predictions.get(target_id, [])
 
         # Pre-compute acceptable route signatures
-        acceptable_sigs = [route.get_signature(match_level=match_level) for route in target.acceptable_routes]
+        acceptable_sigs = [
+            route.get_structural_signature(match_level=match_level) for route in target.acceptable_routes
+        ]
 
         scored_routes = []
         acceptable_rank = None

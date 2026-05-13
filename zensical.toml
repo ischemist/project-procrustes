@@ -14,7 +14,7 @@ site_url = "https://retrocast.ischemist.com/"
 repo_url = "https://github.com/ischemist/project-procrustes"
 repo_name = "ischemist/project-procrustes"
 copyright = """
-CC-BY &copy; 2025 isChemist Group
+CC-BY &copy; 2025-2026 isChemist Group
 """
 # Read more: https://zensical.org/docs/setup/navigation/
 nav = [
@@ -26,6 +26,9 @@ nav = [
     "guides/library.md",
     "guides/benchmarks.md",
     "guides/workflows.md"
+  ] },
+  { "Design" = [
+    "design/training-set-releases.md"
   ] },
   { "Developers" = ["developers/adapters.md"] }
 ]

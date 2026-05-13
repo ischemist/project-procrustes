@@ -48,8 +48,8 @@ class TestPharmaRoutesContract:
         assert len(route.leaves) == 3
 
         # Verify signature is deterministic
-        sig1 = route.get_signature()
-        sig2 = route.get_signature()
+        sig1 = route.get_structural_signature()
+        sig2 = route.get_structural_signature()
         assert sig1 == sig2
 
     def test_mitapivat_route_structure(self, pharma_routes_data: dict[str, Any]):
@@ -83,7 +83,7 @@ class TestPharmaRoutesContract:
         route2 = Route(target=mitapivat_target, rank=1)
 
         # Different routes should have different signatures
-        assert route1.get_signature() != route2.get_signature()
+        assert route1.get_structural_signature() != route2.get_structural_signature()
 
     def test_pharma_routes_roundtrip(self, pharma_routes_data: dict[str, Any]):
         """Test that pharma routes can be built, serialized, and reconstructed."""
@@ -107,7 +107,7 @@ class TestPharmaRoutesContract:
             assert reconstructed_route.target.inchikey == original_route.target.inchikey
 
             # Verify signatures match (proves tree structure is preserved)
-            assert reconstructed_route.get_signature() == original_route.get_signature(), (
+            assert reconstructed_route.get_structural_signature() == original_route.get_structural_signature(), (
                 f"Route {route_id}: signatures don't match after roundtrip"
             )
 

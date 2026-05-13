@@ -38,6 +38,7 @@ data/scored/
 _backups/
 # AI
 _prompts/
+.practices/
 
 clone.sh
 
@@ -94,3 +95,4 @@ data/retrocast/3-processed/
 data/retrocast/4-scored/
 data/retrocast/5-results/
 data/retrocast/6-comparisons/
+.private

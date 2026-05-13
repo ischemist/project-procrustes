@@ -13,7 +13,7 @@ from retrocast.adapters.retrostar_adapter import RetroStarAdapter
 from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
-from retrocast.exceptions import AdapterResolutionError
+from retrocast.exceptions import AdapterError, AdapterResolutionError, ChemError
 from retrocast.models.chem import Route, TargetIdentity
 
 ADAPTER_MAP: dict[str, BaseAdapter] = {
@@ -57,13 +57,15 @@ def adapt_single_route(
 ) -> Route | None:
     """Adapt a single raw route to the unified Route format."""
     adapter = get_adapter(adapter_name)
-
-    if adapter_name in TARGET_CENTRIC_ADAPTERS:
+    if adapter_name in TARGET_CENTRIC_ADAPTERS or isinstance(raw_route, list):
         raw_data = raw_route
     else:
-        raw_data = [raw_route] if not isinstance(raw_route, list) else raw_route
+        raw_data = [raw_route]
 
-    return next(adapter.cast(raw_data, target), None)
+    try:
+        return next(adapter.cast(raw_data, target), None)
+    except (AdapterError, ChemError):
+        return None
 
 
 def adapt_routes(

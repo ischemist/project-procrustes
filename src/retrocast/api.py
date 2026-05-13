@@ -9,7 +9,22 @@ without relying on the specific directory structure of the CLI.
 from pathlib import Path
 
 from retrocast.chem import InchiKeyLevel
-from retrocast.io import load_benchmark, load_routes, load_stock_file
+from retrocast.datasets import (
+    download_benchmark,
+    download_benchmark_assets,
+    download_stock,
+    download_training_set,
+    load_training_set,
+)
+from retrocast.io import (
+    load_benchmark,
+    load_routes,
+    load_stock_file,
+    load_training_reaction_records,
+    load_training_reaction_smiles,
+    load_training_route_records,
+    load_training_routes,
+)
 from retrocast.metrics.bootstrap import compute_metric_with_ci
 from retrocast.metrics.ranking import compute_probabilistic_ranking
 from retrocast.models.benchmark import BenchmarkSet
@@ -23,6 +38,15 @@ __all__ = [
     "load_benchmark",
     "load_routes",
     "load_stock_file",
+    "load_training_route_records",
+    "load_training_reaction_records",
+    "load_training_reaction_smiles",
+    "load_training_routes",
+    "download_benchmark",
+    "download_benchmark_assets",
+    "download_stock",
+    "download_training_set",
+    "load_training_set",
     "score_predictions",
     "compute_model_statistics",
     "compute_metric_with_ci",

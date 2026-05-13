@@ -1,4 +1,4 @@
-"""Unit tests for Route.get_content_hash() method."""
+"""Unit tests for route signature and hashing methods."""
 
 import pytest
 
@@ -40,7 +40,7 @@ class TestRouteContentHash:
         # Same tree structure, different rank = different content hash
         assert route1.get_content_hash() != route2.get_content_hash()
         # But same tree signature (structure only)
-        assert route1.get_signature() == route2.get_signature()
+        assert route1.get_structural_signature() == route2.get_structural_signature()
 
     def test_get_content_hash_includes_metadata(self):
         """Test that content hash differs when metadata changes."""
@@ -98,7 +98,7 @@ class TestRouteContentHash:
         # Different content hash because template info differs
         assert route1.get_content_hash() != route2.get_content_hash()
         # But same tree signature (structure is the same)
-        assert route1.get_signature() == route2.get_signature()
+        assert route1.get_structural_signature() == route2.get_structural_signature()
 
     def test_get_content_hash_includes_retrocast_version(self):
         """Test that content hash includes retrocast version."""
@@ -111,7 +111,7 @@ class TestRouteContentHash:
 
         assert route1.get_content_hash() != route2.get_content_hash()
 
-    def test_get_content_hash_vs_get_signature(self):
+    def test_get_content_hash_vs_get_structural_signature(self):
         """Test that get_content_hash and get_signature serve different purposes."""
         reactant = Molecule(
             smiles=SmilesStr("CCO"),
@@ -125,7 +125,7 @@ class TestRouteContentHash:
         )
         route = Route(target=target, rank=1, metadata={"cost": 100})
 
-        signature = route.get_signature()
+        signature = route.get_structural_signature()
         content_hash = route.get_content_hash()
 
         # Both should be valid SHA256 hashes
@@ -134,3 +134,93 @@ class TestRouteContentHash:
 
         # But they should be different (content hash includes more info)
         assert signature != content_hash
+
+
+@pytest.mark.unit
+class TestRouteAnnotatedSignature:
+    """Tests for Route.get_annotated_signature() method."""
+
+    def test_get_annotated_signature_includes_selected_reaction_fields(self):
+        reactant = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+        )
+
+        route1 = Route(
+            target=Molecule(
+                smiles=SmilesStr("C"),
+                inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"),
+                synthesis_step=ReactionStep(
+                    reactants=[reactant],
+                    mapped_smiles="CCO>O>C",
+                    metadata={"condition_slot_smiles": ["O"]},
+                ),
+            ),
+            rank=1,
+        )
+        route2 = Route(
+            target=Molecule(
+                smiles=SmilesStr("C"),
+                inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"),
+                synthesis_step=ReactionStep(
+                    reactants=[reactant],
+                    mapped_smiles="CCO>N>C",
+                    metadata={"condition_slot_smiles": ["N"]},
+                ),
+            ),
+            rank=1,
+        )
+
+        assert route1.get_structural_signature() == route2.get_structural_signature()
+        assert route1.get_annotated_signature() == route2.get_annotated_signature()
+        assert route1.get_annotated_signature(include_mapped_smiles=True) != route2.get_annotated_signature(
+            include_mapped_smiles=True
+        )
+        assert route1.get_annotated_signature(
+            include_step_metadata_keys=("condition_slot_smiles",)
+        ) != route2.get_annotated_signature(include_step_metadata_keys=("condition_slot_smiles",))
+
+    def test_get_annotated_signature_excludes_route_provenance(self):
+        reactant = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+        )
+        target = Molecule(
+            smiles=SmilesStr("C"),
+            inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(
+                reactants=[reactant],
+                mapped_smiles="CCO>O>C",
+                metadata={"condition_slot_smiles": ["O"]},
+            ),
+        )
+
+        route1 = Route(target=target, rank=1, metadata={"patent_id": "a"})
+        route2 = Route.model_validate(route1.model_dump(mode="json"))
+        route2.rank = 2
+        route2.metadata = {"patent_id": "b"}
+        route2.retrocast_version = "999.0.0"
+
+        assert route1.get_content_hash() != route2.get_content_hash()
+        assert route1.get_annotated_signature(
+            include_mapped_smiles=True,
+            include_step_metadata_keys=("condition_slot_smiles",),
+        ) == route2.get_annotated_signature(
+            include_mapped_smiles=True,
+            include_step_metadata_keys=("condition_slot_smiles",),
+        )
+
+    def test_get_signature_warns_and_matches_structural_signature(self):
+        route = Route(
+            target=Molecule(
+                smiles=SmilesStr("CCO"),
+                inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+            ),
+            rank=1,
+        )
+
+        with pytest.deprecated_call(match="get_structural_signature"):
+            deprecated_signature = route.get_signature()
+
+        assert deprecated_signature == route.get_structural_signature()
+        assert route.signature == route.get_structural_signature()

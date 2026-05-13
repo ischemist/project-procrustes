@@ -23,12 +23,12 @@ def find_acceptable_match(
         Index of the first matching acceptable route, or None if no match
 
     Example:
-        >>> acceptable_sigs = [r.get_signature() for r in target.acceptable_routes]
+        >>> acceptable_sigs = [r.get_structural_signature() for r in target.acceptable_routes]
         >>> matched_idx = find_acceptable_match(predicted_route, acceptable_sigs)
         >>> if matched_idx is not None:
         ...     matched_route = target.acceptable_routes[matched_idx]
     """
-    route_sig = route.get_signature(match_level=match_level)
+    route_sig = route.get_structural_signature(match_level=match_level)
     for idx, acceptable_sig in enumerate(acceptable_signatures):
         if route_sig == acceptable_sig:
             return idx

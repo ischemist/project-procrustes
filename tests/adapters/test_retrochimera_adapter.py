@@ -149,7 +149,7 @@ class TestRetrochimeraAdapterRegression:
 
     def test_routes_have_distinct_structures(self, routes):
         """Verify that routes have different structures (different signatures)."""
-        signatures = [route.get_signature() for route in routes]
+        signatures = [route.get_structural_signature() for route in routes]
         # All 3 routes should be distinct
         assert len(set(signatures)) == 3
 

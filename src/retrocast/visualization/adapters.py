@@ -263,10 +263,14 @@ def stats_to_stability_data(results_map: dict[str, dict[str, Any]], metric_key: 
 # --- Internal Helper ---
 
 
+def _route_length_key(key: int | str) -> int:
+    return int(key)
+
+
 def _create_length_series(metric_obj: StratifiedMetric, name: str, color: str, mode: str) -> PlotSeries:
     """Helper to extract stratified data by route length into a PlotSeries."""
     # FIX: Cast keys to int before sorting to handle "10" vs "2" correctly.
-    sorted_keys = sorted(metric_obj.by_group.keys(), key=int)
+    sorted_keys = sorted(metric_obj.by_group.keys(), key=_route_length_key)
 
     x_vals, y_vals, y_up, y_low, custom = [], [], [], [], []
     for k in sorted_keys:
