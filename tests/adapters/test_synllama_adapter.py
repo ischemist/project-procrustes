@@ -85,6 +85,16 @@ class TestSynLlamaAdapterUnit(BaseAdapterTest):
             adapter_instance._parse_synthesis_string(bad_string)
         assert exc_info.value.code == expected_code
 
+    def test_route_with_no_templates_is_treated_as_leaf(self, adapter_instance):
+        raw_data = [{"synthesis_string": "CC(C)=O"}]
+        target_input = TargetInput(id="acetone-leaf", smiles=canonicalize_smiles("CC(C)=O"))
+
+        routes = list(adapter_instance.cast(raw_data, target_input))
+
+        assert len(routes) == 1
+        assert routes[0].target.is_leaf is True
+        assert routes[0].length == 0
+
 
 @pytest.mark.integration
 class TestSynLlamaAdapterContract:

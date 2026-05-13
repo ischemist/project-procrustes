@@ -80,6 +80,38 @@ class TestRetrochimeraAdapterUnit(BaseAdapterTest):
             "payload_field": "result.outputs",
         }
 
+    def test_route_level_failure_skips_only_bad_route(
+        self, adapter_instance, raw_valid_route_data, target_input, caplog
+    ):
+        raw_data = {
+            "smiles": "CCO",
+            "result": {
+                "outputs": [
+                    {
+                        "routes": [
+                            raw_valid_route_data["result"]["outputs"][0]["routes"][0],
+                            {
+                                "reactions": [
+                                    {"product": "CCO", "reactants": ["C"], "probability": 0.9},
+                                    {"product": "C", "reactants": ["CCO"], "probability": 0.8},
+                                ],
+                                "num_steps": 2,
+                                "step_probability_min": 0.8,
+                                "step_probability_product": 0.72,
+                            },
+                        ],
+                        "num_routes": 2,
+                    }
+                ]
+            },
+        }
+
+        routes = list(adapter_instance.cast(raw_data, target_input))
+
+        assert len(routes) == 1
+        assert routes[0].target.smiles == target_input.smiles
+        assert "adapter.cycle_detected" in caplog.text
+
 
 @pytest.mark.integration
 class TestRetrochimeraAdapterContract:

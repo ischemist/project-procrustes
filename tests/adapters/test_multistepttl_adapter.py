@@ -41,6 +41,32 @@ class TestTtlRetroAdapterUnit(BaseAdapterTest):
     def mismatched_target_input(self):
         return TargetInput(id="ethanol", smiles="CCC")
 
+    def test_zero_step_route_returns_leaf_route(self, adapter_instance, target_input):
+        raw_data = [{"reactions": [], "metadata": {"steps": 0}}]
+
+        routes = list(adapter_instance.cast(raw_data, target_input))
+
+        assert len(routes) == 1
+        assert routes[0].target.smiles == target_input.smiles
+        assert routes[0].target.is_leaf is True
+        assert routes[0].length == 0
+
+    def test_cycle_detection_discards_invalid_route(self, adapter_instance, target_input, caplog):
+        raw_data = [
+            {
+                "reactions": [
+                    {"product": "CCO", "reactants": ["C"]},
+                    {"product": "C", "reactants": ["CCO"]},
+                ],
+                "metadata": {"steps": 2},
+            }
+        ]
+
+        routes = list(adapter_instance.cast(raw_data, target_input))
+
+        assert routes == []
+        assert "adapter.cycle_detected" in caplog.text
+
 
 @pytest.mark.integration
 class TestTtlRetroAdapterContract:

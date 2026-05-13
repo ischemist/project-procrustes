@@ -110,6 +110,28 @@ class TestAskcosAdapterUnit(BaseAdapterTest):
         assert routes == []
         assert "adapter.cycle_detected" in caplog.text
 
+    def test_missing_root_uuid_skips_corrupted_pathway(self, raw_valid_route_data, target_input, caplog):
+        adapter = AskcosAdapter()
+        corrupted_data = copy.deepcopy(raw_valid_route_data)
+        corrupted_data["results"]["uds"]["uuid2smiles"].pop("00000000-0000-0000-0000-000000000000")
+
+        routes = list(adapter.cast(corrupted_data, target_input))
+
+        assert routes == []
+        assert "adapter.node_missing" in caplog.text
+        assert "root chemical" in caplog.text
+
+    def test_missing_reaction_uuid_skips_corrupted_pathway(self, raw_valid_route_data, target_input, caplog):
+        adapter = AskcosAdapter()
+        corrupted_data = copy.deepcopy(raw_valid_route_data)
+        corrupted_data["results"]["uds"]["pathways"][0][0]["target"] = "missing-rxn-uuid"
+
+        routes = list(adapter.cast(corrupted_data, target_input))
+
+        assert routes == []
+        assert "adapter.node_missing" in caplog.text
+        assert "reaction" in caplog.text
+
 
 @pytest.mark.contract
 class TestAskcosAdapterContract:
