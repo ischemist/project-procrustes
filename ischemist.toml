@@ -1,4 +1,3 @@
 [practices]
-source = "../engineering-practices"
 profile = "python-library"
 output = ".practices/docs"

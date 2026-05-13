@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import hashlib
 import os
@@ -15,16 +17,57 @@ HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
+    <meta name="color-scheme" content="light dark">
     <title>RetroCast Data Index</title>
     <style>
-        body {{ font-family: monospace; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f4f4f4; }}
-        h1 {{ border-bottom: 2px solid #333; }}
-        table {{ width: 100%; border-collapse: collapse; background: white; }}
-        th, td {{ padding: 8px; border: 1px solid #ddd; text-align: left; }}
-        th {{ background-color: #333; color: white; }}
-        tr:hover {{ background-color: #f5f5f5; }}
-        .hash {{ font-size: 0.8em; color: #666; }}
-        .meta {{ font-size: 0.8em; color: #888; margin-bottom: 20px; }}
+        :root {{
+            color-scheme: light dark;
+            --page-background: #f4f4f4;
+            --surface-background: #ffffff;
+            --text-color: #111111;
+            --muted-text-color: #666666;
+            --meta-text-color: #888888;
+            --border-color: #dddddd;
+            --header-background: #333333;
+            --header-text-color: #ffffff;
+            --row-hover-background: #f5f5f5;
+            --link-color: #005fcc;
+            --visited-link-color: #5d2ca0;
+        }}
+
+        @media (prefers-color-scheme: dark) {{
+            :root {{
+                --page-background: #101418;
+                --surface-background: #161b22;
+                --text-color: #e6edf3;
+                --muted-text-color: #9da7b3;
+                --meta-text-color: #8b949e;
+                --border-color: #30363d;
+                --header-background: #21262d;
+                --header-text-color: #f0f6fc;
+                --row-hover-background: #1f2630;
+                --link-color: #7ab7ff;
+                --visited-link-color: #c297ff;
+            }}
+        }}
+
+        body {{
+            font-family: monospace;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: var(--page-background);
+            color: var(--text-color);
+        }}
+        h1 {{ border-bottom: 2px solid var(--header-background); }}
+        table {{ width: 100%; border-collapse: collapse; background: var(--surface-background); }}
+        th, td {{ padding: 8px; border: 1px solid var(--border-color); text-align: left; }}
+        th {{ background-color: var(--header-background); color: var(--header-text-color); }}
+        tr:hover {{ background-color: var(--row-hover-background); }}
+        a {{ color: var(--link-color); }}
+        a:visited {{ color: var(--visited-link-color); }}
+        .hash {{ font-size: 0.8em; color: var(--muted-text-color); }}
+        .meta {{ font-size: 0.8em; color: var(--meta-text-color); margin-bottom: 20px; }}
     </style>
 </head>
 <body>
