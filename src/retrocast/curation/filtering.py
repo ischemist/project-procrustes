@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Callable, Hashable
+from copy import deepcopy
 from typing import Literal
 
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
@@ -50,7 +51,7 @@ def excise_reactions_from_route(
             return Molecule(
                 smiles=node.smiles,
                 inchikey=node.inchikey,
-                metadata=node.metadata.copy(),
+                metadata=deepcopy(node.metadata),
             )
 
         # Non-leaf node has a synthesis_step
@@ -73,7 +74,7 @@ def excise_reactions_from_route(
                         new_route = Route(
                             target=rebuilt_reactant,
                             rank=route.rank,
-                            metadata=route.metadata.copy(),
+                            metadata=deepcopy(route.metadata),
                         )
                         sub_routes.append(new_route)
 
@@ -81,7 +82,7 @@ def excise_reactions_from_route(
             return Molecule(
                 smiles=node.smiles,
                 inchikey=node.inchikey,
-                metadata=node.metadata.copy(),
+                metadata=deepcopy(node.metadata),
             )
         else:
             # Keep this reaction, but recursively check reactants
@@ -90,15 +91,15 @@ def excise_reactions_from_route(
                 reactants=new_reactants,
                 mapped_smiles=rxn.mapped_smiles,
                 template=rxn.template,
-                reagents=rxn.reagents,
-                solvents=rxn.solvents,
-                metadata=rxn.metadata.copy(),
+                reagents=list(rxn.reagents) if rxn.reagents is not None else None,
+                solvents=list(rxn.solvents) if rxn.solvents is not None else None,
+                metadata=deepcopy(rxn.metadata),
             )
             return Molecule(
                 smiles=node.smiles,
                 inchikey=node.inchikey,
                 synthesis_step=new_step,
-                metadata=node.metadata.copy(),
+                metadata=deepcopy(node.metadata),
             )
 
     main_target = _rebuild(route.target)
@@ -110,7 +111,7 @@ def excise_reactions_from_route(
         main_route = Route(
             target=main_target,
             rank=route.rank,
-            metadata=route.metadata.copy(),
+            metadata=deepcopy(route.metadata),
         )
         result.append(main_route)
 

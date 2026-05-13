@@ -6,6 +6,8 @@ real-ish molecule fixtures.
 """
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from retrocast.curation.filtering import (
     clean_and_prioritize_pools,
@@ -39,6 +41,96 @@ def make_product(smiles: str, inchikey: str, reactants: list[Molecule]) -> Molec
         inchikey=InchiKeyStr(inchikey),
         synthesis_step=ReactionStep(reactants=reactants),
     )
+
+
+def reaction_signature(product: Molecule) -> ReactionSignature:
+    """Build the excision signature for a non-leaf product node."""
+    assert product.synthesis_step is not None
+    return (frozenset(reactant.inchikey for reactant in product.synthesis_step.reactants), product.inchikey)
+
+
+@st.composite
+def recursive_route_shape(draw):
+    """Generate a bounded synthesis tree shape where None means leaf."""
+    subtree = st.recursive(
+        st.none(),
+        lambda inner: st.lists(inner, min_size=1, max_size=3).map(tuple),
+        max_leaves=8,
+    )
+    return tuple(draw(st.lists(subtree, min_size=1, max_size=3)))
+
+
+def build_route_from_shape(shape: tuple[object, ...]) -> Route:
+    """Materialize a route with unique InChIKeys from a recursive shape."""
+    node_index = 0
+
+    def _build(node_shape: object) -> Molecule:
+        nonlocal node_index
+        node_index += 1
+        token = f"node-{node_index}"
+        metadata = {"token": token, "nested": {"items": [token]}}
+
+        if node_shape is None:
+            return Molecule(
+                smiles=SmilesStr("C"),
+                inchikey=InchiKeyStr(_synthetic_inchikey(token)),
+                metadata=metadata,
+            )
+
+        assert isinstance(node_shape, tuple)
+        reactants = [_build(child) for child in node_shape]
+        return Molecule(
+            smiles=SmilesStr("CC"),
+            inchikey=InchiKeyStr(_synthetic_inchikey(token)),
+            synthesis_step=ReactionStep(
+                reactants=reactants,
+                template=f"template-{token}",
+                reagents=[SmilesStr("O"), SmilesStr("N")],
+                solvents=[SmilesStr("CC")],
+                metadata={"token": f"step-{token}", "nested": {"items": [f"step-{token}"]}},
+            ),
+            metadata=metadata,
+        )
+
+    return Route(
+        target=_build(shape),
+        rank=7,
+        metadata={"source": "generated", "nested": {"items": ["route"]}},
+    )
+
+
+def expected_excised_components(
+    route: Route,
+    exclude: set[ReactionSignature],
+) -> dict[str, set[ReactionSignature]]:
+    """Compute the kept reaction components independently of excise()."""
+    components: dict[str, set[ReactionSignature]] = {}
+
+    def _visit(node: Molecule, current_root: str | None) -> None:
+        if node.synthesis_step is None:
+            return
+
+        sig = reaction_signature(node)
+        if sig in exclude:
+            for reactant in node.synthesis_step.reactants:
+                _visit(reactant, None)
+            return
+
+        if current_root is None:
+            current_root = node.inchikey
+            components[current_root] = set()
+
+        components[current_root].add(sig)
+        for reactant in node.synthesis_step.reactants:
+            _visit(reactant, current_root)
+
+    _visit(route.target, None)
+    return components
+
+
+def component_map(routes: list[Route]) -> dict[str, set[ReactionSignature]]:
+    """Summarize route fragments by root target and kept reactions."""
+    return {route.target.inchikey: route.get_reaction_signatures() for route in routes}
 
 
 # =============================================================================
@@ -148,6 +240,60 @@ class TestExciseReactionsFromRoute:
         assert len(result) == 1
         assert result[0].target.inchikey == "INCHI-B"
 
+    def test_excise_top_reaction_yields_all_non_leaf_branches_in_order(self):
+        """Excising a convergent top step should emit one fragment per live branch."""
+        leaf_a = make_leaf("A", "INCHI-A")
+        leaf_b = make_leaf("B", "INCHI-B")
+        leaf_c = make_leaf("C", "INCHI-C")
+
+        mol_d = make_product("D", "INCHI-D", [leaf_a])
+        mol_e = make_product("E", "INCHI-E", [leaf_b, leaf_c])
+        mol_f = make_product("F", "INCHI-F", [mol_d, mol_e])
+
+        route = Route(target=mol_f, rank=1)
+
+        result = excise_reactions_from_route(route, {reaction_signature(mol_f)})
+
+        assert [fragment.target.inchikey for fragment in result] == ["INCHI-D", "INCHI-E"]
+        assert result[0].target.synthesis_step is not None
+        assert result[0].target.synthesis_step.reactants[0].inchikey == "INCHI-A"
+        assert result[1].target.synthesis_step is not None
+        assert [reactant.inchikey for reactant in result[1].target.synthesis_step.reactants] == ["INCHI-B", "INCHI-C"]
+
+    def test_excise_multiple_nested_reactions_skips_empty_fragments(self):
+        """Nested cuts should keep only components with surviving reactions."""
+        leaf_a = make_leaf("A", "INCHI-A")
+        mol_b = make_product("B", "INCHI-B", [leaf_a])
+        mol_c = make_product("C", "INCHI-C", [mol_b])
+        mol_d = make_product("D", "INCHI-D", [mol_c])
+        mol_e = make_product("E", "INCHI-E", [mol_d])
+        mol_f = make_product("F", "INCHI-F", [mol_e])
+
+        route = Route(target=mol_f, rank=1)
+
+        result = excise_reactions_from_route(
+            route,
+            {
+                reaction_signature(mol_e),  # F <- E stays; E becomes a leaf
+                reaction_signature(mol_c),  # D <- C stays; C becomes a leaf
+            },
+        )
+
+        assert [fragment.target.inchikey for fragment in result] == ["INCHI-F", "INCHI-B", "INCHI-D"]
+        main_route = result[0]
+        assert main_route.target.synthesis_step is not None
+        assert main_route.target.synthesis_step.reactants[0].inchikey == "INCHI-E"
+        assert main_route.target.synthesis_step.reactants[0].is_leaf
+
+        first_sub_route = result[1]
+        assert first_sub_route.target.synthesis_step is not None
+        assert first_sub_route.target.synthesis_step.reactants[0].inchikey == "INCHI-A"
+
+        second_sub_route = result[2]
+        assert second_sub_route.target.synthesis_step is not None
+        assert second_sub_route.target.synthesis_step.reactants[0].inchikey == "INCHI-C"
+        assert second_sub_route.target.synthesis_step.reactants[0].is_leaf
+
     def test_excise_nothing(self):
         """Excising with empty set should return full route."""
         leaf_a = make_leaf("A", "INCHI-A")
@@ -170,6 +316,60 @@ class TestExciseReactionsFromRoute:
 
         assert len(result) == 0
 
+    def test_excise_ignores_unknown_signatures(self):
+        """Signatures not present in the route should be inert."""
+        leaf_a = make_leaf("A", "INCHI-A")
+        mol_b = make_product("B", "INCHI-B", [leaf_a])
+        route = Route(target=mol_b, rank=1)
+
+        result = excise_reactions_from_route(route, {(frozenset(["INCHI-Z"]), "INCHI-Y")})
+
+        assert len(result) == 1
+        assert result[0].get_structural_signature() == route.get_structural_signature()
+        assert result[0].get_reaction_signatures() == route.get_reaction_signatures()
+
+    def test_excise_noop_returns_detached_copy_of_mutable_fields(self):
+        """The rebuilt route should not share mutable containers with the input."""
+        leaf_a = Molecule(
+            smiles=SmilesStr("A"),
+            inchikey=InchiKeyStr("INCHI-A"),
+            metadata={"nested": {"items": ["leaf"]}},
+        )
+        mol_b = Molecule(
+            smiles=SmilesStr("B"),
+            inchikey=InchiKeyStr("INCHI-B"),
+            synthesis_step=ReactionStep(
+                reactants=[leaf_a],
+                reagents=[SmilesStr("O")],
+                solvents=[SmilesStr("CC")],
+                metadata={"nested": {"items": ["step"]}},
+            ),
+            metadata={"nested": {"items": ["molecule"]}},
+        )
+        route = Route(
+            target=mol_b,
+            rank=1,
+            metadata={"nested": {"items": ["route"]}},
+        )
+
+        rebuilt = excise_reactions_from_route(route, set())[0]
+        assert rebuilt.target.synthesis_step is not None
+        assert rebuilt.target.synthesis_step.reagents is not None
+        assert rebuilt.target.metadata["nested"]["items"] == ["molecule"]
+        assert rebuilt.target.synthesis_step.metadata["nested"]["items"] == ["step"]
+        assert rebuilt.metadata["nested"]["items"] == ["route"]
+
+        rebuilt.metadata["nested"]["items"].append("changed")
+        rebuilt.target.metadata["nested"]["items"].append("changed")
+        rebuilt.target.synthesis_step.metadata["nested"]["items"].append("changed")
+        rebuilt.target.synthesis_step.reagents.append(SmilesStr("N"))
+
+        assert route.metadata["nested"]["items"] == ["route"]
+        assert route.target.metadata["nested"]["items"] == ["molecule"]
+        assert route.target.synthesis_step is not None
+        assert route.target.synthesis_step.metadata["nested"]["items"] == ["step"]
+        assert route.target.synthesis_step.reagents == ["O"]
+
     def test_preserves_metadata(self):
         """Excision should preserve route metadata."""
         leaf_a = make_leaf("A", "INCHI-A")
@@ -189,6 +389,34 @@ class TestExciseReactionsFromRoute:
         # Sub-route should have same rank
         sub = result[0]
         assert sub.rank == 1
+
+    @given(shape=recursive_route_shape(), data=st.data())
+    @settings(max_examples=75)
+    def test_hypothesis_excise_partitions_remaining_reactions(self, shape, data):
+        """Fragments should exactly match the connected components of kept reactions."""
+        route = build_route_from_shape(shape)
+        all_signatures = tuple(sorted(route.get_reaction_signatures(), key=lambda sig: (sig[1], tuple(sorted(sig[0])))))
+        exclude = data.draw(st.sets(st.sampled_from(all_signatures), max_size=len(all_signatures)))
+
+        result = excise_reactions_from_route(route, exclude)
+
+        assert component_map(result) == expected_excised_components(route, exclude)
+        for fragment in result:
+            assert fragment.length > 0
+            assert fragment.get_reaction_signatures().isdisjoint(exclude)
+
+    @given(shape=recursive_route_shape(), data=st.data())
+    @settings(max_examples=50)
+    def test_hypothesis_excise_is_idempotent(self, shape, data):
+        """Running excision twice with the same exclusion set should be a no-op."""
+        route = build_route_from_shape(shape)
+        all_signatures = tuple(sorted(route.get_reaction_signatures(), key=lambda sig: (sig[1], tuple(sorted(sig[0])))))
+        exclude = data.draw(st.sets(st.sampled_from(all_signatures), max_size=len(all_signatures)))
+
+        first = excise_reactions_from_route(route, exclude)
+        second = [grandchild for fragment in first for grandchild in excise_reactions_from_route(fragment, exclude)]
+
+        assert component_map(second) == component_map(first)
 
 
 # =============================================================================
