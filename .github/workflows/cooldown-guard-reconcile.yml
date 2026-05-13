@@ -1,0 +1,50 @@
+name: cooldown guard reconcile
+
+on:
+  schedule:
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      COOLDOWN_GUARD_VERSION: "0.1.1"
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: install python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: apply cooldown cleanup if possible
+        id: cleanup
+        run: |
+          set -euo pipefail
+          # Avoid inheriting the repo's own uv cooldown policy while bootstrapping cooldown-guard itself.
+          uvx --no-config --from "cooldown-guard==${COOLDOWN_GUARD_VERSION}" cooldown-guard cleanup --project . --apply
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: create pull request
+        if: steps.cleanup.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: cooldown-guard/reconcile
+          commit-message: relax cooldown exception after window elapsed
+          title: relax cooldown exception after window elapsed
+          body: |
+            this pr was opened automatically after `cooldown-guard cleanup --apply`
+            found one or more exceptions that can now be relaxed.

@@ -1,0 +1,16 @@
+version = 1
+
+[[exceptions]]
+package = "urllib3"
+version = "2.7.0"
+constraint = "urllib3==2.7.0"
+relax_to = "urllib3>=2.7.0"
+approved_by = "anmorgunov"
+approved_at = "2026-05-13T14:46:46.535656Z"
+reason = "security fix for urllib3 streaming API vulnerability blocked by uv cooldown"
+introduced_via = ["requests", "types-tqdm"]
+upload_time = "2026-05-07T16:13:18.596909Z"
+package_cutoff = "2026-05-07T16:13:19.596909Z"
+state = "active"
+advisory = "GHSA-mf9v-mfxr-j63j"
+cooldown_ends_at = "2026-05-14T16:13:18.596909Z"
