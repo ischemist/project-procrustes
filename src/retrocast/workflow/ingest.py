@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -7,7 +8,7 @@ from tqdm import tqdm
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.curation.filtering import deduplicate_routes
 from retrocast.curation.sampling import sample_k_by_length, sample_random_k, sample_top_k
-from retrocast.exceptions import AdapterError, ChemError
+from retrocast.exceptions import AdapterError, ChemError, InputError, UnsupportedAdapterFeatureError
 from retrocast.io.data import save_routes
 from retrocast.io.provenance import generate_model_hash
 from retrocast.models.benchmark import BenchmarkSet
@@ -39,12 +40,26 @@ def ingest_model_predictions(
     """
     logger.info(f"Ingesting results for {model_name} on {benchmark.name}...")
 
-    if sampling_strategy:
+    sampler_fn: Callable[[list[Route], int], list[Route]] | None = None
+    sampler_k = 0
+    if sampling_strategy is not None:
         if sampling_strategy not in SAMPLING_STRATEGIES:
-            raise ValueError(f"Unknown sampling strategy: {sampling_strategy}")
+            raise InputError(
+                f"Unknown sampling strategy: {sampling_strategy}",
+                code="input.invalid_sampling_strategy",
+                context={
+                    "sampling_strategy": sampling_strategy,
+                    "available_sampling_strategies": sorted(SAMPLING_STRATEGIES.keys()),
+                },
+            )
         if sample_k is None:
-            raise ValueError("Must provide sample_k when using a sampling strategy")
+            raise InputError(
+                "Must provide sample_k when using a sampling strategy",
+                code="input.missing_sample_k",
+                context={"sampling_strategy": sampling_strategy},
+            )
         sampler_fn = SAMPLING_STRATEGIES[sampling_strategy]
+        sampler_k = sample_k
         logger.info(f"Applying sampling: {sampling_strategy} (k={sample_k})")
 
     processed_routes: dict[str, list[Route]] = {}
@@ -78,6 +93,8 @@ def ingest_model_predictions(
         try:
             # Adapter returns an iterator of Routes
             routes = list(adapter.cast(raw_payload, target=target, ignore_stereo=ignore_stereo))
+        except UnsupportedAdapterFeatureError:
+            raise
         except (AdapterError, ChemError) as e:
             logger.warning(f"Adapter failed for {target_id}: {e} [{e.code}]")
             routes = []
@@ -92,9 +109,8 @@ def ingest_model_predictions(
         # --- Deduplication & Sampling ---
         unique_routes = deduplicate_routes(routes)
 
-        if sampling_strategy:
-            assert sample_k is not None
-            unique_routes = sampler_fn(unique_routes, sample_k)
+        if sampler_fn is not None:
+            unique_routes = sampler_fn(unique_routes, sampler_k)
 
         processed_routes[target_id] = unique_routes
 
@@ -120,5 +136,7 @@ def ingest_model_predictions(
         f"Saved {stats.final_unique_routes_saved} valid routes. "
         f"Duplication factor: {stats.duplication_factor}x"
     )
+    if stats.failures_by_code:
+        logger.info("Ingestion failures by code: %s", dict(sorted(stats.failures_by_code.items())))
 
     return processed_routes, save_file, stats

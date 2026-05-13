@@ -7,11 +7,16 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.errors import adapter_node_type_error, adapter_schema_error, adapter_target_mismatch
+from retrocast.adapters.errors import (
+    adapter_cycle_error,
+    adapter_node_type_error,
+    adapter_schema_error,
+    adapter_target_mismatch,
+)
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
-from retrocast.typing import ReactionSmilesStr
+from retrocast.typing import ReactionSmilesStr, SmilesStr
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +86,11 @@ class SynPlannerAdapter(BaseAdapter):
         raises RetroCastException on failure.
         """
         # use the custom recursive builder for synplanner (has mapped_smiles on reaction nodes)
-        target_molecule = self._build_molecule_from_synplanner_node(synplanner_root, ignore_stereo=ignore_stereo)
+        target_molecule = self._build_molecule_from_synplanner_node(
+            synplanner_root,
+            ignore_stereo=ignore_stereo,
+            visited=set(),
+        )
 
         # canonicalize both synplanner output and benchmark target with RDKit to align formats
         produced = canonicalize_smiles(target_molecule.smiles, remove_mapping=True, ignore_stereo=ignore_stereo)
@@ -106,7 +115,10 @@ class SynPlannerAdapter(BaseAdapter):
         return Route(target=target_molecule, rank=rank, metadata={})
 
     def _build_molecule_from_synplanner_node(
-        self, raw_mol_node: SynPlannerMoleculeInput, ignore_stereo: bool = False
+        self,
+        raw_mol_node: SynPlannerMoleculeInput,
+        ignore_stereo: bool = False,
+        visited: set[SmilesStr] | None = None,
     ) -> Molecule:
         """
         recursively builds a `Molecule` from a raw synplanner bipartite graph node.
@@ -115,7 +127,14 @@ class SynPlannerAdapter(BaseAdapter):
         if raw_mol_node.type != "mol":
             raise adapter_node_type_error("synplanner", expected="mol", actual=raw_mol_node.type, role="molecule")
 
+        if visited is None:
+            visited = set()
+
         canon_smiles = canonicalize_smiles(raw_mol_node.smiles, remove_mapping=True, ignore_stereo=ignore_stereo)
+        if canon_smiles in visited:
+            raise adapter_cycle_error("synplanner", canon_smiles)
+
+        new_visited = visited | {canon_smiles}
         is_leaf = raw_mol_node.in_stock or not bool(raw_mol_node.children)
 
         if is_leaf:
@@ -145,7 +164,11 @@ class SynPlannerAdapter(BaseAdapter):
             if not isinstance(reactant_mol_input, SynPlannerMoleculeInput):
                 actual = getattr(reactant_mol_input, "type", type(reactant_mol_input).__name__)
                 raise adapter_node_type_error("synplanner", expected="mol", actual=actual, role="reaction child")
-            reactant_mol = self._build_molecule_from_synplanner_node(reactant_mol_input, ignore_stereo=ignore_stereo)
+            reactant_mol = self._build_molecule_from_synplanner_node(
+                reactant_mol_input,
+                ignore_stereo=ignore_stereo,
+                visited=new_visited,
+            )
             reactant_molecules.append(reactant_mol)
 
         # Extract mapped_smiles from the 'smiles' field of the reaction node

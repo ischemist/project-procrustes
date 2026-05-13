@@ -267,6 +267,76 @@ class TestPaRoutesAdapterRegression:
         assert stats.uncanonicalizable_token_count == 1
         assert stats.top_uncanonicalizable_tokens == [("CC(C)CC1=C(CC(C)C)[AlH3]1", 1)]
 
+    def test_missing_patent_id_raises_typed_error(self, adapter):
+        raw_route = {
+            "type": "mol",
+            "smiles": "CCO",
+            "in_stock": True,
+            "children": [],
+        }
+        target_input = TargetInput(id="missing-patent", smiles=canonicalize_smiles("CCO"))
+
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter.cast(raw_route, target_input))
+
+        assert exc_info.value.code == "adapter.patent_id_missing"
+
+    def test_malformed_condition_slot_is_counted_non_fatally(self, adapter, raw_paroutes_data):
+        raw_route = deepcopy(raw_paroutes_data["paroutes-ex-1"])
+        raw_route["children"][0]["metadata"]["rsmi"] = "not-a-valid-rsmi"
+        stats = ConditionSlotParseStatistics()
+        target_input = TargetInput(id="paroutes-ex-1", smiles=canonicalize_smiles(raw_route["smiles"]))
+
+        route = list(adapter.cast(raw_route, target_input, condition_slot_parse_statistics=stats))[0]
+
+        step = route.target.synthesis_step
+        assert step is not None
+        assert "condition_slot" not in step.metadata
+        assert stats.malformed_rsmi_count == 1
+        assert stats.uncanonicalizable_token_count == 0
+
+    def test_report_statistics_logs_years_and_unparsed_categories(self, caplog):
+        adapter = PaRoutesAdapter()
+        adapter.year_counts["2015"] = 2
+        adapter.unparsed_categories["unknown_format"] = 1
+
+        with caplog.at_level("INFO"):
+            adapter.report_statistics()
+
+        assert "Parsed Year 2015: 2 routes" in caplog.text
+        assert "Category 'unknown_format': 1 routes" in caplog.text
+
+
+class TestPaRoutesAdapterDiagnostics:
+    def test_adapt_route_with_diagnostics_returns_route_on_success(self, raw_paroutes_data):
+        adapter = PaRoutesAdapter()
+        raw_route = raw_paroutes_data["paroutes-ex-1"]
+        target = TargetInput(id="paroutes-ex-1", smiles=canonicalize_smiles(raw_route["smiles"]))
+        stats = ConditionSlotParseStatistics()
+
+        result = adapter.adapt_route_with_diagnostics(raw_route, target, stats)
+
+        assert result.error is None
+        assert result.route is not None
+        assert result.route.metadata["patent_id"] == "US20150051201A1"
+
+    def test_adapt_route_with_diagnostics_captures_typed_error(self):
+        adapter = PaRoutesAdapter()
+        raw_route = {
+            "type": "mol",
+            "smiles": "CCO",
+            "in_stock": True,
+            "children": [],
+        }
+        target = TargetInput(id="missing-patent", smiles=canonicalize_smiles("CCO"))
+        stats = ConditionSlotParseStatistics()
+
+        result = adapter.adapt_route_with_diagnostics(raw_route, target, stats)
+
+        assert result.route is None
+        assert result.error is not None
+        assert result.error.code == "adapter.patent_id_missing"
+
 
 class TestPaRoutesYearParsing:
     @pytest.mark.parametrize(
