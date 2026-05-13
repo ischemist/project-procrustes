@@ -24,9 +24,22 @@ from retrocast.curation.training import (
     TrainingRouteRecord,
 )
 from retrocast.exceptions import ArtifactDecodeError, RetroCastIOError
-from retrocast.io.blob import load_json_gz, load_jsonl_gz, load_lines_gz, save_json_gz, save_jsonl_gz, save_lines_gz
+from retrocast.io.blob import (
+    iter_jsonl_gz,
+    iter_lines_gz,
+    load_json_gz,
+    load_jsonl_gz,
+    load_lines_gz,
+    save_json_gz,
+    save_jsonl_gz,
+    save_lines_gz,
+)
 from retrocast.io.data import (
     BenchmarkResultsLoader,
+    iter_training_reaction_records,
+    iter_training_reaction_smiles,
+    iter_training_route_records,
+    iter_training_routes,
     load_benchmark,
     load_routes,
     load_stock_file,
@@ -81,6 +94,7 @@ class TestBlobWriters:
         save_jsonl_gz([{"a": 1}, {"b": 2}], out_path)
 
         assert load_jsonl_gz(out_path) == [{"a": 1}, {"b": 2}]
+        assert list(iter_jsonl_gz(out_path)) == [{"a": 1}, {"b": 2}]
 
     def test_load_jsonl_gz_can_reject_empty_rows(self, tmp_path):
         out_path = tmp_path / "rows.jsonl.gz"
@@ -97,6 +111,7 @@ class TestBlobWriters:
 
         assert n_lines == 2
         assert load_lines_gz(out_path) == ["a>>b", "c>>d"]
+        assert list(iter_lines_gz(out_path)) == ["a>>b", "c>>d"]
 
 
 @pytest.mark.unit
@@ -121,8 +136,10 @@ class TestTrainingReleaseLoaders:
         save_jsonl_gz([record.to_json_dict()], path)
 
         loaded = load_training_route_records(path)
+        streamed = list(iter_training_route_records(path))
 
         assert loaded == [record]
+        assert streamed == [record]
 
     def test_load_training_routes_returns_route_objects(self, tmp_path, synthetic_route_factory):
         route = synthetic_route_factory("linear", depth=1)
@@ -131,9 +148,12 @@ class TestTrainingReleaseLoaders:
         save_jsonl_gz([{"route": route.model_dump(mode="json")}], path)
 
         loaded = load_training_routes(path)
+        streamed = list(iter_training_routes(path))
 
         assert len(loaded) == 1
         assert loaded[0].get_content_hash() == route.get_content_hash()
+        assert len(streamed) == 1
+        assert streamed[0].get_content_hash() == route.get_content_hash()
 
     def test_load_training_reaction_records_returns_validated_models(self, tmp_path):
         record = TrainingReactionRecord(
@@ -158,14 +178,17 @@ class TestTrainingReleaseLoaders:
         save_jsonl_gz([record], path)
 
         loaded = load_training_reaction_records(path)
+        streamed = list(iter_training_reaction_records(path))
 
         assert loaded == [record]
+        assert streamed == [record]
 
     def test_load_training_reaction_smiles_reads_rsmi_lines(self, tmp_path):
         path = tmp_path / "training.rsmi.txt.gz"
         save_lines_gz(["c>o>cc", "cc>n>ccc"], path)
 
         assert load_training_reaction_smiles(path) == ["c>o>cc", "cc>n>ccc"]
+        assert list(iter_training_reaction_smiles(path)) == ["c>o>cc", "cc>n>ccc"]
 
 
 @pytest.mark.unit

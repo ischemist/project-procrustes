@@ -1,5 +1,18 @@
-from retrocast.io.blob import load_json_gz, load_jsonl_gz, load_lines_gz, save_json_gz, save_jsonl_gz, save_lines_gz
+from retrocast.io.blob import (
+    iter_jsonl_gz,
+    iter_lines_gz,
+    load_json_gz,
+    load_jsonl_gz,
+    load_lines_gz,
+    save_json_gz,
+    save_jsonl_gz,
+    save_lines_gz,
+)
 from retrocast.io.data import (
+    iter_training_reaction_records,
+    iter_training_reaction_smiles,
+    iter_training_route_records,
+    iter_training_routes,
     load_benchmark,
     load_execution_stats,
     load_raw_paroutes_list,
@@ -23,6 +36,8 @@ from retrocast.io.provenance import (
 
 __all__ = [
     # blob
+    "iter_jsonl_gz",
+    "iter_lines_gz",
     "load_json_gz",
     "load_jsonl_gz",
     "load_lines_gz",
@@ -39,6 +54,10 @@ __all__ = [
     "load_training_reaction_records",
     "load_training_reaction_smiles",
     "load_training_routes",
+    "iter_training_route_records",
+    "iter_training_reaction_records",
+    "iter_training_reaction_smiles",
+    "iter_training_routes",
     "save_execution_stats",
     "save_routes",
     "save_stock_files",

@@ -36,7 +36,12 @@ class TestPublishTrainingRelease:
 
         assert staged_root == tmp_path / "staging" / "training-sets" / "paroutes"
         assert (staged_root / "latest.json").exists()
-        assert (staged_root / "v2026-05-12" / "route-holdout-n1-n5" / "SHA256SUMS").exists()
+        assert (staged_root / "index.html").exists()
+        assert (staged_root / "v2026-05-12" / "SHA256SUMS").exists()
+        assert not (staged_root / "v2026-05-12" / "route-holdout-n1-n5" / "SHA256SUMS").exists()
+        assert "route-holdout-n1-n5/training.jsonl.gz" in (staged_root / "v2026-05-12" / "SHA256SUMS").read_text(
+            encoding="utf-8"
+        )
 
     def test_upload_training_release_targets_dataset_directory(self, monkeypatch) -> None:
         calls: list[list[str]] = []

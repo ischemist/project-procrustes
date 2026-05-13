@@ -10,7 +10,7 @@ main() {
     DATASET="paroutes"
     ARTIFACT=""
     SPLIT="training"
-    FORMAT="auto"
+    FORMAT="jsonl"
     RELEASE="latest"
     DRY_RUN=0
 
@@ -34,7 +34,7 @@ main() {
         echo ""
         echo -e "${B}flags:${NC}"
         echo "  --split=all|training|validation"
-        echo "  --format=auto|routes|route-records|reaction-records|reaction-smiles"
+        echo "  --format=jsonl|rsmi"
         echo "  --release=latest|vYYYY-MM-DD"
         echo "  --dataset=paroutes"
         echo "  --dir=PATH  materialize into an explicit project-owned directory"
@@ -128,45 +128,62 @@ main() {
         ROOT_DIR="$OUTPUT_DIR"
     fi
 
-    LOCAL_DIR="$ROOT_DIR/$DATASET/$RESOLVED_RELEASE/$ARTIFACT"
+    if [ -n "$OUTPUT_DIR" ]; then
+        RELEASE_DIR="$ROOT_DIR/$RESOLVED_RELEASE"
+    else
+        RELEASE_DIR="$ROOT_DIR/$DATASET/$RESOLVED_RELEASE"
+    fi
+    LOCAL_DIR="$RELEASE_DIR/$ARTIFACT"
     LOCAL_PATH="$LOCAL_DIR/$FILENAME"
-    CHECKSUMS_PATH="$LOCAL_DIR/SHA256SUMS"
+    MANIFEST_PATH="$LOCAL_DIR/manifest.json"
+    CHECKSUMS_PATH="$RELEASE_DIR/SHA256SUMS"
     FILE_URL="$BASE_URL/$DATASET/$RESOLVED_RELEASE/$ARTIFACT/$FILENAME"
-    CHECKSUMS_URL="$BASE_URL/$DATASET/$RESOLVED_RELEASE/$ARTIFACT/SHA256SUMS"
+    MANIFEST_URL="$BASE_URL/$DATASET/$RESOLVED_RELEASE/$ARTIFACT/manifest.json"
+    CHECKSUMS_URL="$BASE_URL/$DATASET/$RESOLVED_RELEASE/SHA256SUMS"
+    CHECKSUMS_KEY="$ARTIFACT/$FILENAME"
+    MANIFEST_CHECKSUM_KEY="$ARTIFACT/manifest.json"
 
     mkdir -p "$LOCAL_DIR"
     curl -fsSL "$CHECKSUMS_URL" -o "$CHECKSUMS_PATH"
-    EXPECTED_HASH="$(awk -v file="$FILENAME" '$2 == file { print $1 }' "$CHECKSUMS_PATH")"
-
-    if [ -z "$EXPECTED_HASH" ]; then
-        echo -e "${R}error: could not resolve hash for '$FILENAME'${NC}" >&2
-        exit 1
-    fi
-
     if [ "$DRY_RUN" -eq 1 ]; then
         echo "$LOCAL_PATH"
         exit 0
     fi
 
-    if [ -f "$LOCAL_PATH" ]; then
-        ACTUAL_HASH=$($SHACMD "$LOCAL_PATH" | awk '{print $1}')
-        if [ "$ACTUAL_HASH" = "$EXPECTED_HASH" ]; then
-            echo "$LOCAL_PATH"
-            exit 0
-        fi
-    fi
+    download_and_verify "$FILE_URL" "$LOCAL_PATH" "$CHECKSUMS_KEY"
+    download_and_verify "$MANIFEST_URL" "$MANIFEST_PATH" "$MANIFEST_CHECKSUM_KEY"
+    echo "$LOCAL_PATH"
+}
 
-    TMP_PATH="${LOCAL_PATH}.tmp"
-    curl -fsSL "$FILE_URL" -o "$TMP_PATH"
-    ACTUAL_HASH=$($SHACMD "$TMP_PATH" | awk '{print $1}')
-    if [ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]; then
-        rm -f "$TMP_PATH"
-        echo -e "${R}error: hash mismatch for '$FILENAME'${NC}" >&2
+download_and_verify() {
+    local url="$1"
+    local local_path="$2"
+    local checksum_key="$3"
+    local tmp_path actual_hash expected_hash
+
+    expected_hash="$(awk -v file="$checksum_key" '$2 == file { print $1 }' "$CHECKSUMS_PATH")"
+    if [ -z "$expected_hash" ]; then
+        echo -e "${R}error: could not resolve hash for '$checksum_key'${NC}" >&2
         exit 1
     fi
 
-    mv "$TMP_PATH" "$LOCAL_PATH"
-    echo "$LOCAL_PATH"
+    if [ -f "$local_path" ]; then
+        actual_hash=$($SHACMD "$local_path" | awk '{print $1}')
+        if [ "$actual_hash" = "$expected_hash" ]; then
+            return 0
+        fi
+    fi
+
+    tmp_path="${local_path}.tmp"
+    curl -fsSL "$url" -o "$tmp_path"
+    actual_hash=$($SHACMD "$tmp_path" | awk '{print $1}')
+    if [ "$actual_hash" != "$expected_hash" ]; then
+        rm -f "$tmp_path"
+        echo -e "${R}error: hash mismatch for '$checksum_key'${NC}" >&2
+        exit 1
+    fi
+
+    mv "$tmp_path" "$local_path"
 }
 
 resolve_latest_release() {
@@ -192,7 +209,7 @@ resolve_filename() {
     case "$artifact" in
         route-holdout-n1-n5|reaction-holdout-n1-n5)
             case "$format" in
-                auto|routes|route-records) echo "${split}.jsonl.gz" ;;
+                jsonl) echo "${split}.jsonl.gz" ;;
                 *)
                     echo "unsupported format '$format' for artifact '$artifact'" >&2
                     exit 1
@@ -201,8 +218,8 @@ resolve_filename() {
             ;;
         single-step-reaction-holdout-n1-n5)
             case "$format" in
-                auto|reaction-records) echo "${split}.jsonl.gz" ;;
-                reaction-smiles) echo "${split}.rsmi.txt.gz" ;;
+                jsonl) echo "${split}.jsonl.gz" ;;
+                rsmi) echo "${split}.rsmi.txt.gz" ;;
                 *)
                     echo "unsupported format '$format' for artifact '$artifact'" >&2
                     exit 1
