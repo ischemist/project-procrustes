@@ -52,11 +52,11 @@ except ValidationError as exc:
 Handle failures by class and code, not by message text:
 
 ```python
-from retrocast.exceptions import AdapterError
+from retrocast.exceptions import AdapterError, ChemError
 
 try:
     routes = list(adapter.cast(raw_payload, target=target))
-except AdapterError as exc:
+except (AdapterError, ChemError) as exc:
     stats.record_failure(exc.code, target_id=target_id)
     routes = []
 ```
@@ -86,7 +86,7 @@ Route root mismatches should use `adapter.target_mismatch`; malformed raw payloa
 
 Batch workflows that continue after expected failures must count them by stable code.
 
-For `ingest`, the CLI writes `stats.to_manifest_dict()` into the manifest `statistics` block, so counts land under `statistics.failures_by_code`. The workflow also logs the same sorted summary.
+For `ingest`, `ingest_model_predictions()` logs the sorted failure summary and returns `stats`. The ingest CLI path then writes `stats.to_manifest_dict()` into the manifest `statistics` block, so counts land under `statistics.failures_by_code`.
 
 ```json
 {

@@ -154,7 +154,7 @@ Adapter resolution happens before `cast` and raises `AdapterResolutionError` (`a
 
 Use `retrocast.adapters.errors.adapter_schema_error()` and `adapter_target_mismatch()` where they fit; they keep messages, codes, and context consistent.
 
-During `ingest`, workflow boundaries aggregate target-level adapter failures by `error.code` and persist the summary in manifest `statistics.failures_by_code`.
+During `ingest`, workflow boundaries aggregate target-level `AdapterError` and `ChemError` failures by `error.code`. In the ingest CLI path, that summary is persisted in manifest `statistics.failures_by_code`.
 
 ### Adapter Error Examples
 
