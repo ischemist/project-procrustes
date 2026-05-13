@@ -104,7 +104,10 @@ class DreamRetroAdapter(BaseAdapter):
 
         # build molecule tree from precursor map
         molecule = build_molecule_from_precursor_map(
-            smiles=expected_smiles, precursor_map=precursor_map, ignore_stereo=ignore_stereo
+            smiles=expected_smiles,
+            precursor_map=precursor_map,
+            ignore_stereo=ignore_stereo,
+            adapter="dreamretro",
         )
 
         # extract metadata

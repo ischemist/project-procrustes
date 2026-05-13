@@ -4,6 +4,7 @@ import pytest
 
 from retrocast.adapters.retrochimera_adapter import RetrochimeraAdapter
 from retrocast.chem import canonicalize_smiles
+from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
@@ -37,8 +38,8 @@ class TestRetrochimeraAdapterUnit(BaseAdapterTest):
 
     @pytest.fixture
     def raw_unsuccessful_run_data(self):
-        # represents a model failure
-        return {"smiles": "CCO", "result": {"error": {"message": "failed"}}}
+        # represents a target with no extracted routes but no adapter contract failure
+        return {"smiles": "CCO", "result": {"outputs": []}}
 
     @pytest.fixture
     def raw_invalid_schema_data(self):
@@ -52,6 +53,32 @@ class TestRetrochimeraAdapterUnit(BaseAdapterTest):
     @pytest.fixture
     def mismatched_target_input(self):
         return TargetInput(id="ethanol", smiles="CCC")
+
+    def test_adapt_raises_on_reported_model_error(self, adapter_instance, target_input):
+        raw_data = {"smiles": "CCO", "result": {"error": {"type": "search_failed", "message": "failed"}}}
+
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter_instance.cast(raw_data, target_input))
+
+        assert exc_info.value.code == "adapter.route_transform_failed"
+        assert exc_info.value.context == {
+            "adapter": "retrochimera",
+            "target_id": target_input.id,
+            "error_type": "search_failed",
+        }
+
+    def test_adapt_raises_when_outputs_are_missing(self, adapter_instance, target_input):
+        raw_data = {"smiles": "CCO", "result": {}}
+
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter_instance.cast(raw_data, target_input))
+
+        assert exc_info.value.code == "adapter.route_transform_failed"
+        assert exc_info.value.context == {
+            "adapter": "retrochimera",
+            "target_id": target_input.id,
+            "payload_field": "result.outputs",
+        }
 
 
 @pytest.mark.integration

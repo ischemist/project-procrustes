@@ -51,6 +51,45 @@ class TestBipartiteBuilder:
         assert exc_info.value.code == "adapter.node_type_invalid"
         assert exc_info.value.context["expected"] == "reaction"
 
+    def test_raises_on_cycle(self):
+        """should fail if the same molecule is revisited in one path."""
+        raw_data = SimpleNamespace(
+            smiles="CCO",
+            type="mol",
+            in_stock=False,
+            children=[
+                SimpleNamespace(
+                    type="reaction",
+                    metadata={},
+                    children=[
+                        SimpleNamespace(
+                            smiles="C",
+                            type="mol",
+                            in_stock=False,
+                            children=[
+                                SimpleNamespace(
+                                    type="reaction",
+                                    metadata={},
+                                    children=[
+                                        SimpleNamespace(
+                                            smiles="CCO",
+                                            type="mol",
+                                            in_stock=False,
+                                            children=[],
+                                        )
+                                    ],
+                                )
+                            ],
+                        )
+                    ],
+                )
+            ],
+        )
+
+        with pytest.raises(AdapterLogicError) as exc_info:
+            build_molecule_from_bipartite_node(raw_data)
+        assert exc_info.value.code == "adapter.cycle_detected"
+
 
 class TestPrecursorMapBuilder:
     def test_build_linear_route(self):
@@ -89,24 +128,12 @@ class TestPrecursorMapBuilder:
         assert reactant_smiles == {"C", "CO"}
         assert all(r.is_leaf for r in molecule.synthesis_step.reactants)
 
-    def test_handles_cycles(self):
-        """tests that a cycle a -> b -> a is detected and handled."""
+    def test_raises_on_cycles(self):
+        """tests that a cycle a -> b -> a raises a typed adapter error."""
         precursor_map = {
             "CCO": ["C"],  # ethanol from methane
             "C": ["CCO"],  # methane from ethanol (cycle)
         }
-        molecule = build_molecule_from_precursor_map("CCO", precursor_map)
-        # molecule should be: CCO -> C -> (CCO as leaf due to cycle detection)
-        assert not molecule.is_leaf
-        rxn_a = molecule.synthesis_step
-        assert rxn_a is not None
-        reactant_b = rxn_a.reactants[0]
-        assert reactant_b.smiles == "C"
-        assert not reactant_b.is_leaf
-        rxn_b = reactant_b.synthesis_step
-        assert rxn_b is not None
-        reactant_a_cycle = rxn_b.reactants[0]
-        assert reactant_a_cycle.smiles == "CCO"
-        # cycle is broken, second CCO is a leaf
-        assert reactant_a_cycle.is_leaf
-        assert reactant_a_cycle.synthesis_step is None
+        with pytest.raises(AdapterLogicError) as exc_info:
+            build_molecule_from_precursor_map("CCO", precursor_map)
+        assert exc_info.value.code == "adapter.cycle_detected"

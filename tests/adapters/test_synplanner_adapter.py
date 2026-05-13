@@ -52,6 +52,47 @@ class TestSynPlannerAdapterUnit(BaseAdapterTest):
     def mismatched_target_input(self):
         return TargetInput(id="ethanol", smiles="CCC")
 
+    def test_cycle_detection_discards_invalid_route(self, adapter_instance, caplog):
+        raw_data = [
+            {
+                "smiles": "CCO",
+                "type": "mol",
+                "in_stock": False,
+                "children": [
+                    {
+                        "type": "reaction",
+                        "smiles": "[C:1]>>[C:1][C:2][O:3]",
+                        "children": [
+                            {
+                                "smiles": "C",
+                                "type": "mol",
+                                "in_stock": False,
+                                "children": [
+                                    {
+                                        "type": "reaction",
+                                        "smiles": "[C:1][C:2][O:3]>>[C:1]",
+                                        "children": [
+                                            {
+                                                "smiles": "CCO",
+                                                "type": "mol",
+                                                "in_stock": False,
+                                                "children": [],
+                                            }
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+
+        routes = list(adapter_instance.cast(raw_data, TargetInput(id="ethanol", smiles="CCO")))
+
+        assert routes == []
+        assert "adapter.cycle_detected" in caplog.text
+
 
 # ========================================
 # Contract Tests

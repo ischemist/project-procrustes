@@ -32,6 +32,14 @@ def adapter_schema_error(adapter: str, target_id: str, detail: str, **context: A
     )
 
 
+def adapter_route_transform_error(adapter: str, target_id: str, detail: str, **context: Any) -> AdapterLogicError:
+    return AdapterLogicError(
+        f"{adapter_display_name(adapter)} could not adapt target '{target_id}': {detail}",
+        code="adapter.route_transform_failed",
+        context={"adapter": adapter, "target_id": target_id, **context},
+    )
+
+
 def adapter_target_mismatch(
     adapter: str,
     target_id: str,

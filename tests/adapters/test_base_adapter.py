@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from retrocast.exceptions import AdapterSchemaError
+from retrocast.exceptions import AdapterLogicError, AdapterSchemaError
 from retrocast.models.chem import Route
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,11 @@ class BaseAdapterTest(ABC):
     def test_adapt_handles_mismatched_smiles(
         self, adapter_instance, raw_valid_route_data, mismatched_target_input, caplog
     ):
-        """Tests that a SMILES mismatch between target and data yields no routes and logs a warning."""
-        routes = list(adapter_instance.cast(raw_valid_route_data, mismatched_target_input))
-        assert len(routes) == 0
-        assert "mismatched smiles" in caplog.text.lower() or "does not match expected target" in caplog.text.lower()
+        """Tests that a SMILES mismatch either raises a typed error or yields no routes with a warning."""
+        try:
+            routes = list(adapter_instance.cast(raw_valid_route_data, mismatched_target_input))
+        except AdapterLogicError as exc:
+            assert exc.code == "adapter.target_mismatch"
+        else:
+            assert len(routes) == 0
+            assert "mismatched smiles" in caplog.text.lower() or "does not match expected target" in caplog.text.lower()

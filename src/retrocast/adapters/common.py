@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Protocol
 
-from retrocast.adapters.errors import adapter_node_type_error
+from retrocast.adapters.errors import adapter_cycle_error, adapter_node_type_error
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.models.chem import Molecule, ReactionStep
 from retrocast.typing import SmilesStr
@@ -62,6 +62,8 @@ def build_molecule_from_precursor_map(
     precursor_map: PrecursorMap,
     visited: set[SmilesStr] | None = None,
     ignore_stereo: bool = False,
+    *,
+    adapter: str = "common",
 ) -> Molecule:
     """
     Recursively builds a `Molecule` from a precursor map, with cycle detection.
@@ -82,13 +84,7 @@ def build_molecule_from_precursor_map(
 
     # Cycle detection
     if smiles in visited:
-        logger.warning(f"Cycle detected in route graph involving smiles: {smiles}. Treating as a leaf node.")
-        return Molecule(
-            smiles=smiles,
-            inchikey=get_inchi_key(smiles),
-            synthesis_step=None,
-            metadata={},
-        )
+        raise adapter_cycle_error(adapter, smiles)
 
     new_visited = visited | {smiles}
     is_leaf = smiles not in precursor_map
@@ -112,6 +108,7 @@ def build_molecule_from_precursor_map(
             precursor_map=precursor_map,
             visited=new_visited,
             ignore_stereo=ignore_stereo,
+            adapter=adapter,
         )
         reactant_molecules.append(reactant_mol)
 
@@ -133,7 +130,13 @@ def build_molecule_from_precursor_map(
     )
 
 
-def build_molecule_from_bipartite_node(raw_mol_node: BipartiteMolNode, ignore_stereo: bool = False) -> Molecule:
+def build_molecule_from_bipartite_node(
+    raw_mol_node: BipartiteMolNode,
+    ignore_stereo: bool = False,
+    *,
+    visited: set[SmilesStr] | None = None,
+    adapter: str = "common",
+) -> Molecule:
     """
     Recursively builds a `Molecule` from a raw, validated bipartite graph node.
     This is the new schema version for models like aizynthfinder, synplanner, etc.
@@ -147,9 +150,16 @@ def build_molecule_from_bipartite_node(raw_mol_node: BipartiteMolNode, ignore_st
         A Molecule object representing this node and its synthesis tree.
     """
     if raw_mol_node.type != "mol":
-        raise adapter_node_type_error("bipartite", expected="mol", actual=raw_mol_node.type, role="molecule")
+        raise adapter_node_type_error(adapter, expected="mol", actual=raw_mol_node.type, role="molecule")
+
+    if visited is None:
+        visited = set()
 
     canon_smiles = canonicalize_smiles(raw_mol_node.smiles, ignore_stereo=ignore_stereo)
+    if canon_smiles in visited:
+        raise adapter_cycle_error(adapter, canon_smiles)
+
+    new_visited = visited | {canon_smiles}
     is_leaf = raw_mol_node.in_stock or not bool(raw_mol_node.children)
 
     if is_leaf:
@@ -169,13 +179,18 @@ def build_molecule_from_bipartite_node(raw_mol_node: BipartiteMolNode, ignore_st
     raw_reaction_node: BipartiteRxnNode = raw_mol_node.children[0]
     if raw_reaction_node.type != "reaction":
         raise adapter_node_type_error(
-            "bipartite", expected="reaction", actual=raw_reaction_node.type, role="molecule child"
+            adapter, expected="reaction", actual=raw_reaction_node.type, role="molecule child"
         )
 
     # Build reactants recursively
     reactant_molecules: list[Molecule] = []
     for reactant_mol_input in raw_reaction_node.children:
-        reactant_mol = build_molecule_from_bipartite_node(raw_mol_node=reactant_mol_input, ignore_stereo=ignore_stereo)
+        reactant_mol = build_molecule_from_bipartite_node(
+            raw_mol_node=reactant_mol_input,
+            ignore_stereo=ignore_stereo,
+            visited=new_visited,
+            adapter=adapter,
+        )
         reactant_molecules.append(reactant_mol)
 
     # Extract template and mapped_smiles from metadata if available
