@@ -105,5 +105,10 @@ exclude = ["tests", "scripts"]
 # Require a short cooling-off window before newly uploaded artifacts are eligible.
 required-version = ">=0.9.17"
 exclude-newer = "7 days"
+exclude-newer-package = {urllib3 = "2026-05-07T16:13:19.596909Z"}
+constraint-dependencies = [
+    "urllib3==2.7.0",
+]
+
 [tool.uv.extra-build-dependencies]
 torch-scatter = ["torch"]
