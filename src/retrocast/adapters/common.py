@@ -82,24 +82,26 @@ def build_molecule_from_precursor_map(
     if visited is None:
         visited = set()
 
-    # Cycle detection
-    if smiles in visited:
-        raise adapter_cycle_error(adapter, smiles)
+    canon_smiles = canonicalize_smiles(smiles, ignore_stereo=ignore_stereo)
+    if canon_smiles in visited:
+        raise adapter_cycle_error(adapter, canon_smiles)
 
-    new_visited = visited | {smiles}
-    is_leaf = smiles not in precursor_map
+    new_visited = visited | {canon_smiles}
+    reactant_smiles_list = precursor_map.get(canon_smiles)
+    if reactant_smiles_list is None:
+        reactant_smiles_list = precursor_map.get(smiles)
+    is_leaf = reactant_smiles_list is None
 
     if is_leaf:
         # This is a starting material (leaf node)
         return Molecule(
-            smiles=smiles,
-            inchikey=get_inchi_key(smiles),
+            smiles=canon_smiles,
+            inchikey=get_inchi_key(canon_smiles),
             synthesis_step=None,
             metadata={},
         )
 
     # Build reactants recursively
-    reactant_smiles_list = precursor_map[smiles]
     reactant_molecules: list[Molecule] = []
 
     for reactant_smi in reactant_smiles_list:
@@ -123,8 +125,8 @@ def build_molecule_from_precursor_map(
 
     # Create the molecule with its synthesis step
     return Molecule(
-        smiles=smiles,
-        inchikey=get_inchi_key(smiles),
+        smiles=canon_smiles,
+        inchikey=get_inchi_key(canon_smiles),
         synthesis_step=synthesis_step,
         metadata={},
     )

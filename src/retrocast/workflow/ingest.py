@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -7,7 +8,7 @@ from tqdm import tqdm
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.curation.filtering import deduplicate_routes
 from retrocast.curation.sampling import sample_k_by_length, sample_random_k, sample_top_k
-from retrocast.exceptions import AdapterError, ChemError, InputError
+from retrocast.exceptions import AdapterError, ChemError, InputError, UnsupportedAdapterFeatureError
 from retrocast.io.data import save_routes
 from retrocast.io.provenance import generate_model_hash
 from retrocast.models.benchmark import BenchmarkSet
@@ -39,7 +40,8 @@ def ingest_model_predictions(
     """
     logger.info(f"Ingesting results for {model_name} on {benchmark.name}...")
 
-    sampler_fn = None
+    sampler_fn: Callable[[list[Route], int], list[Route]] | None = None
+    sampler_k = 0
     if sampling_strategy is not None:
         if sampling_strategy not in SAMPLING_STRATEGIES:
             raise InputError(
@@ -57,6 +59,7 @@ def ingest_model_predictions(
                 context={"sampling_strategy": sampling_strategy},
             )
         sampler_fn = SAMPLING_STRATEGIES[sampling_strategy]
+        sampler_k = sample_k
         logger.info(f"Applying sampling: {sampling_strategy} (k={sample_k})")
 
     processed_routes: dict[str, list[Route]] = {}
@@ -90,6 +93,8 @@ def ingest_model_predictions(
         try:
             # Adapter returns an iterator of Routes
             routes = list(adapter.cast(raw_payload, target=target, ignore_stereo=ignore_stereo))
+        except UnsupportedAdapterFeatureError:
+            raise
         except (AdapterError, ChemError) as e:
             logger.warning(f"Adapter failed for {target_id}: {e} [{e.code}]")
             routes = []
@@ -105,8 +110,7 @@ def ingest_model_predictions(
         unique_routes = deduplicate_routes(routes)
 
         if sampler_fn is not None:
-            assert sample_k is not None
-            unique_routes = sampler_fn(unique_routes, sample_k)
+            unique_routes = sampler_fn(unique_routes, sampler_k)
 
         processed_routes[target_id] = unique_routes
 

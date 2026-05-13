@@ -137,3 +137,17 @@ class TestPrecursorMapBuilder:
         with pytest.raises(AdapterLogicError) as exc_info:
             build_molecule_from_precursor_map("CCO", precursor_map)
         assert exc_info.value.code == "adapter.cycle_detected"
+
+    def test_raises_on_cycles_when_aliases_share_a_canonical_smiles(self):
+        """different smiles spellings of the same molecule should still trip cycle detection."""
+        precursor_map = {
+            "CCO": ["OCC"],
+            "OCC": ["C"],
+            "C": ["CCO"],
+        }
+
+        with pytest.raises(AdapterLogicError) as exc_info:
+            build_molecule_from_precursor_map("CCO", precursor_map)
+
+        assert exc_info.value.code == "adapter.cycle_detected"
+        assert exc_info.value.context["smiles"] == canonicalize_smiles("CCO")

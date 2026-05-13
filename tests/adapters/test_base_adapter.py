@@ -76,11 +76,14 @@ class BaseAdapterTest(ABC):
         assert route.rank >= 1
 
     def test_adapt_handles_unsuccessful_run(self, adapter_instance, raw_unsuccessful_run_data, target_input):
-        """Tests that data for an unsuccessful run yields no routes or a typed schema error."""
+        """Tests that data for an unsuccessful run yields no routes or a typed adapter failure."""
         try:
             routes = list(adapter_instance.cast(raw_unsuccessful_run_data, target_input))
         except AdapterSchemaError as exc:
             assert exc.code == "adapter.schema_invalid"
+        except AdapterLogicError as exc:
+            assert exc.code.startswith("adapter.")
+            assert exc.context.get("target_id") == target_input.id
         else:
             assert len(routes) == 0
 

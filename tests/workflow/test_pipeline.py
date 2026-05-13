@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.exceptions import AdapterSchemaError, ChemRuntimeError, InputError
+from retrocast.exceptions import AdapterSchemaError, ChemRuntimeError, InputError, UnsupportedAdapterFeatureError
 from retrocast.io.data import load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Route, TargetIdentity
@@ -72,6 +72,18 @@ class ChemFailingAdapter(BaseAdapter):
         raise ChemRuntimeError(
             "synthetic chemistry failure",
             context={"target_id": target.id},
+        )
+
+
+class UnsupportedFeatureAdapter(BaseAdapter):
+    """Adapter that fails fast on a workflow-level unsupported feature."""
+
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
+        raise UnsupportedAdapterFeatureError(
+            "synthetic unsupported feature",
+            context={"adapter": "synthetic", "feature": "full_graph"},
         )
 
 
@@ -399,6 +411,25 @@ class TestIngestModelPredictions:
             "target_1": {"chem.runtime_error": 1},
             "target_2": {"chem.runtime_error": 1},
         }
+
+    @pytest.mark.integration
+    def test_ingest_re_raises_unsupported_adapter_features(self, tmp_path, synthetic_benchmark):
+        adapter = UnsupportedFeatureAdapter()
+        raw_data = {
+            "target_1": [{"bad": "payload"}],
+            "target_2": [{"bad": "payload"}],
+        }
+
+        with pytest.raises(UnsupportedAdapterFeatureError) as exc_info:
+            ingest_model_predictions(
+                model_name="unsupported-model",
+                benchmark=synthetic_benchmark,
+                raw_data=raw_data,
+                adapter=adapter,
+                output_dir=tmp_path,
+            )
+
+        assert exc_info.value.code == "adapter.unsupported_feature"
 
 
 # =============================================================================
