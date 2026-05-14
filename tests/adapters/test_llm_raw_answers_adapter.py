@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 
 from retrocast.adapters.llm_raw_answers_adapter import LlmRawAnswersAdapter
@@ -144,7 +146,7 @@ class TestLlmRawAnswersAdapterUnit(BaseAdapterTest):
         assert [r.rank for r in routes] == [1, 3]
 
 
-@pytest.mark.integration
+@pytest.mark.contract
 class TestLlmRawAnswersAdapterContract:
     """Contract tests on real LLM completions: verify Route objects are well-formed."""
 
@@ -163,19 +165,20 @@ class TestLlmRawAnswersAdapterContract:
     )
     def routes(self, adapter, raw_llm_raw_answers_data, request):
         target_id, target_smi = request.param
-        # the fixture is keyed by the raw product_smiles from the source data;
-        # find the matching key whose canonical form equals our target.
-        for raw_key, recs in raw_llm_raw_answers_data.items():
-            if canonicalize_smiles(raw_key) == target_smi:
-                target_input = TargetInput(id=target_id, smiles=target_smi)
-                return list(adapter.cast(recs, target_input))
-        raise AssertionError(f"target {target_id} not found in fixture")
+        payload = raw_llm_raw_answers_data.get(target_smi)
+        assert payload is not None, f"target {target_id} not found under canonical smiles key"
+
+        target_input = TargetInput(id=target_id, smiles=target_smi)
+        return list(adapter.cast(payload, target_input))
 
     def test_produces_at_least_one_route(self, routes):
         assert len(routes) >= 1
 
-    def test_all_routes_have_sequential_ranks(self, routes):
-        assert [r.rank for r in routes] == list(range(1, len(routes) + 1))
+    def test_all_routes_preserve_strictly_increasing_ranks(self, routes):
+        ranks = [route.rank for route in routes]
+        assert ranks == sorted(ranks)
+        assert len(ranks) == len(set(ranks))
+        assert all(rank >= 1 for rank in ranks)
 
     def test_target_smiles_match(self, routes, request):
         # request.node.callspec.params resolves the parametrized target
