@@ -83,7 +83,7 @@ for benchmark in "${BENCHMARKS[@]}"; do
     # Ingest DMS legacy data
     ((CURRENT_STEP++))
     show_progress "$CURRENT_STEP" "$TOTAL_STEPS" "${DMS_MODEL}/${benchmark}: Ingesting..."
-    uv run scripts/directmultistep/ingest-dms-legacy.py --model "${DMS_MODEL}" --benchmark "${benchmark}" > /dev/null 2>&1
+    uv run ../project-pandora/scripts/directmultistep/ingest-dms-legacy.py --model "${DMS_MODEL}" --benchmark "${benchmark}" > /dev/null 2>&1
 
     # Score
     ((CURRENT_STEP++))

@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 
 from retrocast.adapters.askcos_adapter import AskcosAdapter
+from retrocast.exceptions import UnsupportedAdapterFeatureError
 from retrocast.models.chem import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
@@ -65,6 +66,71 @@ class TestAskcosAdapterUnit(BaseAdapterTest):
     @pytest.fixture
     def mismatched_target_input(self):
         return TargetInput(id="ethyl_acetate", smiles="CCO")
+
+    def test_use_full_graph_raises_typed_unsupported_feature(self, raw_valid_route_data, target_input):
+        adapter = AskcosAdapter(use_full_graph=True)
+
+        with pytest.raises(UnsupportedAdapterFeatureError) as exc_info:
+            list(adapter.cast(raw_valid_route_data, target_input))
+
+        assert exc_info.value.code == "adapter.unsupported_feature"
+        assert exc_info.value.context == {"adapter": "askcos", "feature": "full_graph"}
+
+    def test_cycle_detection_skips_corrupted_pathway(self, target_input, caplog):
+        adapter = AskcosAdapter()
+        cyclic_data = {
+            "results": {
+                "uds": {
+                    "node_dict": {
+                        "CCO": {"smiles": "CCO", "id": "chem-root", "type": "chemical", "terminal": False},
+                        "C": {"smiles": "C", "id": "chem-1", "type": "chemical", "terminal": False},
+                        "C>>CCO": {"smiles": "C>>CCO", "id": "rxn-1", "type": "reaction"},
+                        "CCO>>C": {"smiles": "CCO>>C", "id": "rxn-2", "type": "reaction"},
+                    },
+                    "uuid2smiles": {
+                        "00000000-0000-0000-0000-000000000000": "CCO",
+                        "uuid-rxn-1": "C>>CCO",
+                        "uuid-chem-1": "C",
+                        "uuid-rxn-2": "CCO>>C",
+                    },
+                    "pathways": [
+                        [
+                            {"source": "00000000-0000-0000-0000-000000000000", "target": "uuid-rxn-1"},
+                            {"source": "uuid-rxn-1", "target": "uuid-chem-1"},
+                            {"source": "uuid-chem-1", "target": "uuid-rxn-2"},
+                            {"source": "uuid-rxn-2", "target": "00000000-0000-0000-0000-000000000000"},
+                        ]
+                    ],
+                }
+            }
+        }
+
+        routes = list(adapter.cast(cyclic_data, target_input))
+
+        assert routes == []
+        assert "adapter.cycle_detected" in caplog.text
+
+    def test_missing_root_uuid_skips_corrupted_pathway(self, raw_valid_route_data, target_input, caplog):
+        adapter = AskcosAdapter()
+        corrupted_data = copy.deepcopy(raw_valid_route_data)
+        corrupted_data["results"]["uds"]["uuid2smiles"].pop("00000000-0000-0000-0000-000000000000")
+
+        routes = list(adapter.cast(corrupted_data, target_input))
+
+        assert routes == []
+        assert "adapter.node_missing" in caplog.text
+        assert "root chemical" in caplog.text
+
+    def test_missing_reaction_uuid_skips_corrupted_pathway(self, raw_valid_route_data, target_input, caplog):
+        adapter = AskcosAdapter()
+        corrupted_data = copy.deepcopy(raw_valid_route_data)
+        corrupted_data["results"]["uds"]["pathways"][0][0]["target"] = "missing-rxn-uuid"
+
+        routes = list(adapter.cast(corrupted_data, target_input))
+
+        assert routes == []
+        assert "adapter.node_missing" in caplog.text
+        assert "reaction" in caplog.text
 
 
 @pytest.mark.contract
@@ -224,18 +290,14 @@ class TestAskcosAdapterErrorHandling:
     """Tests for error handling and edge cases."""
 
     @pytest.mark.parametrize(
-        "key_to_remove, error_match",
+        "key_to_remove, role",
         [
-            pytest.param("COC(C)=O", "node data for smiles 'COC(C)=O' not found", id="chemical_smiles_missing"),
-            pytest.param(
-                "CC(=O)Cl.CO>>COC(C)=O",
-                "node data for reaction 'CC(=O)Cl.CO>>COC(C)=O' not found",
-                id="reaction_smiles_missing",
-            ),
+            pytest.param("COC(C)=O", "chemical", id="chemical_smiles_missing"),
+            pytest.param("CC(=O)Cl.CO>>COC(C)=O", "reaction", id="reaction_smiles_missing"),
         ],
     )
     def test_logs_warning_on_inconsistent_nodedict(
-        self, raw_askcos_data, methylacetate_target_input, key_to_remove, error_match, caplog
+        self, raw_askcos_data, methylacetate_target_input, key_to_remove, role, caplog
     ):
         """Tests resilience to inconsistencies in the node_dict mapping."""
         adapter = AskcosAdapter()
@@ -249,4 +311,5 @@ class TestAskcosAdapterErrorHandling:
         # The key assertion: we produced FEWER routes than total pathways.
         total_pathways = len(raw_target_data["results"]["uds"]["pathways"])
         assert len(routes) < total_pathways
-        assert error_match in caplog.text
+        assert "adapter.node_missing" in caplog.text
+        assert role in caplog.text

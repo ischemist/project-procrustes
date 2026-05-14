@@ -217,8 +217,10 @@ class TestValidateFilename:
 
     def test_rejects_forward_slash(self):
         """Should reject forward slashes."""
-        with pytest.raises(SecurityError, match="path separator"):
+        with pytest.raises(SecurityError, match="path separator") as exc_info:
             validate_filename("path/to/file.json")
+        assert exc_info.value.code == "security.path_separator"
+        assert exc_info.value.context == {"param": "filename", "value": "path/to/file.json"}
 
     def test_rejects_backslash(self):
         """Should reject backslashes."""
@@ -262,8 +264,9 @@ class TestValidateFilename:
 
     def test_rejects_null_bytes(self):
         """Should reject null bytes."""
-        with pytest.raises(SecurityError, match="null bytes"):
+        with pytest.raises(SecurityError, match="null bytes") as exc_info:
             validate_filename("file\x00.txt")
+        assert exc_info.value.code == "security.path_null_byte"
 
     def test_includes_param_name_in_error(self):
         """Error message should include parameter name."""
@@ -343,8 +346,10 @@ class TestEnsurePathWithinRoot:
 
         path = root / ".." / "outside" / "secret.txt"
 
-        with pytest.raises(SecurityError, match="escapes root directory"):
+        with pytest.raises(SecurityError, match="escapes root directory") as exc_info:
             ensure_path_within_root(path, root)
+        assert exc_info.value.code == "security.path_traversal"
+        assert exc_info.value.context["description"] == "path"
 
     def test_rejects_absolute_path_outside_root(self, tmp_path):
         """Should reject absolute paths outside root."""

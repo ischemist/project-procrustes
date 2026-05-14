@@ -2,8 +2,9 @@ from copy import deepcopy
 
 import pytest
 
-from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
+from retrocast.adapters.paroutes_adapter import ConditionSlotParseStatistics, PaRoutesAdapter
 from retrocast.chem import canonicalize_smiles
+from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
@@ -37,6 +38,12 @@ class TestPaRoutesAdapterUnit(BaseAdapterTest):
     @pytest.fixture
     def mismatched_target_input(self, raw_paroutes_data):
         return TargetInput(id="paroutes-ex-1", smiles="CCO")  # clearly not the same molecule
+
+    def test_adapt_handles_mismatched_smiles(self, adapter_instance, raw_valid_route_data, mismatched_target_input):
+        """tests that a smiles mismatch raises a typed adapter error."""
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter_instance.cast(raw_valid_route_data, mismatched_target_input))
+        assert exc_info.value.code == "adapter.target_mismatch"
 
 
 @pytest.mark.integration
@@ -103,6 +110,20 @@ class TestPaRoutesAdapterContract:
 
         check_molecule(routes_ex1[0].target)
 
+    def test_all_reaction_steps_keep_templates_empty_and_metadata_trustworthy(self, routes_ex1):
+        """verify ambiguous paroutes annotations stay in metadata without pretending to be templates."""
+
+        def check_molecule(mol):
+            if mol.synthesis_step is not None:
+                assert mol.synthesis_step.template is None
+                assert "source_id" in mol.synthesis_step.metadata
+                assert "reaction_hash" not in mol.synthesis_step.metadata
+                assert "smiles" not in mol.synthesis_step.metadata
+                for reactant in mol.synthesis_step.reactants:
+                    check_molecule(reactant)
+
+        check_molecule(routes_ex1[0].target)
+
     def test_length_calculation(self, routes_ex1, routes_ex2):
         """verify route length is calculated correctly."""
         # paroutes-ex-1 has 2 reaction steps (length 2)
@@ -160,10 +181,9 @@ class TestPaRoutesAdapterRegression:
         inner_reaction = raw_route["children"][0]["children"][1]["children"][0]
         inner_reaction["metadata"]["ID"] = "SOME-OTHER-PATENT;1234;56789"
 
-        # the adapter should now see two different patent ids and yield nothing.
-        routes = list(adapter.cast(raw_route, target_input))
-
-        assert len(routes) == 0
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter.cast(raw_route, target_input))
+        assert exc_info.value.code == "adapter.multiple_patents"
 
     def test_adapt_second_example_route(self, adapter, raw_paroutes_data):
         """
@@ -190,6 +210,132 @@ class TestPaRoutesAdapterRegression:
             canonicalize_smiles("O=C(O)c1ccncc1Cl"),
         }
         assert reactant_smiles == expected_smiles
+
+    def test_extracts_condition_slot_metadata(self, adapter, raw_paroutes_data):
+        """regression: keep condition-slot metadata while leaving untrustworthy fields out."""
+        target_id = "paroutes-ex-1"
+        raw_route = raw_paroutes_data[target_id]
+        target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
+
+        route = list(adapter.cast(raw_route, target_input))[0]
+        outer_reaction = route.target.synthesis_step
+        assert outer_reaction is not None
+
+        outer_condition_slot = raw_route["children"][0]["metadata"]["rsmi"].split(">")[1]
+        assert outer_reaction.metadata["source_id"] == raw_route["children"][0]["metadata"]["ID"]
+        assert outer_reaction.metadata["ring_breaker"] is False
+        assert outer_reaction.metadata["condition_slot"] == outer_condition_slot
+        assert outer_reaction.metadata["condition_slot_smiles"] == sorted(
+            canonicalize_smiles(token) for token in outer_condition_slot.split(".")
+        )
+        assert "reaction_hash" not in outer_reaction.metadata
+        assert "smiles" not in outer_reaction.metadata
+
+        inner_molecule = next(reactant for reactant in outer_reaction.reactants if not reactant.is_leaf)
+        inner_reaction = inner_molecule.synthesis_step
+        assert inner_reaction is not None
+        inner_condition_slot = raw_route["children"][0]["children"][1]["children"][0]["metadata"]["rsmi"].split(">")[1]
+        assert (
+            inner_reaction.metadata["source_id"]
+            == raw_route["children"][0]["children"][1]["children"][0]["metadata"]["ID"]
+        )
+        assert inner_reaction.metadata["condition_slot"] == inner_condition_slot
+        assert inner_reaction.metadata["condition_slot_smiles"] == sorted(
+            canonicalize_smiles(token) for token in inner_condition_slot.split(".")
+        )
+
+    def test_invalid_condition_slot_tokens_are_counted_without_warning(self, adapter, raw_paroutes_data, caplog):
+        """invalid middle-slot molecules should not spam route-level warnings during best-effort parsing."""
+        target_id = "paroutes-ex-1"
+        raw_route = deepcopy(raw_paroutes_data[target_id])
+        stats = ConditionSlotParseStatistics()
+        raw_route["children"][0]["metadata"]["rsmi"] = (
+            "CC(C)CC1=C(CC(C)C)[AlH3]1>CC(C)CC1=C(CC(C)C)[AlH3]1>CC(C)CC1=C(CC(C)C)[AlH3]1"
+        )
+        target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
+
+        with caplog.at_level("WARNING"):
+            route = list(adapter.cast(raw_route, target_input, condition_slot_parse_statistics=stats))[0]
+
+        step = route.target.synthesis_step
+        assert step is not None
+        assert step.metadata["condition_slot"] == "CC(C)CC1=C(CC(C)C)[AlH3]1"
+        assert "condition_slot_smiles" not in step.metadata
+        assert "could not canonicalize condition-slot token" not in caplog.text
+
+        assert stats.malformed_rsmi_count == 0
+        assert stats.uncanonicalizable_token_count == 1
+        assert stats.top_uncanonicalizable_tokens == [("CC(C)CC1=C(CC(C)C)[AlH3]1", 1)]
+
+    def test_missing_patent_id_raises_typed_error(self, adapter):
+        raw_route = {
+            "type": "mol",
+            "smiles": "CCO",
+            "in_stock": True,
+            "children": [],
+        }
+        target_input = TargetInput(id="missing-patent", smiles=canonicalize_smiles("CCO"))
+
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter.cast(raw_route, target_input))
+
+        assert exc_info.value.code == "adapter.patent_id_missing"
+
+    def test_malformed_condition_slot_is_counted_non_fatally(self, adapter, raw_paroutes_data):
+        raw_route = deepcopy(raw_paroutes_data["paroutes-ex-1"])
+        raw_route["children"][0]["metadata"]["rsmi"] = "not-a-valid-rsmi"
+        stats = ConditionSlotParseStatistics()
+        target_input = TargetInput(id="paroutes-ex-1", smiles=canonicalize_smiles(raw_route["smiles"]))
+
+        route = list(adapter.cast(raw_route, target_input, condition_slot_parse_statistics=stats))[0]
+
+        step = route.target.synthesis_step
+        assert step is not None
+        assert "condition_slot" not in step.metadata
+        assert stats.malformed_rsmi_count == 1
+        assert stats.uncanonicalizable_token_count == 0
+
+    def test_report_statistics_logs_years_and_unparsed_categories(self, caplog):
+        adapter = PaRoutesAdapter()
+        adapter.year_counts["2015"] = 2
+        adapter.unparsed_categories["unknown_format"] = 1
+
+        with caplog.at_level("INFO"):
+            adapter.report_statistics()
+
+        assert "Parsed Year 2015: 2 routes" in caplog.text
+        assert "Category 'unknown_format': 1 routes" in caplog.text
+
+
+class TestPaRoutesAdapterDiagnostics:
+    def test_adapt_route_with_diagnostics_returns_route_on_success(self, raw_paroutes_data):
+        adapter = PaRoutesAdapter()
+        raw_route = raw_paroutes_data["paroutes-ex-1"]
+        target = TargetInput(id="paroutes-ex-1", smiles=canonicalize_smiles(raw_route["smiles"]))
+        stats = ConditionSlotParseStatistics()
+
+        result = adapter.adapt_route_with_diagnostics(raw_route, target, stats)
+
+        assert result.error is None
+        assert result.route is not None
+        assert result.route.metadata["patent_id"] == "US20150051201A1"
+
+    def test_adapt_route_with_diagnostics_captures_typed_error(self):
+        adapter = PaRoutesAdapter()
+        raw_route = {
+            "type": "mol",
+            "smiles": "CCO",
+            "in_stock": True,
+            "children": [],
+        }
+        target = TargetInput(id="missing-patent", smiles=canonicalize_smiles("CCO"))
+        stats = ConditionSlotParseStatistics()
+
+        result = adapter.adapt_route_with_diagnostics(raw_route, target, stats)
+
+        assert result.route is None
+        assert result.error is not None
+        assert result.error.code == "adapter.patent_id_missing"
 
 
 class TestPaRoutesYearParsing:
@@ -297,9 +443,9 @@ class TestPaRoutesAdapterCycleDetection:
 
         target_input = TargetInput(id="cycle-test-1", smiles=canonicalize_smiles(smiles_a))
 
-        # Should raise AdapterLogicError due to cycle
-        routes = list(adapter.cast(raw_route_with_cycle, target_input))
-        assert len(routes) == 0  # Cycle should cause transformation to fail
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter.cast(raw_route_with_cycle, target_input))
+        assert exc_info.value.code == "adapter.cycle_detected"
 
     def test_self_loop_cycle_detection(self, adapter):
         """
@@ -335,9 +481,9 @@ class TestPaRoutesAdapterCycleDetection:
 
         target_input = TargetInput(id="self-loop-test", smiles=canonicalize_smiles(smiles_a))
 
-        # Should raise AdapterLogicError due to self-loop
-        routes = list(adapter.cast(raw_route_with_self_loop, target_input))
-        assert len(routes) == 0
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter.cast(raw_route_with_self_loop, target_input))
+        assert exc_info.value.code == "adapter.cycle_detected"
 
     def test_deep_cycle_detection_a_to_b_to_c_to_b(self, adapter):
         """
@@ -407,9 +553,9 @@ class TestPaRoutesAdapterCycleDetection:
 
         target_input = TargetInput(id="deep-cycle-test", smiles=canonicalize_smiles(smiles_a))
 
-        # Should raise AdapterLogicError due to deep cycle
-        routes = list(adapter.cast(raw_route_with_deep_cycle, target_input))
-        assert len(routes) == 0
+        with pytest.raises(AdapterLogicError) as exc_info:
+            list(adapter.cast(raw_route_with_deep_cycle, target_input))
+        assert exc_info.value.code == "adapter.cycle_detected"
 
     def test_valid_acyclic_route_no_false_positives(self, adapter, raw_paroutes_data):
         """

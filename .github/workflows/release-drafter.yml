@@ -50,6 +50,6 @@ jobs:
           maintain-labels-not-matched: false
           apply-changes: true
 
-      - uses: release-drafter/release-drafter@v6.0.0
+      - uses: release-drafter/release-drafter@v7.3.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

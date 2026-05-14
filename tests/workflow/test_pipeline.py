@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.exceptions import AdapterSchemaError, ChemRuntimeError, InputError, UnsupportedAdapterFeatureError
 from retrocast.io.data import load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Route, TargetIdentity
@@ -47,6 +48,43 @@ class SyntheticAdapter(BaseAdapter):
                     yield route
                 except Exception:
                     continue
+
+
+class FailingAdapter(BaseAdapter):
+    """Adapter that raises a structured schema failure for accounting tests."""
+
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
+        raise AdapterSchemaError(
+            "synthetic adapter schema failure",
+            code="adapter.schema_invalid",
+            context={"adapter": "synthetic", "target_id": target.id},
+        )
+
+
+class ChemFailingAdapter(BaseAdapter):
+    """Adapter that raises a chemistry failure after target-local processing begins."""
+
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
+        raise ChemRuntimeError(
+            "synthetic chemistry failure",
+            context={"target_id": target.id},
+        )
+
+
+class UnsupportedFeatureAdapter(BaseAdapter):
+    """Adapter that fails fast on a workflow-level unsupported feature."""
+
+    def cast(
+        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+    ) -> Generator[Route, None, None]:
+        raise UnsupportedAdapterFeatureError(
+            "synthetic unsupported feature",
+            context={"adapter": "synthetic", "feature": "full_graph"},
+        )
 
 
 # =============================================================================
@@ -286,10 +324,10 @@ class TestIngestModelPredictions:
 
     @pytest.mark.integration
     def test_ingest_invalid_sampling_strategy_raises(self, tmp_path, synthetic_benchmark):
-        """Test that invalid sampling strategy raises ValueError."""
+        """Test that invalid sampling strategy raises a typed input error."""
         adapter = SyntheticAdapter()
 
-        with pytest.raises(ValueError, match="Unknown sampling strategy"):
+        with pytest.raises(InputError) as exc_info:
             ingest_model_predictions(
                 model_name="test",
                 benchmark=synthetic_benchmark,
@@ -299,13 +337,15 @@ class TestIngestModelPredictions:
                 sampling_strategy="invalid-strategy",
                 sample_k=3,
             )
+        assert exc_info.value.code == "input.invalid_sampling_strategy"
+        assert exc_info.value.context["sampling_strategy"] == "invalid-strategy"
 
     @pytest.mark.integration
     def test_ingest_sampling_without_k_raises(self, tmp_path, synthetic_benchmark):
-        """Test that sampling without sample_k raises ValueError."""
+        """Test that sampling without sample_k raises a typed input error."""
         adapter = SyntheticAdapter()
 
-        with pytest.raises(ValueError, match="Must provide sample_k"):
+        with pytest.raises(InputError) as exc_info:
             ingest_model_predictions(
                 model_name="test",
                 benchmark=synthetic_benchmark,
@@ -315,6 +355,81 @@ class TestIngestModelPredictions:
                 sampling_strategy="top-k",
                 sample_k=None,
             )
+        assert exc_info.value.code == "input.missing_sample_k"
+        assert exc_info.value.context == {"sampling_strategy": "top-k"}
+
+    @pytest.mark.integration
+    def test_ingest_records_structured_adapter_failures(self, tmp_path, synthetic_benchmark, caplog):
+        adapter = FailingAdapter()
+        raw_data = {
+            "target_1": [{"bad": "payload"}],
+            "target_2": [{"bad": "payload"}],
+        }
+
+        with caplog.at_level("INFO"):
+            processed, _, stats = ingest_model_predictions(
+                model_name="failing-model",
+                benchmark=synthetic_benchmark,
+                raw_data=raw_data,
+                adapter=adapter,
+                output_dir=tmp_path,
+            )
+
+        assert processed["target_1"] == []
+        assert processed["target_2"] == []
+        assert stats.routes_failed_transformation == 2
+        assert stats.failures_by_code == {"adapter.schema_invalid": 2}
+        assert stats.failures_by_target == {
+            "target_1": {"adapter.schema_invalid": 1},
+            "target_2": {"adapter.schema_invalid": 1},
+        }
+        assert stats.to_manifest_dict()["failures_by_code"] == {"adapter.schema_invalid": 2}
+        assert "Ingestion failures by code: {'adapter.schema_invalid': 2}" in caplog.text
+
+    @pytest.mark.integration
+    def test_ingest_records_chem_failures_per_target(self, tmp_path, synthetic_benchmark):
+        adapter = ChemFailingAdapter()
+        raw_data = {
+            "target_1": [{"bad": "payload"}],
+            "target_2": [{"bad": "payload"}],
+        }
+
+        processed, _, stats = ingest_model_predictions(
+            model_name="failing-model",
+            benchmark=synthetic_benchmark,
+            raw_data=raw_data,
+            adapter=adapter,
+            output_dir=tmp_path,
+        )
+
+        assert processed["target_1"] == []
+        assert processed["target_2"] == []
+        assert processed["target_3"] == []
+        assert stats.routes_failed_transformation == 2
+        assert stats.failures_by_code == {"chem.runtime_error": 2}
+        assert stats.failures_by_target == {
+            "target_1": {"chem.runtime_error": 1},
+            "target_2": {"chem.runtime_error": 1},
+        }
+
+    @pytest.mark.integration
+    def test_ingest_re_raises_unsupported_adapter_features(self, tmp_path, synthetic_benchmark):
+        adapter = UnsupportedFeatureAdapter()
+        raw_data = {
+            "target_1": [{"bad": "payload"}],
+            "target_2": [{"bad": "payload"}],
+        }
+
+        with pytest.raises(UnsupportedAdapterFeatureError) as exc_info:
+            ingest_model_predictions(
+                model_name="unsupported-model",
+                benchmark=synthetic_benchmark,
+                raw_data=raw_data,
+                adapter=adapter,
+                output_dir=tmp_path,
+            )
+
+        assert exc_info.value.code == "adapter.unsupported_feature"
 
 
 # =============================================================================

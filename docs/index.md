@@ -64,6 +64,9 @@ New to RetroCast? Start here:
 - **[Concepts](concepts.md)** - Understand the architecture and philosophy
 - **[CLI Reference](guides/cli.md)** - Full command documentation
 - **[Python Library](guides/library.md)** - Integrate RetroCast into your research pipelines
+- **[Training Sets](guides/training-sets.md)** - Load PaRoutes route and reaction training artifacts
+- **[Training-Set Release Rationale](rationale/training-set-releases.md)** - How PaRoutes route and single-step releases are created
+- **[Error Handling](developers/errors.md)** - Stable error codes and boundary contracts
 
 ## Benchmarks
 
@@ -163,3 +166,9 @@ Achieving structural mastery in retrosynthesis is a long journey—one that requ
 ## License
 
 MIT License. See [LICENSE](https://github.com/ischemist/project-procrustes/blob/master/LICENSE) for details.
+
+!!! note "From isChemist: Structure precedes quantity."
+
+    Essays and software that make better scientific questions possible.
+
+    Subscribe at [ischemist.com/newsletter](https://ischemist.com/newsletter), or check [service status](https://status.ischemist.com) if RetroCast docs, data downloads, or SynthArena look off.

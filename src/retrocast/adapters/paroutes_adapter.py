@@ -4,13 +4,20 @@ import logging
 import re
 from collections import defaultdict
 from collections.abc import Generator
+from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.errors import (
+    adapter_cycle_error,
+    adapter_node_type_error,
+    adapter_schema_error,
+    adapter_target_mismatch,
+)
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import AdapterError, AdapterLogicError, ChemError, RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -24,6 +31,9 @@ logger = logging.getLogger(__name__)
 class PaRoutesReactionMetadata(BaseModel):
     id: str = Field(..., alias="ID")
     rsmi: str | None = None  # reaction-mapped SMILES
+    smiles: str | None = None  # mapped reactants>>product without the condition slot
+    reaction_hash: str | None = None
+    ring_breaker: bool | None = Field(None, alias="RingBreaker")
 
 
 class PaRoutesBaseNode(BaseModel):
@@ -47,6 +57,33 @@ PaRoutesNode = Annotated[PaRoutesMoleculeInput | PaRoutesReactionInput, Field(di
 # pydantic needs this to resolve the forward references in the recursive models
 PaRoutesMoleculeInput.model_rebuild()
 PaRoutesReactionInput.model_rebuild()
+
+
+class ConditionSlotParseStatistics(BaseModel):
+    malformed_rsmi_count: int = 0
+    uncanonicalizable_token_count: int = 0
+    uncanonicalizable_tokens: dict[str, int] = Field(default_factory=lambda: defaultdict(int))
+
+    @property
+    def distinct_uncanonicalizable_token_count(self) -> int:
+        return len(self.uncanonicalizable_tokens)
+
+    @property
+    def top_uncanonicalizable_tokens(self) -> list[tuple[str, int]]:
+        return sorted(self.uncanonicalizable_tokens.items(), key=lambda item: (-item[1], item[0]))[:5]
+
+    def to_manifest_dict(self) -> dict[str, int]:
+        return {
+            "malformed_rsmi_count": self.malformed_rsmi_count,
+            "uncanonicalizable_token_count": self.uncanonicalizable_token_count,
+            "distinct_uncanonicalizable_token_count": self.distinct_uncanonicalizable_token_count,
+        }
+
+
+@dataclass(frozen=True)
+class PaRoutesAdaptationResult:
+    route: Route | None
+    error: RetroCastException | None = None
 
 
 class PaRoutesAdapter(BaseAdapter):
@@ -119,8 +156,86 @@ class PaRoutesAdapter(BaseAdapter):
         self.unparsed_categories["unknown_format"] += 1
         return None
 
+    def _extract_condition_slot(
+        self,
+        rsmi: str | None,
+        condition_slot_parse_statistics: ConditionSlotParseStatistics,
+    ) -> str | None:
+        """extract the raw middle condition slot from a paroutes reaction smiles string."""
+        if not rsmi:
+            return None
+
+        parts = rsmi.split(">")
+        if len(parts) != 3:
+            condition_slot_parse_statistics.malformed_rsmi_count += 1
+            return None
+
+        condition_slot = parts[1].strip()
+        return condition_slot or None
+
+    def _parse_condition_slot_smiles(
+        self,
+        condition_slot: str,
+        *,
+        ignore_stereo: bool,
+        condition_slot_parse_statistics: ConditionSlotParseStatistics,
+    ) -> list[SmilesStr]:
+        """best-effort canonicalization of molecules listed in the condition slot."""
+        parsed_smiles: list[SmilesStr] = []
+        for token in condition_slot.split("."):
+            token = token.strip()
+            if not token:
+                continue
+            try:
+                parsed_smiles.append(
+                    canonicalize_smiles(
+                        token,
+                        remove_mapping=True,
+                        ignore_stereo=ignore_stereo,
+                    )
+                )
+            except ChemError:
+                condition_slot_parse_statistics.uncanonicalizable_token_count += 1
+                condition_slot_parse_statistics.uncanonicalizable_tokens[token] += 1
+
+        return sorted(parsed_smiles)
+
+    def _build_reaction_metadata(
+        self,
+        rxn_metadata: PaRoutesReactionMetadata | None,
+        *,
+        ignore_stereo: bool,
+        condition_slot_parse_statistics: ConditionSlotParseStatistics,
+    ) -> dict[str, Any]:
+        """build trustworthy reaction metadata from ambiguous paroutes side information."""
+        if rxn_metadata is None:
+            return {}
+
+        metadata: dict[str, Any] = {
+            "source_id": rxn_metadata.id,
+        }
+        if rxn_metadata.ring_breaker is not None:
+            metadata["ring_breaker"] = rxn_metadata.ring_breaker
+
+        condition_slot = self._extract_condition_slot(rxn_metadata.rsmi, condition_slot_parse_statistics)
+        if condition_slot is not None:
+            metadata["condition_slot"] = condition_slot
+            condition_slot_smiles = self._parse_condition_slot_smiles(
+                condition_slot,
+                ignore_stereo=ignore_stereo,
+                condition_slot_parse_statistics=condition_slot_parse_statistics,
+            )
+            if condition_slot_smiles:
+                metadata["condition_slot_smiles"] = condition_slot_smiles
+
+        return metadata
+
     def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
+        self,
+        raw_target_data: Any,
+        target: TargetIdentity,
+        ignore_stereo: bool = False,
+        condition_slot_parse_statistics: ConditionSlotParseStatistics | None = None,
     ) -> Generator[Route, None, None]:
         """
         validates a single paroutes route, checks for patent consistency, and transforms it.
@@ -129,16 +244,16 @@ class PaRoutesAdapter(BaseAdapter):
             # unlike other adapters, the raw data for one target is a single route object, not a list.
             validated_route_root = PaRoutesMoleculeInput.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - raw data for target '{target.id}' failed paroutes schema validation. error: {e}")
-            return
+            raise adapter_schema_error("paroutes", target.id, "invalid molecule route root") from e
 
         # --- custom validation: ensure all reactions are from the same patent ---
         patent_ids = self._get_patent_ids(validated_route_root)
         if len(patent_ids) > 1:
-            logger.warning(
-                f"  - skipping route for '{target.id}': contains reactions from multiple patents: {patent_ids}"
+            raise AdapterLogicError(
+                f"PaRoutes route for target '{target.id}' contains reactions from multiple patents",
+                code="adapter.multiple_patents",
+                context={"adapter": "paroutes", "target_id": target.id, "patent_ids": sorted(patent_ids)},
             )
-            return
         elif len(patent_ids) == 1:
             patent_id = list(patent_ids)[0]
             year = self._get_year_from_patent_id(patent_id)
@@ -146,34 +261,68 @@ class PaRoutesAdapter(BaseAdapter):
                 self.year_counts[year] += 1
 
         if not patent_ids:  # skip if no patent id was found
-            return
-
-        try:
-            route = self._transform(
-                validated_route_root, target, patent_id=list(patent_ids)[0], ignore_stereo=ignore_stereo
+            raise AdapterLogicError(
+                f"PaRoutes route for target '{target.id}' does not contain a patent id",
+                code="adapter.patent_id_missing",
+                context={"adapter": "paroutes", "target_id": target.id},
             )
-            yield route
-        except RetroCastException as e:
-            logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
-            return
+
+        stats = condition_slot_parse_statistics or ConditionSlotParseStatistics()
+        yield self._transform(
+            validated_route_root,
+            target,
+            patent_id=list(patent_ids)[0],
+            ignore_stereo=ignore_stereo,
+            condition_slot_parse_statistics=stats,
+        )
+
+    def adapt_route_with_diagnostics(
+        self,
+        raw_route: Any,
+        target: TargetIdentity,
+        condition_slot_parse_statistics: ConditionSlotParseStatistics,
+    ) -> PaRoutesAdaptationResult:
+        try:
+            route = next(
+                self.cast(
+                    raw_route,
+                    target,
+                    condition_slot_parse_statistics=condition_slot_parse_statistics,
+                ),
+                None,
+            )
+            return PaRoutesAdaptationResult(route=route)
+        except (AdapterError, ChemError) as exc:
+            return PaRoutesAdaptationResult(route=None, error=exc)
 
     def _transform(
-        self, paroutes_root: PaRoutesMoleculeInput, target: TargetIdentity, patent_id: str, ignore_stereo: bool = False
+        self,
+        paroutes_root: PaRoutesMoleculeInput,
+        target: TargetIdentity,
+        patent_id: str,
+        *,
+        ignore_stereo: bool = False,
+        condition_slot_parse_statistics: ConditionSlotParseStatistics,
     ) -> Route:
         """
         orchestrates the transformation of a single validated paroutes tree.
         """
         # build the molecule tree recursively with cycle detection
-        target_molecule = self._build_molecule(paroutes_root, visited=set(), ignore_stereo=ignore_stereo)
+        target_molecule = self._build_molecule(
+            paroutes_root,
+            visited=set(),
+            ignore_stereo=ignore_stereo,
+            condition_slot_parse_statistics=condition_slot_parse_statistics,
+        )
 
         expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if target_molecule.smiles != expected_smiles:
-            msg = (
-                f"mismatched smiles for target {target.id}. "
-                f"expected canonical: {expected_smiles}, but adapter produced: {target_molecule.smiles}"
+            raise adapter_target_mismatch(
+                "paroutes",
+                target.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=target_molecule.smiles,
             )
-            logger.error(msg)
-            raise AdapterLogicError(msg)
 
         # add patent ID to route metadata (everything up to first semicolon)
         route_metadata = {"patent_id": patent_id}
@@ -181,7 +330,12 @@ class PaRoutesAdapter(BaseAdapter):
         return Route(target=target_molecule, rank=1, metadata=route_metadata)
 
     def _build_molecule(
-        self, raw_mol_node: PaRoutesMoleculeInput, visited: set[SmilesStr] | None = None, ignore_stereo: bool = False
+        self,
+        raw_mol_node: PaRoutesMoleculeInput,
+        visited: set[SmilesStr] | None = None,
+        *,
+        ignore_stereo: bool = False,
+        condition_slot_parse_statistics: ConditionSlotParseStatistics,
     ) -> Molecule:
         """
         recursively builds a molecule from a paroutes bipartite graph node.
@@ -195,7 +349,7 @@ class PaRoutesAdapter(BaseAdapter):
             AdapterLogicError: If a cycle is detected in the route graph
         """
         if raw_mol_node.type != "mol":
-            raise AdapterLogicError(f"expected node type 'mol' but got '{raw_mol_node.type}'")
+            raise adapter_node_type_error("paroutes", expected="mol", actual=raw_mol_node.type, role="molecule")
 
         if visited is None:
             visited = set()
@@ -204,7 +358,7 @@ class PaRoutesAdapter(BaseAdapter):
 
         # Cycle detection: check if we've seen this molecule before in the current path
         if canon_smiles in visited:
-            raise AdapterLogicError(f"cycle detected in route graph involving smiles: {canon_smiles}")
+            raise adapter_cycle_error("paroutes", canon_smiles)
 
         # Create new visited set with current molecule added
         new_visited = visited | {canon_smiles}
@@ -227,25 +381,34 @@ class PaRoutesAdapter(BaseAdapter):
 
         first_child = raw_mol_node.children[0]
         if not isinstance(first_child, PaRoutesReactionInput):
-            raise AdapterLogicError("child of molecule node was not a reaction node")
+            actual = getattr(first_child, "type", type(first_child).__name__)
+            raise adapter_node_type_error("paroutes", expected="reaction", actual=actual, role="molecule child")
         raw_reaction_node: PaRoutesReactionInput = first_child
 
         # build reactants recursively with updated visited set
         reactant_molecules: list[Molecule] = []
         for reactant_mol_input in raw_reaction_node.children:
-            reactant_mol = self._build_molecule(reactant_mol_input, visited=new_visited, ignore_stereo=ignore_stereo)
+            reactant_mol = self._build_molecule(
+                reactant_mol_input,
+                visited=new_visited,
+                ignore_stereo=ignore_stereo,
+                condition_slot_parse_statistics=condition_slot_parse_statistics,
+            )
             reactant_molecules.append(reactant_mol)
 
         # extract mapped smiles (rsmi) from metadata
         rxn_metadata = raw_reaction_node.metadata
         mapped_smiles_str = rxn_metadata.rsmi if rxn_metadata else None
         mapped_smiles = ReactionSmilesStr(mapped_smiles_str) if mapped_smiles_str else None
-
-        # create the reaction step with full metadata
-        metadata_dict = rxn_metadata.model_dump(by_alias=True) if rxn_metadata else {}
+        metadata_dict = self._build_reaction_metadata(
+            rxn_metadata,
+            ignore_stereo=ignore_stereo,
+            condition_slot_parse_statistics=condition_slot_parse_statistics,
+        )
         synthesis_step = ReactionStep(
             reactants=reactant_molecules,
             mapped_smiles=mapped_smiles,
+            template=None,
             reagents=None,
             solvents=None,
             metadata=metadata_dict,

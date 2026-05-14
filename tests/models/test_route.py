@@ -79,6 +79,30 @@ class TestRoute:
         route = Route(target=target, rank=1)
         assert route.length == 3
 
+    def test_iter_steps_and_reactions_are_root_first(self):
+        leaf = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"))
+        intermediate = Molecule(
+            smiles=SmilesStr("CO"),
+            inchikey=InchiKeyStr("OKKJLVBELUTLKV-UHFFFAOYSA-N"),
+            synthesis_step=ReactionStep(reactants=[leaf], mapped_smiles="C>>CO"),
+        )
+        target = Molecule(
+            smiles=SmilesStr("COC"),
+            inchikey=InchiKeyStr("FAKE-KEY-1"),
+            synthesis_step=ReactionStep(reactants=[intermediate], mapped_smiles="CO>>COC"),
+        )
+        route = Route(target=target, rank=1)
+
+        assert [step.mapped_smiles for step in route.iter_steps()] == ["CO>>COC", "C>>CO"]
+        assert [(reaction.product.smiles, reaction.step.mapped_smiles) for reaction in route.iter_reactions()] == [
+            ("COC", "CO>>COC"),
+            ("CO", "C>>CO"),
+        ]
+        assert [reaction.signature for reaction in route.iter_reactions()] == [
+            (frozenset(["OKKJLVBELUTLKV-UHFFFAOYSA-N"]), "FAKE-KEY-1"),
+            (frozenset(["VNWKTOKETHGBQD-UHFFFAOYSA-N"]), "OKKJLVBELUTLKV-UHFFFAOYSA-N"),
+        ]
+
     def test_depth_branched_route(self):
         """Test depth calculation for branched route (should return max depth)."""
         # Left branch: depth 2
@@ -176,8 +200,8 @@ class TestRoute:
         )
         route = Route(target=target, rank=1)
 
-        sig1 = route.get_signature()
-        sig2 = route.get_signature()
+        sig1 = route.get_structural_signature()
+        sig2 = route.get_structural_signature()
         assert sig1 == sig2
         assert isinstance(sig1, str)
         assert len(sig1) == 64  # SHA256 hex digest length
@@ -219,7 +243,7 @@ class TestRoute:
         )
         route2 = Route(target=target2, rank=2)
 
-        assert route1.get_signature() == route2.get_signature()
+        assert route1.get_structural_signature() == route2.get_structural_signature()
 
     def test_get_signature_different_routes(self):
         """Test that different routes have different signatures."""
@@ -254,7 +278,7 @@ class TestRoute:
         )
         route2 = Route(target=target2, rank=1)
 
-        assert route1.get_signature() != route2.get_signature()
+        assert route1.get_structural_signature() != route2.get_structural_signature()
 
     def test_get_signature_order_invariance(self):
         """Test that reactant order doesn't affect signature."""
@@ -294,7 +318,7 @@ class TestRoute:
         route2 = Route(target=target2, rank=1)
 
         # Should be the same due to sorting in get_signature
-        assert route1.get_signature() == route2.get_signature()
+        assert route1.get_structural_signature() == route2.get_structural_signature()
 
     def test_get_signature_with_repeated_molecule(self):
         """Test get_signature with the same molecule appearing multiple times (tests memoization)."""
@@ -329,7 +353,7 @@ class TestRoute:
         )
 
         route = Route(target=target, rank=1)
-        signature = route.get_signature()
+        signature = route.get_structural_signature()
 
         # Should produce a valid signature
         assert isinstance(signature, str)

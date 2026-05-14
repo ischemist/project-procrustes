@@ -36,8 +36,13 @@ from typing import Any
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.errors import (
+    adapter_cycle_error,
+    adapter_schema_error,
+    adapter_target_mismatch,
+)
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -91,15 +96,14 @@ class MolBuilderAdapter(BaseAdapter):
         try:
             validated_routes = MolBuilderRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.debug(f"  - Raw data for target '{target.id}' failed MolBuilder schema validation. Error: {e}")
-            return
+            raise adapter_schema_error("molbuilder", target.id, "invalid route list") from e
 
         for rank, tree_root in enumerate(validated_routes.root, start=1):
             try:
                 route = self._transform(tree_root, target, rank, ignore_stereo=ignore_stereo)
                 yield route
             except RetroCastException as e:
-                logger.debug(f"  - Route for '{target.id}' failed transformation: {e}")
+                logger.debug(f"  - Route for '{target.id}' failed transformation: {e} [{e.code}]")
                 continue
 
     def _transform(
@@ -114,12 +118,12 @@ class MolBuilderAdapter(BaseAdapter):
 
         expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if target_molecule.smiles != expected_smiles:
-            msg = (
-                f"Mismatched SMILES for target {target.id}. "
-                f"Expected canonical: {expected_smiles}, but adapter produced: {target_molecule.smiles}"
+            raise adapter_target_mismatch(
+                "molbuilder",
+                target.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=target_molecule.smiles,
             )
-            logger.error(msg)
-            raise AdapterLogicError(msg)
 
         route_metadata: dict[str, Any] = {}
         if raw_root.best_disconnection is not None:
@@ -140,7 +144,7 @@ class MolBuilderAdapter(BaseAdapter):
         canon_smiles = canonicalize_smiles(node.smiles, ignore_stereo=ignore_stereo)
 
         if canon_smiles in visited:
-            raise AdapterLogicError(f"cycle detected in route graph involving smiles: {canon_smiles}")
+            raise adapter_cycle_error("molbuilder", canon_smiles)
 
         visited.add(canon_smiles)
         is_leaf = node.is_purchasable or not bool(node.children)
@@ -157,29 +161,24 @@ class MolBuilderAdapter(BaseAdapter):
                 metadata=mol_metadata,
             )
 
-        if node.best_disconnection is None:
-            raise AdapterLogicError(f"Non-leaf node for SMILES '{canon_smiles}' is missing 'best_disconnection' field.")
-
-        if not node.best_disconnection.reaction_name.strip():
-            raise AdapterLogicError(
-                f"Non-leaf node for SMILES '{canon_smiles}' has empty 'reaction_name' in 'best_disconnection'."
-            )
-
         reactant_molecules: list[Molecule] = []
         for child in node.children:
             reactant_mol = self._build_molecule(child, visited=set(visited), ignore_stereo=ignore_stereo)
             reactant_molecules.append(reactant_mol)
 
         disc = node.best_disconnection
-        step_metadata: dict[str, Any] = {
-            "reaction_name": disc.reaction_name,
-            "score": disc.score,
-        }
-        if disc.named_reaction:
-            step_metadata["named_reaction"] = disc.named_reaction
-        if disc.category:
-            step_metadata["category"] = disc.category
-        template = disc.reaction_name
+        step_metadata: dict[str, Any] = {}
+        template = None
+        if disc is not None:
+            reaction_name = disc.reaction_name.strip()
+            if reaction_name:
+                step_metadata["reaction_name"] = reaction_name
+                template = reaction_name
+            step_metadata["score"] = disc.score
+            if disc.named_reaction:
+                step_metadata["named_reaction"] = disc.named_reaction
+            if disc.category:
+                step_metadata["category"] = disc.category
 
         synthesis_step = ReactionStep(
             reactants=reactant_molecules,

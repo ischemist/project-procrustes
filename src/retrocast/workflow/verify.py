@@ -87,7 +87,7 @@ def _verify_logical_chain(graph: dict[Path, Manifest], report: VerificationRepor
 
             parent_manifest = graph[parent_manifest_path]
             parent_output_info = next(
-                (out for out in parent_manifest.output_files if out.path == source_file.path), None
+                (out for out in parent_manifest.iter_output_files() if out.path == source_file.path), None
             )
 
             if not parent_output_info:
@@ -127,7 +127,7 @@ def _verify_physical_integrity(
     # Outputs are the source of truth; sources are secondary.
     expected_hashes: dict[Path, str] = {}
     for manifest in graph.values():
-        for f in manifest.output_files:
+        for f in manifest.iter_output_files():
             expected_hashes[Path(f.path)] = f.file_hash
 
     # Only check source files if not in output_only mode

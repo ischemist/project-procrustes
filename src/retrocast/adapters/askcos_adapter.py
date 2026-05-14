@@ -8,8 +8,14 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.errors import (
+    adapter_cycle_error,
+    adapter_missing_node_error,
+    adapter_schema_error,
+    adapter_target_mismatch,
+)
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import RetroCastException, UnsupportedAdapterFeatureError
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -96,13 +102,15 @@ class AskcosAdapter(BaseAdapter):
     ) -> Generator[Route, None, None]:
         """validates raw askcos data, transforms its pathways, and yields route objects."""
         if self.use_full_graph:
-            raise NotImplementedError("extracting routes from the full askcos search graph is not yet implemented.")
+            raise UnsupportedAdapterFeatureError(
+                "ASKCOS full-graph route extraction is not implemented",
+                context={"adapter": "askcos", "feature": "full_graph"},
+            )
 
         try:
             validated_output = AskcosOutput.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - raw data for target '{target.id}' failed askcos schema validation. error: {e}")
-            return
+            raise adapter_schema_error("askcos", target.id, "invalid output") from e
 
         uds = validated_output.results.uds
 
@@ -129,7 +137,7 @@ class AskcosAdapter(BaseAdapter):
                 )
                 yield route
             except RetroCastException as e:
-                logger.warning(f"  - pathway {i} for target '{target.id}' failed transformation: {e}")
+                logger.warning(f"  - pathway {i} for target '{target.id}' failed transformation: {e} [{e.code}]")
                 continue
 
     def _transform_pathway(
@@ -149,7 +157,7 @@ class AskcosAdapter(BaseAdapter):
 
         root_uuid = "00000000-0000-0000-0000-000000000000"
         if root_uuid not in uuid2smiles:
-            raise AdapterLogicError("root uuid not found in pathway data.")
+            raise adapter_missing_node_error("askcos", node_id=root_uuid, lookup="uuid2smiles", role="root chemical")
 
         target_molecule = self._build_molecule(
             chem_uuid=root_uuid,
@@ -157,15 +165,18 @@ class AskcosAdapter(BaseAdapter):
             adj_list=adj_list,
             uuid2smiles=uuid2smiles,
             node_dict=node_dict,
+            visited=set(),
             ignore_stereo=ignore_stereo,
         )
 
-        if target_molecule.smiles != target_input.smiles:
-            msg = (
-                f"mismatched smiles for target {target_input.id}. "
-                f"expected canonical: {target_input.smiles}, but adapter produced: {target_molecule.smiles}"
+        expected_smiles = canonicalize_smiles(target_input.smiles, ignore_stereo=ignore_stereo)
+        if target_molecule.smiles != expected_smiles:
+            raise adapter_target_mismatch(
+                "askcos",
+                target_input.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=target_molecule.smiles,
             )
-            raise AdapterLogicError(msg)
 
         return Route(target=target_molecule, rank=rank, metadata=metadata)
 
@@ -176,18 +187,26 @@ class AskcosAdapter(BaseAdapter):
         adj_list: dict[str, list[str]],
         uuid2smiles: dict[str, str],
         node_dict: dict[str, AskcosNode],
+        visited: set[SmilesStr] | None = None,
         ignore_stereo: bool = False,
     ) -> Molecule:
         """recursively builds a canonical molecule from a chemical uuid."""
+        if visited is None:
+            visited = set()
+
         raw_smiles = uuid2smiles.get(chem_uuid)
         if not raw_smiles:
-            raise AdapterLogicError(f"uuid '{chem_uuid}' not found in uuid2smiles map.")
+            raise adapter_missing_node_error("askcos", node_id=chem_uuid, lookup="uuid2smiles", role="chemical")
 
         node_data = node_dict.get(raw_smiles)
         if not node_data or not isinstance(node_data, AskcosChemicalNode):
-            raise AdapterLogicError(f"node data for smiles '{raw_smiles}' not found or not a chemical node.")
+            raise adapter_missing_node_error("askcos", node_id=raw_smiles, lookup="node_dict", role="chemical")
 
         canon_smiles = canonicalize_smiles(node_data.smiles, ignore_stereo=ignore_stereo)
+        if canon_smiles in visited:
+            raise adapter_cycle_error("askcos", canon_smiles)
+
+        new_visited = visited | {canon_smiles}
         is_leaf = node_data.terminal
         synthesis_step = None
 
@@ -204,6 +223,7 @@ class AskcosAdapter(BaseAdapter):
                 adj_list=adj_list,
                 uuid2smiles=uuid2smiles,
                 node_dict=node_dict,
+                visited=new_visited,
                 ignore_stereo=ignore_stereo,
             )
 
@@ -221,16 +241,17 @@ class AskcosAdapter(BaseAdapter):
         adj_list: dict[str, list[str]],
         uuid2smiles: dict[str, str],
         node_dict: dict[str, AskcosNode],
+        visited: set[SmilesStr],
         ignore_stereo: bool = False,
     ) -> ReactionStep:
         """builds a canonical reaction step from a reaction uuid."""
         raw_smiles = uuid2smiles.get(rxn_uuid)
         if not raw_smiles:
-            raise AdapterLogicError(f"uuid '{rxn_uuid}' not found in uuid2smiles map.")
+            raise adapter_missing_node_error("askcos", node_id=rxn_uuid, lookup="uuid2smiles", role="reaction")
 
         node_data = node_dict.get(raw_smiles)
         if not node_data or not isinstance(node_data, AskcosReactionNode):
-            raise AdapterLogicError(f"node data for reaction '{raw_smiles}' not found or not a reaction node.")
+            raise adapter_missing_node_error("askcos", node_id=raw_smiles, lookup="node_dict", role="reaction")
 
         reactants: list[Molecule] = []
         reactant_smiles_list: list[SmilesStr] = []
@@ -243,6 +264,7 @@ class AskcosAdapter(BaseAdapter):
                 adj_list=adj_list,
                 uuid2smiles=uuid2smiles,
                 node_dict=node_dict,
+                visited=visited,
                 ignore_stereo=ignore_stereo,
             )
             reactants.append(reactant_molecule)

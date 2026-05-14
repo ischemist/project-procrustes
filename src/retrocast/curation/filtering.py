@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Callable, Hashable
+from copy import deepcopy
 from typing import Literal
 
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
@@ -49,7 +51,7 @@ def excise_reactions_from_route(
             return Molecule(
                 smiles=node.smiles,
                 inchikey=node.inchikey,
-                metadata=node.metadata.copy(),
+                metadata=deepcopy(node.metadata),
             )
 
         # Non-leaf node has a synthesis_step
@@ -72,7 +74,7 @@ def excise_reactions_from_route(
                         new_route = Route(
                             target=rebuilt_reactant,
                             rank=route.rank,
-                            metadata=route.metadata.copy(),
+                            metadata=deepcopy(route.metadata),
                         )
                         sub_routes.append(new_route)
 
@@ -80,7 +82,7 @@ def excise_reactions_from_route(
             return Molecule(
                 smiles=node.smiles,
                 inchikey=node.inchikey,
-                metadata=node.metadata.copy(),
+                metadata=deepcopy(node.metadata),
             )
         else:
             # Keep this reaction, but recursively check reactants
@@ -89,15 +91,15 @@ def excise_reactions_from_route(
                 reactants=new_reactants,
                 mapped_smiles=rxn.mapped_smiles,
                 template=rxn.template,
-                reagents=rxn.reagents,
-                solvents=rxn.solvents,
-                metadata=rxn.metadata.copy(),
+                reagents=list(rxn.reagents) if rxn.reagents is not None else None,
+                solvents=list(rxn.solvents) if rxn.solvents is not None else None,
+                metadata=deepcopy(rxn.metadata),
             )
             return Molecule(
                 smiles=node.smiles,
                 inchikey=node.inchikey,
                 synthesis_step=new_step,
-                metadata=node.metadata.copy(),
+                metadata=deepcopy(node.metadata),
             )
 
     main_target = _rebuild(route.target)
@@ -109,7 +111,7 @@ def excise_reactions_from_route(
         main_route = Route(
             target=main_target,
             rank=route.rank,
-            metadata=route.metadata.copy(),
+            metadata=deepcopy(route.metadata),
         )
         result.append(main_route)
 
@@ -119,21 +121,29 @@ def excise_reactions_from_route(
     return result
 
 
-def deduplicate_routes(routes: list[Route]) -> list[Route]:
+def deduplicate_routes(
+    routes: list[Route],
+    *,
+    key: Callable[[Route], Hashable] | None = None,
+) -> list[Route]:
     """
     Filters a list of Route objects, returning only the unique routes.
-    Uses the Route.get_signature() method for canonical deduplication.
+
+    Args:
+        routes: Routes to deduplicate.
+        key: Optional identity function. Defaults to Route.get_structural_signature().
     """
-    seen_signatures = set()
+    route_key = key or (lambda route: route.get_structural_signature())
+    seen_keys: set[Hashable] = set()
     unique_routes = []
 
     logger.debug(f"Deduplicating {len(routes)} routes...")
 
     for route in routes:
-        signature = route.get_signature()
+        route_identity = route_key(route)
 
-        if signature not in seen_signatures:
-            seen_signatures.add(signature)
+        if route_identity not in seen_keys:
+            seen_keys.add(route_identity)
             unique_routes.append(route)
 
     num_removed = len(routes) - len(unique_routes)
@@ -180,11 +190,11 @@ def clean_and_prioritize_pools(
     logger.info(f"Cleaning pools: Primary ({len(primary)}) + Secondary ({len(secondary)})")
 
     # 1. Filter Secondary by Route Signature (remove duplicates based on primary route)
-    primary_sigs = {t.primary_route.get_signature() for t in primary if t.primary_route}
+    primary_sigs = {t.primary_route.get_structural_signature() for t in primary if t.primary_route}
 
     secondary_unique_routes = []
     for t in secondary:
-        if t.primary_route and t.primary_route.get_signature() in primary_sigs:
+        if t.primary_route and t.primary_route.get_structural_signature() in primary_sigs:
             continue
         secondary_unique_routes.append(t)
 

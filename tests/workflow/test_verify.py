@@ -297,6 +297,28 @@ class TestVerifyPhysicalIntegrity:
         assert report.is_valid
         assert any("hash matches" in entry.message.lower() and entry.level == "PASS" for entry in report.issues)
 
+    def test_keyed_output_files_are_verified_like_list_outputs(self, tmp_path):
+        data_file = tmp_path / "output.txt"
+        data_file.write_text("test content")
+
+        manifest = create_manifest(
+            action="test",
+            sources=[],
+            outputs=[("train", data_file, {}, "unknown")],
+            root_dir=tmp_path,
+            keyed_output_files=True,
+        )
+        manifest_path = Path("manifest.json")
+        graph = {manifest_path: manifest}
+
+        from retrocast.models.provenance import VerificationReport
+
+        report = VerificationReport(manifest_path=manifest_path)
+        _verify_physical_integrity(graph, tmp_path, report)
+
+        assert report.is_valid
+        assert any("hash matches" in entry.message.lower() and entry.level == "PASS" for entry in report.issues)
+
     def test_file_hash_mismatch_detection(self, tmp_path):
         """File with wrong hash should FAIL."""
         data_file = tmp_path / "output.txt"

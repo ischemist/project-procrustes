@@ -7,6 +7,8 @@ import yaml
 
 from retrocast import __version__
 from retrocast.cli import adhoc, compare, handlers
+from retrocast.cli.errors import format_cli_error
+from retrocast.exceptions import RetroCastException
 from retrocast.paths import ENV_VAR_NAME, check_migration_needed, get_data_dir_source, resolve_data_dir
 from retrocast.utils.logging import configure_script_logging, logger
 
@@ -228,6 +230,9 @@ def main() -> None:
         elif args.command == "verify":
             handlers.handle_verify(args, config)
 
+    except RetroCastException as e:
+        logger.critical(f"Command failed: {format_cli_error(e)}", exc_info=True)
+        sys.exit(1)
     except Exception as e:
         logger.critical(f"Command failed: {e}", exc_info=True)
         sys.exit(1)

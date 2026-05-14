@@ -21,8 +21,10 @@ class BaseAdapter(ABC):
         Validates, transforms, and yields Routes from raw model data.
 
         This is the primary method for an adapter. It encapsulates all model-specific
-        logic. It should be a generator that yields successful routes and handles its
-        own exceptions internally by logging and continuing.
+        logic. It should be a generator that yields successful routes, logs/skips
+        route-local transform failures when later routes for the same target can still
+        succeed, and raises typed boundary errors when the target payload itself is
+        invalid or unsupported.
 
         Args:
             raw_target_data: The raw data blob from a file for a single target.

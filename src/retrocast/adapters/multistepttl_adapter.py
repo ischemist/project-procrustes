@@ -7,8 +7,9 @@ from typing import Any
 from pydantic import BaseModel, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.errors import adapter_cycle_error, adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, RetroCastException
+from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -41,15 +42,14 @@ class TtlRetroAdapter(BaseAdapter):
         try:
             validated_data = TtlRouteList.model_validate(raw_target_data)
         except ValidationError as e:
-            logger.warning(f"  - pre-processed data for target '{target.id}' failed schema validation. error: {e}")
-            return
+            raise adapter_schema_error("multistepttl", target.id, "invalid pre-processed route list") from e
 
         for rank, route in enumerate(validated_data.root, start=1):
             try:
                 adapted_route = self._transform(route, target, rank, ignore_stereo=ignore_stereo)
                 yield adapted_route
             except RetroCastException as e:
-                logger.warning(f"  - route for '{target.id}' failed transformation: {e}")
+                logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
                 continue
 
     def _transform(self, route: TtlRoute, target: TargetIdentity, rank: int, ignore_stereo: bool = False) -> Route:
@@ -70,8 +70,11 @@ class TtlRetroAdapter(BaseAdapter):
         root_smiles = canonicalize_smiles(route.reactions[0].product, ignore_stereo=ignore_stereo)
         expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
         if root_smiles != expected_smiles:
-            raise AdapterLogicError(
-                f"route's final product '{root_smiles}' does not match expected target '{expected_smiles}'."
+            raise adapter_target_mismatch(
+                "multistepttl",
+                target.id,
+                expected_smiles=expected_smiles,
+                actual_smiles=root_smiles,
             )
 
         # build precursor map for recursive traversal
@@ -87,8 +90,8 @@ class TtlRetroAdapter(BaseAdapter):
         """
         precursor_map: dict[str, list[str]] = {}
         for reaction in route.reactions:
-            canon_product = canonicalize_smiles(reaction.product, ignore_stereo=ignore_stereo)
-            canon_reactants = [canonicalize_smiles(r, ignore_stereo=ignore_stereo) for r in reaction.reactants]
+            canon_product = str(canonicalize_smiles(reaction.product, ignore_stereo=ignore_stereo))
+            canon_reactants = [str(canonicalize_smiles(r, ignore_stereo=ignore_stereo)) for r in reaction.reactants]
             precursor_map[canon_product] = canon_reactants
         return precursor_map
 
@@ -102,7 +105,7 @@ class TtlRetroAdapter(BaseAdapter):
         canon_smiles = canonicalize_smiles(smiles, ignore_stereo=ignore_stereo)
 
         if canon_smiles in visited:
-            raise AdapterLogicError(f"cycle detected: molecule '{canon_smiles}' appears multiple times in route.")
+            raise adapter_cycle_error("multistepttl", canon_smiles)
 
         # if the molecule is not in the precursor map, it's a starting material
         if canon_smiles not in precursor_map:

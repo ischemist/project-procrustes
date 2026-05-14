@@ -1,0 +1,34 @@
+name: cooldown guard validate
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    env:
+      COOLDOWN_GUARD_VERSION: "0.1.2"
+      COOLDOWN_GUARD_SHA256: "644f2dd532a116f2b4ade67ab3f8fd407c72f4a294bc347a7bd653cfdb66b33c"
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+
+      - name: download cooldown-guard release binary
+        run: |
+          curl -fsSL -o cooldown-guard-linux-x86_64 \
+            "https://github.com/ischemist/cooldown-guard/releases/download/v${COOLDOWN_GUARD_VERSION}/cooldown-guard-linux-x86_64"
+          echo "${COOLDOWN_GUARD_SHA256}  cooldown-guard-linux-x86_64" | sha256sum -c -
+          chmod +x cooldown-guard-linux-x86_64
+
+      - name: validate cooldown guard ledger
+        run: ./cooldown-guard-linux-x86_64 validate --project .

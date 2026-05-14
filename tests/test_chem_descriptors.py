@@ -47,6 +47,8 @@ def test_get_heavy_atom_count_raises_exception_on_generic_error(mock_molfromsmil
     with pytest.raises(RetroCastException) as exc_info:
         get_heavy_atom_count("CCO")
     assert "An unexpected error occurred during HAC calculation" in str(exc_info.value)
+    assert exc_info.value.code == "chem.descriptor_failed"
+    assert exc_info.value.context == {"operation": "get_heavy_atom_count", "smiles": "CCO"}
 
 
 # ============================================================================
@@ -86,6 +88,8 @@ def test_get_molecular_weight_raises_exception_on_generic_error(mock_calc) -> No
     with pytest.raises(RetroCastException) as exc_info:
         get_molecular_weight("CCO")
     assert "An unexpected error occurred during MW calculation" in str(exc_info.value)
+    assert exc_info.value.code == "chem.descriptor_failed"
+    assert exc_info.value.context == {"operation": "get_molecular_weight", "smiles": "CCO"}
 
 
 # ============================================================================
@@ -125,6 +129,8 @@ def test_get_chiral_center_count_raises_exception_on_generic_error(mock_find) ->
     with pytest.raises(RetroCastException) as exc_info:
         get_chiral_center_count("CCO")
     assert "An unexpected error occurred during chiral center count" in str(exc_info.value)
+    assert exc_info.value.code == "chem.descriptor_failed"
+    assert exc_info.value.context == {"operation": "get_chiral_center_count", "smiles": "CCO"}
 
 
 # ============================================================================
@@ -148,3 +154,4 @@ def test_all_functions_reject_bad_input(func, bad_input) -> None:
     with pytest.raises(InvalidSmilesError) as exc_info:
         func(bad_input)
     assert "SMILES input must be a non-empty string" in str(exc_info.value)
+    assert exc_info.value.code == "chem.invalid_smiles"

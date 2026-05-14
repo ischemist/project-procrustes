@@ -9,6 +9,7 @@ Philosophy: Data persistence is not optional. Content hashes must be:
 
 import csv
 import gzip
+import json
 import tempfile
 from pathlib import Path
 
@@ -16,13 +17,36 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from retrocast.exceptions import RetroCastIOError
-from retrocast.io.blob import load_json_gz, save_json_gz
+from retrocast.curation.training import (
+    RawRouteSource,
+    TrainingReactionRecord,
+    TrainingReactionSource,
+    TrainingRouteRecord,
+)
+from retrocast.exceptions import ArtifactDecodeError, RetroCastIOError
+from retrocast.io.blob import (
+    iter_jsonl_gz,
+    iter_lines_gz,
+    load_json_gz,
+    load_jsonl_gz,
+    load_lines_gz,
+    save_json_gz,
+    save_jsonl_gz,
+    save_lines_gz,
+)
 from retrocast.io.data import (
     BenchmarkResultsLoader,
+    iter_training_reaction_records,
+    iter_training_reaction_smiles,
+    iter_training_route_records,
+    iter_training_routes,
     load_benchmark,
     load_routes,
     load_stock_file,
+    load_training_reaction_records,
+    load_training_reaction_smiles,
+    load_training_route_records,
+    load_training_routes,
     save_routes,
 )
 from retrocast.io.provenance import (
@@ -39,6 +63,132 @@ from tests.helpers import _synthetic_inchikey
 # =============================================================================
 # Tests for calculate_file_hash
 # =============================================================================
+
+
+@pytest.mark.unit
+class TestBlobWriters:
+    def test_save_json_gz_is_reproducible(self, tmp_path):
+        payload = {"b": [2, 1], "a": "same"}
+        first = tmp_path / "first.json.gz"
+        second = tmp_path / "second.json.gz"
+
+        save_json_gz(payload, first)
+        save_json_gz(payload, second)
+
+        assert first.read_bytes() == second.read_bytes()
+        assert load_json_gz(first) == payload
+
+    def test_save_jsonl_gz_writes_rows_and_count(self, tmp_path):
+        out_path = tmp_path / "rows.jsonl.gz"
+
+        n_rows = save_jsonl_gz([{"b": 2, "a": 1}, {"c": 3}], out_path)
+
+        assert n_rows == 2
+        with gzip.open(out_path, "rt", encoding="utf-8") as f:
+            rows = [json.loads(line) for line in f]
+
+        assert rows == [{"a": 1, "b": 2}, {"c": 3}]
+
+    def test_load_jsonl_gz_reads_rows(self, tmp_path):
+        out_path = tmp_path / "rows.jsonl.gz"
+        save_jsonl_gz([{"a": 1}, {"b": 2}], out_path)
+
+        assert load_jsonl_gz(out_path) == [{"a": 1}, {"b": 2}]
+        assert list(iter_jsonl_gz(out_path)) == [{"a": 1}, {"b": 2}]
+
+    def test_load_jsonl_gz_can_reject_empty_rows(self, tmp_path):
+        out_path = tmp_path / "rows.jsonl.gz"
+        with gzip.open(out_path, "wt", encoding="utf-8") as f:
+            f.write('{"a":1}\n\n')
+
+        with pytest.raises(ArtifactDecodeError, match="Empty JSONL row 2"):
+            load_jsonl_gz(out_path, skip_empty=False)
+
+    def test_save_lines_gz_writes_and_loads_lines(self, tmp_path):
+        out_path = tmp_path / "rows.rsmi.txt.gz"
+
+        n_lines = save_lines_gz(["a>>b", "c>>d"], out_path)
+
+        assert n_lines == 2
+        assert load_lines_gz(out_path) == ["a>>b", "c>>d"]
+        assert list(iter_lines_gz(out_path)) == ["a>>b", "c>>d"]
+
+
+@pytest.mark.unit
+class TestTrainingReleaseLoaders:
+    def test_load_training_route_records_returns_structured_records(self, tmp_path, synthetic_route_factory):
+        route = synthetic_route_factory("linear", depth=1)
+        record = TrainingRouteRecord(
+            id="paroutes-reaction-holdout-n1-n5-000001",
+            split="training",
+            route=route,
+            sources=[
+                RawRouteSource(
+                    dataset="all-routes",
+                    raw_index=1,
+                    raw_route_hash="hash-1",
+                    patent_id="patent-1",
+                )
+            ],
+        )
+        path = tmp_path / "training.jsonl.gz"
+
+        save_jsonl_gz([record.to_json_dict()], path)
+
+        loaded = load_training_route_records(path)
+        streamed = list(iter_training_route_records(path))
+
+        assert loaded == [record]
+        assert streamed == [record]
+
+    def test_load_training_routes_returns_route_objects(self, tmp_path, synthetic_route_factory):
+        route = synthetic_route_factory("linear", depth=1)
+        path = tmp_path / "training.jsonl.gz"
+
+        save_jsonl_gz([{"route": route.model_dump(mode="json")}], path)
+
+        loaded = load_training_routes(path)
+        streamed = list(iter_training_routes(path))
+
+        assert len(loaded) == 1
+        assert loaded[0].get_content_hash() == route.get_content_hash()
+        assert len(streamed) == 1
+        assert streamed[0].get_content_hash() == route.get_content_hash()
+
+    def test_load_training_reaction_records_returns_validated_models(self, tmp_path):
+        record = TrainingReactionRecord(
+            id="paroutes-rxn-000001",
+            split="training",
+            reactants=["c"],
+            product="cc",
+            mapped_smiles="c>o>cc",
+            alternative_mapped_smiles=["[ch4:1]>o>[ch3:1][ch3:2]"],
+            condition_slot="o",
+            condition_slot_smiles=["o"],
+            sources=[
+                TrainingReactionSource(
+                    route_id="paroutes-reaction-holdout-n1-n5-000001",
+                    step_index=1,
+                    source_id="rxn-1",
+                )
+            ],
+        )
+        path = tmp_path / "training.jsonl.gz"
+
+        save_jsonl_gz([record], path)
+
+        loaded = load_training_reaction_records(path)
+        streamed = list(iter_training_reaction_records(path))
+
+        assert loaded == [record]
+        assert streamed == [record]
+
+    def test_load_training_reaction_smiles_reads_rsmi_lines(self, tmp_path):
+        path = tmp_path / "training.rsmi.txt.gz"
+        save_lines_gz(["c>o>cc", "cc>n>ccc"], path)
+
+        assert load_training_reaction_smiles(path) == ["c>o>cc", "cc>n>ccc"]
+        assert list(iter_training_reaction_smiles(path)) == ["c>o>cc", "cc>n>ccc"]
 
 
 @pytest.mark.unit
@@ -451,6 +601,27 @@ class TestRouteRoundtrip:
 
         assert [r.rank for r in loaded["target"]] == [1, 2, 3]
 
+    def test_load_routes_missing_file_raises_not_found_code(self, tmp_path):
+        """Missing routes files should be typed as missing artifacts."""
+        path = tmp_path / "missing-routes.json.gz"
+
+        with pytest.raises(RetroCastIOError) as exc_info:
+            load_routes(path)
+
+        assert exc_info.value.code == "io.not_found"
+        assert exc_info.value.context == {"path": str(path), "artifact": "routes"}
+
+    def test_load_routes_invalid_json_shape_raises_format_code(self, tmp_path):
+        """Route files with valid JSON but invalid route shape should be typed as format errors."""
+        path = tmp_path / "routes.json.gz"
+        save_json_gz({"target": [{"not": "a route"}]}, path)
+
+        with pytest.raises(RetroCastIOError) as exc_info:
+            load_routes(path)
+
+        assert exc_info.value.code == "io.invalid_artifact_shape"
+        assert exc_info.value.context == {"path": str(path), "artifact": "routes"}
+
 
 # =============================================================================
 # Tests for benchmark save/load roundtrip
@@ -561,8 +732,10 @@ class TestStockFile:
         stock_file = tmp_path / "stock.txt"
         stock_file.write_text("C\nCC\n")
 
-        with pytest.raises(RetroCastIOError, match="Only .csv.gz format is supported"):
+        with pytest.raises(RetroCastIOError, match="Only .csv.gz format is supported") as exc_info:
             load_stock_file(stock_file)
+        assert exc_info.value.code == "io.unsupported_format"
+        assert exc_info.value.context["expected_suffix"] == ".csv.gz"
 
     def test_load_stock_csv_invalid_header_raises(self, tmp_path):
         """Invalid CSV.GZ header should raise RetroCastIOError."""
@@ -571,16 +744,20 @@ class TestStockFile:
         with gzip.open(stock_file, "wt") as f:
             f.write("WrongHeader1,WrongHeader2\nC,VNWKTOKETHGBQD-UHFFFAOYSA-N\n")
 
-        with pytest.raises(RetroCastIOError, match="Invalid stock CSV format"):
+        with pytest.raises(RetroCastIOError, match="Invalid stock CSV format") as exc_info:
             load_stock_file(stock_file)
+        assert exc_info.value.code == "io.invalid_artifact_shape"
+        assert exc_info.value.context["required_column"] == "InChIKey"
 
     def test_load_stock_missing_file_raises(self, tmp_path):
         """Missing file should raise RetroCastIOError."""
 
         stock_file = tmp_path / "nonexistent.csv.gz"
 
-        with pytest.raises(RetroCastIOError, match="Stock file not found"):
+        with pytest.raises(RetroCastIOError, match="Stock file not found") as exc_info:
             load_stock_file(stock_file)
+        assert exc_info.value.code == "io.not_found"
+        assert exc_info.value.context["artifact"] == "stock"
 
     def test_load_stock_as_smiles_returns_smiles(self, tmp_path):
         """Stock CSV.GZ with return_as='smiles' should return SMILES set."""
@@ -635,7 +812,7 @@ class TestStockFile:
             writer.writerow(["SMILES", "InChIKey"])
             writer.writerow(["C", "VNWKTOKETHGBQD-UHFFFAOYSA-N"])
 
-        with pytest.raises(RetroCastIOError, match="Invalid return_as parameter"):
+        with pytest.raises(ValueError, match="Invalid return_as parameter"):
             load_stock_file(stock_file, return_as="invalid")
 
     def test_load_stock_as_smiles_missing_smiles_column_raises(self, tmp_path):
@@ -692,6 +869,18 @@ def test_json_gz_roundtrip_arbitrary_dict(data):
         save_json_gz(data, path)
         loaded = load_json_gz(path)
         assert loaded == data
+
+
+@pytest.mark.unit
+def test_load_json_gz_missing_file_raises_not_found_code(tmp_path):
+    """Missing JSON artifacts should not be reported as decode failures."""
+    path = tmp_path / "missing.json.gz"
+
+    with pytest.raises(RetroCastIOError) as exc_info:
+        load_json_gz(path)
+
+    assert exc_info.value.code == "io.not_found"
+    assert exc_info.value.context == {"path": str(path)}
 
 
 # =============================================================================

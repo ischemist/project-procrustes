@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import statistics
-from enum import Enum
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+import warnings
+from collections.abc import Callable, Iterator
+from enum import StrEnum
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field, computed_field
 
 from retrocast.chem import InchiKeyLevel, reduce_inchikey
 from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
-
-if TYPE_CHECKING:
-    from retrocast.chem import InchiKeyLevel
 
 # Type alias for a reaction signature: (frozenset of reactant InchiKeys, product InchiKey)
 ReactionSignature = tuple[frozenset[str], str]
@@ -25,6 +25,18 @@ def _get_retrocast_version() -> str:
         return version("retrocast")
     except PackageNotFoundError:
         return "0.0.0.dev0+unknown"
+
+
+def _normalize_signature_value(value: Any) -> Any:
+    """Normalize nested values into a deterministic, order-invariant JSON shape."""
+    if isinstance(value, dict):
+        return {key: _normalize_signature_value(val) for key, val in sorted(value.items())}
+
+    if isinstance(value, (list, tuple, set, frozenset)):
+        normalized_items = [_normalize_signature_value(item) for item in value]
+        return sorted(normalized_items, key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":")))
+
+    return value
 
 
 class Molecule(BaseModel):
@@ -91,6 +103,17 @@ class ReactionStep(BaseModel):
         """
         intermediate_count = sum(1 for r in self.reactants if not r.is_leaf)
         return intermediate_count >= 2
+
+
+class RouteReaction(BaseModel):
+    """A reaction step paired with the route molecule it produces."""
+
+    product: Molecule
+    step: ReactionStep
+
+    @property
+    def signature(self) -> ReactionSignature:
+        return (frozenset(reactant.inchikey for reactant in self.step.reactants), self.product.inchikey)
 
 
 @runtime_checkable
@@ -184,13 +207,88 @@ class Route(BaseModel):
     @computed_field
     @property
     def signature(self) -> str:
-        """Computed topology signature for structural comparison."""
-        return self.get_signature()
+        """Deprecated computed alias for the structural route signature."""
+        return self.get_structural_signature()
 
-    def get_signature(self, match_level: InchiKeyLevel = InchiKeyLevel.FULL) -> str:
+    @property
+    def structural_signature(self) -> str:
+        """Canonical signature of the labeled route structure."""
+        return self.get_structural_signature()
+
+    def iter_steps(self) -> list[ReactionStep]:
+        """Return reaction steps in deterministic root-first depth-first order."""
+        steps: list[ReactionStep] = []
+
+        def _visit(node: Molecule) -> None:
+            if node.synthesis_step is None:
+                return
+            steps.append(node.synthesis_step)
+            for reactant in node.synthesis_step.reactants:
+                _visit(reactant)
+
+        _visit(self.target)
+        return steps
+
+    def iter_reactions(self) -> Iterator[RouteReaction]:
+        """Yield reaction/product pairs in deterministic root-first depth-first order."""
+
+        def _visit(node: Molecule) -> Iterator[RouteReaction]:
+            if node.synthesis_step is None:
+                return
+            yield RouteReaction(product=node, step=node.synthesis_step)
+            for reactant in node.synthesis_step.reactants:
+                yield from _visit(reactant)
+
+        yield from _visit(self.target)
+
+    def get_reactions(self) -> list[RouteReaction]:
+        """Return reaction/product pairs in deterministic root-first depth-first order."""
+        return list(self.iter_reactions())
+
+    def _build_route_signature(
+        self,
+        *,
+        match_level: InchiKeyLevel,
+        annotation_builder: Callable[[ReactionStep], dict[str, Any]] | None = None,
+    ) -> str:
+        memo: dict[int, str] = {}
+
+        def _node_key(node: Molecule) -> str:
+            if match_level == InchiKeyLevel.FULL:
+                return node.inchikey
+            return reduce_inchikey(node.inchikey, match_level)
+
+        def _get_node_sig(node: Molecule) -> str:
+            node_id = id(node)
+            if node_id in memo:
+                return memo[node_id]
+
+            key = _node_key(node)
+            if node.is_leaf:
+                memo[node_id] = key
+                return key
+
+            assert node.synthesis_step is not None, "Non-leaf node without synthesis_step"
+            reactant_sigs = sorted(_get_node_sig(r) for r in node.synthesis_step.reactants)
+
+            payload: dict[str, Any] = {
+                "product": key,
+                "reactants": reactant_sigs,
+            }
+            if annotation_builder is not None:
+                annotations = annotation_builder(node.synthesis_step)
+                if annotations:
+                    payload["annotations"] = annotations
+
+            sig_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            memo[node_id] = sig_hash
+            return sig_hash
+
+        return _get_node_sig(self.target)
+
+    def get_structural_signature(self, match_level: InchiKeyLevel = InchiKeyLevel.FULL) -> str:
         """
-        Generates a canonical, order-invariant hash for the entire route,
-        perfect for deduplication.
+        Generates a canonical, order-invariant signature for the route structure.
 
         Args:
             match_level: Level of InChI key matching specificity:
@@ -198,44 +296,68 @@ class Route(BaseModel):
                 - NO_STEREO: Ignore stereochemistry
                 - CONNECTIVITY: Match on molecular skeleton only
         """
+        return self._build_route_signature(match_level=match_level)
 
-        memo = {}
+    def get_signature(self, match_level: InchiKeyLevel = InchiKeyLevel.FULL) -> str:
+        """Deprecated alias for get_structural_signature()."""
+        warnings.warn(
+            "Route.get_signature() is deprecated; use Route.get_structural_signature() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.get_structural_signature(match_level=match_level)
 
-        def _get_node_sig(node: Molecule) -> str:
-            if match_level == InchiKeyLevel.FULL:
-                key = node.inchikey
-            else:
-                key = reduce_inchikey(node.inchikey, match_level)
+    def get_annotated_signature(
+        self,
+        *,
+        match_level: InchiKeyLevel = InchiKeyLevel.FULL,
+        include_mapped_smiles: bool = False,
+        include_template: bool = False,
+        include_reagents: bool = False,
+        include_solvents: bool = False,
+        include_step_metadata_keys: tuple[str, ...] = (),
+    ) -> str:
+        """
+        Generates a canonical signature of the route structure plus selected reaction annotations.
 
-            if key in memo:
-                return memo[key]
+        Unlike get_structural_signature(), this method can incorporate reaction-level detail
+        such as mapped reaction smiles, templates, reagents, solvents, or selected metadata keys,
+        while still excluding route provenance like rank or retrocast version.
+        """
 
-            if node.is_leaf:
-                return key
+        def _build_annotations(step: ReactionStep) -> dict[str, Any]:
+            annotations: dict[str, Any] = {}
+            if include_mapped_smiles and step.mapped_smiles is not None:
+                annotations["mapped_smiles"] = step.mapped_smiles
+            if include_template and step.template is not None:
+                annotations["template"] = step.template
+            if include_reagents and step.reagents is not None:
+                annotations["reagents"] = _normalize_signature_value(step.reagents)
+            if include_solvents and step.solvents is not None:
+                annotations["solvents"] = _normalize_signature_value(step.solvents)
+            if include_step_metadata_keys:
+                selected_metadata = {
+                    key: _normalize_signature_value(step.metadata.get(key))
+                    for key in include_step_metadata_keys
+                    if key in step.metadata
+                }
+                if selected_metadata:
+                    annotations["metadata"] = selected_metadata
+            return annotations
 
-            assert node.synthesis_step is not None, "Non-leaf node without synthesis_step"
-            reactant_sigs = sorted(_get_node_sig(r) for r in node.synthesis_step.reactants)
-
-            sig_str = "".join(reactant_sigs) + ">>" + key
-            sig_hash = hashlib.sha256(sig_str.encode()).hexdigest()
-            memo[key] = sig_hash
-            return sig_hash
-
-        return _get_node_sig(self.target)
+        return self._build_route_signature(match_level=match_level, annotation_builder=_build_annotations)
 
     def get_content_hash(self) -> str:
         """
         Generates a deterministic hash of the complete route content.
 
-        Unlike get_signature() which only considers tree topology (InchiKeys),
+        Unlike get_structural_signature() which only considers route structure,
         this method includes ALL data: rank, metadata, solvability, retrocast_version,
         and all reaction details (mapped_smiles, templates, reagents, solvents, etc.).
 
         This is useful for verifying that two routes are semantically identical,
         including all metadata and provenance information.
         """
-        import hashlib
-        import json
 
         # Exclude computed fields to ensure deterministic serialization
         # (sets like 'leaves' have non-deterministic iteration order across processes)
@@ -260,34 +382,14 @@ class Route(BaseModel):
             route2_reactions = route2.get_reaction_signatures()
             overlapping = route1_reactions & route2_reactions
         """
-        signatures: set[ReactionSignature] = set()
-
-        def _collect_reactions(node: Molecule) -> None:
-            if node.is_leaf:
-                return
-
-            # Non-leaf node must have a synthesis_step
-            assert node.synthesis_step is not None, "Non-leaf node without synthesis_step"
-
-            # Create signature for this reaction
-            reactant_keys = frozenset(r.inchikey for r in node.synthesis_step.reactants)
-            product_key = node.inchikey
-            sig: ReactionSignature = (reactant_keys, product_key)
-            signatures.add(sig)
-
-            # Recursively collect from reactants
-            for reactant in node.synthesis_step.reactants:
-                _collect_reactions(reactant)
-
-        _collect_reactions(self.target)
-        return signatures
+        return {reaction.signature for reaction in self.iter_reactions()}
 
 
 # We need to tell Pydantic to rebuild the forward references
 Molecule.model_rebuild()
 
 
-class VendorSource(str, Enum):
+class VendorSource(StrEnum):
     """Enumeration of buyables vendor sources."""
 
     MCULE = "MC"
@@ -346,6 +448,16 @@ class RunStatistics(BaseModel):
     final_unique_routes_saved: int = 0
     targets_with_at_least_one_route: set[str] = Field(default_factory=set)
     routes_per_target: dict[str, int] = Field(default_factory=dict)
+    failures_by_code: dict[str, int] = Field(default_factory=dict)
+    failures_by_target: dict[str, dict[str, int]] = Field(default_factory=dict)
+
+    def record_failure(self, code: str, *, target_id: str | None = None) -> None:
+        """Record a workflow-classified target failure."""
+        self.routes_failed_transformation += 1
+        self.failures_by_code[code] = self.failures_by_code.get(code, 0) + 1
+        if target_id is not None:
+            target_failures = self.failures_by_target.setdefault(target_id, {})
+            target_failures[code] = target_failures.get(code, 0) + 1
 
     @property
     def total_failures(self) -> int:
@@ -393,7 +505,7 @@ class RunStatistics(BaseModel):
             return 0.0
         return round(statistics.median(self.routes_per_target.values()), 2)
 
-    def to_manifest_dict(self) -> dict[str, int | float]:
+    def to_manifest_dict(self) -> dict[str, int | float | dict[str, int]]:
         """Generates a dictionary suitable for including in the final manifest."""
         return {
             "total_routes_in_raw_files": self.total_routes_in_raw_files,
@@ -406,4 +518,5 @@ class RunStatistics(BaseModel):
             "max_routes_per_target": self.max_routes_per_target,
             "avg_routes_per_target": self.avg_routes_per_target,
             "median_routes_per_target": self.median_routes_per_target,
+            "failures_by_code": dict(sorted(self.failures_by_code.items())),
         }

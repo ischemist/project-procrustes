@@ -46,8 +46,19 @@ class TestRetroStarAdapterUnit(BaseAdapterTest):
     def test_parser_raises_on_invalid_step_format(self, adapter_instance):
         """The private parser method should raise an error for malformed steps."""
         bad_route_str = "CCO>CC=O"  # Missing the score part
-        with pytest.raises(AdapterLogicError, match="Invalid format near"):
+        with pytest.raises(AdapterLogicError) as exc_info:
             adapter_instance._parse_route_string(bad_route_str)
+        assert exc_info.value.code == "adapter.route_string_invalid"
+
+    def test_parser_raises_on_empty_string(self, adapter_instance):
+        with pytest.raises(AdapterLogicError) as exc_info:
+            adapter_instance._parse_route_string("")
+        assert exc_info.value.code == "adapter.route_string_empty"
+
+    def test_parser_raises_when_later_step_is_malformed(self, adapter_instance):
+        with pytest.raises(AdapterLogicError) as exc_info:
+            adapter_instance._parse_route_string("CCO>0.9>CC=O|CC=O>0.8")
+        assert exc_info.value.code == "adapter.route_string_invalid"
 
 
 # ============================================================================
