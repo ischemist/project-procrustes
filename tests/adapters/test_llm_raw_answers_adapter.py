@@ -5,6 +5,11 @@ from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
+# canonical SMILES for the three drugs used in the integration fixture
+EBASTINE_SMILES = canonicalize_smiles("CC(C)(C)C1=CC=C(C=C1)C(=O)CCCN2CCC(CC2)OC(C3=CC=CC=C3)C4=CC=CC=C4")
+SILDENAFIL_SMILES = canonicalize_smiles("CCCC1=NN(C2=C1N=C(NC2=O)C3=C(C=CC(=C3)S(=O)(=O)N4CCN(CC4)C)OCC)C")
+TIVOZANIB_SMILES = canonicalize_smiles("COC1=C(OC)C=C2C(OC3=CC(Cl)=C(NC(=O)NC4=NOC(C)=C4)C=C3)=CC=NC2=C1")
+
 
 def _wrap_step(product_smiles: str, reactant_smiles: list[str]) -> str:
     reactants = "".join(f"<reactant><smiles>{r}</smiles></reactant>" for r in reactant_smiles)
@@ -137,3 +142,58 @@ class TestLlmRawAnswersAdapterUnit(BaseAdapterTest):
 
         assert len(routes) == 2
         assert [r.rank for r in routes] == [1, 3]
+
+
+@pytest.mark.integration
+class TestLlmRawAnswersAdapterContract:
+    """Contract tests on real LLM completions: verify Route objects are well-formed."""
+
+    @pytest.fixture(scope="class")
+    def adapter(self) -> LlmRawAnswersAdapter:
+        return LlmRawAnswersAdapter()
+
+    @pytest.fixture(
+        scope="class",
+        params=[
+            ("Ebastine", EBASTINE_SMILES),
+            ("Sildenafil", SILDENAFIL_SMILES),
+            ("Tivozanib", TIVOZANIB_SMILES),
+        ],
+        ids=lambda p: p[0],
+    )
+    def routes(self, adapter, raw_llm_raw_answers_data, request):
+        target_id, target_smi = request.param
+        # the fixture is keyed by the raw product_smiles from the source data;
+        # find the matching key whose canonical form equals our target.
+        for raw_key, recs in raw_llm_raw_answers_data.items():
+            if canonicalize_smiles(raw_key) == target_smi:
+                target_input = TargetInput(id=target_id, smiles=target_smi)
+                return list(adapter.cast(recs, target_input))
+        raise AssertionError(f"target {target_id} not found in fixture")
+
+    def test_produces_at_least_one_route(self, routes):
+        assert len(routes) >= 1
+
+    def test_all_routes_have_sequential_ranks(self, routes):
+        assert [r.rank for r in routes] == list(range(1, len(routes) + 1))
+
+    def test_target_smiles_match(self, routes, request):
+        # request.node.callspec.params resolves the parametrized target
+        _, expected = request.node.callspec.params["routes"]
+        for route in routes:
+            assert route.target.smiles == expected
+
+    def test_all_molecules_have_inchikeys(self, routes):
+        def check(mol):
+            assert mol.inchikey
+            if mol.synthesis_step is not None:
+                for r in mol.synthesis_step.reactants:
+                    check(r)
+
+        for route in routes:
+            check(route.target)
+
+    def test_root_is_not_leaf(self, routes):
+        for route in routes:
+            assert not route.target.is_leaf
+            assert route.target.synthesis_step is not None
