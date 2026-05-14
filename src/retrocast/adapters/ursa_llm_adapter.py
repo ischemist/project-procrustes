@@ -178,9 +178,7 @@ class UrsaLlmAdapter(BaseAdapter):
                 logger.warning(f"  - completion #{rank} for '{target.id}' failed transformation: {e} [{e.code}]")
                 continue
 
-    def _transform(
-        self, completion: str, target: TargetIdentity, rank: int, ignore_stereo: bool = False
-    ) -> Route:
+    def _transform(self, completion: str, target: TargetIdentity, rank: int, ignore_stereo: bool = False) -> Route:
         precursor_map = self._parse_completion(completion, ignore_stereo=ignore_stereo)
         if not precursor_map:
             raise adapter_route_transform_error(self.adapter_key, target.id, "no synthesis steps found in completion")
@@ -242,6 +240,7 @@ class UrsaLlmAdapter(BaseAdapter):
             precursor_map[product_canon] = reactant_smiles
 
         return precursor_map
+
 
 __all__ = [
     "UrsaLlmAdapter",

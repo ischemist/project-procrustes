@@ -201,6 +201,7 @@ class TestUrsaLlmAdapterContract:
             assert not route.target.is_leaf
             assert route.target.synthesis_step is not None
 
+
 @pytest.mark.integration
 def test_prepare_ursa_llm_results_accepts_json_array(tmp_path):
     input_path = tmp_path / "completions.json"

@@ -15,9 +15,7 @@ RAW_TARGET_SMILES = {
     "Sildenafil": "CCCC1=NN(C2=C1N=C(NC2=O)C3=C(C=CC(=C3)S(=O)(=O)N4CCN(CC4)C)OCC)C",
     "Tivozanib": "COC1=C(OC)C=C2C(OC3=CC(Cl)=C(NC(=O)NC4=NOC(C)=C4)C=C3)=CC=NC2=C1",
 }
-RAW_RESULTS_PATH = (
-    Path(__file__).resolve().parents[1] / "testing_data/model-predictions/ursa-llm/results.json.gz"
-)
+RAW_RESULTS_PATH = Path(__file__).resolve().parents[1] / "testing_data/model-predictions/ursa-llm/results.json.gz"
 
 
 @pytest.mark.integration

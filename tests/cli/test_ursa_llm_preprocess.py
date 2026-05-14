@@ -27,9 +27,7 @@ def _load_script_module(script_path: Path, module_name: str):
 
 @pytest.mark.integration
 class TestUrsaLlmPreprocessScript:
-    def test_main_writes_canonical_target_keys_without_extra_summary_file(
-        self, tmp_path, monkeypatch
-    ):
+    def test_main_writes_canonical_target_keys_without_extra_summary_file(self, tmp_path, monkeypatch):
         raw_target_smiles = "C1=CC=CC=C1"
         canonical_target_smiles = canonicalize_smiles(raw_target_smiles)
         input_path = tmp_path / "completions.jsonl"
