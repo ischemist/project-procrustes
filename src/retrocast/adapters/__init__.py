@@ -17,8 +17,6 @@ from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter, prepare_ursa_llm
 from retrocast.exceptions import AdapterError, AdapterResolutionError, ChemError
 from retrocast.models.chem import Route, TargetIdentity
 
-_URSA_LLM_ADAPTER = UrsaLlmAdapter()
-
 ADAPTER_MAP: dict[str, BaseAdapter] = {
     "aizynth": AizynthAdapter(),
     "askcos": AskcosAdapter(),
@@ -32,7 +30,7 @@ ADAPTER_MAP: dict[str, BaseAdapter] = {
     "synplanner": SynPlannerAdapter(),
     "syntheseus": SyntheseusAdapter(),
     "synllama": SynLlaMaAdapter(),
-    "ursa-llm": _URSA_LLM_ADAPTER,
+    "ursa-llm": UrsaLlmAdapter(),
 }
 
 # Adapters that expect target-centric data format (dict with metadata + nested routes)

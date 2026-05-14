@@ -4,12 +4,9 @@ import gzip
 import json
 import logging
 import re
-from collections import defaultdict
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
-
-from pydantic import BaseModel, ConfigDict, RootModel, ValidationError
 
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
@@ -30,35 +27,6 @@ _SMILES_RE = re.compile(r"<smiles>(.*?)</smiles>", re.DOTALL)
 _SM_TOKEN_RE = re.compile(r"<sm_([^>]+)>")
 
 
-class UrsaLlmCompletionInput(BaseModel):
-    """Single prepared completion record consumed by the adapter."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    completion: str
-
-
-class UrsaLlmCompletionList(RootModel[list[UrsaLlmCompletionInput]]):
-    """Prepared per-target completion payload consumed by the adapter."""
-
-
-class UrsaLlmRawMeta(BaseModel):
-    """Minimal raw metadata required to build the compatibility artifact."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    product_smiles: str
-
-
-class UrsaLlmRawRecord(BaseModel):
-    """Single raw Ursa completion record."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    meta: UrsaLlmRawMeta
-    completion: str
-
-
 def _extract_smiles(block: str) -> str | None:
     """Extract a SMILES from a `<product>` or `<reactant>` block."""
     match = _SMILES_RE.search(block)
@@ -71,16 +39,12 @@ def _extract_smiles(block: str) -> str | None:
     return inner if inner else None
 
 
-def _detect_ursa_input_format(input_path: Path) -> str:
+def _is_json_array_input(input_path: Path) -> bool:
     name = input_path.name
-    if name.endswith(".jsonl.gz"):
-        return "jsonl.gz"
-    if name.endswith(".json.gz"):
-        return "json.gz"
-    if name.endswith(".jsonl"):
-        return "jsonl"
-    if name.endswith(".json"):
-        return "json"
+    if name.endswith((".json", ".json.gz")):
+        return True
+    if name.endswith((".jsonl", ".jsonl.gz")):
+        return False
     raise ValueError("unsupported input format; expected .json, .json.gz, .jsonl, or .jsonl.gz")
 
 
@@ -91,14 +55,36 @@ def _read_input_text(input_path: Path) -> str:
     return input_path.read_text(encoding="utf-8")
 
 
+def _extract_completion_text(raw_record: Any) -> str | None:
+    if not isinstance(raw_record, dict):
+        return None
+    completion = raw_record.get("completion")
+    return completion if isinstance(completion, str) else None
+
+
+def _extract_raw_completion(raw_record: Any) -> tuple[str, str] | None:
+    if not isinstance(raw_record, dict):
+        return None
+
+    meta = raw_record.get("meta")
+    completion = raw_record.get("completion")
+    if not isinstance(meta, dict) or not isinstance(completion, str):
+        return None
+
+    product_smiles = meta.get("product_smiles")
+    if not isinstance(product_smiles, str):
+        return None
+
+    return product_smiles, completion
+
+
 def load_ursa_llm_records(input_path: Path) -> list[Any]:
     """Load raw Ursa completion records from json/jsonl, optionally gzipped."""
-    input_format = _detect_ursa_input_format(input_path)
     raw_text = _read_input_text(input_path).strip()
     if not raw_text:
         return []
 
-    if input_format in {"json", "json.gz"}:
+    if _is_json_array_input(input_path):
         data = json.loads(raw_text)
         if not isinstance(data, list):
             raise ValueError("top-level JSON must be a list of records")
@@ -117,27 +103,27 @@ def prepare_ursa_llm_results(input_path: Path) -> tuple[dict[str, list[dict[str,
     """Build the current benchmark-centric compatibility artifact from raw Ursa completions."""
     records = load_ursa_llm_records(input_path)
 
-    grouped_completions: dict[str, list[dict[str, str]]] = defaultdict(list)
+    grouped_completions: dict[str, list[dict[str, str]]] = {}
     skipped_records = 0
     accepted_records = 0
 
     for raw_record in records:
-        try:
-            record = UrsaLlmRawRecord.model_validate(raw_record)
-        except ValidationError:
+        prepared = _extract_raw_completion(raw_record)
+        if prepared is None:
             skipped_records += 1
             continue
 
+        product_smiles, completion = prepared
         try:
-            canonical_target = canonicalize_smiles(record.meta.product_smiles)
+            canonical_target = canonicalize_smiles(product_smiles)
         except RetroCastException:
             skipped_records += 1
             continue
 
-        grouped_completions[canonical_target].append({"completion": record.completion})
+        grouped_completions.setdefault(canonical_target, []).append({"completion": completion})
         accepted_records += 1
 
-    results = {target_smiles: grouped_completions[target_smiles] for target_smiles in sorted(grouped_completions)}
+    results = dict(sorted(grouped_completions.items()))
     summary = {
         "solved_count": len(results),
         "total_records": len(records),
@@ -178,22 +164,28 @@ class UrsaLlmAdapter(BaseAdapter):
     def cast(
         self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
     ) -> Generator[Route, None, None]:
-        try:
-            validated = UrsaLlmCompletionList.model_validate(raw_target_data)
-        except ValidationError as e:
-            raise adapter_schema_error(self.adapter_key, target.id, "invalid completion list") from e
+        if not isinstance(raw_target_data, list):
+            raise adapter_schema_error(self.adapter_key, target.id, "expected a list of completion records")
 
-        for rank, record in enumerate(validated.root, start=1):
+        for rank, raw_record in enumerate(raw_target_data, start=1):
+            completion = _extract_completion_text(raw_record)
+            if completion is None:
+                raise adapter_schema_error(
+                    self.adapter_key,
+                    target.id,
+                    "each completion record must be a dict with a string 'completion' field",
+                    record_index=rank - 1,
+                )
             try:
-                yield self._transform(record, target, rank=rank, ignore_stereo=ignore_stereo)
+                yield self._transform(completion, target, rank=rank, ignore_stereo=ignore_stereo)
             except RetroCastException as e:
                 logger.warning(f"  - completion #{rank} for '{target.id}' failed transformation: {e} [{e.code}]")
                 continue
 
     def _transform(
-        self, record: UrsaLlmCompletionInput, target: TargetIdentity, rank: int, ignore_stereo: bool = False
+        self, completion: str, target: TargetIdentity, rank: int, ignore_stereo: bool = False
     ) -> Route:
-        precursor_map = self._parse_completion(record.completion, ignore_stereo=ignore_stereo)
+        precursor_map = self._parse_completion(completion, ignore_stereo=ignore_stereo)
         if not precursor_map:
             raise adapter_route_transform_error(self.adapter_key, target.id, "no synthesis steps found in completion")
 
