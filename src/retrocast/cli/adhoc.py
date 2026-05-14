@@ -30,6 +30,7 @@ def handle_list_adapters(args: Any) -> None:
         "askcos": ("ASKCOS", "custom format"),
         "dms": ("DirectMultiStep", "recursive dict"),
         "dreamretro": ("DreamRetro", "precursor map"),
+        "llm-raw-answers": ("LLM Raw Answers", "<synthesis_step> XML blocks"),
         "multistepttl": ("MultiStepTTL", "custom format"),
         "paroutes": ("PaRoutes", "reference format"),
         "retrochimera": ("RetroChimera", "precursor map"),
