@@ -97,9 +97,9 @@ def raw_synllama_data(raw_data_factory) -> dict[str, Any]:
 
 
 @pytest.fixture(scope="session")
-def raw_llm_raw_answers_data(raw_data_factory) -> dict[str, Any]:
-    """loads the raw llm-raw-answers prediction data from the test file."""
-    return raw_data_factory("model-predictions/llm-raw-answers/results.json.gz")
+def raw_ursa_llm_data(raw_data_factory) -> dict[str, Any]:
+    """loads the raw ursa llm prediction data from the test file."""
+    return raw_data_factory("model-predictions/ursa-llm/results.json.gz")
 
 
 @pytest.fixture(scope="session")

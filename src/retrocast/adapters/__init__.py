@@ -5,7 +5,6 @@ from retrocast.adapters.askcos_adapter import AskcosAdapter
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.dms_adapter import DMSAdapter
 from retrocast.adapters.dreamretro_adapter import DreamRetroAdapter
-from retrocast.adapters.llm_raw_answers_adapter import LlmRawAnswersAdapter
 from retrocast.adapters.molbuilder_adapter import MolBuilderAdapter
 from retrocast.adapters.multistepttl_adapter import TtlRetroAdapter
 from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
@@ -14,15 +13,17 @@ from retrocast.adapters.retrostar_adapter import RetroStarAdapter
 from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
+from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter, prepare_ursa_llm_results
 from retrocast.exceptions import AdapterError, AdapterResolutionError, ChemError
 from retrocast.models.chem import Route, TargetIdentity
+
+_URSA_LLM_ADAPTER = UrsaLlmAdapter()
 
 ADAPTER_MAP: dict[str, BaseAdapter] = {
     "aizynth": AizynthAdapter(),
     "askcos": AskcosAdapter(),
     "dms": DMSAdapter(),
     "dreamretro": DreamRetroAdapter(),
-    "llm-raw-answers": LlmRawAnswersAdapter(),
     "molbuilder": MolBuilderAdapter(),
     "multistepttl": TtlRetroAdapter(),
     "paroutes": PaRoutesAdapter(),
@@ -31,6 +32,7 @@ ADAPTER_MAP: dict[str, BaseAdapter] = {
     "synplanner": SynPlannerAdapter(),
     "syntheseus": SyntheseusAdapter(),
     "synllama": SynLlaMaAdapter(),
+    "ursa-llm": _URSA_LLM_ADAPTER,
 }
 
 # Adapters that expect target-centric data format (dict with metadata + nested routes)
@@ -120,7 +122,7 @@ __all__ = [
     "AskcosAdapter",
     "DMSAdapter",
     "DreamRetroAdapter",
-    "LlmRawAnswersAdapter",
+    "UrsaLlmAdapter",
     "MolBuilderAdapter",
     "TtlRetroAdapter",
     "PaRoutesAdapter",
@@ -129,4 +131,5 @@ __all__ = [
     "SynPlannerAdapter",
     "SyntheseusAdapter",
     "SynLlaMaAdapter",
+    "prepare_ursa_llm_results",
 ]

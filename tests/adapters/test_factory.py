@@ -16,7 +16,6 @@ def test_get_adapter_known_adapter():
     # check if it's the correct specific class instance from the map
     assert isinstance(adapter, type(ADAPTER_MAP[adapter_name]))
 
-
 def test_get_adapter_unknown_adapter_raises_exception():
     """
     tests that requesting an unknown adapter name raises an RetroCastException

@@ -32,7 +32,6 @@ def handle_list_adapters(args: Any) -> None:
         "askcos": ("ASKCOS", "custom format"),
         "dms": ("DirectMultiStep", "recursive dict"),
         "dreamretro": ("DreamRetro", "precursor map"),
-        "llm-raw-answers": ("LLM Raw Answers", "<synthesis_step> XML blocks"),
         "multistepttl": ("MultiStepTTL", "custom format"),
         "paroutes": ("PaRoutes", "reference format"),
         "retrochimera": ("RetroChimera", "precursor map"),
@@ -40,6 +39,7 @@ def handle_list_adapters(args: Any) -> None:
         "synllama": ("SynLlama", "precursor map"),
         "synplanner": ("SynPlanner", "bipartite graph"),
         "syntheseus": ("Syntheseus", "bipartite graph"),
+        "ursa-llm": ("Ursa LLM", "<synthesis_step> XML blocks"),
     }
 
     print("Available adapters:")

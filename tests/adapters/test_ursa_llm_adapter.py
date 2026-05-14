@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from retrocast.adapters.llm_raw_answers_adapter import LlmRawAnswersAdapter
+from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter, prepare_ursa_llm_results
 from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import TargetInput
 from tests.adapters.test_base_adapter import BaseAdapterTest
@@ -18,10 +18,10 @@ def _wrap_step(product_smiles: str, reactant_smiles: list[str]) -> str:
     return f"<synthesis_step><product><smiles>{product_smiles}</smiles></product>{reactants}</synthesis_step>"
 
 
-class TestLlmRawAnswersAdapterUnit(BaseAdapterTest):
+class TestUrsaLlmAdapterUnit(BaseAdapterTest):
     @pytest.fixture
     def adapter_instance(self):
-        return LlmRawAnswersAdapter()
+        return UrsaLlmAdapter()
 
     @pytest.fixture
     def raw_valid_route_data(self):
@@ -147,12 +147,12 @@ class TestLlmRawAnswersAdapterUnit(BaseAdapterTest):
 
 
 @pytest.mark.contract
-class TestLlmRawAnswersAdapterContract:
+class TestUrsaLlmAdapterContract:
     """Contract tests on real LLM completions: verify Route objects are well-formed."""
 
     @pytest.fixture(scope="class")
-    def adapter(self) -> LlmRawAnswersAdapter:
-        return LlmRawAnswersAdapter()
+    def adapter(self) -> UrsaLlmAdapter:
+        return UrsaLlmAdapter()
 
     @pytest.fixture(
         scope="class",
@@ -163,9 +163,9 @@ class TestLlmRawAnswersAdapterContract:
         ],
         ids=lambda p: p[0],
     )
-    def routes(self, adapter, raw_llm_raw_answers_data, request):
+    def routes(self, adapter, raw_ursa_llm_data, request):
         target_id, target_smi = request.param
-        payload = raw_llm_raw_answers_data.get(target_smi)
+        payload = raw_ursa_llm_data.get(target_smi)
         assert payload is not None, f"target {target_id} not found under canonical smiles key"
 
         target_input = TargetInput(id=target_id, smiles=target_smi)
@@ -200,3 +200,27 @@ class TestLlmRawAnswersAdapterContract:
         for route in routes:
             assert not route.target.is_leaf
             assert route.target.synthesis_step is not None
+
+@pytest.mark.integration
+def test_prepare_ursa_llm_results_accepts_json_array(tmp_path):
+    input_path = tmp_path / "completions.json"
+    input_path.write_text(
+        '[{"meta":{"product_smiles":"C1=CC=CC=C1"},"completion":"route-1"},{"meta":{"product_smiles":"c1ccccc1"},"completion":"route-2"}]',
+        encoding="utf-8",
+    )
+
+    results, summary = prepare_ursa_llm_results(input_path)
+
+    canonical_target_smiles = canonicalize_smiles("C1=CC=CC=C1")
+    assert results == {
+        canonical_target_smiles: [
+            {"completion": "route-1"},
+            {"completion": "route-2"},
+        ]
+    }
+    assert summary == {
+        "solved_count": 1,
+        "total_records": 2,
+        "accepted_records": 2,
+        "skipped_records": 0,
+    }

@@ -17,6 +17,7 @@ ADAPTER_DISPLAY_NAMES = {
     "synllama": "SynLlama",
     "synplanner": "SynPlanner",
     "syntheseus": "Syntheseus",
+    "ursa-llm": "Ursa LLM",
 }
 
 
