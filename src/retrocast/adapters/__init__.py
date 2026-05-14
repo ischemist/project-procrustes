@@ -13,6 +13,7 @@ from retrocast.adapters.retrostar_adapter import RetroStarAdapter
 from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
+from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter, prepare_ursa_llm_results
 from retrocast.exceptions import AdapterError, AdapterResolutionError, ChemError
 from retrocast.models.chem import Route, TargetIdentity
 
@@ -29,6 +30,7 @@ ADAPTER_MAP: dict[str, BaseAdapter] = {
     "synplanner": SynPlannerAdapter(),
     "syntheseus": SyntheseusAdapter(),
     "synllama": SynLlaMaAdapter(),
+    "ursa-llm": UrsaLlmAdapter(),
 }
 
 # Adapters that expect target-centric data format (dict with metadata + nested routes)
@@ -118,6 +120,7 @@ __all__ = [
     "AskcosAdapter",
     "DMSAdapter",
     "DreamRetroAdapter",
+    "UrsaLlmAdapter",
     "MolBuilderAdapter",
     "TtlRetroAdapter",
     "PaRoutesAdapter",
@@ -126,4 +129,5 @@ __all__ = [
     "SynPlannerAdapter",
     "SyntheseusAdapter",
     "SynLlaMaAdapter",
+    "prepare_ursa_llm_results",
 ]

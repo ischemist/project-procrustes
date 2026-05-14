@@ -39,6 +39,7 @@ def handle_list_adapters(args: Any) -> None:
         "synllama": ("SynLlama", "precursor map"),
         "synplanner": ("SynPlanner", "bipartite graph"),
         "syntheseus": ("Syntheseus", "bipartite graph"),
+        "ursa-llm": ("Ursa LLM", "<synthesis_step> XML blocks"),
     }
 
     print("Available adapters:")

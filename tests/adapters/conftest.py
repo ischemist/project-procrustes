@@ -97,6 +97,12 @@ def raw_synllama_data(raw_data_factory) -> dict[str, Any]:
 
 
 @pytest.fixture(scope="session")
+def raw_ursa_llm_data(raw_data_factory) -> dict[str, Any]:
+    """loads the raw ursa llm prediction data from the test file."""
+    return raw_data_factory("model-predictions/ursa-llm/results.json.gz")
+
+
+@pytest.fixture(scope="session")
 def raw_paroutes_data(raw_data_factory) -> dict[str, Any]:
     """loads the raw paroutes prediction data from the test file."""
     return raw_data_factory("paroutes.json.gz")

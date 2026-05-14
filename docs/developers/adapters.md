@@ -119,6 +119,27 @@ Some models have unique structures that don't fit the above patterns (e.g., grap
 
     See `retrocast.adapters.dms_adapter` for a complete example of implementing a custom recursive builder with cycle detection.
 
+### Compatibility Preparation: Ursa LLM
+
+`UrsaLlmAdapter` is the current bridge for flat Ursa completion corpora that contain
+`<synthesis_step>` XML blocks rather than pre-keyed per-target payloads.
+
+today's `ingest` workflow is still benchmark-centric, so Ursa support intentionally
+uses a small preparation step before adaptation:
+
+- canonical adapter key: `ursa-llm`
+- library helper: `retrocast.adapters.prepare_ursa_llm_results(...)`
+- wrapper script: `uv run scripts/ursa-llm/1-prepare-raw-results.py --input ... --output ...`
+
+the preparation helper accepts `.json`, `.json.gz`, `.jsonl`, and `.jsonl.gz`
+completion artifacts, canonicalizes `meta.product_smiles`, and writes the current
+compatibility `results.json.gz` keyed by canonical target smiles. it does not
+create a separate manifest or `summary.json`; durable statistics belong to the
+downstream `ingest` artifact boundary.
+
+this is deliberate: the Ursa parsing logic lives in library code, while the output
+artifact remains compatible with today's benchmark-first `ingest` path.
+
 ## Implementation Guidelines
 
 !!! warning "Critical requirements"
