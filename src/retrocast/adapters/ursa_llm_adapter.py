@@ -134,10 +134,9 @@ def prepare_ursa_llm_results(input_path: Path) -> tuple[dict[str, list[dict[str,
 
 
 def write_prepared_ursa_llm_results(*, input_path: Path, output_dir: Path) -> dict[str, int]:
-    """Persist the compatibility artifact and summary for raw Ursa completions."""
+    """Persist the compatibility artifact for raw Ursa completions."""
     results, summary = prepare_ursa_llm_results(input_path)
     results_path = output_dir / "results.json.gz"
-    summary_path = output_dir / "summary.json"
 
     logger.info(
         "found %s unique targets across %s accepted completions.",
@@ -150,9 +149,6 @@ def write_prepared_ursa_llm_results(*, input_path: Path, output_dir: Path) -> di
     output_dir.mkdir(parents=True, exist_ok=True)
     save_json_gz(results, results_path)
     logger.info("successfully wrote pre-processed data to %s", results_path)
-
-    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-    logger.info("wrote summary to %s", summary_path)
     return summary
 
 

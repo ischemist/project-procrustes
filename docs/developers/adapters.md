@@ -133,7 +133,9 @@ uses a small preparation step before adaptation:
 
 the preparation helper accepts `.json`, `.json.gz`, `.jsonl`, and `.jsonl.gz`
 completion artifacts, canonicalizes `meta.product_smiles`, and writes the current
-compatibility `results.json.gz` keyed by canonical target smiles.
+compatibility `results.json.gz` keyed by canonical target smiles. it does not
+create a separate manifest or `summary.json`; durable statistics belong to the
+downstream `ingest` artifact boundary.
 
 this is deliberate: the Ursa parsing logic lives in library code, while the output
 artifact remains compatible with today's benchmark-first `ingest` path.

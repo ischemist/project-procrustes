@@ -27,7 +27,7 @@ def _load_script_module(script_path: Path, module_name: str):
 
 @pytest.mark.integration
 class TestUrsaLlmPreprocessScript:
-    def test_main_writes_canonical_target_keys_and_truthful_summary(
+    def test_main_writes_canonical_target_keys_without_extra_summary_file(
         self, tmp_path, monkeypatch
     ):
         raw_target_smiles = "C1=CC=CC=C1"
@@ -59,7 +59,6 @@ class TestUrsaLlmPreprocessScript:
         script_module.main()
 
         results = load_json_gz(output_dir / "results.json.gz")
-        summary = json.loads((output_dir / "summary.json").read_text())
 
         assert raw_target_smiles not in results
         assert results == {
@@ -68,12 +67,7 @@ class TestUrsaLlmPreprocessScript:
                 {"completion": "route-2"},
             ]
         }
-        assert summary == {
-            "solved_count": 1,
-            "total_records": 5,
-            "accepted_records": 2,
-            "skipped_records": 3,
-        }
+        assert not (output_dir / "summary.json").exists()
 
     def test_main_exits_nonzero_when_input_is_missing(self, tmp_path, monkeypatch):
         output_dir = tmp_path / "converted"
