@@ -1,8 +1,9 @@
 import pytest
 
-from retrocast.adapters import ADAPTER_MAP, get_adapter
+from retrocast.adapters import ADAPTER_MAP, ADAPTER_TYPES, adapt_single_route, get_adapter
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.exceptions import RetroCastException
+from retrocast.models.chem import TargetInput
 
 
 def test_get_adapter_known_adapter():
@@ -13,7 +14,8 @@ def test_get_adapter_known_adapter():
     adapter_name = "aizynth"
     adapter = get_adapter(adapter_name)
     assert isinstance(adapter, BaseAdapter)
-    assert isinstance(adapter, ADAPTER_MAP[adapter_name])
+    assert isinstance(adapter, ADAPTER_TYPES[adapter_name])
+    assert adapter is not ADAPTER_MAP[adapter_name]
 
 
 def test_get_adapter_unknown_adapter_raises_exception():
@@ -28,7 +30,31 @@ def test_get_adapter_unknown_adapter_raises_exception():
     assert exc_info.value.context["adapter"] == unknown_name
 
 
-@pytest.mark.parametrize("adapter_name, adapter_type", ADAPTER_MAP.items())
+def test_adapt_single_route_uses_target_local_payload_contract():
+    target = TargetInput(id="target_1", smiles="CC")
+    raw_routes = [
+        {
+            "type": "mol",
+            "smiles": "CC",
+            "children": [
+                {
+                    "type": "reaction",
+                    "smiles": "",
+                    "children": [{"type": "mol", "smiles": "C", "children": [], "in_stock": True}],
+                    "metadata": {},
+                }
+            ],
+            "in_stock": False,
+        }
+    ]
+
+    route = adapt_single_route(raw_routes, target, "aizynth")
+
+    assert route is not None
+    assert route.target.smiles == "CC"
+
+
+@pytest.mark.parametrize("adapter_name, adapter_type", ADAPTER_TYPES.items())
 def test_all_adapters_in_map_are_valid(adapter_name, adapter_type):
     """
     iterates through the entire ADAPTER_MAP to verify that each registered
@@ -38,3 +64,4 @@ def test_all_adapters_in_map_are_valid(adapter_name, adapter_type):
     retrieved_adapter = get_adapter(adapter_name)
     assert isinstance(retrieved_adapter, adapter_type)
     assert isinstance(retrieved_adapter, BaseAdapter)
+    assert isinstance(ADAPTER_MAP[adapter_name], adapter_type)

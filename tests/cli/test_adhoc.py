@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
+from retrocast.adapters.retrostar_adapter import RetroStarAdapter
 from retrocast.cli.adhoc import handle_adapt, handle_collect, handle_create_benchmark
 from retrocast.exceptions import ChemRuntimeError
 from retrocast.io.blob import load_json_gz, save_json_gz
@@ -459,6 +460,40 @@ class TestHandleAdapt:
         route_corpus = load_route_corpus(output_path)
         assert len(route_corpus) == 1
         assert route_corpus[0].target.smiles == "CC(C)=O"
+
+    def test_adapt_benchmark_does_not_reinterpret_provider_dict_as_target_keyed(self, tmp_path, monkeypatch):
+        input_path = tmp_path / "retrostar.json.gz"
+        output_path = tmp_path / "route-corpus.jsonl.gz"
+        benchmark_path = tmp_path / "benchmark.json.gz"
+        save_json_gz({"succ": True, "routes": "CC>>C"}, input_path)
+        monkeypatch.setattr("retrocast.cli.adhoc.get_adapter", lambda name: RetroStarAdapter())
+
+        benchmark = BenchmarkSet(
+            name="provider-output-test",
+            targets={
+                "target_1": BenchmarkTarget(
+                    id="target_1",
+                    smiles=SmilesStr("CC"),
+                    inchi_key=_synthetic_inchikey("CC"),
+                    acceptable_routes=[],
+                )
+            },
+        )
+        save_json_gz(benchmark.model_dump(mode="json"), benchmark_path)
+
+        args = Namespace(
+            input=str(input_path),
+            output=str(output_path),
+            adapter="retrostar",
+            benchmark=str(benchmark_path),
+            input_kind="provider-output",
+        )
+
+        handle_adapt(args)
+
+        route_corpus = load_route_corpus(output_path)
+        assert len(route_corpus) == 1
+        assert route_corpus[0].target.smiles == "CC"
 
     def test_collect_builds_benchmark_keyed_routes(self, tmp_path):
         input_path = tmp_path / "route-corpus.jsonl.gz"

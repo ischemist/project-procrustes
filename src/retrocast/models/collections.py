@@ -9,7 +9,6 @@ class BenchmarkCollectionStats(BaseModel):
     """Structured summary of benchmark collection outcomes."""
 
     total_routes: int = 0
-    matched_by_target_hint: int = 0
     matched_by_canonical_smiles: int = 0
     unmatched_routes: int = 0
     ambiguous_routes: int = 0

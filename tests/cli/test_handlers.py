@@ -335,6 +335,7 @@ class TestHandleIngest:
             adapter=None,
             sampling_strategy=None,
             k=None,
+            input_kind="provider-output",
             ignore_stereo=False,
             anonymize=False,
         )

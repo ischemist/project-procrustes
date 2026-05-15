@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from retrocast._warnings import warn_deprecated
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.exceptions import AdapterError, ChemError, InputError
 from retrocast.models.benchmark import BenchmarkSet
@@ -81,7 +82,7 @@ def _adapt_entries(
 
 
 def iter_adapted_routes(
-    raw_data: Any,
+    provider_output: Any,
     adapter: BaseAdapter,
     *,
     ignore_stereo: bool,
@@ -90,33 +91,33 @@ def iter_adapted_routes(
     if stats is not None:
         stats.total_routes_in_raw_files += 1
     yield from _adapt_entries(
-        adapter.iter_raw_entries(raw_data),
+        adapter.iter_raw_entries(provider_output),
         adapter,
         ignore_stereo=ignore_stereo,
         stats=stats,
     )
 
 
-def iter_benchmark_adapted_routes(
-    raw_data: Mapping[Any, Any],
+def iter_target_keyed_adapted_routes(
+    target_keyed_provider_output: Mapping[Any, Any],
     benchmark: BenchmarkSet,
     adapter: BaseAdapter,
     *,
     ignore_stereo: bool,
     stats: RunStatistics | None = None,
 ) -> Iterator[Route]:
-    if not isinstance(raw_data, Mapping):
+    if not isinstance(target_keyed_provider_output, Mapping):
         raise InputError(
-            "Raw prediction data must be a mapping keyed by target id or target smiles.",
-            code="input.invalid_raw_predictions_corpus",
-            context={"actual_type": type(raw_data).__name__},
+            "Target-keyed provider output must be a mapping keyed by target id or target smiles.",
+            code="input.invalid_target_keyed_provider_output",
+            context={"actual_type": type(target_keyed_provider_output).__name__},
         )
 
     for target_id, target in benchmark.targets.items():
         matched_key = None
-        if target_id in raw_data:
+        if target_id in target_keyed_provider_output:
             matched_key = target_id
-        elif target.smiles in raw_data:
+        elif target.smiles in target_keyed_provider_output:
             matched_key = target.smiles
 
         if matched_key is None:
@@ -125,7 +126,7 @@ def iter_benchmark_adapted_routes(
         if stats is not None:
             stats.total_routes_in_raw_files += 1
 
-        payload = raw_data[matched_key]
+        payload = target_keyed_provider_output[matched_key]
         entries = adapter.iter_raw_entries(
             payload,
             source_key=str(matched_key),
@@ -158,6 +159,37 @@ def adapt_target_routes(
     )
 
 
+def adapt_provider_output(
+    provider_output: Any,
+    adapter: BaseAdapter,
+    *,
+    ignore_stereo: bool = False,
+    stats: RunStatistics | None = None,
+) -> list[Route]:
+    """Materialize canonical routes from one provider output."""
+    return list(iter_adapted_routes(provider_output, adapter, ignore_stereo=ignore_stereo, stats=stats))
+
+
+def adapt_target_keyed_provider_output(
+    target_keyed_provider_output: Mapping[Any, Any],
+    benchmark: BenchmarkSet,
+    adapter: BaseAdapter,
+    *,
+    ignore_stereo: bool = False,
+    stats: RunStatistics | None = None,
+) -> list[Route]:
+    """Materialize canonical routes from target-keyed provider output."""
+    return list(
+        iter_target_keyed_adapted_routes(
+            target_keyed_provider_output,
+            benchmark,
+            adapter,
+            ignore_stereo=ignore_stereo,
+            stats=stats,
+        )
+    )
+
+
 def adapt_route_corpus(
     raw_data: Any,
     adapter: BaseAdapter,
@@ -165,8 +197,14 @@ def adapt_route_corpus(
     ignore_stereo: bool = False,
     stats: RunStatistics | None = None,
 ) -> list[Route]:
-    """Materialize a canonical route corpus from a raw artifact."""
-    return list(iter_adapted_routes(raw_data, adapter, ignore_stereo=ignore_stereo, stats=stats))
+    """Deprecated alias for adapt_provider_output."""
+    warn_deprecated(
+        old="adapt_route_corpus(...)",
+        new="adapt_provider_output(...)",
+        remove_in="0.6",
+        stacklevel=2,
+    )
+    return adapt_provider_output(raw_data, adapter, ignore_stereo=ignore_stereo, stats=stats)
 
 
 def adapt_benchmark_keyed_route_corpus(
@@ -177,13 +215,17 @@ def adapt_benchmark_keyed_route_corpus(
     ignore_stereo: bool = False,
     stats: RunStatistics | None = None,
 ) -> list[Route]:
-    """Materialize a canonical route corpus from a benchmark-keyed raw predictions mapping."""
-    return list(
-        iter_benchmark_adapted_routes(
-            raw_data,
-            benchmark,
-            adapter,
-            ignore_stereo=ignore_stereo,
-            stats=stats,
-        )
+    """Deprecated alias for adapt_target_keyed_provider_output."""
+    warn_deprecated(
+        old="adapt_benchmark_keyed_route_corpus(...)",
+        new="adapt_target_keyed_provider_output(...)",
+        remove_in="0.6",
+        stacklevel=2,
+    )
+    return adapt_target_keyed_provider_output(
+        raw_data,
+        benchmark,
+        adapter,
+        ignore_stereo=ignore_stereo,
+        stats=stats,
     )

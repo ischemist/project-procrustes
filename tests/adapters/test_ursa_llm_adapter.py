@@ -8,7 +8,7 @@ from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterSchemaError
 from retrocast.models.chem import Route, TargetInput
-from retrocast.workflow.adapt import adapt_route_corpus, adapt_target_routes
+from retrocast.workflow.adapt import adapt_provider_output, adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 EBASTINE_SMILES = canonicalize_smiles("CC(C)(C)C1=CC=C(C=C1)C(=O)CCCN2CCC(CC2)OC(C3=CC=CC=C3)C4=CC=CC=C4")
@@ -171,7 +171,7 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
 class TestUrsaLlmAdapterContract:
     @pytest.fixture(scope="class")
     def routes_by_target_smiles(self, raw_ursa_llm_data) -> dict[str, list[Route]]:
-        route_corpus = adapt_route_corpus(raw_ursa_llm_data, UrsaLlmAdapter())
+        route_corpus = adapt_provider_output(raw_ursa_llm_data, UrsaLlmAdapter())
         grouped_routes: dict[str, list[Route]] = defaultdict(list)
         for route in route_corpus:
             grouped_routes[route.target.smiles].append(route)

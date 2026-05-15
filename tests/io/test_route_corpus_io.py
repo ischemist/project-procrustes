@@ -31,3 +31,15 @@ class TestRouteCorpusIO:
             load_route_corpus(path)
 
         assert exc_info.value.code == "io.invalid_artifact_shape"
+
+    def test_legacy_route_rank_field_is_ignored(self, tmp_path):
+        path = tmp_path / "legacy-route-corpus.jsonl.gz"
+        legacy_route = _make_simple_route("CC", "C").model_dump(mode="json")
+        legacy_route["rank"] = 7
+        save_jsonl_gz([legacy_route], path)
+
+        loaded = load_route_corpus(path)
+
+        assert len(loaded) == 1
+        assert not hasattr(loaded[0], "rank")
+        assert loaded[0].target.smiles == "CC"

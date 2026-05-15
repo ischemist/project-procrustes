@@ -8,13 +8,13 @@ from typing import Any
 from retrocast.adapters import ADAPTER_MAP, get_adapter
 from retrocast.api import score_predictions
 from retrocast.cli.errors import log_expected_error
-from retrocast.exceptions import RetroCastException
+from retrocast.exceptions import InputError, RetroCastException
 from retrocast.io.blob import load_json_artifact, save_json_gz
 from retrocast.io.data import load_benchmark, load_route_corpus, load_routes, save_route_corpus, save_routes
 from retrocast.io.provenance import create_manifest
 from retrocast.models.benchmark import create_benchmark, create_benchmark_target
 from retrocast.models.chem import RunStatistics
-from retrocast.workflow.adapt import adapt_benchmark_keyed_route_corpus, adapt_route_corpus
+from retrocast.workflow.adapt import adapt_provider_output, adapt_target_keyed_provider_output
 from retrocast.workflow.collect import collect_benchmark_predictions
 
 logger = logging.getLogger(__name__)
@@ -278,19 +278,33 @@ def handle_adapt(args: Any) -> None:
                 sys.exit(1)
             benchmark = load_benchmark(benchmark_path)
 
+        input_kind = getattr(args, "input_kind", "provider-output")
+
         stats = RunStatistics()
-        if benchmark is not None and isinstance(raw_data, dict):
-            route_corpus = adapt_benchmark_keyed_route_corpus(
+        if input_kind == "target-keyed-provider-output":
+            if benchmark is None:
+                raise InputError(
+                    "target-keyed provider output requires --benchmark so keys can be resolved",
+                    code="input.missing_benchmark",
+                    context={"input_kind": input_kind},
+                )
+            route_corpus = adapt_target_keyed_provider_output(
                 raw_data,
                 benchmark,
                 adapter,
                 stats=stats,
             )
-        else:
-            route_corpus = adapt_route_corpus(
+        elif input_kind == "provider-output":
+            route_corpus = adapt_provider_output(
                 raw_data,
                 adapter,
                 stats=stats,
+            )
+        else:
+            raise InputError(
+                f"unknown input kind: {input_kind}",
+                code="input.invalid_provider_output_kind",
+                context={"input_kind": input_kind},
             )
         stats.final_unique_routes_saved = len(route_corpus)
 
@@ -308,7 +322,7 @@ def handle_adapt(args: Any) -> None:
             sources=[input_path] + ([benchmark_path] if benchmark_path is not None else []),
             outputs=[("route_corpus", output_path, route_corpus, "route_corpus")],
             root_dir=output_path.parent,
-            parameters={"adapter": adapter_name, "benchmark_provided": bool(args.benchmark)},
+            parameters={"adapter": adapter_name, "benchmark_provided": bool(args.benchmark), "input_kind": input_kind},
             statistics=stats.to_manifest_dict(),
         )
         with open(manifest_path, "w") as f:

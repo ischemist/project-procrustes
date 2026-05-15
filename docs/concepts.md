@@ -56,7 +56,6 @@ The schema enforces the minimal information required for rigorous evaluation whi
     class Route(BaseModel):
         """The root container for a single prediction."""
         target: Molecule
-        rank: int  # (1)!
 
         # Provenance
         metadata: dict[str, Any]
@@ -64,17 +63,20 @@ The schema enforces the minimal information required for rigorous evaluation whi
 
         # Computed Properties
         @property
-        def length(self) -> int: ...  # (2)!
+        def length(self) -> int: ...  # (1)!
         @property
-        def leaves(self) -> set[Molecule]: ...  # (3)!
+        def leaves(self) -> set[Molecule]: ...  # (2)!
         @property
-        def signature(self) -> str: ...  # (4)!
+        def signature(self) -> str: ...  # (3)!
     ```
 
-    1. Model's preference order (populated by adapter)
-    2. Longest path from target to any leaf
-    3. All starting materials in the route
-    4. Cryptographic hash for deduplication
+    1. Longest path from target to any leaf
+    2. All starting materials in the route
+    3. Cryptographic hash for deduplication
+
+    Route ordering is intentionally external to the `Route` object. In memory,
+    list order is the canonical ranking signal; scoring writes explicit ranks
+    onto `ScoredRoute` results.
 
 
 === "Molecule"

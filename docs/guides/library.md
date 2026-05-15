@@ -43,22 +43,22 @@ RetroCast is designed as a modular Python library. While the CLI handles file-ba
 
 The most common use case is converting raw model outputs into the canonical `Route` format. This creates a unified interface for any downstream task.
 
-### Adapting a Single Route
+### Adapting the First Route
 
-```python title="Convert raw output to Route object" hl_lines="6 9"
+```python title="Convert target-local raw output to one Route object" hl_lines="6 9"
 from retrocast import adapt_single_route, TargetInput
 
 # 1. Define the target context
 target = TargetInput(id="mol-1", smiles="CCO") # (1)!
 
-# 2. Provide raw data from your model
+# 2. Provide one target-local payload from your model
 raw_data = {
     "smiles": "CCO",
     "children": [{"smiles": "CC", "children": []}, {"smiles": "O", "children": []}] # (2)!
 }
 
-# 3. Cast to Route
-route = adapt_single_route(raw_data, target, adapter_name="dms") # (3)!
+# 3. Return the first successful Route
+route = adapt_single_route([raw_data], target, adapter_name="dms") # (3)!
 
 if route:
     print(f"Length: {route.length}")
@@ -108,8 +108,8 @@ target-local convenience wrappers.
 
 ```python title="Adapt then collect" hl_lines="1 11"
 from retrocast import (
-    adapt_benchmark_keyed_route_corpus,
-    adapt_route_corpus,
+    adapt_provider_output,
+    adapt_target_keyed_provider_output,
     collect_benchmark_predictions,
     get_adapter,
     load_benchmark,
@@ -117,20 +117,26 @@ from retrocast import (
 
 adapter = get_adapter("ursa-llm")
 
-# Flat corpus: list/jsonl-style artifact -> list[Route]
-route_corpus = adapt_route_corpus(raw_artifact, adapter)
+# Provider output: one raw blob from a planner, service, script, or jsonl corpus.
+routes = adapt_provider_output(raw_provider_output, adapter)
 
-# Benchmark-keyed raw predictions: mapping[target_id or smiles, raw payload] -> list[Route]
+# Target-keyed provider output: mapping[target_id or smiles, raw payload].
 benchmark = load_benchmark("benchmark.json.gz")
-route_corpus = adapt_benchmark_keyed_route_corpus(raw_mapping, benchmark, adapter)
+routes = adapt_target_keyed_provider_output(raw_mapping, benchmark, adapter)
 
-# Route corpus -> benchmark-keyed routes.json.gz shape
-collected = collect_benchmark_predictions(route_corpus, benchmark)
+# Routes -> benchmark-keyed routes.json.gz shape.
+collected = collect_benchmark_predictions(routes, benchmark)
 routes_by_target = collected.routes_by_target
 ```
 
 Use `adapt_single_route(...)` and `adapt_routes(...)` when you already have
 target-local payloads in memory and just need the convenience wrappers.
+
+!!! note "Route ordering"
+
+    `Route.rank` was removed from the canonical route schema. Use list order for
+    raw/adapted routes, or `enumerate(routes, start=1)` when code needs an
+    explicit rank value. Scoring writes explicit ranks onto `ScoredRoute`.
 
 ## Evaluation Workflow
 
@@ -447,10 +453,10 @@ fig.write_html("diagnostics.html")
 
 | Function | Purpose | Returns |
 |:---------|:--------|:--------|
-| `adapt_single_route(raw, target, adapter)` | Convert single route | `Route \| None` |
+| `adapt_single_route(raw, target, adapter)` | Return first successful route from a target-local payload | `Route \| None` |
 | `adapt_routes(raw, target, adapter)` | Convert multiple routes | `list[Route]` |
-| `adapt_route_corpus(raw, adapter)` | Adapt a flat raw artifact | `list[Route]` |
-| `adapt_benchmark_keyed_route_corpus(raw, benchmark, adapter)` | Adapt a benchmark-keyed raw mapping | `list[Route]` |
+| `adapt_provider_output(raw, adapter)` | Adapt one raw provider output | `list[Route]` |
+| `adapt_target_keyed_provider_output(raw, benchmark, adapter)` | Adapt raw output keyed by target id or smiles | `list[Route]` |
 | `collect_benchmark_predictions(routes, benchmark)` | Collect a route corpus onto a benchmark | `CollectedBenchmarkRoutes` |
 | `deduplicate_routes(routes)` | Remove duplicate routes | `list[Route]` |
 | `score_predictions(benchmark, predictions, stock)` | Evaluate routes | `ScoredResults` |

@@ -18,7 +18,7 @@ from retrocast.exceptions import AdapterError, AdapterResolutionError, ChemError
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.workflow.adapt import adapt_target_routes
 
-ADAPTER_MAP: dict[str, type[BaseAdapter]] = {
+ADAPTER_TYPES: dict[str, type[BaseAdapter]] = {
     "aizynth": AizynthAdapter,
     "askcos": AskcosAdapter,
     "dms": DMSAdapter,
@@ -34,17 +34,21 @@ ADAPTER_MAP: dict[str, type[BaseAdapter]] = {
     "ursa-llm": UrsaLlmAdapter,
 }
 
+ADAPTER_MAP: dict[str, BaseAdapter] = {
+    adapter_name: adapter_type() for adapter_name, adapter_type in ADAPTER_TYPES.items()
+}
+
 
 def get_adapter(adapter_name: str) -> BaseAdapter:
     """
-    Retrieves a fresh adapter instance from the `ADAPTER_MAP`.
+    Retrieves a fresh adapter instance from the adapter registry.
     """
-    adapter_type = ADAPTER_MAP.get(adapter_name)
+    adapter_type = ADAPTER_TYPES.get(adapter_name)
     if adapter_type is None:
         raise AdapterResolutionError(
             f"unknown adapter '{adapter_name}'. Check `retrocast.adapters.ADAPTER_MAP` for available adapters.",
             code="adapter.unknown",
-            context={"adapter": adapter_name, "available": sorted(ADAPTER_MAP.keys())},
+            context={"adapter": adapter_name, "available": sorted(ADAPTER_TYPES.keys())},
         )
     return adapter_type()
 
@@ -57,7 +61,7 @@ def adapt_single_route(
     """Adapt a single raw route to the unified Route format."""
     adapter = get_adapter(adapter_name)
     try:
-        return adapter.cast(raw_route, expected_target=target)
+        return next(adapt_target_routes(adapter, raw_route, target), None)
     except (AdapterError, ChemError):
         return None
 
@@ -105,6 +109,7 @@ __all__ = [
     "adapt_routes",
     "get_adapter",
     "ADAPTER_MAP",
+    "ADAPTER_TYPES",
     "BaseAdapter",
     "AizynthAdapter",
     "AskcosAdapter",

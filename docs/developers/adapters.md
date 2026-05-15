@@ -323,7 +323,7 @@ Once your adapter logic is written, you must register it so the CLI can find it.
     ```python title="src/retrocast/adapters/__init__.py"
     from retrocast.adapters.my_adapter import MyModelAdapter
     
-    ADAPTER_MAP = {
+    ADAPTER_TYPES = {
         "aizynth": AizynthAdapter,
         # ...
         "my-model": MyModelAdapter, # (1)!

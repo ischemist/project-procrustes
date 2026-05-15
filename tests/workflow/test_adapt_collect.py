@@ -3,12 +3,18 @@ from typing import Any
 
 import pytest
 
+from retrocast._warnings import RetroCastFutureWarning
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.exceptions import AdapterLogicError, BenchmarkCollectionError
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import SmilesStr
-from retrocast.workflow.adapt import adapt_benchmark_keyed_route_corpus, adapt_route_corpus
+from retrocast.workflow.adapt import (
+    adapt_benchmark_keyed_route_corpus,
+    adapt_provider_output,
+    adapt_route_corpus,
+    adapt_target_keyed_provider_output,
+)
 from retrocast.workflow.collect import collect_benchmark_predictions
 from tests.helpers import _make_simple_route, _make_two_step_route, _synthetic_inchikey
 
@@ -78,29 +84,45 @@ def _first_leaf_smiles(route: Route) -> str:
 
 
 @pytest.mark.unit
-class TestAdaptRouteCorpus:
-    def test_adapt_route_corpus_supports_unkeyed_route_lists(self):
+class TestAdaptProviderOutput:
+    def test_adapt_provider_output_supports_unkeyed_route_lists(self):
         raw_data = [
             _make_simple_route("CC", "C", rank=9).model_dump(mode="json"),
             _make_two_step_route("CCC", "CC", "C", rank=4).model_dump(mode="json"),
         ]
 
-        routes = adapt_route_corpus(raw_data, RouteFirstSyntheticAdapter())
+        routes = adapt_provider_output(raw_data, RouteFirstSyntheticAdapter())
 
         assert len(routes) == 2
         assert [route.target.smiles for route in routes] == ["CC", "CCC"]
 
-    def test_adapt_route_corpus_filters_benchmark_keyed_payloads(self, synthetic_benchmark):
+    def test_adapt_target_keyed_provider_output_filters_to_benchmark_targets(self, synthetic_benchmark):
         raw_data = {
             "target_1": [_make_simple_route("CC", "C", rank=7).model_dump(mode="json")],
             "CCC": [_make_two_step_route("CCC", "CC", "C", rank=3).model_dump(mode="json")],
             "unused": [_make_simple_route("CCCC", "CC", rank=1).model_dump(mode="json")],
         }
 
-        routes = adapt_benchmark_keyed_route_corpus(raw_data, synthetic_benchmark, RouteFirstSyntheticAdapter())
+        routes = adapt_target_keyed_provider_output(raw_data, synthetic_benchmark, RouteFirstSyntheticAdapter())
 
         assert len(routes) == 2
         assert [route.target.smiles for route in routes] == ["CC", "CCC"]
+
+    def test_legacy_adapt_names_warn(self, synthetic_benchmark):
+        provider_output = [_make_simple_route("CC", "C").model_dump(mode="json")]
+        target_keyed_provider_output = {"target_1": provider_output}
+
+        with pytest.warns(RetroCastFutureWarning, match="adapt_route_corpus"):
+            routes = adapt_route_corpus(provider_output, RouteFirstSyntheticAdapter())
+        with pytest.warns(RetroCastFutureWarning, match="adapt_benchmark_keyed_route_corpus"):
+            keyed_routes = adapt_benchmark_keyed_route_corpus(
+                target_keyed_provider_output,
+                synthetic_benchmark,
+                RouteFirstSyntheticAdapter(),
+            )
+
+        assert len(routes) == 1
+        assert len(keyed_routes) == 1
 
 
 @pytest.mark.unit
@@ -128,6 +150,18 @@ class TestCollectBenchmarkPredictions:
 
         assert collected.stats.unmatched_routes == 1
         assert collected.stats.final_unique_routes_saved == 0
+
+    def test_collect_benchmark_predictions_warns_for_legacy_report_policy(self, synthetic_benchmark):
+        unmatched_route = _make_simple_route("CCCC", "CC", rank=1)
+
+        with pytest.warns(RetroCastFutureWarning, match="on_unmatched='ignore'"):
+            collected = collect_benchmark_predictions(
+                [unmatched_route],
+                synthetic_benchmark,
+                on_unmatched="report",
+            )
+
+        assert collected.stats.unmatched_routes == 1
 
     def test_collect_benchmark_predictions_raises_on_ambiguous_smiles(self):
         ambiguous_benchmark = BenchmarkSet(

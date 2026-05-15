@@ -38,7 +38,7 @@ class TestLibraryAPIWithRealData:
         }
 
         # 3. Cast to Route
-        route = adapt_single_route(raw_data, target, adapter_name="dms")
+        route = adapt_single_route([raw_data], target, adapter_name="dms")
 
         # Validate the route was created successfully
         assert route is not None

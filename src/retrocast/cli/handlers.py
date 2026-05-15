@@ -199,6 +199,7 @@ def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any)
         return
 
     ignore_stereo = getattr(args, "ignore_stereo", False)
+    input_kind = getattr(args, "input_kind", "target-keyed-provider-output").replace("-", "_")
 
     try:
         benchmark = load_benchmark(paths["benchmarks"] / f"{benchmark_name}.json.gz")
@@ -215,6 +216,7 @@ def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any)
             sampling_strategy=strategy,
             sample_k=k,
             ignore_stereo=ignore_stereo,
+            provider_output_kind=input_kind,
         )
 
         manifest = create_manifest(
@@ -222,7 +224,13 @@ def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any)
             sources=[raw_path, paths["benchmarks"] / f"{benchmark_name}.json.gz"],
             outputs=[(out_path, processed_routes, "predictions")],
             root_dir=paths["raw"].parent,  # The 'data/' directory
-            parameters={"model": model_name, "benchmark": benchmark_name, "sampling": strategy, "k": k},
+            parameters={
+                "model": model_name,
+                "benchmark": benchmark_name,
+                "sampling": strategy,
+                "k": k,
+                "input_kind": getattr(args, "input_kind", "target-keyed-provider-output"),
+            },
             statistics=stats.to_manifest_dict(),
         )
 

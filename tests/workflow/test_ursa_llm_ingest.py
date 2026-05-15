@@ -36,6 +36,7 @@ def test_ingest_ursa_llm_matches_benchmark_targets_by_canonical_smiles(tmp_path)
         raw_data=raw_ursa_llm_data,
         adapter=UrsaLlmAdapter(),
         output_dir=tmp_path,
+        provider_output_kind="provider_output",
     )
 
     assert save_path == Path(tmp_path) / benchmark.name / "ursa-llm" / "routes.json.gz"

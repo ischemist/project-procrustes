@@ -106,12 +106,14 @@ Convert raw output from a supported model into a canonical route corpus.
 retrocast adapt \
   --input raw_predictions.json.gz \
   --adapter aizynth \ # (1)!
+  --input-kind provider-output \ # (2)!
   --output route-corpus.jsonl.gz \
-  --benchmark benchmark.json.gz  # (2)!
+  --benchmark benchmark.json.gz  # (3)!
 ```
 
 1. See available adapters with `retrocast list-adapters`
-2. Optional: supplies target hints during adaptation; benchmark collection still happens separately
+2. Use `target-keyed-provider-output` when the top-level raw object is keyed by target id or target smiles
+3. Optional for `provider-output`; required for `target-keyed-provider-output`
 
 **Supported adapters:** `aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa-llm`
 
@@ -241,6 +243,7 @@ Transforms raw model outputs into benchmark-keyed routes by running adaptation a
 retrocast ingest \
   --model dms-explorer \
   --dataset paroutes-n1 \
+  --input-kind target-keyed-provider-output \
   --anonymize \  # (1)!
   --ignore-stereo  # (2)!
 ```

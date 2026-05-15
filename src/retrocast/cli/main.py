@@ -55,6 +55,12 @@ def main() -> None:
     adapt_parser.add_argument("--output", required=True, help="Path to save route corpus (.jsonl.gz)")
     adapt_parser.add_argument("--adapter", required=True, help="Name of the adapter to use (e.g. aizynth, dms)")
     adapt_parser.add_argument(
+        "--input-kind",
+        choices=["provider-output", "target-keyed-provider-output"],
+        default="provider-output",
+        help="Raw input shape. Use target-keyed-provider-output for mappings keyed by target id or target smiles.",
+    )
+    adapt_parser.add_argument(
         "--benchmark",
         help="Optional benchmark definition used only for target-hint validation during adaptation",
     )
@@ -98,6 +104,12 @@ def main() -> None:
     # Options
     ingest_parser.add_argument("--sampling-strategy", help="Sampling strategy (e.g., top-k, random-k, by-length)")
     ingest_parser.add_argument("--k", type=int, help="Sample k value (required with --sampling-strategy)")
+    ingest_parser.add_argument(
+        "--input-kind",
+        choices=["provider-output", "target-keyed-provider-output"],
+        default="target-keyed-provider-output",
+        help="Raw input shape. Project ingest defaults to target-keyed provider output.",
+    )
     ingest_parser.add_argument(
         "--anonymize", action="store_true", help="Hash the model name in the output folder (useful for blind review)"
     )
