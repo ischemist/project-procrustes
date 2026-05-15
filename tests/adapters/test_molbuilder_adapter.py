@@ -13,6 +13,7 @@ from retrocast.adapters.molbuilder_adapter import MolBuilderAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterSchemaError
 from retrocast.models.chem import TargetInput
+from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
 
     def test_reaction_metadata_propagated(self, adapter_instance, raw_valid_route_data, target_input):
         """Verify reaction name and score are preserved in step metadata."""
-        routes = list(adapter_instance.adapt_target_payload(raw_valid_route_data, target_input))
+        routes = list(adapt_target_routes(adapter_instance, raw_valid_route_data, target_input))
         assert len(routes) == 1
         route = routes[0]
 
@@ -88,14 +89,14 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
 
     def test_template_set_to_reaction_name(self, adapter_instance, raw_valid_route_data, target_input):
         """MolBuilder uses name-based templates, stored in ReactionStep.template."""
-        routes = list(adapter_instance.adapt_target_payload(raw_valid_route_data, target_input))
+        routes = list(adapt_target_routes(adapter_instance, raw_valid_route_data, target_input))
         step = routes[0].target.synthesis_step
         assert step is not None
         assert step.template == "Reduction"
 
     def test_route_metadata_has_score(self, adapter_instance, raw_valid_route_data, target_input):
         """Score from root disconnection is copied to route-level metadata."""
-        routes = list(adapter_instance.adapt_target_payload(raw_valid_route_data, target_input))
+        routes = list(adapt_target_routes(adapter_instance, raw_valid_route_data, target_input))
         assert routes[0].metadata["score"] == 0.85
 
     def test_purchasable_nodes_are_leaves(self, adapter_instance, target_input):
@@ -120,7 +121,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
                 ],
             }
         ]
-        routes = list(adapter_instance.adapt_target_payload(raw_routes, target_input))
+        routes = list(adapt_target_routes(adapter_instance, raw_routes, target_input))
         assert len(routes) == 1
         step = routes[0].target.synthesis_step
         assert step is not None
@@ -144,7 +145,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
             },
         ]
         target = TargetInput(id="ethanol", smiles="CCO")
-        routes = list(adapter_instance.adapt_target_payload(raw_routes, target))
+        routes = list(adapt_target_routes(adapter_instance, raw_routes, target))
         assert len(routes) == 2
 
     def test_cycle_detection(self, adapter_instance, caplog):
@@ -169,7 +170,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
             }
         ]
         target = TargetInput(id="ibuprofen_cycle", smiles=canonicalize_smiles(target_smiles))
-        routes = list(adapter_instance.adapt_target_payload(raw_routes, target))
+        routes = list(adapt_target_routes(adapter_instance, raw_routes, target))
         assert len(routes) == 0
         assert "adapter.cycle_detected" in caplog.text
 
@@ -203,7 +204,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
         ]
         target_smiles = canonicalize_smiles("CCOC(C)=O")
         target = TargetInput(id="ethyl_acetate", smiles=target_smiles)
-        routes = list(adapter_instance.adapt_target_payload(raw_routes, target))
+        routes = list(adapt_target_routes(adapter_instance, raw_routes, target))
 
         assert len(routes) == 1
         route = routes[0]
@@ -235,7 +236,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
             }
         ]
         target = TargetInput(id="ethanol", smiles="CCO")
-        routes = list(adapter_instance.adapt_target_payload(raw_routes, target))
+        routes = list(adapt_target_routes(adapter_instance, raw_routes, target))
         # Node has no children -> leaf -> no synthesis step -> no route steps
         # The adapter treats the root as a leaf, which means Route has length 0
         assert len(routes) == 1
@@ -253,7 +254,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
             }
         ]
         target = TargetInput(id="ethanol", smiles="CCO")
-        routes = list(adapter_instance.adapt_target_payload(raw_routes, target))
+        routes = list(adapt_target_routes(adapter_instance, raw_routes, target))
         assert len(routes) == 1
         step = routes[0].target.synthesis_step
         assert step is not None
@@ -277,7 +278,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
         ]
         target = TargetInput(id="ethanol", smiles="CCO")
 
-        routes = list(adapter_instance.adapt_target_payload(raw_routes, target))
+        routes = list(adapt_target_routes(adapter_instance, raw_routes, target))
 
         assert len(routes) == 1
         step = routes[0].target.synthesis_step
@@ -293,7 +294,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
         }
 
         with pytest.raises(AdapterSchemaError) as exc_info:
-            list(adapter_instance.adapt_target_payload(raw_payload, target_input))
+            list(adapt_target_routes(adapter_instance, raw_payload, target_input))
         assert exc_info.value.code == "adapter.schema_invalid"
         assert exc_info.value.context == {"adapter": "molbuilder", "target_id": target_input.id}
 
@@ -313,7 +314,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
         ]
         mismatched_target = TargetInput(id="ethanol", smiles="CCC")
 
-        routes = list(adapter_instance.adapt_target_payload(raw_routes, mismatched_target))
+        routes = list(adapt_target_routes(adapter_instance, raw_routes, mismatched_target))
 
         assert routes == []
 
@@ -339,7 +340,7 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
             }
         ]
         target = TargetInput(id="ethanol", smiles="CCO")
-        routes = list(adapter_instance.adapt_target_payload(raw_routes, target))
+        routes = list(adapt_target_routes(adapter_instance, raw_routes, target))
         assert len(routes) == 1
 
         # Root molecule metadata
@@ -360,6 +361,6 @@ class TestMolBuilderAdapterUnit(BaseAdapterTest):
                 for reactant in mol.synthesis_step.reactants:
                     _check(reactant)
 
-        routes = list(adapter_instance.adapt_target_payload(raw_valid_route_data, target_input))
+        routes = list(adapt_target_routes(adapter_instance, raw_valid_route_data, target_input))
         for route in routes:
             _check(route.target)

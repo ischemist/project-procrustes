@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import gzip
-import json
 import logging
 import re
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
@@ -13,7 +10,6 @@ from retrocast.adapters.common import PrecursorMap, build_molecule_from_precurso
 from retrocast.adapters.errors import adapter_route_transform_error, adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import RetroCastException
-from retrocast.io.blob import save_json_gz
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -39,22 +35,6 @@ def _extract_smiles(block: str) -> str | None:
     return inner if inner else None
 
 
-def _is_json_array_input(input_path: Path) -> bool:
-    name = input_path.name
-    if name.endswith((".json", ".json.gz")):
-        return True
-    if name.endswith((".jsonl", ".jsonl.gz")):
-        return False
-    raise ValueError("unsupported input format; expected .json, .json.gz, .jsonl, or .jsonl.gz")
-
-
-def _read_input_text(input_path: Path) -> str:
-    if input_path.suffix == ".gz":
-        with gzip.open(input_path, "rt", encoding="utf-8") as handle:
-            return handle.read()
-    return input_path.read_text(encoding="utf-8")
-
-
 def _extract_completion_text(raw_record: Any) -> str | None:
     if not isinstance(raw_record, dict):
         return None
@@ -62,94 +42,19 @@ def _extract_completion_text(raw_record: Any) -> str | None:
     return completion if isinstance(completion, str) else None
 
 
-def _extract_raw_completion(raw_record: Any) -> tuple[str, str] | None:
+def _extract_source_target_smiles(raw_record: Any) -> str | None:
     if not isinstance(raw_record, dict):
         return None
 
     meta = raw_record.get("meta")
-    completion = raw_record.get("completion")
-    if not isinstance(meta, dict) or not isinstance(completion, str):
+    if not isinstance(meta, dict):
         return None
 
     product_smiles = meta.get("product_smiles")
     if not isinstance(product_smiles, str):
         return None
 
-    return product_smiles, completion
-
-
-def load_ursa_llm_records(input_path: Path) -> list[Any]:
-    """Load raw Ursa completion records from json/jsonl, optionally gzipped."""
-    raw_text = _read_input_text(input_path).strip()
-    if not raw_text:
-        return []
-
-    if _is_json_array_input(input_path):
-        data = json.loads(raw_text)
-        if not isinstance(data, list):
-            raise ValueError("top-level JSON must be a list of records")
-        return data
-
-    records = []
-    for line in raw_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        records.append(json.loads(line))
-    return records
-
-
-def prepare_ursa_llm_results(input_path: Path) -> tuple[dict[str, list[dict[str, str]]], dict[str, int]]:
-    """Build the current benchmark-centric compatibility artifact from raw Ursa completions."""
-    records = load_ursa_llm_records(input_path)
-
-    grouped_completions: dict[str, list[dict[str, str]]] = {}
-    skipped_records = 0
-    accepted_records = 0
-
-    for raw_record in records:
-        prepared = _extract_raw_completion(raw_record)
-        if prepared is None:
-            skipped_records += 1
-            continue
-
-        product_smiles, completion = prepared
-        try:
-            canonical_target = canonicalize_smiles(product_smiles)
-        except RetroCastException:
-            skipped_records += 1
-            continue
-
-        grouped_completions.setdefault(canonical_target, []).append({"completion": completion})
-        accepted_records += 1
-
-    results = dict(sorted(grouped_completions.items()))
-    summary = {
-        "solved_count": len(results),
-        "total_records": len(records),
-        "accepted_records": accepted_records,
-        "skipped_records": skipped_records,
-    }
-    return results, summary
-
-
-def write_prepared_ursa_llm_results(*, input_path: Path, output_dir: Path) -> dict[str, int]:
-    """Persist the compatibility artifact for raw Ursa completions."""
-    results, summary = prepare_ursa_llm_results(input_path)
-    results_path = output_dir / "results.json.gz"
-
-    logger.info(
-        "found %s unique targets across %s accepted completions.",
-        summary["solved_count"],
-        summary["accepted_records"],
-    )
-    if summary["skipped_records"]:
-        logger.warning("skipped %s invalid or incomplete records.", summary["skipped_records"])
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    save_json_gz(results, results_path)
-    logger.info("successfully wrote pre-processed data to %s", results_path)
-    return summary
+    return product_smiles
 
 
 class UrsaLlmAdapter(BaseAdapter):
@@ -177,12 +82,31 @@ class UrsaLlmAdapter(BaseAdapter):
                     "each completion record must be a dict with a string 'completion' field",
                     record_index=row_index - 1,
                 )
+            expected_target_smiles = expected_target.smiles if expected_target is not None else None
+            if expected_target_smiles is None:
+                source_target_smiles = _extract_source_target_smiles(raw_record)
+                if source_target_smiles is None:
+                    raise adapter_schema_error(
+                        self.adapter_key,
+                        target_id,
+                        "completion records must include meta.product_smiles when no expected target is provided",
+                        record_index=row_index - 1,
+                    )
+                try:
+                    expected_target_smiles = canonicalize_smiles(source_target_smiles)
+                except RetroCastException as exc:
+                    raise adapter_schema_error(
+                        self.adapter_key,
+                        target_id,
+                        "completion record has invalid meta.product_smiles",
+                        record_index=row_index - 1,
+                    ) from exc
             yield RawRouteEntry(
                 payload=completion,
                 source_key=source_key,
                 source_row_index=row_index,
                 expected_target_id=expected_target.id if expected_target is not None else None,
-                expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+                expected_target_smiles=expected_target_smiles,
                 source_order=row_index,
             )
 
@@ -273,7 +197,4 @@ class UrsaLlmAdapter(BaseAdapter):
 
 __all__ = [
     "UrsaLlmAdapter",
-    "prepare_ursa_llm_results",
-    "write_prepared_ursa_llm_results",
-    "load_ursa_llm_records",
 ]

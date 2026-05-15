@@ -16,6 +16,7 @@ from retrocast.io.data import load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import InchiKeyStr, SmilesStr
+from retrocast.workflow.adapt import adapt_target_routes
 from retrocast.workflow.ingest import ingest_model_predictions
 from retrocast.workflow.score import score_model
 from tests.helpers import _make_simple_route, _make_two_step_route, _synthetic_inchikey
@@ -801,7 +802,7 @@ class TestSyntheticAdapter:
             route_length=1,
         )
 
-        results = list(adapter.adapt_target_payload(raw_data, target))
+        results = list(adapt_target_routes(adapter, raw_data, target))
         assert len(results) == 1
         assert results[0].target.smiles == "CC"
 
@@ -819,7 +820,7 @@ class TestSyntheticAdapter:
             route_length=1,
         )
 
-        results = list(adapter.adapt_target_payload(raw_data, target))
+        results = list(adapt_target_routes(adapter, raw_data, target))
         assert len(results) == 0
 
     @pytest.mark.unit
@@ -835,5 +836,5 @@ class TestSyntheticAdapter:
             route_length=1,
         )
 
-        results = list(adapter.adapt_target_payload("not a list", target))
+        results = list(adapt_target_routes(adapter, "not a list", target))
         assert len(results) == 0

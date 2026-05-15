@@ -6,6 +6,7 @@ from retrocast.adapters.retrochimera_adapter import RetrochimeraAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import TargetInput
+from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 
@@ -58,7 +59,7 @@ class TestRetrochimeraAdapterUnit(BaseAdapterTest):
         raw_data = {"smiles": "CCO", "result": {"error": {"type": "search_failed", "message": "failed"}}}
 
         with pytest.raises(AdapterLogicError) as exc_info:
-            list(adapter_instance.adapt_target_payload(raw_data, target_input))
+            list(adapt_target_routes(adapter_instance, raw_data, target_input))
 
         assert exc_info.value.code == "adapter.route_transform_failed"
         assert exc_info.value.context == {
@@ -71,7 +72,7 @@ class TestRetrochimeraAdapterUnit(BaseAdapterTest):
         raw_data = {"smiles": "CCO", "result": {}}
 
         with pytest.raises(AdapterLogicError) as exc_info:
-            list(adapter_instance.adapt_target_payload(raw_data, target_input))
+            list(adapt_target_routes(adapter_instance, raw_data, target_input))
 
         assert exc_info.value.code == "adapter.route_transform_failed"
         assert exc_info.value.context == {
@@ -106,7 +107,7 @@ class TestRetrochimeraAdapterUnit(BaseAdapterTest):
             },
         }
 
-        routes = list(adapter_instance.adapt_target_payload(raw_data, target_input))
+        routes = list(adapt_target_routes(adapter_instance, raw_data, target_input))
 
         assert len(routes) == 1
         assert routes[0].target.smiles == target_input.smiles
@@ -133,7 +134,7 @@ class TestRetrochimeraAdapterContract:
     def routes(self, adapter, raw_retrochimera_data, ebastine_target_input):
         """Shared fixture to avoid re-running adaptation for every test."""
         raw_target_data = raw_retrochimera_data["Ebastine"]
-        return list(adapter.adapt_target_payload(raw_target_data, ebastine_target_input))
+        return list(adapt_target_routes(adapter, raw_target_data, ebastine_target_input))
 
     def test_produces_correct_number_of_routes(self, routes):
         """Verify the adapter produces the expected number of routes."""
@@ -179,7 +180,7 @@ class TestRetrochimeraAdapterRegression:
     def routes(self, adapter, raw_retrochimera_data, ebastine_target_input):
         """Shared fixture to avoid re-running adaptation for every test."""
         raw_target_data = raw_retrochimera_data["Ebastine"]
-        return list(adapter.adapt_target_payload(raw_target_data, ebastine_target_input))
+        return list(adapt_target_routes(adapter, raw_target_data, ebastine_target_input))
 
     def test_first_route_has_correct_target(self, routes, ebastine_target_input):
         """Verify the first route has the correct target SMILES."""

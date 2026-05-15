@@ -5,6 +5,7 @@ import pytest
 from retrocast.adapters.dms_adapter import DMSAdapter, DMSTree
 from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import TargetInput
+from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 logger = logging.getLogger(__name__)
@@ -64,7 +65,7 @@ class TestDMSAdapterUnit(BaseAdapterTest):
             }
         ]
         target_input = TargetInput(id="ibuprofen_cycle_test", smiles=canonicalize_smiles(target_smiles))
-        routes = list(adapter_instance.adapt_target_payload(cyclic_route_data, target_input))
+        routes = list(adapt_target_routes(adapter_instance, cyclic_route_data, target_input))
         assert len(routes) == 0
         assert "adapter.cycle_detected" in caplog.text
 
@@ -84,7 +85,7 @@ class TestDMSAdapterContract:
         raw_target_data = raw_dms_data["ibuprofen"]
         target_smiles = canonicalize_smiles(raw_target_data[0]["smiles"])
         target_input = TargetInput(id="ibuprofen", smiles=target_smiles)
-        return list(adapter.adapt_target_payload(raw_target_data, target_input))
+        return list(adapt_target_routes(adapter, raw_target_data, target_input))
 
     def test_produces_multiple_routes(self, routes):
         """Verify the adapter produces multiple routes for ibuprofen."""
@@ -132,7 +133,7 @@ class TestDMSAdapterRegression:
         target_smiles = canonicalize_smiles(raw_route_data["smiles"])
         target_input = TargetInput(id="aspirin", smiles=target_smiles)
 
-        routes = list(adapter.adapt_target_payload([raw_route_data], target_input))
+        routes = list(adapt_target_routes(adapter, [raw_route_data], target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -159,7 +160,7 @@ class TestDMSAdapterRegression:
         target_smiles = canonicalize_smiles(raw_route_data["smiles"])
         target_input = TargetInput(id="paracetamol", smiles=target_smiles)
 
-        routes = list(adapter.adapt_target_payload([raw_route_data], target_input))
+        routes = list(adapt_target_routes(adapter, [raw_route_data], target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -214,7 +215,7 @@ class TestDMSAdapterRegression:
             target_smiles = canonicalize_smiles(raw_route_data["smiles"])
             target_input = TargetInput(id=target_name, smiles=target_smiles)
 
-            routes = list(adapter.adapt_target_payload([raw_route_data], target_input))
+            routes = list(adapt_target_routes(adapter, [raw_route_data], target_input))
             route = routes[0]
 
             dms_tree = DMSTree.model_validate(raw_route_data)

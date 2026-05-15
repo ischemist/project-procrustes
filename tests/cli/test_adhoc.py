@@ -7,6 +7,7 @@ Tests follow the testing framework philosophy:
 - Integration tests for end-to-end handler behavior
 """
 
+import json
 from argparse import Namespace
 from collections.abc import Generator
 from typing import Any
@@ -433,6 +434,32 @@ class TestHandleAdapt:
         handle_adapt(args)
 
         assert load_route_corpus(output_path) == []
+
+    def test_adapt_loads_flat_jsonl_corpora(self, tmp_path):
+        input_path = tmp_path / "completions.jsonl"
+        output_path = tmp_path / "route-corpus.jsonl.gz"
+        record = {
+            "meta": {"product_smiles": "CC(=O)C"},
+            "completion": (
+                "<synthesis_step><product><smiles>CC(=O)C</smiles></product>"
+                "<reactant><smiles>CC(=O)O</smiles></reactant>"
+                "<reactant><smiles>C</smiles></reactant></synthesis_step>"
+            ),
+        }
+        input_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+        args = Namespace(
+            input=str(input_path),
+            output=str(output_path),
+            adapter="ursa-llm",
+            benchmark=None,
+        )
+
+        handle_adapt(args)
+
+        route_corpus = load_route_corpus(output_path)
+        assert len(route_corpus) == 1
+        assert route_corpus[0].target.smiles == "CC(C)=O"
 
     def test_collect_builds_benchmark_keyed_routes(self, tmp_path):
         input_path = tmp_path / "route-corpus.jsonl.gz"

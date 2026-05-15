@@ -3,6 +3,7 @@ import pytest
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import Route, TargetInput
+from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 # derive SMILES from the raw data to ensure canonicalization matches
@@ -64,7 +65,7 @@ class TestSyntheseusAdapterContract:
         """Shared fixture for USPTO-2/190 routes."""
         target = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
         raw_routes = raw_syntheseus_data["USPTO-2/190"]
-        return list(adapter.adapt_target_payload(raw_routes, target))
+        return list(adapt_target_routes(adapter, raw_routes, target))
 
     def test_produces_correct_number_of_routes(self, uspto_routes):
         """Verify the adapter produces the expected number of routes."""
@@ -107,7 +108,7 @@ class TestSyntheseusAdapterRegression:
         raw_data = raw_syntheseus_data["USPTO-2/190"]
         target = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
 
-        routes = list(adapter.adapt_target_payload(raw_data, target))
+        routes = list(adapt_target_routes(adapter, raw_data, target))
 
         # The file contains 10 distinct routes for this target
         assert len(routes) == 10
@@ -131,7 +132,7 @@ class TestSyntheseusAdapterRegression:
         raw_data = raw_syntheseus_data["paracetamol"]
         target = TargetInput(id="paracetamol", smiles=PARACETAMOL_SMILES)
 
-        routes = list(adapter.adapt_target_payload(raw_data, target))
+        routes = list(adapt_target_routes(adapter, raw_data, target))
 
         assert len(routes) == 1
         route = routes[0]
@@ -146,5 +147,5 @@ class TestSyntheseusAdapterRegression:
         raw_data = raw_syntheseus_data["ibuprofen"]
         target = TargetInput(id="ibuprofen", smiles="CC(C)Cc1ccc(C(C)C(=O)O)cc1")
 
-        routes = list(adapter.adapt_target_payload(raw_data, target))
+        routes = list(adapt_target_routes(adapter, raw_data, target))
         assert len(routes) == 0

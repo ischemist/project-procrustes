@@ -14,7 +14,7 @@ from retrocast.chem import InchiKeyLevel
 from retrocast.cli.errors import log_expected_error
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
 from retrocast.exceptions import AdapterResolutionError, RetroCastException, SecurityError
-from retrocast.io.blob import load_json_gz, save_json_gz
+from retrocast.io.blob import load_json_artifact, load_json_gz, save_json_gz
 from retrocast.io.data import load_benchmark, load_execution_stats, load_routes, load_stock_file
 from retrocast.io.provenance import create_manifest
 from retrocast.models.evaluation import EvaluationResults
@@ -203,10 +203,7 @@ def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any)
     try:
         benchmark = load_benchmark(paths["benchmarks"] / f"{benchmark_name}.json.gz")
 
-        if raw_path.suffix == ".gz":
-            raw_data = load_json_gz(raw_path)
-        else:
-            raise NotImplementedError("Unsupported file format (only .json.gz supported currently)")
+        raw_data = load_json_artifact(raw_path)
 
         processed_routes, out_path, stats = ingest.ingest_model_predictions(
             model_name=model_name,

@@ -4,6 +4,7 @@ from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import TargetInput
+from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 
@@ -46,7 +47,7 @@ class TestSynLlamaAdapterUnit(BaseAdapterTest):
         raw_data = [{"synthesis_string": multi_step_string}]
         target_input = TargetInput(id="multi-step-test", smiles=canonicalize_smiles("CCC"))
 
-        routes = list(adapter_instance.adapt_target_payload(raw_data, target_input))
+        routes = list(adapt_target_routes(adapter_instance, raw_data, target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -89,7 +90,7 @@ class TestSynLlamaAdapterUnit(BaseAdapterTest):
         raw_data = [{"synthesis_string": "CC(C)=O"}]
         target_input = TargetInput(id="acetone-leaf", smiles=canonicalize_smiles("CC(C)=O"))
 
-        routes = list(adapter_instance.adapt_target_payload(raw_data, target_input))
+        routes = list(adapt_target_routes(adapter_instance, raw_data, target_input))
 
         assert len(routes) == 1
         assert routes[0].target.is_leaf is True
@@ -117,7 +118,7 @@ class TestSynLlamaAdapterContract:
         target_smi_canon = canonicalize_smiles(product_smi_raw)
 
         target_input = TargetInput(id=target_id, smiles=target_smi_canon)
-        return list(adapter.adapt_target_payload(raw_routes, target_input))
+        return list(adapt_target_routes(adapter, raw_routes, target_input))
 
     def test_produces_at_least_one_route(self, routes):
         """Verify the adapter produces at least one route."""
@@ -169,7 +170,7 @@ class TestSynLlamaAdapterRegression:
         target_smi_canon = canonicalize_smiles(product_smi_raw)
 
         target_input = TargetInput(id=target_id, smiles=target_smi_canon)
-        return list(adapter.adapt_target_payload(raw_routes, target_input))
+        return list(adapt_target_routes(adapter, raw_routes, target_input))
 
     @pytest.fixture(scope="class")
     def agn_routes(self, adapter, raw_synllama_data):
@@ -183,7 +184,7 @@ class TestSynLlamaAdapterRegression:
         target_smi_canon = canonicalize_smiles(product_smi_raw)
 
         target_input = TargetInput(id=target_id, smiles=target_smi_canon)
-        return list(adapter.adapt_target_payload(raw_routes, target_input))
+        return list(adapt_target_routes(adapter, raw_routes, target_input))
 
     @pytest.fixture(scope="class")
     def uspto_routes(self, adapter, raw_synllama_data):
@@ -197,7 +198,7 @@ class TestSynLlamaAdapterRegression:
         target_smi_canon = canonicalize_smiles(product_smi_raw)
 
         target_input = TargetInput(id=target_id, smiles=target_smi_canon)
-        return list(adapter.adapt_target_payload(raw_routes, target_input))
+        return list(adapt_target_routes(adapter, raw_routes, target_input))
 
     def test_conivaptan_first_route_has_rank_one(self, conivaptan_routes):
         """Verify Conivaptan first route has rank 1."""

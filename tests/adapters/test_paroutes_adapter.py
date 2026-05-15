@@ -5,6 +5,7 @@ import pytest
 from retrocast.adapters.paroutes_adapter import ConditionSlotParseStatistics, PaRoutesAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import TargetInput
+from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 
@@ -42,7 +43,7 @@ class TestPaRoutesAdapterUnit(BaseAdapterTest):
         self, adapter_instance, raw_valid_route_data, mismatched_target_input, caplog
     ):
         """tests that a smiles mismatch is logged and the invalid route is skipped."""
-        routes = list(adapter_instance.adapt_target_payload(raw_valid_route_data, mismatched_target_input))
+        routes = list(adapt_target_routes(adapter_instance, raw_valid_route_data, mismatched_target_input))
         assert routes == []
         assert "adapter.target_mismatch" in caplog.text
 
@@ -61,7 +62,7 @@ class TestPaRoutesAdapterContract:
         target_id = "paroutes-ex-1"
         raw_route = raw_paroutes_data[target_id]
         target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
-        return list(adapter.adapt_target_payload(raw_route, target_input))
+        return list(adapt_target_routes(adapter, raw_route, target_input))
 
     @pytest.fixture(scope="class")
     def routes_ex2(self, adapter, raw_paroutes_data):
@@ -69,7 +70,7 @@ class TestPaRoutesAdapterContract:
         target_id = "paroutes-ex-2"
         raw_route = raw_paroutes_data[target_id]
         target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
-        return list(adapter.adapt_target_payload(raw_route, target_input))
+        return list(adapt_target_routes(adapter, raw_route, target_input))
 
     def test_produces_single_route(self, routes_ex1):
         """verify the adapter produces exactly one route per target."""
@@ -147,7 +148,7 @@ class TestPaRoutesAdapterRegression:
         target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
 
         # both reaction steps in this example are from patent 'us20150051201a1'.
-        routes = list(adapter.adapt_target_payload(raw_route, target_input))
+        routes = list(adapt_target_routes(adapter, raw_route, target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -178,7 +179,7 @@ class TestPaRoutesAdapterRegression:
         inner_reaction = raw_route["children"][0]["children"][1]["children"][0]
         inner_reaction["metadata"]["ID"] = "SOME-OTHER-PATENT;1234;56789"
 
-        routes = list(adapter.adapt_target_payload(raw_route, target_input))
+        routes = list(adapt_target_routes(adapter, raw_route, target_input))
         assert routes == []
 
     def test_adapt_second_example_route(self, adapter, raw_paroutes_data):
@@ -190,7 +191,7 @@ class TestPaRoutesAdapterRegression:
         target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
 
         # all reaction steps in this example are from patent 'us08242133b2'.
-        routes = list(adapter.adapt_target_payload(raw_route, target_input))
+        routes = list(adapt_target_routes(adapter, raw_route, target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -213,7 +214,7 @@ class TestPaRoutesAdapterRegression:
         raw_route = raw_paroutes_data[target_id]
         target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
 
-        route = list(adapter.adapt_target_payload(raw_route, target_input))[0]
+        route = list(adapt_target_routes(adapter, raw_route, target_input))[0]
         outer_reaction = route.target.synthesis_step
         assert outer_reaction is not None
 
@@ -251,7 +252,7 @@ class TestPaRoutesAdapterRegression:
         target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
 
         with caplog.at_level("WARNING"):
-            route = list(adapter.adapt_target_payload(raw_route, target_input, condition_slot_parse_statistics=stats))[
+            route = list(adapt_target_routes(adapter, raw_route, target_input, condition_slot_parse_statistics=stats))[
                 0
             ]
 
@@ -274,7 +275,7 @@ class TestPaRoutesAdapterRegression:
         }
         target_input = TargetInput(id="missing-patent", smiles=canonicalize_smiles("CCO"))
 
-        routes = list(adapter.adapt_target_payload(raw_route, target_input))
+        routes = list(adapt_target_routes(adapter, raw_route, target_input))
         assert routes == []
         assert "adapter.patent_id_missing" in caplog.text
 
@@ -284,7 +285,7 @@ class TestPaRoutesAdapterRegression:
         stats = ConditionSlotParseStatistics()
         target_input = TargetInput(id="paroutes-ex-1", smiles=canonicalize_smiles(raw_route["smiles"]))
 
-        route = list(adapter.adapt_target_payload(raw_route, target_input, condition_slot_parse_statistics=stats))[0]
+        route = list(adapt_target_routes(adapter, raw_route, target_input, condition_slot_parse_statistics=stats))[0]
 
         step = route.target.synthesis_step
         assert step is not None
@@ -440,7 +441,7 @@ class TestPaRoutesAdapterCycleDetection:
 
         target_input = TargetInput(id="cycle-test-1", smiles=canonicalize_smiles(smiles_a))
 
-        routes = list(adapter.adapt_target_payload(raw_route_with_cycle, target_input))
+        routes = list(adapt_target_routes(adapter, raw_route_with_cycle, target_input))
         assert routes == []
         assert "adapter.cycle_detected" in caplog.text
 
@@ -478,7 +479,7 @@ class TestPaRoutesAdapterCycleDetection:
 
         target_input = TargetInput(id="self-loop-test", smiles=canonicalize_smiles(smiles_a))
 
-        routes = list(adapter.adapt_target_payload(raw_route_with_self_loop, target_input))
+        routes = list(adapt_target_routes(adapter, raw_route_with_self_loop, target_input))
         assert routes == []
         assert "adapter.cycle_detected" in caplog.text
 
@@ -550,7 +551,7 @@ class TestPaRoutesAdapterCycleDetection:
 
         target_input = TargetInput(id="deep-cycle-test", smiles=canonicalize_smiles(smiles_a))
 
-        routes = list(adapter.adapt_target_payload(raw_route_with_deep_cycle, target_input))
+        routes = list(adapt_target_routes(adapter, raw_route_with_deep_cycle, target_input))
         assert routes == []
         assert "adapter.cycle_detected" in caplog.text
 
@@ -563,7 +564,7 @@ class TestPaRoutesAdapterCycleDetection:
         raw_route = raw_paroutes_data[target_id]
         target_input = TargetInput(id=target_id, smiles=canonicalize_smiles(raw_route["smiles"]))
 
-        routes = list(adapter.adapt_target_payload(raw_route, target_input))
+        routes = list(adapt_target_routes(adapter, raw_route, target_input))
 
         # Should successfully process the route
         assert len(routes) == 1
@@ -647,6 +648,6 @@ class TestPaRoutesAdapterCycleDetection:
         target_input = TargetInput(id="branching-test", smiles=canonicalize_smiles(smiles_a))
 
         # Should successfully process - shared leaves are OK
-        routes = list(adapter.adapt_target_payload(raw_route_branching, target_input))
+        routes = list(adapt_target_routes(adapter, raw_route_branching, target_input))
         assert len(routes) == 1
         assert routes[0].length == 2

@@ -13,9 +13,10 @@ from retrocast.adapters.retrostar_adapter import RetroStarAdapter
 from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
-from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter, prepare_ursa_llm_results
+from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter
 from retrocast.exceptions import AdapterError, AdapterResolutionError, ChemError
 from retrocast.models.chem import Route, TargetIdentity
+from retrocast.workflow.adapt import adapt_target_routes
 
 ADAPTER_MAP: dict[str, BaseAdapter] = {
     "aizynth": AizynthAdapter(),
@@ -91,7 +92,7 @@ def adapt_routes(
     """
     adapter = get_adapter(adapter_name)
     routes = []
-    for i, route in enumerate(adapter.adapt_target_payload(raw_routes, target)):
+    for i, route in enumerate(adapt_target_routes(adapter, raw_routes, target)):
         routes.append(route)
         if max_routes and i + 1 >= max_routes:
             break
@@ -118,5 +119,4 @@ __all__ = [
     "SynPlannerAdapter",
     "SyntheseusAdapter",
     "SynLlaMaAdapter",
-    "prepare_ursa_llm_results",
 ]

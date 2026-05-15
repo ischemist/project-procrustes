@@ -6,6 +6,7 @@ import pytest
 from retrocast.adapters.askcos_adapter import AskcosAdapter
 from retrocast.exceptions import UnsupportedAdapterFeatureError
 from retrocast.models.chem import TargetInput
+from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 
@@ -71,7 +72,7 @@ class TestAskcosAdapterUnit(BaseAdapterTest):
         adapter = AskcosAdapter(use_full_graph=True)
 
         with pytest.raises(UnsupportedAdapterFeatureError) as exc_info:
-            list(adapter.adapt_target_payload(raw_valid_route_data, target_input))
+            list(adapt_target_routes(adapter, raw_valid_route_data, target_input))
 
         assert exc_info.value.code == "adapter.unsupported_feature"
         assert exc_info.value.context == {"adapter": "askcos", "feature": "full_graph"}
@@ -105,7 +106,7 @@ class TestAskcosAdapterUnit(BaseAdapterTest):
             }
         }
 
-        routes = list(adapter.adapt_target_payload(cyclic_data, target_input))
+        routes = list(adapt_target_routes(adapter, cyclic_data, target_input))
 
         assert routes == []
         assert "adapter.cycle_detected" in caplog.text
@@ -115,7 +116,7 @@ class TestAskcosAdapterUnit(BaseAdapterTest):
         corrupted_data = copy.deepcopy(raw_valid_route_data)
         corrupted_data["results"]["uds"]["uuid2smiles"].pop("00000000-0000-0000-0000-000000000000")
 
-        routes = list(adapter.adapt_target_payload(corrupted_data, target_input))
+        routes = list(adapt_target_routes(adapter, corrupted_data, target_input))
 
         assert routes == []
         assert "adapter.node_missing" in caplog.text
@@ -126,7 +127,7 @@ class TestAskcosAdapterUnit(BaseAdapterTest):
         corrupted_data = copy.deepcopy(raw_valid_route_data)
         corrupted_data["results"]["uds"]["pathways"][0][0]["target"] = "missing-rxn-uuid"
 
-        routes = list(adapter.adapt_target_payload(corrupted_data, target_input))
+        routes = list(adapt_target_routes(adapter, corrupted_data, target_input))
 
         assert routes == []
         assert "adapter.node_missing" in caplog.text
@@ -145,7 +146,7 @@ class TestAskcosAdapterContract:
     def routes(self, adapter: AskcosAdapter, raw_askcos_data: dict[str, Any], methylacetate_target_input: TargetInput):
         """Shared fixture to avoid re-running adaptation for every test."""
         raw_target_data = raw_askcos_data["methylacetate"]
-        return list(adapter.adapt_target_payload(raw_target_data, methylacetate_target_input))
+        return list(adapt_target_routes(adapter, raw_target_data, methylacetate_target_input))
 
     def test_produces_correct_number_of_routes(self, routes):
         """Verify the adapter produces the expected number of routes."""
@@ -217,7 +218,7 @@ class TestAskcosAdapterRegression:
     def routes(self, adapter: AskcosAdapter, raw_askcos_data: dict[str, Any], methylacetate_target_input: TargetInput):
         """Shared fixture to avoid re-running adaptation for every test."""
         raw_target_data = raw_askcos_data["methylacetate"]
-        return list(adapter.adapt_target_payload(raw_target_data, methylacetate_target_input))
+        return list(adapt_target_routes(adapter, raw_target_data, methylacetate_target_input))
 
     def test_first_route_is_simple_one_step(self, routes):
         """Verify the first route is a simple one-step synthesis."""
@@ -299,7 +300,7 @@ class TestAskcosAdapterErrorHandling:
         corrupted_data["results"]["uds"]["node_dict"].pop(key_to_remove, None)
 
         # The adapter should still run and produce routes for the non-corrupted pathways
-        routes = list(adapter.adapt_target_payload(corrupted_data, methylacetate_target_input))
+        routes = list(adapt_target_routes(adapter, corrupted_data, methylacetate_target_input))
 
         # The key assertion: we produced FEWER routes than total pathways.
         total_pathways = len(raw_target_data["results"]["uds"]["pathways"])

@@ -9,7 +9,7 @@ from retrocast.adapters import ADAPTER_MAP, get_adapter
 from retrocast.api import score_predictions
 from retrocast.cli.errors import log_expected_error
 from retrocast.exceptions import RetroCastException
-from retrocast.io.blob import load_json_gz, save_json_gz
+from retrocast.io.blob import load_json_artifact, save_json_gz
 from retrocast.io.data import load_benchmark, load_route_corpus, load_routes, save_route_corpus, save_routes
 from retrocast.io.provenance import create_manifest
 from retrocast.models.benchmark import create_benchmark, create_benchmark_target
@@ -267,7 +267,7 @@ def handle_adapt(args: Any) -> None:
 
     try:
         adapter = get_adapter(adapter_name)
-        raw_data = load_json_gz(input_path)
+        raw_data = load_json_artifact(input_path)
 
         benchmark_path: Path | None = None
         benchmark = None

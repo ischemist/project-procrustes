@@ -1,73 +1,72 @@
 from __future__ import annotations
 
+from collections import defaultdict
+
 import pytest
 
-from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter, prepare_ursa_llm_results
+from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter
 from retrocast.chem import canonicalize_smiles
-from retrocast.models.chem import TargetInput
+from retrocast.exceptions import AdapterSchemaError
+from retrocast.models.chem import Route, TargetInput
+from retrocast.workflow.adapt import adapt_route_corpus, adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
-# canonical SMILES for the three drugs used in the integration fixture
 EBASTINE_SMILES = canonicalize_smiles("CC(C)(C)C1=CC=C(C=C1)C(=O)CCCN2CCC(CC2)OC(C3=CC=CC=C3)C4=CC=CC=C4")
 SILDENAFIL_SMILES = canonicalize_smiles("CCCC1=NN(C2=C1N=C(NC2=O)C3=C(C=CC(=C3)S(=O)(=O)N4CCN(CC4)C)OCC)C")
 TIVOZANIB_SMILES = canonicalize_smiles("COC1=C(OC)C=C2C(OC3=CC(Cl)=C(NC(=O)NC4=NOC(C)=C4)C=C3)=CC=NC2=C1")
 
 
 def _wrap_step(product_smiles: str, reactant_smiles: list[str]) -> str:
-    reactants = "".join(f"<reactant><smiles>{r}</smiles></reactant>" for r in reactant_smiles)
+    reactants = "".join(f"<reactant><smiles>{smiles}</smiles></reactant>" for smiles in reactant_smiles)
     return f"<synthesis_step><product><smiles>{product_smiles}</smiles></product>{reactants}</synthesis_step>"
 
 
 class TestUrsaLlmAdapterUnit(BaseAdapterTest):
     @pytest.fixture
-    def adapter_instance(self):
+    def adapter_instance(self) -> UrsaLlmAdapter:
         return UrsaLlmAdapter()
 
     @pytest.fixture
-    def raw_valid_route_data(self):
-        # acetone (CC(C)=O) from acetic acid + methane
+    def raw_valid_route_data(self) -> list[dict[str, str]]:
         completion = "<answer>" + _wrap_step("CC(=O)C", ["CC(=O)O", "C"]) + "</answer>"
         return [{"completion": completion}]
 
     @pytest.fixture
-    def raw_unsuccessful_run_data(self):
+    def raw_unsuccessful_run_data(self) -> list[dict[str, str]]:
         return []
 
     @pytest.fixture
-    def raw_invalid_schema_data(self):
-        # missing required `completion` field — pydantic validation fails
+    def raw_invalid_schema_data(self) -> list[dict[str, str]]:
         return [{"wrong_key": "..."}]
 
     @pytest.fixture
-    def target_input(self):
+    def target_input(self) -> TargetInput:
         return TargetInput(id="acetone", smiles=canonicalize_smiles("CC(C)=O"))
 
     @pytest.fixture
-    def mismatched_target_input(self):
+    def mismatched_target_input(self) -> TargetInput:
         return TargetInput(id="acetone", smiles="CCC")
 
-    def test_parses_multi_step_route(self, adapter_instance):
-        # Route: C -> CC -> CCC
+    def test_parses_multi_step_route(self, adapter_instance: UrsaLlmAdapter) -> None:
         steps = _wrap_step("CC", ["C"]) + _wrap_step("CCC", ["CC", "C"])
         completion = f"<answer>{steps}</answer>"
         target_input = TargetInput(id="propane", smiles=canonicalize_smiles("CCC"))
 
-        routes = list(adapter_instance.cast([{"completion": completion}], target_input))
+        routes = list(adapt_target_routes(adapter_instance, [{"completion": completion}], target_input))
 
         assert len(routes) == 1
         target = routes[0].target
         assert target.smiles == "CCC"
         assert target.synthesis_step is not None
-        reactant_smiles = {r.smiles for r in target.synthesis_step.reactants}
+        reactant_smiles = {reactant.smiles for reactant in target.synthesis_step.reactants}
         assert reactant_smiles == {"CC", "C"}
 
-        intermediate = next(r for r in target.synthesis_step.reactants if r.smiles == "CC")
+        intermediate = next(reactant for reactant in target.synthesis_step.reactants if reactant.smiles == "CC")
         assert not intermediate.is_leaf
         assert intermediate.synthesis_step is not None
-        assert {r.smiles for r in intermediate.synthesis_step.reactants} == {"C"}
+        assert {reactant.smiles for reactant in intermediate.synthesis_step.reactants} == {"C"}
 
-    def test_handles_sm_token_format(self, adapter_instance):
-        # tokens <sm_C><sm_C><sm_O> should reconstruct to CCO
+    def test_handles_sm_token_format(self, adapter_instance: UrsaLlmAdapter) -> None:
         completion = (
             "<synthesis_step>"
             "<product><smiles><sm_C><sm_C><sm_O></smiles></product>"
@@ -77,62 +76,84 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
         )
         target_input = TargetInput(id="ethanol", smiles=canonicalize_smiles("CCO"))
 
-        routes = list(adapter_instance.cast([{"completion": completion}], target_input))
+        routes = list(adapt_target_routes(adapter_instance, [{"completion": completion}], target_input))
 
         assert len(routes) == 1
         target = routes[0].target
         assert target.smiles == "CCO"
         assert target.synthesis_step is not None
-        assert {r.smiles for r in target.synthesis_step.reactants} == {"CO", "C"}
+        assert {reactant.smiles for reactant in target.synthesis_step.reactants} == {"CO", "C"}
 
-    def test_strips_think_blocks(self, adapter_instance):
-        # think block contains a fake step that must be ignored
+    def test_strips_think_blocks(self, adapter_instance: UrsaLlmAdapter) -> None:
         fake = _wrap_step("CCN", ["C", "N"])
         real = _wrap_step("CC(=O)C", ["CC(=O)O", "C"])
         completion = f"<think>{fake}</think>{real}"
         target_input = TargetInput(id="acetone", smiles=canonicalize_smiles("CC(C)=O"))
 
-        routes = list(adapter_instance.cast([{"completion": completion}], target_input))
+        routes = list(adapt_target_routes(adapter_instance, [{"completion": completion}], target_input))
 
         assert len(routes) == 1
         target = routes[0].target
         assert target.smiles == "CC(C)=O"
-        # ensure the bogus reactants from the think block did NOT leak into the precursor map
+        assert target.synthesis_step is not None
         leaves = {leaf.smiles for leaf in target.synthesis_step.reactants}
         assert leaves == {"CC(=O)O", "C"}
 
-    def test_skips_steps_without_product_or_reactants(self, adapter_instance):
-        # one good step + one step with no reactants + one step with no product
+    def test_skips_steps_without_product_or_reactants(self, adapter_instance: UrsaLlmAdapter) -> None:
         good = _wrap_step("CC(=O)C", ["CC(=O)O", "C"])
         no_reactants = "<synthesis_step><product><smiles>CCN</smiles></product></synthesis_step>"
         no_product = "<synthesis_step><reactant><smiles>C</smiles></reactant></synthesis_step>"
         completion = good + no_reactants + no_product
         target_input = TargetInput(id="acetone", smiles=canonicalize_smiles("CC(C)=O"))
 
-        routes = list(adapter_instance.cast([{"completion": completion}], target_input))
+        routes = list(adapt_target_routes(adapter_instance, [{"completion": completion}], target_input))
 
         assert len(routes) == 1
         assert routes[0].target.smiles == "CC(C)=O"
 
-    def test_yields_one_route_per_completion_with_ranks(self, adapter_instance):
+    def test_iter_raw_entries_uses_source_target_metadata_without_benchmark_context(
+        self,
+        adapter_instance: UrsaLlmAdapter,
+    ) -> None:
+        completion = _wrap_step("c1ccccc1", ["C", "CC"])
+        entries = list(
+            adapter_instance.iter_raw_entries([{"meta": {"product_smiles": "C1=CC=CC=C1"}, "completion": completion}])
+        )
+
+        assert len(entries) == 1
+        assert entries[0].expected_target_smiles == canonicalize_smiles("C1=CC=CC=C1")
+        assert entries[0].payload == completion
+
+    def test_iter_raw_entries_requires_source_target_metadata_without_expected_target(
+        self,
+        adapter_instance: UrsaLlmAdapter,
+    ) -> None:
+        with pytest.raises(AdapterSchemaError) as exc_info:
+            list(adapter_instance.iter_raw_entries([{"completion": "route-1"}]))
+
+        assert exc_info.value.code == "adapter.schema_invalid"
+
+    def test_yields_one_route_per_completion(self, adapter_instance: UrsaLlmAdapter) -> None:
         completion = _wrap_step("CC(=O)C", ["CC(=O)O", "C"])
         records = [{"completion": completion} for _ in range(5)]
         target_input = TargetInput(id="acetone", smiles=canonicalize_smiles("CC(C)=O"))
 
-        routes = list(adapter_instance.cast(records, target_input))
+        routes = list(adapt_target_routes(adapter_instance, records, target_input))
 
         assert len(routes) == 5
-        assert [r.rank for r in routes] == [1, 2, 3, 4, 5]
+        assert all(route.target.smiles == target_input.smiles for route in routes)
 
-    def test_completion_with_no_steps_is_skipped(self, adapter_instance, caplog):
+    def test_completion_with_no_steps_is_skipped(self, adapter_instance: UrsaLlmAdapter, caplog) -> None:
         target_input = TargetInput(id="acetone", smiles=canonicalize_smiles("CC(C)=O"))
-        routes = list(adapter_instance.cast([{"completion": "no synthesis steps here"}], target_input))
+
+        routes = list(adapt_target_routes(adapter_instance, [{"completion": "no synthesis steps here"}], target_input))
+
         assert routes == []
         assert "no synthesis steps" in caplog.text
 
-    def test_mixed_valid_and_invalid_completions(self, adapter_instance):
+    def test_mixed_valid_and_invalid_completions(self, adapter_instance: UrsaLlmAdapter) -> None:
         good = _wrap_step("CC(=O)C", ["CC(=O)O", "C"])
-        bad = _wrap_step("CCN", ["C", "N"])  # wrong product, won't match target
+        bad = _wrap_step("CCN", ["C", "N"])
         records = [
             {"completion": good},
             {"completion": bad},
@@ -140,19 +161,21 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
         ]
         target_input = TargetInput(id="acetone", smiles=canonicalize_smiles("CC(C)=O"))
 
-        routes = list(adapter_instance.cast(records, target_input))
+        routes = list(adapt_target_routes(adapter_instance, records, target_input))
 
         assert len(routes) == 2
-        assert [r.rank for r in routes] == [1, 3]
+        assert all(route.target.smiles == target_input.smiles for route in routes)
 
 
 @pytest.mark.contract
 class TestUrsaLlmAdapterContract:
-    """Contract tests on real LLM completions: verify Route objects are well-formed."""
-
     @pytest.fixture(scope="class")
-    def adapter(self) -> UrsaLlmAdapter:
-        return UrsaLlmAdapter()
+    def routes_by_target_smiles(self, raw_ursa_llm_data) -> dict[str, list[Route]]:
+        route_corpus = adapt_route_corpus(raw_ursa_llm_data, UrsaLlmAdapter())
+        grouped_routes: dict[str, list[Route]] = defaultdict(list)
+        for route in route_corpus:
+            grouped_routes[route.target.smiles].append(route)
+        return grouped_routes
 
     @pytest.fixture(
         scope="class",
@@ -161,67 +184,31 @@ class TestUrsaLlmAdapterContract:
             ("Sildenafil", SILDENAFIL_SMILES),
             ("Tivozanib", TIVOZANIB_SMILES),
         ],
-        ids=lambda p: p[0],
+        ids=lambda param: param[0],
     )
-    def routes(self, adapter, raw_ursa_llm_data, request):
-        target_id, target_smi = request.param
-        payload = raw_ursa_llm_data.get(target_smi)
-        assert payload is not None, f"target {target_id} not found under canonical smiles key"
+    def routes(self, routes_by_target_smiles: dict[str, list[Route]], request) -> list[Route]:
+        _, target_smiles = request.param
+        return routes_by_target_smiles[target_smiles]
 
-        target_input = TargetInput(id=target_id, smiles=target_smi)
-        return list(adapter.cast(payload, target_input))
-
-    def test_produces_at_least_one_route(self, routes):
+    def test_produces_at_least_one_route(self, routes: list[Route]) -> None:
         assert len(routes) >= 1
 
-    def test_all_routes_preserve_strictly_increasing_ranks(self, routes):
-        ranks = [route.rank for route in routes]
-        assert ranks == sorted(ranks)
-        assert len(ranks) == len(set(ranks))
-        assert all(rank >= 1 for rank in ranks)
-
-    def test_target_smiles_match(self, routes, request):
-        # request.node.callspec.params resolves the parametrized target
+    def test_target_smiles_match(self, routes: list[Route], request) -> None:
         _, expected = request.node.callspec.params["routes"]
         for route in routes:
             assert route.target.smiles == expected
 
-    def test_all_molecules_have_inchikeys(self, routes):
-        def check(mol):
-            assert mol.inchikey
-            if mol.synthesis_step is not None:
-                for r in mol.synthesis_step.reactants:
-                    check(r)
+    def test_all_molecules_have_inchikeys(self, routes: list[Route]) -> None:
+        def check(molecule) -> None:
+            assert molecule.inchikey
+            if molecule.synthesis_step is not None:
+                for reactant in molecule.synthesis_step.reactants:
+                    check(reactant)
 
         for route in routes:
             check(route.target)
 
-    def test_root_is_not_leaf(self, routes):
+    def test_root_is_not_leaf(self, routes: list[Route]) -> None:
         for route in routes:
             assert not route.target.is_leaf
             assert route.target.synthesis_step is not None
-
-
-@pytest.mark.integration
-def test_prepare_ursa_llm_results_accepts_json_array(tmp_path):
-    input_path = tmp_path / "completions.json"
-    input_path.write_text(
-        '[{"meta":{"product_smiles":"C1=CC=CC=C1"},"completion":"route-1"},{"meta":{"product_smiles":"c1ccccc1"},"completion":"route-2"}]',
-        encoding="utf-8",
-    )
-
-    results, summary = prepare_ursa_llm_results(input_path)
-
-    canonical_target_smiles = canonicalize_smiles("C1=CC=CC=C1")
-    assert results == {
-        canonical_target_smiles: [
-            {"completion": "route-1"},
-            {"completion": "route-2"},
-        ]
-    }
-    assert summary == {
-        "solved_count": 1,
-        "total_records": 2,
-        "accepted_records": 2,
-        "skipped_records": 0,
-    }

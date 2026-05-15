@@ -5,8 +5,10 @@ from collections.abc import Iterator, Mapping
 from itertools import chain
 from typing import Any
 
+from pydantic import ValidationError
+
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
-from retrocast.exceptions import AdapterError, AdapterSchemaError, ChemError, InputError, UnsupportedAdapterFeatureError
+from retrocast.exceptions import AdapterError, AdapterSchemaError, ChemError, UnsupportedAdapterFeatureError
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.chem import Route, RunStatistics, TargetIdentity, TargetInput
 
@@ -34,6 +36,7 @@ def _adapt_entries(
     *,
     ignore_stereo: bool,
     stats: RunStatistics | None = None,
+    **cast_kwargs: Any,
 ) -> Iterator[Route]:
     for entry in entries:
         try:
@@ -41,7 +44,16 @@ def _adapt_entries(
                 entry.payload,
                 ignore_stereo=ignore_stereo,
                 expected_target=_target_from_entry(entry),
+                **cast_kwargs,
             )
+        except ValidationError as exc:
+            logger.warning(
+                "Adapter failed for raw entry %s: %s [adapter.schema_invalid]",
+                entry.expected_target_id or entry.source_key or entry.source_row_index,
+                exc,
+            )
+            _record_adaptation_failure(stats, entry, "adapter.schema_invalid")
+            continue
         except (AdapterError, ChemError) as exc:
             logger.warning(
                 "Adapter failed for raw entry %s: %s [%s]",
@@ -63,6 +75,7 @@ def _iter_route_first_routes(
     *,
     ignore_stereo: bool,
     stats: RunStatistics | None = None,
+    **cast_kwargs: Any,
 ) -> Iterator[Route]:
     if isinstance(raw_data, Mapping):
         try:
@@ -88,6 +101,7 @@ def _iter_route_first_routes(
                 adapter,
                 ignore_stereo=ignore_stereo,
                 stats=stats,
+                **cast_kwargs,
             )
             return
 
@@ -98,6 +112,7 @@ def _iter_route_first_routes(
         adapter,
         ignore_stereo=ignore_stereo,
         stats=stats,
+        **cast_kwargs,
     )
 
 
@@ -107,6 +122,7 @@ def _iter_keyed_route_first_routes(
     *,
     ignore_stereo: bool,
     stats: RunStatistics | None = None,
+    **cast_kwargs: Any,
 ) -> Iterator[Route]:
     for source_key, payload in raw_data.items():
         if stats is not None:
@@ -116,6 +132,7 @@ def _iter_keyed_route_first_routes(
             adapter,
             ignore_stereo=ignore_stereo,
             stats=stats,
+            **cast_kwargs,
         )
 
 
@@ -126,13 +143,17 @@ def _iter_benchmark_routes(
     *,
     ignore_stereo: bool,
     stats: RunStatistics | None = None,
+    **cast_kwargs: Any,
 ) -> Iterator[Route]:
     if not isinstance(raw_data, Mapping):
-        raise InputError(
-            "Raw prediction data must be a mapping keyed by target id or target smiles.",
-            code="input.invalid_raw_predictions_corpus",
-            context={"actual_type": type(raw_data).__name__},
+        yield from _iter_route_first_routes(
+            raw_data,
+            adapter,
+            ignore_stereo=ignore_stereo,
+            stats=stats,
+            **cast_kwargs,
         )
+        return
 
     for target_id, target in benchmark.targets.items():
         matched_key = None
@@ -158,6 +179,7 @@ def _iter_benchmark_routes(
             adapter,
             ignore_stereo=ignore_stereo,
             stats=stats,
+            **cast_kwargs,
         )
 
 
@@ -168,6 +190,7 @@ def iter_adapted_routes(
     benchmark: BenchmarkSet | None = None,
     ignore_stereo: bool = False,
     stats: RunStatistics | None = None,
+    **cast_kwargs: Any,
 ) -> Iterator[Route]:
     """
     Adapt a raw artifact into canonical Route objects.
@@ -183,6 +206,7 @@ def iter_adapted_routes(
             adapter,
             ignore_stereo=ignore_stereo,
             stats=stats,
+            **cast_kwargs,
         )
         return
 
@@ -191,6 +215,27 @@ def iter_adapted_routes(
         adapter,
         ignore_stereo=ignore_stereo,
         stats=stats,
+        **cast_kwargs,
+    )
+
+
+def adapt_target_routes(
+    adapter: BaseAdapter,
+    raw_target_data: Any,
+    target: TargetIdentity,
+    *,
+    ignore_stereo: bool = False,
+    stats: RunStatistics | None = None,
+    **cast_kwargs: Any,
+) -> Iterator[Route]:
+    """Adapt a target-local raw payload through the route-first adapter seam."""
+    entries = adapter.iter_raw_entries(raw_target_data, expected_target=target)
+    yield from _adapt_entries(
+        entries,
+        adapter,
+        ignore_stereo=ignore_stereo,
+        stats=stats,
+        **cast_kwargs,
     )
 
 
@@ -201,6 +246,7 @@ def adapt_route_corpus(
     benchmark: BenchmarkSet | None = None,
     ignore_stereo: bool = False,
     stats: RunStatistics | None = None,
+    **cast_kwargs: Any,
 ) -> list[Route]:
     """Materialize a canonical route corpus from a raw artifact."""
     return list(
@@ -210,5 +256,6 @@ def adapt_route_corpus(
             benchmark=benchmark,
             ignore_stereo=ignore_stereo,
             stats=stats,
+            **cast_kwargs,
         )
     )

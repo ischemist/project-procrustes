@@ -1,6 +1,7 @@
 from retrocast.io.blob import (
     iter_jsonl_gz,
     iter_lines_gz,
+    load_json_artifact,
     load_json_gz,
     load_jsonl_gz,
     load_lines_gz,
@@ -41,6 +42,7 @@ __all__ = [
     # blob
     "iter_jsonl_gz",
     "iter_lines_gz",
+    "load_json_artifact",
     "load_json_gz",
     "load_jsonl_gz",
     "load_lines_gz",

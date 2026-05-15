@@ -3,6 +3,7 @@ import pytest
 from retrocast.adapters.aizynth_adapter import AizynthAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import Route, TargetInput
+from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 
@@ -62,7 +63,7 @@ class TestAizynthAdapterContract:
         """Shared fixture for aspirin routes."""
         target = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
         raw_routes = raw_aizynth_mcts_data["aspirin"]
-        return list(adapter.adapt_target_payload(raw_routes, target))
+        return list(adapt_target_routes(adapter, raw_routes, target))
 
     def test_produces_correct_number_of_routes(self, aspirin_routes):
         """Verify the adapter produces the expected number of routes."""
@@ -130,7 +131,7 @@ class TestAizynthAdapterRegression:
         """Verify the first aspirin route is a simple one-step synthesis."""
         target = TargetInput(id="aspirin", smiles=canonicalize_smiles("CC(=O)Oc1ccccc1C(=O)O"))
         raw_routes = raw_aizynth_mcts_data["aspirin"]
-        routes = list(adapter.adapt_target_payload(raw_routes, target))
+        routes = list(adapt_target_routes(adapter, raw_routes, target))
 
         first_route = routes[0]
         assert first_route.target.smiles == target.smiles
@@ -153,7 +154,7 @@ class TestAizynthAdapterRegression:
         """Verify the first ibuprofen route is a three-step synthesis."""
         target = TargetInput(id="ibuprofen", smiles=canonicalize_smiles("CC(C)Cc1ccc([C@@H](C)C(=O)O)cc1"))
         raw_route = raw_aizynth_mcts_data["ibuprofen"][0]
-        routes = list(adapter.adapt_target_payload([raw_route], target))
+        routes = list(adapt_target_routes(adapter, [raw_route], target))
 
         assert len(routes) == 1
         route = routes[0]
