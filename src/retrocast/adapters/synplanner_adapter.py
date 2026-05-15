@@ -63,12 +63,11 @@ class SynPlannerAdapter(BaseAdapter):
         raw_data: Any,
         *,
         source_key: str | None = None,
-        expected_target: TargetIdentity | None = None,
     ) -> Iterator[RawRouteEntry]:
         """
         Validate raw SynPlanner data and expose one route-like payload per entry.
         """
-        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
+        target_id = source_key or "<unknown>"
         try:
             validated_routes = SynPlannerRouteList.model_validate(raw_data)
         except ValidationError as e:
@@ -78,8 +77,8 @@ class SynPlannerAdapter(BaseAdapter):
             yield RawRouteEntry(
                 payload=synplanner_tree_root,
                 source_key=source_key,
-                expected_target_id=expected_target.id if expected_target is not None else None,
-                expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+                target_hint_id=None,
+                target_hint_smiles=None,
                 source_order=rank,
             )
 
@@ -99,6 +98,7 @@ class SynPlannerAdapter(BaseAdapter):
         synplanner_root: SynPlannerMoleculeInput,
         target: TargetIdentity | None,
         ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
     ) -> Route:
         """
         orchestrates the transformation of a single synplanner output tree.

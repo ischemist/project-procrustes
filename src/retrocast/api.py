@@ -72,6 +72,7 @@ from retrocast.models.stats import ModelStatistics
 from retrocast.typing import InchiKeyStr
 from retrocast.workflow import analyze as analyze_workflow
 from retrocast.workflow import score as score_workflow
+from retrocast.workflow.adapt import adapt_benchmark_keyed_route_corpus as adapt_benchmark_keyed_route_corpus
 from retrocast.workflow.adapt import adapt_route_corpus as adapt_route_corpus
 from retrocast.workflow.adapt import adapt_target_routes as adapt_target_routes
 from retrocast.workflow.collect import collect_benchmark_predictions as collect_benchmark_predictions

@@ -10,7 +10,7 @@ from retrocast.io.data import save_routes
 from retrocast.io.provenance import generate_model_hash
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.chem import Route, RunStatistics
-from retrocast.workflow.adapt import adapt_route_corpus
+from retrocast.workflow.adapt import adapt_benchmark_keyed_route_corpus, adapt_route_corpus
 from retrocast.workflow.collect import collect_benchmark_predictions
 
 logger = logging.getLogger(__name__)
@@ -65,13 +65,21 @@ def ingest_model_predictions(
         logger.info(f"Applying sampling: {sampling_strategy} (k={sample_k})")
 
     stats = RunStatistics()
-    route_corpus = adapt_route_corpus(
-        raw_data,
-        adapter,
-        benchmark=benchmark,
-        ignore_stereo=ignore_stereo,
-        stats=stats,
-    )
+    if isinstance(raw_data, dict):
+        route_corpus = adapt_benchmark_keyed_route_corpus(
+            raw_data,
+            benchmark,
+            adapter,
+            ignore_stereo=ignore_stereo,
+            stats=stats,
+        )
+    else:
+        route_corpus = adapt_route_corpus(
+            raw_data,
+            adapter,
+            ignore_stereo=ignore_stereo,
+            stats=stats,
+        )
     collected_routes = collect_benchmark_predictions(route_corpus, benchmark)
     processed_routes = collected_routes.routes_by_target
 

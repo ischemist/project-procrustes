@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import logging
-import re
-from collections import defaultdict
 from collections.abc import Iterator
-from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -16,8 +13,9 @@ from retrocast.adapters.errors import (
     adapter_schema_error,
     adapter_target_mismatch,
 )
+from retrocast.adapters.paroutes_diagnostics import build_condition_slot_metadata
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterError, AdapterLogicError, ChemError, RetroCastException
+from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -59,43 +57,8 @@ PaRoutesMoleculeInput.model_rebuild()
 PaRoutesReactionInput.model_rebuild()
 
 
-class ConditionSlotParseStatistics(BaseModel):
-    malformed_rsmi_count: int = 0
-    uncanonicalizable_token_count: int = 0
-    uncanonicalizable_tokens: dict[str, int] = Field(default_factory=lambda: defaultdict(int))
-
-    @property
-    def distinct_uncanonicalizable_token_count(self) -> int:
-        return len(self.uncanonicalizable_tokens)
-
-    @property
-    def top_uncanonicalizable_tokens(self) -> list[tuple[str, int]]:
-        return sorted(self.uncanonicalizable_tokens.items(), key=lambda item: (-item[1], item[0]))[:5]
-
-    def to_manifest_dict(self) -> dict[str, int]:
-        return {
-            "malformed_rsmi_count": self.malformed_rsmi_count,
-            "uncanonicalizable_token_count": self.uncanonicalizable_token_count,
-            "distinct_uncanonicalizable_token_count": self.distinct_uncanonicalizable_token_count,
-        }
-
-
-@dataclass(frozen=True)
-class PaRoutesAdaptationResult:
-    route: Route | None
-    error: RetroCastException | None = None
-
-
 class PaRoutesAdapter(BaseAdapter):
     """adapter for converting paroutes experimental routes to the route schema."""
-
-    _MODERN_YEAR_PATTERN = re.compile(r"^US(20\d{2})")
-    _SPECIAL_PREFIX_PATTERN = re.compile(r"^US[A-Z]+")
-
-    def __init__(self) -> None:
-        """initialize the adapter with a stats counter."""
-        self.year_counts: dict[str, int] = defaultdict(int)
-        self.unparsed_categories: dict[str, int] = defaultdict(int)
 
     def _get_patent_ids(self, node: PaRoutesMoleculeInput, visited: set[str] | None = None) -> set[str]:
         """
@@ -135,109 +98,13 @@ class PaRoutesAdapter(BaseAdapter):
                 patent_ids.update(self._get_patent_ids(reactant_node, visited=new_visited))
         return patent_ids
 
-    def _get_year_from_patent_id(self, patent_id: str) -> str | None:
-        """extracts the year from a patent id string, or categorizes it."""
-        # handles modern format: US<YYYY><serial>A1, e.g., US2015...
-        match = self._MODERN_YEAR_PATTERN.match(patent_id)
-        if match:
-            return match.group(1)
-
-        # handles special administrative patents like reissues (USRE...) or SIRs (USH...)
-        if self._SPECIAL_PREFIX_PATTERN.match(patent_id):
-            self.unparsed_categories["special/admin"] += 1
-            return None
-
-        # if it starts with US and a digit but didn't match the modern year format,
-        # it's a pre-2001 granted patent. the number does not contain a year.
-        if patent_id.startswith("US") and len(patent_id) > 2 and patent_id[2].isdigit():
-            self.unparsed_categories["pre-2001_grant"] += 1
-            return None
-
-        self.unparsed_categories["unknown_format"] += 1
-        return None
-
-    def _extract_condition_slot(
-        self,
-        rsmi: str | None,
-        condition_slot_parse_statistics: ConditionSlotParseStatistics,
-    ) -> str | None:
-        """extract the raw middle condition slot from a paroutes reaction smiles string."""
-        if not rsmi:
-            return None
-
-        parts = rsmi.split(">")
-        if len(parts) != 3:
-            condition_slot_parse_statistics.malformed_rsmi_count += 1
-            return None
-
-        condition_slot = parts[1].strip()
-        return condition_slot or None
-
-    def _parse_condition_slot_smiles(
-        self,
-        condition_slot: str,
-        *,
-        ignore_stereo: bool,
-        condition_slot_parse_statistics: ConditionSlotParseStatistics,
-    ) -> list[SmilesStr]:
-        """best-effort canonicalization of molecules listed in the condition slot."""
-        parsed_smiles: list[SmilesStr] = []
-        for token in condition_slot.split("."):
-            token = token.strip()
-            if not token:
-                continue
-            try:
-                parsed_smiles.append(
-                    canonicalize_smiles(
-                        token,
-                        remove_mapping=True,
-                        ignore_stereo=ignore_stereo,
-                    )
-                )
-            except ChemError:
-                condition_slot_parse_statistics.uncanonicalizable_token_count += 1
-                condition_slot_parse_statistics.uncanonicalizable_tokens[token] += 1
-
-        return sorted(parsed_smiles)
-
-    def _build_reaction_metadata(
-        self,
-        rxn_metadata: PaRoutesReactionMetadata | None,
-        *,
-        ignore_stereo: bool,
-        condition_slot_parse_statistics: ConditionSlotParseStatistics,
-    ) -> dict[str, Any]:
-        """build trustworthy reaction metadata from ambiguous paroutes side information."""
-        if rxn_metadata is None:
-            return {}
-
-        metadata: dict[str, Any] = {
-            "source_id": rxn_metadata.id,
-        }
-        if rxn_metadata.ring_breaker is not None:
-            metadata["ring_breaker"] = rxn_metadata.ring_breaker
-
-        condition_slot = self._extract_condition_slot(rxn_metadata.rsmi, condition_slot_parse_statistics)
-        if condition_slot is not None:
-            metadata["condition_slot"] = condition_slot
-            condition_slot_smiles = self._parse_condition_slot_smiles(
-                condition_slot,
-                ignore_stereo=ignore_stereo,
-                condition_slot_parse_statistics=condition_slot_parse_statistics,
-            )
-            if condition_slot_smiles:
-                metadata["condition_slot_smiles"] = condition_slot_smiles
-
-        return metadata
-
     def iter_raw_entries(
         self,
         raw_data: Any,
         *,
         source_key: str | None = None,
-        expected_target: TargetIdentity | None = None,
     ) -> Iterator[RawRouteEntry]:
-        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
+        target_id = source_key or "<unknown>"
         try:
             validated_route_root = PaRoutesMoleculeInput.model_validate(raw_data)
         except ValidationError as e:
@@ -246,8 +113,8 @@ class PaRoutesAdapter(BaseAdapter):
         yield RawRouteEntry(
             payload=validated_route_root,
             source_key=source_key,
-            expected_target_id=expected_target.id if expected_target is not None else None,
-            expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+            target_hint_id=None,
+            target_hint_smiles=None,
             source_order=1,
         )
 
@@ -257,7 +124,6 @@ class PaRoutesAdapter(BaseAdapter):
         *,
         ignore_stereo: bool = False,
         expected_target: TargetIdentity | None = None,
-        condition_slot_parse_statistics: ConditionSlotParseStatistics | None = None,
     ) -> Route:
         if not isinstance(raw_route, PaRoutesMoleculeInput):
             raw_route = PaRoutesMoleculeInput.model_validate(raw_route)
@@ -272,9 +138,6 @@ class PaRoutesAdapter(BaseAdapter):
             )
         elif len(patent_ids) == 1:
             patent_id = list(patent_ids)[0]
-            year = self._get_year_from_patent_id(patent_id)
-            if year:
-                self.year_counts[year] += 1
 
         if not patent_ids:
             raise AdapterLogicError(
@@ -283,30 +146,12 @@ class PaRoutesAdapter(BaseAdapter):
                 context={"adapter": "paroutes", "target_id": target_id},
             )
 
-        stats = condition_slot_parse_statistics or ConditionSlotParseStatistics()
         return self._transform(
             raw_route,
             expected_target,
-            patent_id=list(patent_ids)[0],
+            patent_id=patent_id,
             ignore_stereo=ignore_stereo,
-            condition_slot_parse_statistics=stats,
         )
-
-    def adapt_route_with_diagnostics(
-        self,
-        raw_route: Any,
-        target: TargetIdentity,
-        condition_slot_parse_statistics: ConditionSlotParseStatistics,
-    ) -> PaRoutesAdaptationResult:
-        try:
-            route = self.cast(
-                raw_route,
-                expected_target=target,
-                condition_slot_parse_statistics=condition_slot_parse_statistics,
-            )
-            return PaRoutesAdaptationResult(route=route)
-        except (AdapterError, ChemError) as exc:
-            return PaRoutesAdaptationResult(route=None, error=exc)
 
     def _transform(
         self,
@@ -315,7 +160,6 @@ class PaRoutesAdapter(BaseAdapter):
         patent_id: str,
         *,
         ignore_stereo: bool = False,
-        condition_slot_parse_statistics: ConditionSlotParseStatistics,
     ) -> Route:
         """
         orchestrates the transformation of a single validated paroutes tree.
@@ -325,7 +169,6 @@ class PaRoutesAdapter(BaseAdapter):
             paroutes_root,
             visited=set(),
             ignore_stereo=ignore_stereo,
-            condition_slot_parse_statistics=condition_slot_parse_statistics,
         )
 
         if target is not None:
@@ -349,7 +192,6 @@ class PaRoutesAdapter(BaseAdapter):
         visited: set[SmilesStr] | None = None,
         *,
         ignore_stereo: bool = False,
-        condition_slot_parse_statistics: ConditionSlotParseStatistics,
     ) -> Molecule:
         """
         recursively builds a molecule from a paroutes bipartite graph node.
@@ -406,7 +248,6 @@ class PaRoutesAdapter(BaseAdapter):
                 reactant_mol_input,
                 visited=new_visited,
                 ignore_stereo=ignore_stereo,
-                condition_slot_parse_statistics=condition_slot_parse_statistics,
             )
             reactant_molecules.append(reactant_mol)
 
@@ -414,10 +255,11 @@ class PaRoutesAdapter(BaseAdapter):
         rxn_metadata = raw_reaction_node.metadata
         mapped_smiles_str = rxn_metadata.rsmi if rxn_metadata else None
         mapped_smiles = ReactionSmilesStr(mapped_smiles_str) if mapped_smiles_str else None
-        metadata_dict = self._build_reaction_metadata(
-            rxn_metadata,
+        metadata_dict = build_condition_slot_metadata(
+            source_id=rxn_metadata.id,
+            rsmi=rxn_metadata.rsmi,
+            ring_breaker=rxn_metadata.ring_breaker,
             ignore_stereo=ignore_stereo,
-            condition_slot_parse_statistics=condition_slot_parse_statistics,
         )
         synthesis_step = ReactionStep(
             reactants=reactant_molecules,
@@ -434,17 +276,3 @@ class PaRoutesAdapter(BaseAdapter):
             synthesis_step=synthesis_step,
             metadata={},
         )
-
-    def report_statistics(self) -> None:
-        """logs the collected patent year statistics."""
-        if not self.year_counts and not self.unparsed_categories:
-            return
-
-        logger.info("--- PaRoutes Patent Year Statistics ---")
-        if self.year_counts:
-            for year, count in sorted(self.year_counts.items()):
-                logger.info(f"  - Parsed Year {year}: {count} routes")
-        if self.unparsed_categories:
-            for category, count in sorted(self.unparsed_categories.items()):
-                logger.info(f"  - Category '{category}': {count} routes")
-        logger.info("-" * 39)

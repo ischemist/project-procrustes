@@ -111,7 +111,6 @@ class AskcosAdapter(BaseAdapter):
         raw_data: Any,
         *,
         source_key: str | None = None,
-        expected_target: TargetIdentity | None = None,
     ) -> Iterator[RawRouteEntry]:
         if self.use_full_graph:
             raise UnsupportedAdapterFeatureError(
@@ -119,7 +118,7 @@ class AskcosAdapter(BaseAdapter):
                 context={"adapter": "askcos", "feature": "full_graph"},
             )
 
-        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
+        target_id = source_key or "<unknown>"
         try:
             validated_output = AskcosOutput.model_validate(raw_data)
         except ValidationError as e:
@@ -144,8 +143,8 @@ class AskcosAdapter(BaseAdapter):
                     metadata=metadata,
                 ),
                 source_key=source_key,
-                expected_target_id=expected_target.id if expected_target is not None else None,
-                expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+                target_hint_id=None,
+                target_hint_smiles=None,
                 source_order=pathway_index,
             )
 
@@ -186,6 +185,7 @@ class AskcosAdapter(BaseAdapter):
         uuid2smiles: dict[str, str],
         node_dict: dict[str, AskcosNode],
         ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
     ) -> Molecule:
         """build the root molecule for a single askcos pathway payload."""
         adj_list = defaultdict(list)
@@ -215,6 +215,7 @@ class AskcosAdapter(BaseAdapter):
         node_dict: dict[str, AskcosNode],
         visited: set[SmilesStr] | None = None,
         ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
     ) -> Molecule:
         """recursively builds a canonical molecule from a chemical uuid."""
         if visited is None:
@@ -269,6 +270,7 @@ class AskcosAdapter(BaseAdapter):
         node_dict: dict[str, AskcosNode],
         visited: set[SmilesStr],
         ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
     ) -> ReactionStep:
         """builds a canonical reaction step from a reaction uuid."""
         raw_smiles = uuid2smiles.get(rxn_uuid)

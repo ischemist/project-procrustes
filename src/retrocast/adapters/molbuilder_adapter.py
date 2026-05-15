@@ -90,9 +90,8 @@ class MolBuilderAdapter(BaseAdapter):
         raw_data: Any,
         *,
         source_key: str | None = None,
-        expected_target: TargetIdentity | None = None,
     ) -> Iterator[RawRouteEntry]:
-        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
+        target_id = source_key or "<unknown>"
         try:
             validated_routes = MolBuilderRouteList.model_validate(raw_data)
         except ValidationError as e:
@@ -102,8 +101,8 @@ class MolBuilderAdapter(BaseAdapter):
             yield RawRouteEntry(
                 payload=tree_root,
                 source_key=source_key,
-                expected_target_id=expected_target.id if expected_target is not None else None,
-                expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+                target_hint_id=None,
+                target_hint_smiles=None,
                 source_order=rank,
             )
 
@@ -123,6 +122,7 @@ class MolBuilderAdapter(BaseAdapter):
         raw_root: MolBuilderNode,
         target: TargetIdentity | None,
         ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
     ) -> Route:
         """Transform a single MolBuilder tree into a Route."""
         target_molecule = self._build_molecule(raw_root, ignore_stereo=ignore_stereo)
@@ -148,6 +148,7 @@ class MolBuilderAdapter(BaseAdapter):
         node: MolBuilderNode,
         visited: set[SmilesStr] | None = None,
         ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
     ) -> Molecule:
         """Recursively build a Molecule from a MolBuilder tree node."""
         if visited is None:

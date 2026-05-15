@@ -29,12 +29,11 @@ class RetroStarAdapter(BaseAdapter):
         raw_data: Any,
         *,
         source_key: str | None = None,
-        expected_target: TargetIdentity | None = None,
     ) -> Iterator[RawRouteEntry]:
         """
         Validate raw RetroStar data and expose the single route-like payload.
         """
-        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
+        target_id = source_key or "<unknown>"
         if not isinstance(raw_data, dict):
             raise adapter_schema_error("retrostar", target_id, "expected a dict")
 
@@ -49,8 +48,8 @@ class RetroStarAdapter(BaseAdapter):
         yield RawRouteEntry(
             payload=RetroStarRoutePayload(route_str=route_str, route_cost=raw_data.get("route_cost")),
             source_key=source_key,
-            expected_target_id=expected_target.id if expected_target is not None else None,
-            expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+            target_hint_id=None,
+            target_hint_smiles=None,
             source_order=1,
         )
 
@@ -123,6 +122,7 @@ class RetroStarAdapter(BaseAdapter):
         target: TargetIdentity | None,
         route_cost: float | None = None,
         ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
     ) -> Route:
         """
         Orchestrates the transformation of a single RetroStar route string.

@@ -13,8 +13,7 @@ def test_get_adapter_known_adapter():
     adapter_name = "aizynth"
     adapter = get_adapter(adapter_name)
     assert isinstance(adapter, BaseAdapter)
-    # check if it's the correct specific class instance from the map
-    assert isinstance(adapter, type(ADAPTER_MAP[adapter_name]))
+    assert isinstance(adapter, ADAPTER_MAP[adapter_name])
 
 
 def test_get_adapter_unknown_adapter_raises_exception():
@@ -29,13 +28,13 @@ def test_get_adapter_unknown_adapter_raises_exception():
     assert exc_info.value.context["adapter"] == unknown_name
 
 
-@pytest.mark.parametrize("adapter_name, adapter_instance", ADAPTER_MAP.items())
-def test_all_adapters_in_map_are_valid(adapter_name, adapter_instance):
+@pytest.mark.parametrize("adapter_name, adapter_type", ADAPTER_MAP.items())
+def test_all_adapters_in_map_are_valid(adapter_name, adapter_type):
     """
     iterates through the entire ADAPTER_MAP to verify that each registered
     adapter can be retrieved by its key and is a valid baseadapter instance.
     this acts as a regression test for the ADAPTER_MAP constant itself.
     """
     retrieved_adapter = get_adapter(adapter_name)
-    assert retrieved_adapter is adapter_instance
+    assert isinstance(retrieved_adapter, adapter_type)
     assert isinstance(retrieved_adapter, BaseAdapter)

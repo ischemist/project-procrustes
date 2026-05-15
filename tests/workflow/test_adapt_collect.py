@@ -8,7 +8,7 @@ from retrocast.exceptions import AdapterLogicError, BenchmarkCollectionError
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import SmilesStr
-from retrocast.workflow.adapt import adapt_route_corpus
+from retrocast.workflow.adapt import adapt_benchmark_keyed_route_corpus, adapt_route_corpus
 from retrocast.workflow.collect import collect_benchmark_predictions
 from tests.helpers import _make_simple_route, _make_two_step_route, _synthetic_inchikey
 
@@ -21,21 +21,17 @@ class RouteFirstSyntheticAdapter(BaseAdapter):
         raw_data: Any,
         *,
         source_key: str | None = None,
-        expected_target: TargetIdentity | None = None,
     ) -> Iterator[RawRouteEntry]:
         if not isinstance(raw_data, list):
             raise ValueError("expected list payload")
-
-        expected_target_id = expected_target.id if expected_target is not None else None
-        expected_target_smiles = str(expected_target.smiles) if expected_target is not None else None
 
         for row_index, item in enumerate(raw_data, start=1):
             yield RawRouteEntry(
                 payload=item,
                 source_key=source_key,
                 source_row_index=row_index,
-                expected_target_id=expected_target_id,
-                expected_target_smiles=expected_target_smiles,
+                target_hint_id=None,
+                target_hint_smiles=None,
                 source_order=row_index,
             )
 
@@ -101,7 +97,7 @@ class TestAdaptRouteCorpus:
             "unused": [_make_simple_route("CCCC", "CC", rank=1).model_dump(mode="json")],
         }
 
-        routes = adapt_route_corpus(raw_data, RouteFirstSyntheticAdapter(), benchmark=synthetic_benchmark)
+        routes = adapt_benchmark_keyed_route_corpus(raw_data, synthetic_benchmark, RouteFirstSyntheticAdapter())
 
         assert len(routes) == 2
         assert [route.target.smiles for route in routes] == ["CC", "CCC"]

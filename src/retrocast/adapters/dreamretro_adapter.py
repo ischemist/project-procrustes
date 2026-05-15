@@ -29,12 +29,11 @@ class DreamRetroAdapter(BaseAdapter):
         raw_data: Any,
         *,
         source_key: str | None = None,
-        expected_target: TargetIdentity | None = None,
     ) -> Iterator[RawRouteEntry]:
         """
         Validate raw DreamRetro data and expose the single route-like payload.
         """
-        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
+        target_id = source_key or "<unknown>"
         if not isinstance(raw_data, dict):
             raise adapter_schema_error("dreamretro", target_id, "expected a dict")
 
@@ -54,8 +53,8 @@ class DreamRetroAdapter(BaseAdapter):
         yield RawRouteEntry(
             payload=DreamRetroRoutePayload(route_str=route_str, metadata=metadata),
             source_key=source_key,
-            expected_target_id=expected_target.id if expected_target is not None else None,
-            expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+            target_hint_id=None,
+            target_hint_smiles=None,
             source_order=1,
         )
 
@@ -128,6 +127,7 @@ class DreamRetroAdapter(BaseAdapter):
         target_input: TargetIdentity | None,
         metadata: dict[str, Any],
         ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
     ) -> Route:
         """
         orchestrates the transformation of a single dreamretro route string.

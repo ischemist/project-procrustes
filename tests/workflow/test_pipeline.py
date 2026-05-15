@@ -38,20 +38,16 @@ class SyntheticAdapter(BaseAdapter):
         raw_data: Any,
         *,
         source_key: str | None = None,
-        expected_target: TargetIdentity | None = None,
     ) -> Iterator[RawRouteEntry]:
         if not isinstance(raw_data, list):
             return
-
-        expected_target_id = expected_target.id if expected_target is not None else None
-        expected_target_smiles = str(expected_target.smiles) if expected_target is not None else None
         for row_index, item in enumerate(raw_data, start=1):
             yield RawRouteEntry(
                 payload=item,
                 source_key=source_key,
                 source_row_index=row_index,
-                expected_target_id=expected_target_id,
-                expected_target_smiles=expected_target_smiles,
+                target_hint_id=None,
+                target_hint_smiles=None,
                 source_order=row_index,
             )
 
@@ -80,12 +76,10 @@ class FailingAdapter(BaseAdapter):
         raw_data: Any,
         *,
         source_key: str | None = None,
-        expected_target: TargetIdentity | None = None,
     ) -> Iterator[RawRouteEntry]:
         yield from SyntheticAdapter().iter_raw_entries(
             raw_data,
             source_key=source_key,
-            expected_target=expected_target,
         )
 
     def cast(
@@ -110,12 +104,10 @@ class ChemFailingAdapter(BaseAdapter):
         raw_data: Any,
         *,
         source_key: str | None = None,
-        expected_target: TargetIdentity | None = None,
     ) -> Iterator[RawRouteEntry]:
         yield from SyntheticAdapter().iter_raw_entries(
             raw_data,
             source_key=source_key,
-            expected_target=expected_target,
         )
 
     def cast(
@@ -139,7 +131,6 @@ class UnsupportedFeatureAdapter(BaseAdapter):
         raw_data: Any,
         *,
         source_key: str | None = None,
-        expected_target: TargetIdentity | None = None,
     ) -> Iterator[RawRouteEntry]:
         raise UnsupportedAdapterFeatureError(
             "synthetic unsupported feature",

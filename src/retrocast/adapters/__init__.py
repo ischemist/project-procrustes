@@ -18,35 +18,35 @@ from retrocast.exceptions import AdapterError, AdapterResolutionError, ChemError
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.workflow.adapt import adapt_target_routes
 
-ADAPTER_MAP: dict[str, BaseAdapter] = {
-    "aizynth": AizynthAdapter(),
-    "askcos": AskcosAdapter(),
-    "dms": DMSAdapter(),
-    "dreamretro": DreamRetroAdapter(),
-    "molbuilder": MolBuilderAdapter(),
-    "multistepttl": TtlRetroAdapter(),
-    "paroutes": PaRoutesAdapter(),
-    "retrochimera": RetrochimeraAdapter(),
-    "retrostar": RetroStarAdapter(),
-    "synplanner": SynPlannerAdapter(),
-    "syntheseus": SyntheseusAdapter(),
-    "synllama": SynLlaMaAdapter(),
-    "ursa-llm": UrsaLlmAdapter(),
+ADAPTER_MAP: dict[str, type[BaseAdapter]] = {
+    "aizynth": AizynthAdapter,
+    "askcos": AskcosAdapter,
+    "dms": DMSAdapter,
+    "dreamretro": DreamRetroAdapter,
+    "molbuilder": MolBuilderAdapter,
+    "multistepttl": TtlRetroAdapter,
+    "paroutes": PaRoutesAdapter,
+    "retrochimera": RetrochimeraAdapter,
+    "retrostar": RetroStarAdapter,
+    "synplanner": SynPlannerAdapter,
+    "syntheseus": SyntheseusAdapter,
+    "synllama": SynLlaMaAdapter,
+    "ursa-llm": UrsaLlmAdapter,
 }
 
 
 def get_adapter(adapter_name: str) -> BaseAdapter:
     """
-    Retrieves an adapter instance from the `ADAPTER_MAP`.
+    Retrieves a fresh adapter instance from the `ADAPTER_MAP`.
     """
-    adapter = ADAPTER_MAP.get(adapter_name)
-    if adapter is None:
+    adapter_type = ADAPTER_MAP.get(adapter_name)
+    if adapter_type is None:
         raise AdapterResolutionError(
             f"unknown adapter '{adapter_name}'. Check `retrocast.adapters.ADAPTER_MAP` for available adapters.",
             code="adapter.unknown",
             context={"adapter": adapter_name, "available": sorted(ADAPTER_MAP.keys())},
         )
-    return adapter
+    return adapter_type()
 
 
 def adapt_single_route(

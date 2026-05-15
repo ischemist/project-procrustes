@@ -121,7 +121,7 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
         )
 
         assert len(entries) == 1
-        assert entries[0].expected_target_smiles == canonicalize_smiles("C1=CC=CC=C1")
+        assert entries[0].target_hint_smiles == canonicalize_smiles("C1=CC=CC=C1")
         assert entries[0].payload == completion
 
     def test_iter_raw_entries_requires_source_target_metadata_without_expected_target(

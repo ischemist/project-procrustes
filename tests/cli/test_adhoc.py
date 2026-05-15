@@ -31,7 +31,6 @@ class ChemFailingAdapter(BaseAdapter):
         raw_data: Any,
         *,
         source_key: str | None = None,
-        expected_target: TargetIdentity | None = None,
     ) -> Generator[RawRouteEntry, None, None]:
         if isinstance(raw_data, dict):
             for key, payload in raw_data.items():

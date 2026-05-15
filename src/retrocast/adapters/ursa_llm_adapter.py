@@ -67,9 +67,8 @@ class UrsaLlmAdapter(BaseAdapter):
         raw_data: Any,
         *,
         source_key: str | None = None,
-        expected_target: TargetIdentity | None = None,
     ) -> Iterator[RawRouteEntry]:
-        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
+        target_id = source_key or "<unknown>"
         if not isinstance(raw_data, list):
             raise adapter_schema_error(self.adapter_key, target_id, "expected a list of completion records")
 
@@ -82,18 +81,19 @@ class UrsaLlmAdapter(BaseAdapter):
                     "each completion record must be a dict with a string 'completion' field",
                     record_index=row_index - 1,
                 )
-            expected_target_smiles = expected_target.smiles if expected_target is not None else None
-            if expected_target_smiles is None:
-                source_target_smiles = _extract_source_target_smiles(raw_record)
-                if source_target_smiles is None:
+            source_target_smiles = _extract_source_target_smiles(raw_record)
+            target_hint_smiles: str | None = None
+            if source_target_smiles is None:
+                if source_key is None:
                     raise adapter_schema_error(
                         self.adapter_key,
                         target_id,
-                        "completion records must include meta.product_smiles when no expected target is provided",
+                        "completion records must include meta.product_smiles",
                         record_index=row_index - 1,
                     )
+            else:
                 try:
-                    expected_target_smiles = canonicalize_smiles(source_target_smiles)
+                    target_hint_smiles = canonicalize_smiles(source_target_smiles)
                 except RetroCastException as exc:
                     raise adapter_schema_error(
                         self.adapter_key,
@@ -105,8 +105,8 @@ class UrsaLlmAdapter(BaseAdapter):
                 payload=completion,
                 source_key=source_key,
                 source_row_index=row_index,
-                expected_target_id=expected_target.id if expected_target is not None else None,
-                expected_target_smiles=expected_target_smiles,
+                target_hint_id=None,
+                target_hint_smiles=target_hint_smiles,
                 source_order=row_index,
             )
 

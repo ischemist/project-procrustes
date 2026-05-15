@@ -110,8 +110,8 @@ class RawRouteEntry:
     source_key: str | None = None
     source_row_index: int | None = None
     source_record_id: str | None = None
-    expected_target_id: str | None = None
-    expected_target_smiles: str | None = None
+    target_hint_id: str | None = None
+    target_hint_smiles: str | None = None
 ```
 
 important ownership rules:

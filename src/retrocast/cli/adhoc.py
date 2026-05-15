@@ -14,7 +14,7 @@ from retrocast.io.data import load_benchmark, load_route_corpus, load_routes, sa
 from retrocast.io.provenance import create_manifest
 from retrocast.models.benchmark import create_benchmark, create_benchmark_target
 from retrocast.models.chem import RunStatistics
-from retrocast.workflow.adapt import adapt_route_corpus
+from retrocast.workflow.adapt import adapt_benchmark_keyed_route_corpus, adapt_route_corpus
 from retrocast.workflow.collect import collect_benchmark_predictions
 
 logger = logging.getLogger(__name__)
@@ -279,12 +279,19 @@ def handle_adapt(args: Any) -> None:
             benchmark = load_benchmark(benchmark_path)
 
         stats = RunStatistics()
-        route_corpus = adapt_route_corpus(
-            raw_data,
-            adapter,
-            benchmark=benchmark,
-            stats=stats,
-        )
+        if benchmark is not None and isinstance(raw_data, dict):
+            route_corpus = adapt_benchmark_keyed_route_corpus(
+                raw_data,
+                benchmark,
+                adapter,
+                stats=stats,
+            )
+        else:
+            route_corpus = adapt_route_corpus(
+                raw_data,
+                adapter,
+                stats=stats,
+            )
         stats.final_unique_routes_saved = len(route_corpus)
 
         save_route_corpus(route_corpus, output_path)

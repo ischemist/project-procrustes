@@ -13,7 +13,7 @@ from retrocast.models.collections import CollectedBenchmarkRoutes
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.provenance import FileInfo, Manifest
 from retrocast.models.stats import ModelStatistics
-from retrocast.workflow.adapt import adapt_route_corpus, adapt_target_routes
+from retrocast.workflow.adapt import adapt_benchmark_keyed_route_corpus, adapt_route_corpus, adapt_target_routes
 from retrocast.workflow.collect import collect_benchmark_predictions
 
 __all__ = [
@@ -32,6 +32,7 @@ __all__ = [
     "Manifest",
     # Explicit adaptation / collection workflow
     "adapt_route_corpus",
+    "adapt_benchmark_keyed_route_corpus",
     "adapt_target_routes",
     "collect_benchmark_predictions",
     # Adapter functions
