@@ -185,13 +185,13 @@ retrocast analyze --model my-new-model --dataset mkt-cnv-160
 **Learn the Concepts**  
 Read [Concepts](concepts.md) to understand why we use adapters and manifests.
 
-**Use the Python API**  
+**Use the Python API**
 Want to use RetroCast inside your own scripts? See the [Library Guide](guides/library/).
 
-**Migrating from v0.5.x**  
+**Migrating from v0.5.x**
 See the [Changelog](changelog.md) for the v0.6 adapter workflow split.
 
-**Write Custom Adapters**  
+**Write Custom Adapters**
 Need to support a new output format? Learn how to write an [Adapter](developers/adapters.md).
 
 **Full CLI Reference**  
