@@ -33,10 +33,6 @@ ADAPTER_MAP: dict[str, BaseAdapter] = {
     "ursa-llm": UrsaLlmAdapter(),
 }
 
-# Adapters that expect target-centric data format (dict with metadata + nested routes)
-# vs route-centric format (list of route objects)
-TARGET_CENTRIC_ADAPTERS = {"askcos", "retrochimera", "paroutes"}
-
 
 def get_adapter(adapter_name: str) -> BaseAdapter:
     """
@@ -59,13 +55,8 @@ def adapt_single_route(
 ) -> Route | None:
     """Adapt a single raw route to the unified Route format."""
     adapter = get_adapter(adapter_name)
-    if adapter_name in TARGET_CENTRIC_ADAPTERS or isinstance(raw_route, list):
-        raw_data = raw_route
-    else:
-        raw_data = [raw_route]
-
     try:
-        return next(adapter.cast(raw_data, target), None)
+        return adapter.cast(raw_route, expected_target=target)
     except (AdapterError, ChemError):
         return None
 
@@ -100,8 +91,7 @@ def adapt_routes(
     """
     adapter = get_adapter(adapter_name)
     routes = []
-
-    for i, route in enumerate(adapter.cast(raw_routes, target)):
+    for i, route in enumerate(adapter.adapt_target_payload(raw_routes, target)):
         routes.append(route)
         if max_routes and i + 1 >= max_routes:
             break
@@ -114,7 +104,6 @@ __all__ = [
     "adapt_routes",
     "get_adapter",
     "ADAPTER_MAP",
-    "TARGET_CENTRIC_ADAPTERS",
     "BaseAdapter",
     "AizynthAdapter",
     "AskcosAdapter",

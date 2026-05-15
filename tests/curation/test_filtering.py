@@ -386,9 +386,8 @@ class TestExciseReactionsFromRoute:
 
         result = excise_reactions_from_route(route, {sig_c_from_b})
 
-        # Sub-route should have same rank
         sub = result[0]
-        assert sub.rank == 1
+        assert sub.metadata == {"source": "test"}
 
     @given(shape=recursive_route_shape(), data=st.data())
     @settings(max_examples=75)

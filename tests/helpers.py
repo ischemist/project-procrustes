@@ -36,7 +36,7 @@ def _make_simple_route(target_smiles: str, leaf_smiles: str, rank: int = 1) -> R
         inchikey=InchiKeyStr(_synthetic_inchikey(target_smiles)),
         synthesis_step=ReactionStep(reactants=[leaf]),
     )
-    return Route(target=target, rank=rank)
+    return Route(target=target)
 
 
 def _make_two_step_route(target_smiles: str, intermediate_smiles: str, leaf_smiles: str, rank: int = 1) -> Route:
@@ -52,4 +52,4 @@ def _make_two_step_route(target_smiles: str, intermediate_smiles: str, leaf_smil
         inchikey=InchiKeyStr(_synthetic_inchikey(target_smiles)),
         synthesis_step=ReactionStep(reactants=[intermediate]),
     )
-    return Route(target=target, rank=rank)
+    return Route(target=target)

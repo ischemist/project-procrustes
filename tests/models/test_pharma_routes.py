@@ -39,7 +39,6 @@ class TestPharmaRoutesContract:
         route = Route(target=target_molecule, rank=1)
 
         # Verify route properties
-        assert route.rank == 1
         assert not route.target.is_leaf
         assert route.length > 0
 
@@ -59,7 +58,6 @@ class TestPharmaRoutesContract:
         route = Route(target=target_molecule, rank=1)
 
         # Verify route properties
-        assert route.rank == 1
         assert not route.target.is_leaf
         assert route.length >= 3  # Mitapivat has a deeper tree
 
@@ -95,14 +93,11 @@ class TestPharmaRoutesContract:
             # Serialize to dict
             route_dict = original_route.model_dump(exclude={"leaves", "depth"})
             assert "target" in route_dict
-            assert "rank" in route_dict
-            assert route_dict["rank"] == 1
 
             # Reconstruct from dict (this is the "round trip")
             reconstructed_route = Route.model_validate(route_dict)
 
             # Verify reconstructed route matches original
-            assert reconstructed_route.rank == original_route.rank
             assert reconstructed_route.target.smiles == original_route.target.smiles
             assert reconstructed_route.target.inchikey == original_route.target.inchikey
 

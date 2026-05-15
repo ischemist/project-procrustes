@@ -1,20 +1,27 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Generator
+from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.common import build_molecule_from_precursor_map
 from retrocast.adapters.errors import adapter_route_transform_error, adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles
-from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class RetrochimeraRoutePayload:
+    route: RetrochimeraRoute
+    target_smiles: str
+
 
 # --- pydantic models for input validation ---
 
@@ -61,41 +68,36 @@ class RetrochimeraData(BaseModel):
 class RetrochimeraAdapter(BaseAdapter):
     """adapter for converting retrochimera-style outputs to the Route schema."""
 
-    def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+        expected_target: TargetIdentity | None = None,
+    ) -> Iterator[RawRouteEntry]:
         """
-        validates raw retrochimera data, transforms it, and yields Route objects.
+        Validate raw RetroChimera data and expose one route-like payload per route.
         """
+        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
         try:
-            validated_data = RetrochimeraData.model_validate(raw_target_data)
+            validated_data = RetrochimeraData.model_validate(raw_data)
         except ValidationError as e:
-            raise adapter_schema_error("retrochimera", target.id, "invalid output") from e
+            raise adapter_schema_error("retrochimera", target_id, "invalid output") from e
 
         if validated_data.result.error is not None:
             error_msg = validated_data.result.error.get("message", "unknown error")
             error_type = validated_data.result.error.get("type", "unknown")
             raise adapter_route_transform_error(
                 "retrochimera",
-                target.id,
+                target_id,
                 f"model reported {error_type}: {error_msg}",
                 error_type=error_type,
-            )
-
-        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
-        actual_smiles = canonicalize_smiles(validated_data.smiles, ignore_stereo=ignore_stereo)
-        if actual_smiles != expected_smiles:
-            raise adapter_target_mismatch(
-                "retrochimera",
-                target.id,
-                expected_smiles=expected_smiles,
-                actual_smiles=actual_smiles,
             )
 
         if validated_data.result.outputs is None:
             raise adapter_route_transform_error(
                 "retrochimera",
-                target.id,
+                target_id,
                 "validated payload is missing result outputs",
                 payload_field="result.outputs",
             )
@@ -103,30 +105,69 @@ class RetrochimeraAdapter(BaseAdapter):
         rank = 1
         for output in validated_data.result.outputs:
             for route in output.routes:
-                try:
-                    route_obj = self._transform(route, target, rank=rank, ignore_stereo=ignore_stereo)
-                    yield route_obj
-                    rank += 1
-                except RetroCastException as e:
-                    logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
-                    continue
+                yield RawRouteEntry(
+                    payload=RetrochimeraRoutePayload(route=route, target_smiles=validated_data.smiles),
+                    source_key=source_key,
+                    expected_target_id=expected_target.id if expected_target is not None else None,
+                    expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+                    source_order=rank,
+                )
+                rank += 1
+
+    def cast(
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
+        if not isinstance(raw_route, RetrochimeraRoutePayload):
+            raise adapter_schema_error(
+                "retrochimera",
+                expected_target.id if expected_target is not None else "<unknown>",
+                "expected a retrochimera route payload",
+            )
+        return self._transform(
+            raw_route.route,
+            target_smiles=raw_route.target_smiles,
+            target=expected_target,
+            ignore_stereo=ignore_stereo,
+        )
 
     def _transform(
-        self, route: RetrochimeraRoute, target: TargetIdentity, rank: int, ignore_stereo: bool = False
+        self,
+        route: RetrochimeraRoute,
+        target_smiles: str,
+        target: TargetIdentity | None,
+        ignore_stereo: bool = False,
     ) -> Route:
         """
         orchestrates the transformation of a single retrochimera route.
         raises RetroCastException on failure.
         """
         precursor_map = self._build_precursor_map(route, ignore_stereo=ignore_stereo)
+        actual_smiles = canonicalize_smiles(target_smiles, ignore_stereo=ignore_stereo)
+        if target is not None:
+            expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
+            if actual_smiles != expected_smiles:
+                raise adapter_target_mismatch(
+                    "retrochimera",
+                    target.id,
+                    expected_smiles=expected_smiles,
+                    actual_smiles=actual_smiles,
+                )
+            route_target_smiles = SmilesStr(target.smiles)
+        else:
+            route_target_smiles = actual_smiles
+
         target_molecule = build_molecule_from_precursor_map(
-            smiles=SmilesStr(target.smiles),
+            smiles=route_target_smiles,
             precursor_map=precursor_map,
             ignore_stereo=ignore_stereo,
             adapter="retrochimera",
         )
 
-        return Route(target=target_molecule, rank=rank, metadata={})
+        return Route(target=target_molecule, metadata={})
 
     def _build_precursor_map(
         self, route: RetrochimeraRoute, ignore_stereo: bool = False

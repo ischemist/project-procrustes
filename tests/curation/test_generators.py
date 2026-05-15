@@ -289,7 +289,6 @@ class TestGeneratePrunedRoutes:
         """Pruned routes should preserve metadata from original."""
         route = _make_linear_route_with_intermediates(depth=2)
         route.metadata["test_key"] = "test_value"
-        route.rank = 5
 
         stock = {
             _synthetic_inchikey("C"),
@@ -300,7 +299,6 @@ class TestGeneratePrunedRoutes:
 
         for pruned_route in result:
             assert pruned_route.metadata.get("test_key") == "test_value"
-            assert pruned_route.rank == 5
 
     def test_all_routes_are_valid(self):
         """All generated routes should be valid Route objects."""

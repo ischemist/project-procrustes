@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Generator
+from collections.abc import Iterator
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
-from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.errors import (
     adapter_cycle_error,
     adapter_node_type_error,
@@ -14,7 +14,6 @@ from retrocast.adapters.errors import (
     adapter_target_mismatch,
 )
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -59,27 +58,47 @@ class SynPlannerRouteList(RootModel[list[SynPlannerMoleculeInput]]):
 class SynPlannerAdapter(BaseAdapter):
     """adapter for converting synplanner-style outputs to the route schema."""
 
-    def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+        expected_target: TargetIdentity | None = None,
+    ) -> Iterator[RawRouteEntry]:
         """
-        validates raw synplanner data, transforms it, and yields route objects.
+        Validate raw SynPlanner data and expose one route-like payload per entry.
         """
+        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
         try:
-            validated_routes = SynPlannerRouteList.model_validate(raw_target_data)
+            validated_routes = SynPlannerRouteList.model_validate(raw_data)
         except ValidationError as e:
-            raise adapter_schema_error("synplanner", target.id, "invalid route list") from e
+            raise adapter_schema_error("synplanner", target_id, "invalid route list") from e
 
         for rank, synplanner_tree_root in enumerate(validated_routes.root, start=1):
-            try:
-                route = self._transform(synplanner_tree_root, target, rank, ignore_stereo=ignore_stereo)
-                yield route
-            except RetroCastException as e:
-                logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
-                continue
+            yield RawRouteEntry(
+                payload=synplanner_tree_root,
+                source_key=source_key,
+                expected_target_id=expected_target.id if expected_target is not None else None,
+                expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+                source_order=rank,
+            )
+
+    def cast(
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
+        if not isinstance(raw_route, SynPlannerMoleculeInput):
+            raw_route = SynPlannerMoleculeInput.model_validate(raw_route)
+        return self._transform(raw_route, expected_target, ignore_stereo=ignore_stereo)
 
     def _transform(
-        self, synplanner_root: SynPlannerMoleculeInput, target: TargetIdentity, rank: int, ignore_stereo: bool = False
+        self,
+        synplanner_root: SynPlannerMoleculeInput,
+        target: TargetIdentity | None,
+        ignore_stereo: bool = False,
     ) -> Route:
         """
         orchestrates the transformation of a single synplanner output tree.
@@ -94,25 +113,25 @@ class SynPlannerAdapter(BaseAdapter):
 
         # canonicalize both synplanner output and benchmark target with RDKit to align formats
         produced = canonicalize_smiles(target_molecule.smiles, remove_mapping=True, ignore_stereo=ignore_stereo)
-        expected = canonicalize_smiles(target.smiles, remove_mapping=True, ignore_stereo=ignore_stereo)
+        if target is not None:
+            expected = canonicalize_smiles(target.smiles, remove_mapping=True, ignore_stereo=ignore_stereo)
 
-        if produced != expected:
-            raise adapter_target_mismatch(
-                "synplanner",
-                target.id,
-                expected_smiles=expected,
-                actual_smiles=produced,
+            if produced != expected:
+                raise adapter_target_mismatch(
+                    "synplanner",
+                    target.id,
+                    expected_smiles=expected,
+                    actual_smiles=produced,
+                )
+
+            target_molecule = Molecule(
+                smiles=target.smiles,
+                inchikey=get_inchi_key(target.smiles),
+                synthesis_step=target_molecule.synthesis_step,
+                metadata=target_molecule.metadata,
             )
 
-        # ensure target molecule uses the rdkit-canonicalized form
-        target_molecule = Molecule(
-            smiles=target.smiles,
-            inchikey=get_inchi_key(target.smiles),
-            synthesis_step=target_molecule.synthesis_step,
-            metadata=target_molecule.metadata,
-        )
-
-        return Route(target=target_molecule, rank=rank, metadata={})
+        return Route(target=target_molecule, metadata={})
 
     def _build_molecule_from_synplanner_node(
         self,

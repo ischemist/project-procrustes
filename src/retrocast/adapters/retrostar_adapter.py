@@ -1,49 +1,78 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Generator
+from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Any
 
-from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
 from retrocast.adapters.errors import adapter_route_string_error, adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles
-from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True, slots=True)
+class RetroStarRoutePayload:
+    route_str: str
+    route_cost: float | None
+
+
 class RetroStarAdapter(BaseAdapter):
     """Adapter for converting RetroStar-style outputs to the Route schema."""
 
-    def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+        expected_target: TargetIdentity | None = None,
+    ) -> Iterator[RawRouteEntry]:
         """
-        Validates raw RetroStar data, transforms its single route string, and yields a Route.
+        Validate raw RetroStar data and expose the single route-like payload.
         """
-        if not isinstance(raw_target_data, dict):
-            raise adapter_schema_error("retrostar", target.id, "expected a dict")
+        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
+        if not isinstance(raw_data, dict):
+            raise adapter_schema_error("retrostar", target_id, "expected a dict")
 
-        if not raw_target_data.get("succ"):
-            logger.debug(f"Skipping raw data for '{target.id}': 'succ' is not true.")
+        if not raw_data.get("succ"):
+            logger.debug(f"Skipping raw data for '{target_id}': 'succ' is not true.")
             return
 
-        route_str = raw_target_data.get("routes")
+        route_str = raw_data.get("routes")
         if not isinstance(route_str, str) or not route_str:
-            raise adapter_schema_error("retrostar", target.id, "no valid 'routes' string found")
+            raise adapter_schema_error("retrostar", target_id, "no valid 'routes' string found")
 
-        # Extract route_cost if available
-        route_cost = raw_target_data.get("route_cost")
+        yield RawRouteEntry(
+            payload=RetroStarRoutePayload(route_str=route_str, route_cost=raw_data.get("route_cost")),
+            source_key=source_key,
+            expected_target_id=expected_target.id if expected_target is not None else None,
+            expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+            source_order=1,
+        )
 
-        try:
-            route = self._transform(route_str, target, route_cost=route_cost, ignore_stereo=ignore_stereo)
-            yield route
-        except RetroCastException as e:
-            logger.warning(f"  - Route for '{target.id}' failed transformation: {e} [{e.code}]")
-            return
+    def cast(
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
+        if not isinstance(raw_route, RetroStarRoutePayload):
+            raise adapter_schema_error(
+                "retrostar",
+                expected_target.id if expected_target is not None else "<unknown>",
+                "expected a retrostar route payload",
+            )
+        return self._transform(
+            raw_route.route_str,
+            expected_target,
+            route_cost=raw_route.route_cost,
+            ignore_stereo=ignore_stereo,
+        )
 
     def _parse_route_string(self, route_str: str, ignore_stereo: bool = False) -> tuple[SmilesStr, PrecursorMap]:
         """
@@ -89,7 +118,11 @@ class RetroStarAdapter(BaseAdapter):
             ) from e
 
     def _transform(
-        self, route_str: str, target: TargetIdentity, route_cost: float | None = None, ignore_stereo: bool = False
+        self,
+        route_str: str,
+        target: TargetIdentity | None,
+        route_cost: float | None = None,
+        ignore_stereo: bool = False,
     ) -> Route:
         """
         Orchestrates the transformation of a single RetroStar route string.
@@ -97,18 +130,22 @@ class RetroStarAdapter(BaseAdapter):
         """
         parsed_target_smiles, precursor_map = self._parse_route_string(route_str, ignore_stereo=ignore_stereo)
 
-        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
-        if parsed_target_smiles != expected_smiles:
-            raise adapter_target_mismatch(
-                "retrostar",
-                target.id,
-                expected_smiles=expected_smiles,
-                actual_smiles=parsed_target_smiles,
-            )
+        if target is not None:
+            expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
+            if parsed_target_smiles != expected_smiles:
+                raise adapter_target_mismatch(
+                    "retrostar",
+                    target.id,
+                    expected_smiles=expected_smiles,
+                    actual_smiles=parsed_target_smiles,
+                )
+            target_smiles = SmilesStr(target.smiles)
+        else:
+            target_smiles = parsed_target_smiles
 
         # Build the molecule tree using the new schema helper
         target_molecule = build_molecule_from_precursor_map(
-            smiles=SmilesStr(target.smiles),
+            smiles=target_smiles,
             precursor_map=precursor_map,
             ignore_stereo=ignore_stereo,
             adapter="retrostar",
@@ -120,4 +157,4 @@ class RetroStarAdapter(BaseAdapter):
             metadata["route_cost"] = route_cost
 
         # RetroStar produces a single route per target, so rank is always 1
-        return Route(target=target_molecule, rank=1, metadata=metadata)
+        return Route(target=target_molecule, metadata=metadata)

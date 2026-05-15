@@ -26,6 +26,9 @@ class ContentType(StrEnum):
       This hashes Route objects (Pydantic models). Do NOT use during raw model
       execution (use "unknown" instead).
 
+    - ROUTE_CORPUS: Use for route-corpus.jsonl.gz artifacts (ordered list[Route]).
+      This preserves encounter order rather than target-keyed grouping.
+
     - STOCK: Use when hashing a stock dictionary mapping InChIKey -> SMILES.
 
     - UNKNOWN: Use for raw model outputs (dict of raw predictions before ingestion).
@@ -35,11 +38,12 @@ class ContentType(StrEnum):
 
     BENCHMARK = "benchmark"
     PREDICTIONS = "predictions"
+    ROUTE_CORPUS = "route_corpus"
     STOCK = "stock"
     UNKNOWN = "unknown"
 
 
-ContentTypeHint = Literal["benchmark", "predictions", "stock", "unknown"]
+ContentTypeHint = Literal["benchmark", "predictions", "route_corpus", "stock", "unknown"]
 UnlabeledManifestOutput: TypeAlias = tuple[Path, Any, ContentType | ContentTypeHint]
 LabeledManifestOutput: TypeAlias = tuple[str, Path, Any, ContentType | ContentTypeHint]
 ManifestOutput: TypeAlias = UnlabeledManifestOutput | LabeledManifestOutput
@@ -112,28 +116,24 @@ def _calculate_benchmark_content_hash(benchmark: BenchmarkSet) -> str:
 def _calculate_predictions_content_hash(routes: dict[str, list[Route]]) -> str:
     """
     Internal: Hash a dictionary of predicted routes.
-    Ported from your old utils/hashing.py.
+    Target buckets are order-invariant; route order within each bucket is
+    preserved because list order is the canonical ranking signal.
     """
     sorted_ids = sorted(routes.keys())
     route_hashes = []
 
     for target_id in sorted_ids:
-        # Sort routes by rank for determinism within each target
-        # We assume routes have a 'rank' attribute or we rely on list order if rank is missing
-        # Using list order is safer if rank isn't guaranteed unique, but let's try rank first
-        target_routes = routes[target_id]
-
-        # Stable sort: try rank, fallback to signature
-        try:
-            sorted_routes = sorted(target_routes, key=lambda r: (r.rank, r.get_content_hash()))
-        except AttributeError:
-            # If rank is missing/None, sort purely by content signature
-            sorted_routes = sorted(target_routes, key=lambda r: r.get_content_hash())
-
-        for route in sorted_routes:
-            r_hash = route.get_content_hash()  # This method exists on your Route model
+        for route in routes[target_id]:
+            r_hash = route.get_content_hash()
             route_hashes.append(f"{target_id}:{r_hash}")
 
+    combined = "".join(route_hashes)
+    return hashlib.sha256(combined.encode()).hexdigest()
+
+
+def _calculate_route_corpus_content_hash(routes: list[Route]) -> str:
+    """Internal: hash an ordered route corpus."""
+    route_hashes = [route.get_content_hash() for route in routes]
     combined = "".join(route_hashes)
     return hashlib.sha256(combined.encode()).hexdigest()
 
@@ -224,6 +224,7 @@ def create_manifest(
     _HASH_DISPATCH = {
         ContentType.BENCHMARK: _calculate_benchmark_content_hash,
         ContentType.PREDICTIONS: _calculate_predictions_content_hash,
+        ContentType.ROUTE_CORPUS: _calculate_route_corpus_content_hash,
         ContentType.STOCK: _calculate_stock_content_hash,
         ContentType.UNKNOWN: lambda _: None,
     }

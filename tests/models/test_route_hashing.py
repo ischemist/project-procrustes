@@ -28,8 +28,8 @@ class TestRouteContentHash:
         assert isinstance(hash1, str)
         assert len(hash1) == 64  # SHA256 hex digest length
 
-    def test_get_content_hash_includes_rank(self):
-        """Test that content hash differs when rank changes."""
+    def test_get_content_hash_ignores_constructor_rank(self):
+        """Test that legacy rank inputs do not affect route hashing."""
         target = Molecule(
             smiles=SmilesStr("CCO"),
             inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
@@ -37,9 +37,7 @@ class TestRouteContentHash:
         route1 = Route(target=target, rank=1)
         route2 = Route(target=target, rank=2)
 
-        # Same tree structure, different rank = different content hash
-        assert route1.get_content_hash() != route2.get_content_hash()
-        # But same tree signature (structure only)
+        assert route1.get_content_hash() == route2.get_content_hash()
         assert route1.get_structural_signature() == route2.get_structural_signature()
 
     def test_get_content_hash_includes_metadata(self):
@@ -197,7 +195,6 @@ class TestRouteAnnotatedSignature:
 
         route1 = Route(target=target, rank=1, metadata={"patent_id": "a"})
         route2 = Route.model_validate(route1.model_dump(mode="json"))
-        route2.rank = 2
         route2.metadata = {"patent_id": "b"}
         route2.retrocast_version = "999.0.0"
 

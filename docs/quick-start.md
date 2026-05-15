@@ -128,7 +128,7 @@ cp predictions.json data/retrocast/2-raw/my-new-model/mkt-cnv-160/
 
 ### Step B: Ingest
 
-Convert raw output into the canonical RetroCast `Route` format. This standardizes data and removes duplicates.
+Convert raw output into benchmark-keyed routes for scoring. Under the hood, `ingest` first adapts raw payloads into a canonical route corpus, then collects those routes onto the benchmark.
 
 ```bash
 retrocast ingest --model my-new-model --dataset mkt-cnv-160

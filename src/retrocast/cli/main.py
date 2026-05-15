@@ -49,12 +49,22 @@ def main() -> None:
 
     # --- ADAPT (Ad-Hoc) ---
     adapt_parser = subparsers.add_parser(
-        "adapt", help="Convert raw predictions file to RetroCast schema (No config needed)"
+        "adapt", help="Convert a raw route artifact into a canonical route corpus (No config needed)"
     )
     adapt_parser.add_argument("--input", required=True, help="Path to raw predictions (.json.gz)")
-    adapt_parser.add_argument("--output", required=True, help="Path to save processed routes (.json.gz)")
+    adapt_parser.add_argument("--output", required=True, help="Path to save route corpus (.jsonl.gz)")
     adapt_parser.add_argument("--adapter", required=True, help="Name of the adapter to use (e.g. aizynth, dms)")
-    adapt_parser.add_argument("--benchmark", help="Optional: Path to benchmark definition to ensure correct IDs")
+    adapt_parser.add_argument(
+        "--benchmark",
+        help="Optional benchmark definition used only for target-hint validation during adaptation",
+    )
+
+    collect_parser = subparsers.add_parser(
+        "collect", help="Collect a canonical route corpus into benchmark-keyed routes (No config needed)"
+    )
+    collect_parser.add_argument("--input", required=True, help="Path to route corpus (.jsonl.gz)")
+    collect_parser.add_argument("--benchmark", required=True, help="Path to benchmark definition (.json.gz)")
+    collect_parser.add_argument("--output", required=True, help="Path to save benchmark-keyed routes (.json.gz)")
 
     # --- LIST ---
     subparsers.add_parser("list", help="List discovered models from raw data manifests")
@@ -182,9 +192,11 @@ def main() -> None:
     args = parser.parse_args()
 
     # Commands that don't need config/data-dir resolution
-    if args.command in ["adapt", "score-file", "create-benchmark", "list-adapters", "compare"]:
+    if args.command in ["adapt", "collect", "score-file", "create-benchmark", "list-adapters", "compare"]:
         if args.command == "adapt":
             adhoc.handle_adapt(args)
+        elif args.command == "collect":
+            adhoc.handle_collect(args)
         elif args.command == "score-file":
             adhoc.handle_score_file(args)
         elif args.command == "create-benchmark":

@@ -67,18 +67,17 @@ class BaseAdapterTest(ABC):
 
     def test_adapt_success(self, adapter_instance, raw_valid_route_data, target_input):
         """Tests that a valid raw route produces at least one Route."""
-        routes = list(adapter_instance.cast(raw_valid_route_data, target_input))
+        routes = list(adapter_instance.adapt_target_payload(raw_valid_route_data, target_input))
         assert len(routes) >= 1
         route = routes[0]
         assert isinstance(route, Route)
         assert route.target.smiles == target_input.smiles
         assert route.target.inchikey  # Ensure InChIKey is populated
-        assert route.rank >= 1
 
     def test_adapt_handles_unsuccessful_run(self, adapter_instance, raw_unsuccessful_run_data, target_input):
         """Tests that data for an unsuccessful run yields no routes or a typed adapter failure."""
         try:
-            routes = list(adapter_instance.cast(raw_unsuccessful_run_data, target_input))
+            routes = list(adapter_instance.adapt_target_payload(raw_unsuccessful_run_data, target_input))
         except AdapterSchemaError as exc:
             assert exc.code == "adapter.schema_invalid"
         except AdapterLogicError as exc:
@@ -90,7 +89,7 @@ class BaseAdapterTest(ABC):
     def test_adapt_handles_invalid_schema(self, adapter_instance, raw_invalid_schema_data, target_input, caplog):
         """Tests that data failing schema validation raises a typed adapter schema error."""
         with pytest.raises(AdapterSchemaError) as exc_info:
-            list(adapter_instance.cast(raw_invalid_schema_data, target_input))
+            list(adapter_instance.adapt_target_payload(raw_invalid_schema_data, target_input))
         assert exc_info.value.code == "adapter.schema_invalid"
         assert exc_info.value.context["target_id"] == target_input.id
 
@@ -99,7 +98,7 @@ class BaseAdapterTest(ABC):
     ):
         """Tests that a SMILES mismatch either raises a typed error or yields no routes with a warning."""
         try:
-            routes = list(adapter_instance.cast(raw_valid_route_data, mismatched_target_input))
+            routes = list(adapter_instance.adapt_target_payload(raw_valid_route_data, mismatched_target_input))
         except AdapterLogicError as exc:
             assert exc.code == "adapter.target_mismatch"
         else:

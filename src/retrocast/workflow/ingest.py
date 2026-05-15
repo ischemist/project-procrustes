@@ -3,16 +3,15 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from tqdm import tqdm
-
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.curation.filtering import deduplicate_routes
 from retrocast.curation.sampling import sample_k_by_length, sample_random_k, sample_top_k
-from retrocast.exceptions import AdapterError, ChemError, InputError, UnsupportedAdapterFeatureError
+from retrocast.exceptions import InputError
 from retrocast.io.data import save_routes
 from retrocast.io.provenance import generate_model_hash
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.chem import Route, RunStatistics
+from retrocast.workflow.adapt import adapt_route_corpus
+from retrocast.workflow.collect import collect_benchmark_predictions
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +32,13 @@ def ingest_model_predictions(
     sampling_strategy: str | None = None,
     sample_k: int | None = None,
     ignore_stereo: bool = False,
+    adapter_name: str | None = None,
 ) -> tuple[dict[str, list[Route]], Path, RunStatistics]:
     """
-    Converts raw model outputs into standard format.
-    Handles raw data keyed by Target ID (preferred) or SMILES (fallback).
+    Convert raw model outputs into benchmark-keyed routes.
+
+    The workflow is explicit:
+    raw payloads -> canonical Route corpus -> benchmark collection -> routes.json.gz
     """
     logger.info(f"Ingesting results for {model_name} on {benchmark.name}...")
 
@@ -62,64 +64,31 @@ def ingest_model_predictions(
         sampler_k = sample_k
         logger.info(f"Applying sampling: {sampling_strategy} (k={sample_k})")
 
-    processed_routes: dict[str, list[Route]] = {}
-
-    # Initialize statistics tracking
     stats = RunStatistics()
+    route_corpus = adapt_route_corpus(
+        raw_data,
+        adapter,
+        benchmark=benchmark,
+        ignore_stereo=ignore_stereo,
+        stats=stats,
+    )
+    collected_routes = collect_benchmark_predictions(route_corpus, benchmark)
+    processed_routes = collected_routes.routes_by_target
 
-    # 3. Iterate Benchmark Targets (The Source of Truth)
-    for target_id, target in tqdm(benchmark.targets.items(), desc="Ingesting"):
-        # --- Resolution Logic ---
-        raw_payload = None
+    if sampler_fn is not None:
+        processed_routes = {
+            target_id: sampler_fn(routes, sampler_k) if routes else [] for target_id, routes in processed_routes.items()
+        }
 
-        # Strategy A: Direct ID Match (Preferred)
-        if target_id in raw_data:
-            raw_payload = raw_data[target_id]
+    stats.final_unique_routes_saved = 0
+    stats.targets_with_at_least_one_route.clear()
+    stats.routes_per_target.clear()
 
-        # Strategy B: SMILES Match (Fallback)
-        elif target.smiles in raw_data:
-            # Warning: If multiple targets have same SMILES, raw_data might be ambiguous.
-            # But for ingestion, taking the result for that SMILES is usually correct behavior.
-            raw_payload = raw_data[target.smiles]
-
-        if raw_payload is None:
-            # Target was not found in the raw predictions
-            processed_routes[target_id] = []
-            continue
-
-        stats.total_routes_in_raw_files += 1
-
-        # --- Adaptation ---
-        try:
-            # Adapter returns an iterator of Routes
-            routes = list(adapter.cast(raw_payload, target=target, ignore_stereo=ignore_stereo))
-        except UnsupportedAdapterFeatureError:
-            raise
-        except (AdapterError, ChemError) as e:
-            logger.warning(f"Adapter failed for {target_id}: {e} [{e.code}]")
-            routes = []
-            stats.record_failure(e.code, target_id=target_id)
-            processed_routes[target_id] = []
-            continue
-
-        if not routes:
-            processed_routes[target_id] = []
-            continue
-
-        # --- Deduplication & Sampling ---
-        unique_routes = deduplicate_routes(routes)
-
-        if sampler_fn is not None:
-            unique_routes = sampler_fn(unique_routes, sampler_k)
-
-        processed_routes[target_id] = unique_routes
-
-        # --- Stats Update ---
-        stats.successful_routes_before_dedup += len(routes)
-        stats.final_unique_routes_saved += len(unique_routes)
-        if len(unique_routes) > 0:
+    for target_id, routes in processed_routes.items():
+        stats.final_unique_routes_saved += len(routes)
+        if routes:
             stats.targets_with_at_least_one_route.add(target_id)
-            stats.routes_per_target[target_id] = len(unique_routes)
+            stats.routes_per_target[target_id] = len(routes)
 
     # 6. Save
     model_hash = generate_model_hash(model_name)
@@ -133,9 +102,18 @@ def ingest_model_predictions(
 
     logger.info(
         f"Ingestion complete. Found data for {stats.total_routes_in_raw_files}/{len(benchmark.targets)} targets. "
+        f"Adapted {len(route_corpus)} canonical routes. "
+        f"Matched {collected_routes.stats.matched_by_canonical_smiles} by smiles. "
         f"Saved {stats.final_unique_routes_saved} valid routes. "
         f"Duplication factor: {stats.duplication_factor}x"
     )
+    if collected_routes.stats.unmatched_routes or collected_routes.stats.ambiguous_routes:
+        logger.info(
+            "Collection outcomes: unmatched=%s ambiguous=%s duplicate_routes_dropped=%s",
+            collected_routes.stats.unmatched_routes,
+            collected_routes.stats.ambiguous_routes,
+            collected_routes.stats.duplicate_routes_dropped,
+        )
     if stats.failures_by_code:
         logger.info("Ingestion failures by code: %s", dict(sorted(stats.failures_by_code.items())))
 

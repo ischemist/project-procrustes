@@ -77,27 +77,26 @@ class TestRetroStarAdapterContract:
         """Run adapter once for aspirin and reuse results."""
         raw_data = raw_retrostar_data["aspirin"]
         target_input = TargetInput(id="aspirin", smiles=ASPIRIN_SMILES)
-        return list(self.adapter.cast(raw_data, target_input))
+        return list(self.adapter.adapt_target_payload(raw_data, target_input))
 
     @pytest.fixture(scope="class")
     def paracetamol_routes(self, raw_retrostar_data):
         """Run adapter once for paracetamol and reuse results."""
         raw_data = raw_retrostar_data["paracetamol"]
         target_input = TargetInput(id="paracetamol", smiles=PARACETAMOL_SMILES)
-        return list(self.adapter.cast(raw_data, target_input))
+        return list(self.adapter.adapt_target_payload(raw_data, target_input))
 
     @pytest.fixture(scope="class")
     def daridorexant_routes(self, raw_retrostar_data):
         """Run adapter once for daridorexant and reuse results."""
         raw_data = raw_retrostar_data["daridorexant"]
         target_input = TargetInput(id="daridorexant", smiles=DARIDOREXANT_SMILES)
-        return list(self.adapter.cast(raw_data, target_input))
+        return list(self.adapter.adapt_target_payload(raw_data, target_input))
 
     def test_route_has_required_fields(self, aspirin_routes):
         """All routes must have required Route fields populated."""
         for route in aspirin_routes:
             assert route.target is not None
-            assert route.rank > 0
             assert route.metadata is not None
 
     def test_molecule_has_required_fields(self, aspirin_routes):
@@ -181,7 +180,7 @@ class TestRetroStarAdapterRegression:
         raw_data = raw_retrostar_data["aspirin"]
         target_input = TargetInput(id="aspirin", smiles=ASPIRIN_SMILES)
 
-        routes = list(self.adapter.cast(raw_data, target_input))
+        routes = list(self.adapter.adapt_target_payload(raw_data, target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -191,7 +190,6 @@ class TestRetroStarAdapterRegression:
         assert target.smiles == ASPIRIN_SMILES
         assert not target.is_leaf
         assert target.synthesis_step is not None
-        assert route.rank == 1
 
         # Route metadata
         assert route.metadata["route_cost"] == pytest.approx(0.5438278376934434)
@@ -208,7 +206,7 @@ class TestRetroStarAdapterRegression:
         raw_data = raw_retrostar_data["paracetamol"]
         target_input = TargetInput(id="paracetamol", smiles=PARACETAMOL_SMILES)
 
-        routes = list(self.adapter.cast(raw_data, target_input))
+        routes = list(self.adapter.adapt_target_payload(raw_data, target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -218,7 +216,6 @@ class TestRetroStarAdapterRegression:
         assert target.smiles == PARACETAMOL_SMILES
         assert target.is_leaf
         assert target.synthesis_step is None
-        assert route.rank == 1
 
         # Route metadata
         assert route.metadata["route_cost"] == 0
@@ -228,7 +225,7 @@ class TestRetroStarAdapterRegression:
         raw_data = raw_retrostar_data["daridorexant"]
         target_input = TargetInput(id="daridorexant", smiles=DARIDOREXANT_SMILES)
 
-        routes = list(self.adapter.cast(raw_data, target_input))
+        routes = list(self.adapter.adapt_target_payload(raw_data, target_input))
         assert len(routes) == 1
         route = routes[0]
         target = route.target
@@ -237,7 +234,6 @@ class TestRetroStarAdapterRegression:
         assert target.smiles == DARIDOREXANT_SMILES
         assert not target.is_leaf
         assert target.synthesis_step is not None
-        assert route.rank == 1
 
         # Route metadata
         assert route.metadata["route_cost"] == pytest.approx(8.35212518356242)

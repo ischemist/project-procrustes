@@ -196,7 +196,6 @@ def _create_pruned_route(route: Route, prune_at: frozenset[InchiKeyStr]) -> Rout
     # Create new route preserving metadata and rank
     return Route(
         target=new_target,
-        rank=route.rank,
         metadata=route.metadata.copy(),
     )
 

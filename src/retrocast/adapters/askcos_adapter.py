@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from collections.abc import Generator
+from collections.abc import Iterator
+from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
-from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.errors import (
     adapter_cycle_error,
     adapter_missing_node_error,
@@ -15,7 +16,7 @@ from retrocast.adapters.errors import (
     adapter_target_mismatch,
 )
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import RetroCastException, UnsupportedAdapterFeatureError
+from retrocast.exceptions import UnsupportedAdapterFeatureError
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -83,8 +84,16 @@ class AskcosOutput(BaseModel):
     results: AskcosResults
 
 
+@dataclass(frozen=True, slots=True)
+class AskcosPathwayPayload:
+    pathway_edges: list[AskcosPathwayEdge]
+    uuid2smiles: dict[str, str]
+    node_dict: dict[str, AskcosNode]
+    metadata: dict[str, Any]
+
+
 class AskcosAdapter(BaseAdapter):
-    """adapter for converting askcos outputs to the benchmarktree schema."""
+    """adapter for converting askcos outputs to the route schema."""
 
     def __init__(self, use_full_graph: bool = False):
         """
@@ -97,25 +106,26 @@ class AskcosAdapter(BaseAdapter):
         """
         self.use_full_graph = use_full_graph
 
-    def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
-        """validates raw askcos data, transforms its pathways, and yields route objects."""
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+        expected_target: TargetIdentity | None = None,
+    ) -> Iterator[RawRouteEntry]:
         if self.use_full_graph:
             raise UnsupportedAdapterFeatureError(
                 "ASKCOS full-graph route extraction is not implemented",
                 context={"adapter": "askcos", "feature": "full_graph"},
             )
 
+        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
         try:
-            validated_output = AskcosOutput.model_validate(raw_target_data)
+            validated_output = AskcosOutput.model_validate(raw_data)
         except ValidationError as e:
-            raise adapter_schema_error("askcos", target.id, "invalid output") from e
+            raise adapter_schema_error("askcos", target_id, "invalid output") from e
 
-        uds = validated_output.results.uds
-
-        # Extract metadata from stats if available
-        stats = raw_target_data.get("results", {}).get("stats", {})
+        stats = raw_data.get("results", {}).get("stats", {}) if isinstance(raw_data, dict) else {}
         metadata = {
             "total_iterations": stats.get("total_iterations"),
             "total_chemicals": stats.get("total_chemicals"),
@@ -123,34 +133,61 @@ class AskcosAdapter(BaseAdapter):
             "total_templates": stats.get("total_templates"),
             "total_paths": stats.get("total_paths"),
         }
+        uds = validated_output.results.uds
 
-        for i, pathway_edges in enumerate(uds.pathways):
-            try:
-                route = self._transform_pathway(
+        for pathway_index, pathway_edges in enumerate(uds.pathways, start=1):
+            yield RawRouteEntry(
+                payload=AskcosPathwayPayload(
                     pathway_edges=pathway_edges,
                     uuid2smiles=uds.uuid2smiles,
                     node_dict=uds.node_dict,
-                    target_input=target,
-                    rank=i + 1,
                     metadata=metadata,
-                    ignore_stereo=ignore_stereo,
-                )
-                yield route
-            except RetroCastException as e:
-                logger.warning(f"  - pathway {i} for target '{target.id}' failed transformation: {e} [{e.code}]")
-                continue
+                ),
+                source_key=source_key,
+                expected_target_id=expected_target.id if expected_target is not None else None,
+                expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+                source_order=pathway_index,
+            )
 
-    def _transform_pathway(
+    def cast(
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
+        if not isinstance(raw_route, AskcosPathwayPayload):
+            raise adapter_schema_error(
+                "askcos", expected_target.id if expected_target else "<unknown>", "invalid pathway"
+            )
+
+        target_molecule = self._build_target_molecule(
+            pathway_edges=raw_route.pathway_edges,
+            uuid2smiles=raw_route.uuid2smiles,
+            node_dict=raw_route.node_dict,
+            ignore_stereo=ignore_stereo,
+        )
+
+        if expected_target is not None:
+            expected_smiles = canonicalize_smiles(expected_target.smiles, ignore_stereo=ignore_stereo)
+            if target_molecule.smiles != expected_smiles:
+                raise adapter_target_mismatch(
+                    "askcos",
+                    expected_target.id,
+                    expected_smiles=expected_smiles,
+                    actual_smiles=target_molecule.smiles,
+                )
+
+        return Route(target=target_molecule, metadata=raw_route.metadata)
+
+    def _build_target_molecule(
         self,
         pathway_edges: list[AskcosPathwayEdge],
         uuid2smiles: dict[str, str],
         node_dict: dict[str, AskcosNode],
-        target_input: TargetIdentity,
-        rank: int,
-        metadata: dict[str, Any],
         ignore_stereo: bool = False,
-    ) -> Route:
-        """transforms a single askcos pathway (represented by its edges) into a route."""
+    ) -> Molecule:
+        """build the root molecule for a single askcos pathway payload."""
         adj_list = defaultdict(list)
         for edge in pathway_edges:
             adj_list[edge.source].append(edge.target)
@@ -159,7 +196,7 @@ class AskcosAdapter(BaseAdapter):
         if root_uuid not in uuid2smiles:
             raise adapter_missing_node_error("askcos", node_id=root_uuid, lookup="uuid2smiles", role="root chemical")
 
-        target_molecule = self._build_molecule(
+        return self._build_molecule(
             chem_uuid=root_uuid,
             path_prefix="retrocast-mol-root",
             adj_list=adj_list,
@@ -168,17 +205,6 @@ class AskcosAdapter(BaseAdapter):
             visited=set(),
             ignore_stereo=ignore_stereo,
         )
-
-        expected_smiles = canonicalize_smiles(target_input.smiles, ignore_stereo=ignore_stereo)
-        if target_molecule.smiles != expected_smiles:
-            raise adapter_target_mismatch(
-                "askcos",
-                target_input.id,
-                expected_smiles=expected_smiles,
-                actual_smiles=target_molecule.smiles,
-            )
-
-        return Route(target=target_molecule, rank=rank, metadata=metadata)
 
     def _build_molecule(
         self,

@@ -3,13 +3,13 @@ from __future__ import annotations
 import logging
 import re
 from collections import defaultdict
-from collections.abc import Generator
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
 
-from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.errors import (
     adapter_cycle_error,
     adapter_node_type_error,
@@ -230,29 +230,45 @@ class PaRoutesAdapter(BaseAdapter):
 
         return metadata
 
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+        expected_target: TargetIdentity | None = None,
+    ) -> Iterator[RawRouteEntry]:
+        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
+        try:
+            validated_route_root = PaRoutesMoleculeInput.model_validate(raw_data)
+        except ValidationError as e:
+            raise adapter_schema_error("paroutes", target_id, "invalid molecule route root") from e
+
+        yield RawRouteEntry(
+            payload=validated_route_root,
+            source_key=source_key,
+            expected_target_id=expected_target.id if expected_target is not None else None,
+            expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+            source_order=1,
+        )
+
     def cast(
         self,
-        raw_target_data: Any,
-        target: TargetIdentity,
+        raw_route: Any,
+        *,
         ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
         condition_slot_parse_statistics: ConditionSlotParseStatistics | None = None,
-    ) -> Generator[Route, None, None]:
-        """
-        validates a single paroutes route, checks for patent consistency, and transforms it.
-        """
-        try:
-            # unlike other adapters, the raw data for one target is a single route object, not a list.
-            validated_route_root = PaRoutesMoleculeInput.model_validate(raw_target_data)
-        except ValidationError as e:
-            raise adapter_schema_error("paroutes", target.id, "invalid molecule route root") from e
+    ) -> Route:
+        if not isinstance(raw_route, PaRoutesMoleculeInput):
+            raw_route = PaRoutesMoleculeInput.model_validate(raw_route)
 
-        # --- custom validation: ensure all reactions are from the same patent ---
-        patent_ids = self._get_patent_ids(validated_route_root)
+        target_id = expected_target.id if expected_target is not None else "<unknown>"
+        patent_ids = self._get_patent_ids(raw_route)
         if len(patent_ids) > 1:
             raise AdapterLogicError(
-                f"PaRoutes route for target '{target.id}' contains reactions from multiple patents",
+                f"PaRoutes route for target '{target_id}' contains reactions from multiple patents",
                 code="adapter.multiple_patents",
-                context={"adapter": "paroutes", "target_id": target.id, "patent_ids": sorted(patent_ids)},
+                context={"adapter": "paroutes", "target_id": target_id, "patent_ids": sorted(patent_ids)},
             )
         elif len(patent_ids) == 1:
             patent_id = list(patent_ids)[0]
@@ -260,17 +276,17 @@ class PaRoutesAdapter(BaseAdapter):
             if year:
                 self.year_counts[year] += 1
 
-        if not patent_ids:  # skip if no patent id was found
+        if not patent_ids:
             raise AdapterLogicError(
-                f"PaRoutes route for target '{target.id}' does not contain a patent id",
+                f"PaRoutes route for target '{target_id}' does not contain a patent id",
                 code="adapter.patent_id_missing",
-                context={"adapter": "paroutes", "target_id": target.id},
+                context={"adapter": "paroutes", "target_id": target_id},
             )
 
         stats = condition_slot_parse_statistics or ConditionSlotParseStatistics()
-        yield self._transform(
-            validated_route_root,
-            target,
+        return self._transform(
+            raw_route,
+            expected_target,
             patent_id=list(patent_ids)[0],
             ignore_stereo=ignore_stereo,
             condition_slot_parse_statistics=stats,
@@ -283,13 +299,10 @@ class PaRoutesAdapter(BaseAdapter):
         condition_slot_parse_statistics: ConditionSlotParseStatistics,
     ) -> PaRoutesAdaptationResult:
         try:
-            route = next(
-                self.cast(
-                    raw_route,
-                    target,
-                    condition_slot_parse_statistics=condition_slot_parse_statistics,
-                ),
-                None,
+            route = self.cast(
+                raw_route,
+                expected_target=target,
+                condition_slot_parse_statistics=condition_slot_parse_statistics,
             )
             return PaRoutesAdaptationResult(route=route)
         except (AdapterError, ChemError) as exc:
@@ -298,7 +311,7 @@ class PaRoutesAdapter(BaseAdapter):
     def _transform(
         self,
         paroutes_root: PaRoutesMoleculeInput,
-        target: TargetIdentity,
+        target: TargetIdentity | None,
         patent_id: str,
         *,
         ignore_stereo: bool = False,
@@ -315,19 +328,20 @@ class PaRoutesAdapter(BaseAdapter):
             condition_slot_parse_statistics=condition_slot_parse_statistics,
         )
 
-        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
-        if target_molecule.smiles != expected_smiles:
-            raise adapter_target_mismatch(
-                "paroutes",
-                target.id,
-                expected_smiles=expected_smiles,
-                actual_smiles=target_molecule.smiles,
-            )
+        if target is not None:
+            expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
+            if target_molecule.smiles != expected_smiles:
+                raise adapter_target_mismatch(
+                    "paroutes",
+                    target.id,
+                    expected_smiles=expected_smiles,
+                    actual_smiles=target_molecule.smiles,
+                )
 
         # add patent ID to route metadata (everything up to first semicolon)
         route_metadata = {"patent_id": patent_id}
 
-        return Route(target=target_molecule, rank=1, metadata=route_metadata)
+        return Route(target=target_molecule, metadata=route_metadata)
 
     def _build_molecule(
         self,

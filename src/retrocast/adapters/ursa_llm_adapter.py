@@ -4,11 +4,11 @@ import gzip
 import json
 import logging
 import re
-from collections.abc import Generator
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
 from retrocast.adapters.errors import adapter_route_transform_error, adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles
@@ -157,28 +157,57 @@ class UrsaLlmAdapter(BaseAdapter):
 
     adapter_key = "ursa-llm"
 
-    def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
-        if not isinstance(raw_target_data, list):
-            raise adapter_schema_error(self.adapter_key, target.id, "expected a list of completion records")
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+        expected_target: TargetIdentity | None = None,
+    ) -> Iterator[RawRouteEntry]:
+        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
+        if not isinstance(raw_data, list):
+            raise adapter_schema_error(self.adapter_key, target_id, "expected a list of completion records")
 
-        for rank, raw_record in enumerate(raw_target_data, start=1):
+        for row_index, raw_record in enumerate(raw_data, start=1):
             completion = _extract_completion_text(raw_record)
             if completion is None:
                 raise adapter_schema_error(
                     self.adapter_key,
-                    target.id,
+                    target_id,
                     "each completion record must be a dict with a string 'completion' field",
-                    record_index=rank - 1,
+                    record_index=row_index - 1,
                 )
-            try:
-                yield self._transform(completion, target, rank=rank, ignore_stereo=ignore_stereo)
-            except RetroCastException as e:
-                logger.warning(f"  - completion #{rank} for '{target.id}' failed transformation: {e} [{e.code}]")
-                continue
+            yield RawRouteEntry(
+                payload=completion,
+                source_key=source_key,
+                source_row_index=row_index,
+                expected_target_id=expected_target.id if expected_target is not None else None,
+                expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+                source_order=row_index,
+            )
 
-    def _transform(self, completion: str, target: TargetIdentity, rank: int, ignore_stereo: bool = False) -> Route:
+    def cast(
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
+        if not isinstance(raw_route, str):
+            raise adapter_schema_error(
+                self.adapter_key,
+                expected_target.id if expected_target is not None else "<unknown>",
+                "expected completion text",
+            )
+        if expected_target is None:
+            raise adapter_route_transform_error(
+                self.adapter_key,
+                "<unknown>",
+                "ursa llm adaptation requires an expected target",
+            )
+        return self._transform(raw_route, expected_target, ignore_stereo=ignore_stereo)
+
+    def _transform(self, completion: str, target: TargetIdentity, ignore_stereo: bool = False) -> Route:
         precursor_map = self._parse_completion(completion, ignore_stereo=ignore_stereo)
         if not precursor_map:
             raise adapter_route_transform_error(self.adapter_key, target.id, "no synthesis steps found in completion")
@@ -198,7 +227,7 @@ class UrsaLlmAdapter(BaseAdapter):
             ignore_stereo=ignore_stereo,
             adapter=self.adapter_key,
         )
-        return Route(target=molecule, rank=rank, metadata={})
+        return Route(target=molecule, metadata={})
 
     def _parse_completion(self, completion: str, ignore_stereo: bool = False) -> PrecursorMap:
         """Parse `<synthesis_step>` blocks from a completion into a precursor map."""

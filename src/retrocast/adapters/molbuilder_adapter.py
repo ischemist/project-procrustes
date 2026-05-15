@@ -30,19 +30,18 @@ Raw data format (route-centric):
 """
 
 import logging
-from collections.abc import Generator
+from collections.abc import Iterator
 from typing import Any
 
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
-from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.errors import (
     adapter_cycle_error,
     adapter_schema_error,
     adapter_target_mismatch,
 )
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -86,50 +85,63 @@ class MolBuilderRouteList(RootModel[list[MolBuilderNode]]):
 class MolBuilderAdapter(BaseAdapter):
     """Adapter for converting MolBuilder retrosynthesis output to the Route schema."""
 
-    def cast(
+    def iter_raw_entries(
         self,
-        raw_target_data: Any,
-        target: TargetIdentity,
-        ignore_stereo: bool = False,
-    ) -> Generator[Route, None, None]:
-        """Validate raw MolBuilder data and yield Route objects."""
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+        expected_target: TargetIdentity | None = None,
+    ) -> Iterator[RawRouteEntry]:
+        target_id = expected_target.id if expected_target is not None else source_key or "<unknown>"
         try:
-            validated_routes = MolBuilderRouteList.model_validate(raw_target_data)
+            validated_routes = MolBuilderRouteList.model_validate(raw_data)
         except ValidationError as e:
-            raise adapter_schema_error("molbuilder", target.id, "invalid route list") from e
+            raise adapter_schema_error("molbuilder", target_id, "invalid route list") from e
 
         for rank, tree_root in enumerate(validated_routes.root, start=1):
-            try:
-                route = self._transform(tree_root, target, rank, ignore_stereo=ignore_stereo)
-                yield route
-            except RetroCastException as e:
-                logger.debug(f"  - Route for '{target.id}' failed transformation: {e} [{e.code}]")
-                continue
+            yield RawRouteEntry(
+                payload=tree_root,
+                source_key=source_key,
+                expected_target_id=expected_target.id if expected_target is not None else None,
+                expected_target_smiles=expected_target.smiles if expected_target is not None else None,
+                source_order=rank,
+            )
+
+    def cast(
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
+        if not isinstance(raw_route, MolBuilderNode):
+            raw_route = MolBuilderNode.model_validate(raw_route)
+        return self._transform(raw_route, expected_target, ignore_stereo=ignore_stereo)
 
     def _transform(
         self,
         raw_root: MolBuilderNode,
-        target: TargetIdentity,
-        rank: int,
+        target: TargetIdentity | None,
         ignore_stereo: bool = False,
     ) -> Route:
         """Transform a single MolBuilder tree into a Route."""
         target_molecule = self._build_molecule(raw_root, ignore_stereo=ignore_stereo)
 
-        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
-        if target_molecule.smiles != expected_smiles:
-            raise adapter_target_mismatch(
-                "molbuilder",
-                target.id,
-                expected_smiles=expected_smiles,
-                actual_smiles=target_molecule.smiles,
-            )
+        if target is not None:
+            expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
+            if target_molecule.smiles != expected_smiles:
+                raise adapter_target_mismatch(
+                    "molbuilder",
+                    target.id,
+                    expected_smiles=expected_smiles,
+                    actual_smiles=target_molecule.smiles,
+                )
 
         route_metadata: dict[str, Any] = {}
         if raw_root.best_disconnection is not None:
             route_metadata["score"] = raw_root.best_disconnection.score
 
-        return Route(target=target_molecule, rank=rank, metadata=route_metadata)
+        return Route(target=target_molecule, metadata=route_metadata)
 
     def _build_molecule(
         self,

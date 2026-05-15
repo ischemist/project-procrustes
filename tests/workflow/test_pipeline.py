@@ -5,12 +5,12 @@ Tests the full ingest -> score -> stats flow using synthetic data and tmp_path.
 No mocking - uses real file I/O and synthetic carbon chain routes.
 """
 
-from collections.abc import Generator
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
 
-from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.exceptions import AdapterSchemaError, ChemRuntimeError, InputError, UnsupportedAdapterFeatureError
 from retrocast.io.data import load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
@@ -32,55 +32,126 @@ class SyntheticAdapter(BaseAdapter):
     Expects raw_target_data to be a list of Route dicts or Route objects.
     """
 
-    def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
-        if not isinstance(raw_target_data, list):
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+        expected_target: TargetIdentity | None = None,
+    ) -> Iterator[RawRouteEntry]:
+        if not isinstance(raw_data, list):
             return
 
-        for item in raw_target_data:
-            if isinstance(item, Route):
-                yield item
-            elif isinstance(item, dict):
-                # Parse Route from dict
-                try:
-                    route = Route.model_validate(item)
-                    yield route
-                except Exception:
-                    continue
+        expected_target_id = expected_target.id if expected_target is not None else None
+        expected_target_smiles = str(expected_target.smiles) if expected_target is not None else None
+        for row_index, item in enumerate(raw_data, start=1):
+            yield RawRouteEntry(
+                payload=item,
+                source_key=source_key,
+                source_row_index=row_index,
+                expected_target_id=expected_target_id,
+                expected_target_smiles=expected_target_smiles,
+                source_order=row_index,
+            )
+
+    def cast(
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
+        route = raw_route if isinstance(raw_route, Route) else Route.model_validate(raw_route)
+        if expected_target is not None and route.target.smiles != expected_target.smiles:
+            raise AdapterSchemaError(
+                "synthetic adapter target mismatch",
+                code="adapter.schema_invalid",
+                context={"adapter": "synthetic", "target_id": expected_target.id},
+            )
+        return route
 
 
 class FailingAdapter(BaseAdapter):
     """Adapter that raises a structured schema failure for accounting tests."""
 
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+        expected_target: TargetIdentity | None = None,
+    ) -> Iterator[RawRouteEntry]:
+        yield from SyntheticAdapter().iter_raw_entries(
+            raw_data,
+            source_key=source_key,
+            expected_target=expected_target,
+        )
+
     def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
         raise AdapterSchemaError(
             "synthetic adapter schema failure",
             code="adapter.schema_invalid",
-            context={"adapter": "synthetic", "target_id": target.id},
+            context={"adapter": "synthetic", "target_id": expected_target.id if expected_target else None},
         )
 
 
 class ChemFailingAdapter(BaseAdapter):
     """Adapter that raises a chemistry failure after target-local processing begins."""
 
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+        expected_target: TargetIdentity | None = None,
+    ) -> Iterator[RawRouteEntry]:
+        yield from SyntheticAdapter().iter_raw_entries(
+            raw_data,
+            source_key=source_key,
+            expected_target=expected_target,
+        )
+
     def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
         raise ChemRuntimeError(
             "synthetic chemistry failure",
-            context={"target_id": target.id},
+            context={"target_id": expected_target.id if expected_target else None},
         )
 
 
 class UnsupportedFeatureAdapter(BaseAdapter):
     """Adapter that fails fast on a workflow-level unsupported feature."""
 
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+        expected_target: TargetIdentity | None = None,
+    ) -> Iterator[RawRouteEntry]:
+        raise UnsupportedAdapterFeatureError(
+            "synthetic unsupported feature",
+            context={"adapter": "synthetic", "feature": "iter_raw_entries"},
+        )
+
     def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
         raise UnsupportedAdapterFeatureError(
             "synthetic unsupported feature",
             context={"adapter": "synthetic", "feature": "full_graph"},
@@ -730,7 +801,7 @@ class TestSyntheticAdapter:
             route_length=1,
         )
 
-        results = list(adapter.cast(raw_data, target))
+        results = list(adapter.adapt_target_payload(raw_data, target))
         assert len(results) == 1
         assert results[0].target.smiles == "CC"
 
@@ -748,7 +819,7 @@ class TestSyntheticAdapter:
             route_length=1,
         )
 
-        results = list(adapter.cast(raw_data, target))
+        results = list(adapter.adapt_target_payload(raw_data, target))
         assert len(results) == 0
 
     @pytest.mark.unit
@@ -764,5 +835,5 @@ class TestSyntheticAdapter:
             route_length=1,
         )
 
-        results = list(adapter.cast("not a list", target))
+        results = list(adapter.adapt_target_payload("not a list", target))
         assert len(results) == 0

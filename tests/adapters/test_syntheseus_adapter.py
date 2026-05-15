@@ -64,16 +64,11 @@ class TestSyntheseusAdapterContract:
         """Shared fixture for USPTO-2/190 routes."""
         target = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
         raw_routes = raw_syntheseus_data["USPTO-2/190"]
-        return list(adapter.cast(raw_routes, target))
+        return list(adapter.adapt_target_payload(raw_routes, target))
 
     def test_produces_correct_number_of_routes(self, uspto_routes):
         """Verify the adapter produces the expected number of routes."""
         assert len(uspto_routes) == 10
-
-    def test_all_routes_have_ranks(self, uspto_routes):
-        """Verify all routes are properly ranked."""
-        ranks = [route.rank for route in uspto_routes]
-        assert ranks == list(range(1, len(uspto_routes) + 1))
 
     def test_all_routes_are_valid_route_objects(self, uspto_routes):
         """Verify all routes are Route instances."""
@@ -112,7 +107,7 @@ class TestSyntheseusAdapterRegression:
         raw_data = raw_syntheseus_data["USPTO-2/190"]
         target = TargetInput(id="USPTO-2/190", smiles=USPTO_2_SMILES)
 
-        routes = list(adapter.cast(raw_data, target))
+        routes = list(adapter.adapt_target_payload(raw_data, target))
 
         # The file contains 10 distinct routes for this target
         assert len(routes) == 10
@@ -121,7 +116,6 @@ class TestSyntheseusAdapterRegression:
         first_route = routes[0]
         target = first_route.target
 
-        assert first_route.rank == 1
         assert target.smiles == USPTO_2_SMILES
         assert not target.is_leaf
         assert target.synthesis_step is not None
@@ -137,13 +131,12 @@ class TestSyntheseusAdapterRegression:
         raw_data = raw_syntheseus_data["paracetamol"]
         target = TargetInput(id="paracetamol", smiles=PARACETAMOL_SMILES)
 
-        routes = list(adapter.cast(raw_data, target))
+        routes = list(adapter.adapt_target_payload(raw_data, target))
 
         assert len(routes) == 1
         route = routes[0]
         target = route.target
 
-        assert route.rank == 1
         assert target.smiles == PARACETAMOL_SMILES
         assert target.is_leaf
         assert target.synthesis_step is None
@@ -153,5 +146,5 @@ class TestSyntheseusAdapterRegression:
         raw_data = raw_syntheseus_data["ibuprofen"]
         target = TargetInput(id="ibuprofen", smiles="CC(C)Cc1ccc(C(C)C(=O)O)cc1")
 
-        routes = list(adapter.cast(raw_data, target))
+        routes = list(adapter.adapt_target_payload(raw_data, target))
         assert len(routes) == 0

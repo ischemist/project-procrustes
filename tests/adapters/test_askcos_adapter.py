@@ -71,7 +71,7 @@ class TestAskcosAdapterUnit(BaseAdapterTest):
         adapter = AskcosAdapter(use_full_graph=True)
 
         with pytest.raises(UnsupportedAdapterFeatureError) as exc_info:
-            list(adapter.cast(raw_valid_route_data, target_input))
+            list(adapter.adapt_target_payload(raw_valid_route_data, target_input))
 
         assert exc_info.value.code == "adapter.unsupported_feature"
         assert exc_info.value.context == {"adapter": "askcos", "feature": "full_graph"}
@@ -105,7 +105,7 @@ class TestAskcosAdapterUnit(BaseAdapterTest):
             }
         }
 
-        routes = list(adapter.cast(cyclic_data, target_input))
+        routes = list(adapter.adapt_target_payload(cyclic_data, target_input))
 
         assert routes == []
         assert "adapter.cycle_detected" in caplog.text
@@ -115,7 +115,7 @@ class TestAskcosAdapterUnit(BaseAdapterTest):
         corrupted_data = copy.deepcopy(raw_valid_route_data)
         corrupted_data["results"]["uds"]["uuid2smiles"].pop("00000000-0000-0000-0000-000000000000")
 
-        routes = list(adapter.cast(corrupted_data, target_input))
+        routes = list(adapter.adapt_target_payload(corrupted_data, target_input))
 
         assert routes == []
         assert "adapter.node_missing" in caplog.text
@@ -126,7 +126,7 @@ class TestAskcosAdapterUnit(BaseAdapterTest):
         corrupted_data = copy.deepcopy(raw_valid_route_data)
         corrupted_data["results"]["uds"]["pathways"][0][0]["target"] = "missing-rxn-uuid"
 
-        routes = list(adapter.cast(corrupted_data, target_input))
+        routes = list(adapter.adapt_target_payload(corrupted_data, target_input))
 
         assert routes == []
         assert "adapter.node_missing" in caplog.text
@@ -145,7 +145,7 @@ class TestAskcosAdapterContract:
     def routes(self, adapter: AskcosAdapter, raw_askcos_data: dict[str, Any], methylacetate_target_input: TargetInput):
         """Shared fixture to avoid re-running adaptation for every test."""
         raw_target_data = raw_askcos_data["methylacetate"]
-        return list(adapter.cast(raw_target_data, methylacetate_target_input))
+        return list(adapter.adapt_target_payload(raw_target_data, methylacetate_target_input))
 
     def test_produces_correct_number_of_routes(self, routes):
         """Verify the adapter produces the expected number of routes."""
@@ -160,11 +160,6 @@ class TestAskcosAdapterContract:
             assert "total_reactions" in route.metadata
             assert "total_templates" in route.metadata
             assert "total_paths" in route.metadata
-
-    def test_all_routes_have_ranks(self, routes):
-        """Verify all routes are properly ranked."""
-        ranks = [route.rank for route in routes]
-        assert ranks == list(range(1, len(routes) + 1))
 
     def test_all_routes_have_inchikeys(self, routes):
         """Verify all target molecules have InChIKeys."""
@@ -222,12 +217,11 @@ class TestAskcosAdapterRegression:
     def routes(self, adapter: AskcosAdapter, raw_askcos_data: dict[str, Any], methylacetate_target_input: TargetInput):
         """Shared fixture to avoid re-running adaptation for every test."""
         raw_target_data = raw_askcos_data["methylacetate"]
-        return list(adapter.cast(raw_target_data, methylacetate_target_input))
+        return list(adapter.adapt_target_payload(raw_target_data, methylacetate_target_input))
 
     def test_first_route_is_simple_one_step(self, routes):
         """Verify the first route is a simple one-step synthesis."""
         route1 = routes[0]
-        assert route1.rank == 1
 
         target = route1.target
         assert target.smiles == "COC(C)=O"
@@ -258,7 +252,6 @@ class TestAskcosAdapterRegression:
     def test_second_route_is_two_step(self, routes):
         """Verify the second route is a two-step synthesis."""
         route2 = routes[1]
-        assert route2.rank == 2
 
         target = route2.target
         assert target.smiles == "COC(C)=O"
@@ -306,7 +299,7 @@ class TestAskcosAdapterErrorHandling:
         corrupted_data["results"]["uds"]["node_dict"].pop(key_to_remove, None)
 
         # The adapter should still run and produce routes for the non-corrupted pathways
-        routes = list(adapter.cast(corrupted_data, methylacetate_target_input))
+        routes = list(adapter.adapt_target_payload(corrupted_data, methylacetate_target_input))
 
         # The key assertion: we produced FEWER routes than total pathways.
         total_pathways = len(raw_target_data["results"]["uds"]["pathways"])

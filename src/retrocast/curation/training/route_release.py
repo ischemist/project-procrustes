@@ -13,6 +13,7 @@ from typing import Any
 
 from tqdm.auto import tqdm
 
+from retrocast.adapters.base_adapter import RawRouteEntry
 from retrocast.adapters.paroutes_adapter import ConditionSlotParseStatistics, PaRoutesAdapter
 from retrocast.curation.filtering import deduplicate_routes, excise_reactions_from_route
 from retrocast.curation.training.records import (
@@ -26,7 +27,7 @@ from retrocast.curation.training.records import (
     TrainingSetBuildConfig,
     TrainingSetBuildResult,
 )
-from retrocast.exceptions import TrainingReleaseError
+from retrocast.exceptions import AdapterError, ChemError, TrainingReleaseError
 from retrocast.io import ContentType, create_manifest, save_jsonl_gz
 from retrocast.models.chem import ReactionSignature, Route, TargetInput
 from retrocast.typing import SmilesStr
@@ -52,6 +53,28 @@ def stable_raw_route_hash(raw_route: dict[str, Any]) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
+def iter_training_raw_route_entries(
+    raw_routes: Sequence[dict[str, Any]],
+    *,
+    dataset: str,
+    id_width: int,
+) -> Sequence[RawRouteEntry]:
+    entries: list[RawRouteEntry] = []
+    for idx, raw_route in enumerate(raw_routes):
+        raw_smiles = raw_route.get("smiles") if isinstance(raw_route, Mapping) else None
+        entries.append(
+            RawRouteEntry(
+                payload=raw_route,
+                source_key=dataset,
+                source_row_index=idx,
+                expected_target_id=f"{dataset}-{idx + 1:0{id_width}d}",
+                expected_target_smiles=raw_smiles if isinstance(raw_smiles, str) and raw_smiles else None,
+                source_order=idx + 1,
+            )
+        )
+    return entries
+
+
 def adapt_training_routes(
     raw_routes: Sequence[dict[str, Any]],
     dataset: str,
@@ -66,33 +89,33 @@ def adapt_training_routes(
     reaction_hash_signature_pairs: set[tuple[str, ReactionSignature]] = set()
     skipped_adaptation = 0
     skipped_without_error_code = 0
-    routes = (
-        tqdm(raw_routes, desc=f"adapt {dataset}", unit="route", dynamic_ncols=True, leave=False)
+    raw_entries = iter_training_raw_route_entries(raw_routes, dataset=dataset, id_width=id_width)
+    entries = (
+        tqdm(raw_entries, desc=f"adapt {dataset}", unit="route", dynamic_ncols=True, leave=False)
         if show_progress
-        else raw_routes
+        else raw_entries
     )
-    for idx, raw_route in enumerate(routes):
-        target_id = f"{dataset}-{idx + 1:0{id_width}d}"
-        raw_smiles = raw_route.get("smiles") if isinstance(raw_route, Mapping) else None
-        if not isinstance(raw_smiles, str) or not raw_smiles:
+    for entry in entries:
+        if entry.expected_target_smiles is None or entry.expected_target_id is None:
             skipped_adaptation += 1
             failures_by_code["adapter.schema_invalid"] += 1
             continue
 
-        target = TargetInput(id=target_id, smiles=raw_smiles)
-        adaptation = adapter.adapt_route_with_diagnostics(
-            raw_route,
-            target,
-            condition_slot_parse_statistics=parse_stats,
-        )
-        if (route := adaptation.route) is None:
+        target = TargetInput(id=entry.expected_target_id, smiles=entry.expected_target_smiles)
+        try:
+            route = adapter.cast(
+                entry.payload,
+                expected_target=target,
+                condition_slot_parse_statistics=parse_stats,
+            )
+        except (AdapterError, ChemError) as exc:
             skipped_adaptation += 1
-            if adaptation.error is None:
-                skipped_without_error_code += 1
-            else:
-                failures_by_code[adaptation.error.code] += 1
+            failures_by_code[exc.code] += 1
             continue
+
         patent_id = route.metadata.get("patent_id") if isinstance(route.metadata.get("patent_id"), str) else None
+        raw_route = entry.payload
+        assert isinstance(raw_route, dict), "training route entries must preserve raw dict payloads"
         collect_reaction_hash_sanity(route, raw_route, reaction_hash_signature_pairs)
         adapted_routes.append(
             AdaptedTrainingRoute(
@@ -101,7 +124,7 @@ def adapt_training_routes(
                 reaction_signatures=route.get_reaction_signatures() if collect_reactions else set(),
                 source=RawRouteSource(
                     dataset=dataset,
-                    raw_index=idx,
+                    raw_index=entry.source_row_index or 0,
                     raw_route_hash=stable_raw_route_hash(raw_route),
                     patent_id=patent_id,
                 ),

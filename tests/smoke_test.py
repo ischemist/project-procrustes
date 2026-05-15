@@ -102,7 +102,6 @@ class TestBasicFunctionality:
         route = Route(target=mol, rank=1)
 
         assert route.target.smiles == "CC"
-        assert route.rank == 1
 
     def test_create_evaluation_results(self):
         from retrocast.models.evaluation import EvaluationResults

@@ -22,7 +22,6 @@ class TestRoute:
         )
         route = Route(target=target, rank=1)
         assert route.target == target
-        assert route.rank == 1
         assert route.metadata == {}
 
     def test_depth_single_leaf(self):

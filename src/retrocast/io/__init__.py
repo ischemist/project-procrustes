@@ -9,6 +9,7 @@ from retrocast.io.blob import (
     save_lines_gz,
 )
 from retrocast.io.data import (
+    iter_route_corpus,
     iter_training_reaction_records,
     iter_training_reaction_smiles,
     iter_training_route_records,
@@ -16,6 +17,7 @@ from retrocast.io.data import (
     load_benchmark,
     load_execution_stats,
     load_raw_paroutes_list,
+    load_route_corpus,
     load_routes,
     load_stock_file,
     load_training_reaction_records,
@@ -23,6 +25,7 @@ from retrocast.io.data import (
     load_training_route_records,
     load_training_routes,
     save_execution_stats,
+    save_route_corpus,
     save_routes,
     save_stock_files,
 )
@@ -48,6 +51,7 @@ __all__ = [
     "load_benchmark",
     "load_execution_stats",
     "load_raw_paroutes_list",
+    "load_route_corpus",
     "load_routes",
     "load_stock_file",
     "load_training_route_records",
@@ -58,7 +62,9 @@ __all__ = [
     "iter_training_reaction_records",
     "iter_training_reaction_smiles",
     "iter_training_routes",
+    "iter_route_corpus",
     "save_execution_stats",
+    "save_route_corpus",
     "save_routes",
     "save_stock_files",
     # provenance

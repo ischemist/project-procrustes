@@ -100,29 +100,40 @@ The data directory is resolved with the following priority:
 
 ### `adapt` - Convert Raw Predictions
 
-Convert raw output from a supported model into the standardized RetroCast format.
+Convert raw output from a supported model into a canonical route corpus.
 
 ```bash
 retrocast adapt \
   --input raw_predictions.json.gz \
   --adapter aizynth \ # (1)!
-  --output standardized_routes.json.gz \
+  --output route-corpus.jsonl.gz \
   --benchmark benchmark.json.gz  # (2)!
 ```
 
 1. See available adapters with `retrocast list-adapters`
-2. Optional: Ensures target IDs match exactly
+2. Optional: supplies target hints during adaptation; benchmark collection still happens separately
 
 **Supported adapters:** `aizynth`, `dms`, `retrostar`, `synplanner`, `syntheseus`, `askcos`, `retrochimera`, `dreamretro`, `multistepttl`, `synllama`, `paroutes`
 
+### `collect` - Align a Route Corpus to a Benchmark
+
+Collect a canonical route corpus into the benchmark-keyed `routes.json.gz` artifact used for scoring.
+
+```bash
+retrocast collect \
+  --input route-corpus.jsonl.gz \
+  --benchmark benchmark.json.gz \
+  --output routes.json.gz
+```
+
 ### `score-file` - Evaluate Routes
 
-Evaluate standardized routes against a stock file.
+Evaluate benchmark-keyed routes against a stock file.
 
 ```bash
 retrocast score-file \
   --benchmark benchmark.json.gz \
-  --routes standardized_routes.json.gz \
+  --routes routes.json.gz \
   --stock stock_smiles.txt \ # (1)!
   --output scores.json.gz \
   --model-name "My-Experiment"
@@ -222,9 +233,9 @@ graph LR
 
 All paths are relative to your data directory (default: `data/retrocast/`).
 
-### `ingest` - Standardize Routes
+### `ingest` - Adapt and Collect Routes
 
-Transforms raw model outputs into standardized `Route` objects.
+Transforms raw model outputs into benchmark-keyed routes by running adaptation and collection as one command.
 
 ```bash
 retrocast ingest \
@@ -242,9 +253,10 @@ retrocast ingest \
 
 **Operations:**
 
-- Parse raw format via adapter
+- Adapt raw payloads into a canonical route corpus
 - Canonicalize SMILES (optionally ignoring stereochemistry with `--ignore-stereo`)
-- Deduplicate routes
+- Collect canonical routes onto the benchmark by target smiles
+- Deduplicate routes within each benchmark target
 - Apply sampling strategy (if configured)
 
 !!! warning "Stereochemistry-agnostic processing"
