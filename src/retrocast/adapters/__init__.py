@@ -82,7 +82,7 @@ def adapt_routes(
     max_routes: int | None = None,
 ) -> list[Route]:
     """
-    Adapt multiple raw routes to the unified Route format.
+    Deprecated target-local wrapper for adapting multiple raw routes.
 
     Args:
         raw_routes: Routes in the model's native format (typically a list or dict).
@@ -103,6 +103,14 @@ def adapt_routes(
         >>> routes = adapt_routes(raw_routes, target, "aizynth", max_routes=10)
         >>> print(f"Adapted {len(routes)} routes successfully")
     """
+    warn_deprecated(
+        old="adapt_routes",
+        new="adapt_provider_output(...) or adapt_target_keyed_provider_output(...)",
+        remove_in="0.7",
+        note="Target-local adaptation is being removed from the public API. "
+        "Use provider-output workflows for route standardization.",
+        stacklevel=2,
+    )
     adapter = get_adapter(adapter_name)
     routes = []
     for i, route in enumerate(adapt_target_routes(adapter, raw_routes, target)):

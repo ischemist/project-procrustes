@@ -27,9 +27,8 @@ project-mode convenience command that runs both.
 | `retrocast ingest` for project-mode benchmark runs | still `retrocast ingest` | Project mode keeps the one-command convenience wrapper. |
 | `Route.rank` | list order | Keeps canonical `Route` free of benchmark/list-position metadata. |
 
-`adapt_single_route(...)` emits `RetroCastFutureWarning` in v0.6 and is
-scheduled for removal in v0.7. `adapt_routes(...)` remains available as a
-target-local compatibility helper.
+`adapt_single_route(...)` and `adapt_routes(...)` emit `RetroCastFutureWarning`
+in v0.6 and are scheduled for removal in v0.7.
 
 ### 1-5 Minute Migration
 

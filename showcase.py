@@ -136,12 +136,15 @@ def section_adapt_target_local_convenience_wrappers() -> None:
     target_input = TargetInput(id=target.id, smiles=target.smiles)
     raw_target_payload = raw_data[target_id]
 
-    one_route = adapt_single_route(raw_target_payload, target_input, "aizynth")
-    routes = adapt_routes(raw_target_payload, target_input, "aizynth", max_routes=3)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", RetroCastFutureWarning)
+        one_route = adapt_single_route(raw_target_payload, target_input, "aizynth")
+        routes = adapt_routes(raw_target_payload, target_input, "aizynth", max_routes=3)
 
     print(f"target id: {target_id}")
     print(f"adapt_single_route returned route: {one_route is not None}")
     print(f"adapt_routes max_routes=3 returned: {len(routes)}")
+    print(f"deprecation warnings: {[str(warning.message) for warning in caught]}")
 
 
 def section_collect_routes() -> None:

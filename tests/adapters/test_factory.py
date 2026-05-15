@@ -1,7 +1,7 @@
 import pytest
 
 from retrocast._warnings import RetroCastFutureWarning
-from retrocast.adapters import ADAPTER_MAP, ADAPTER_TYPES, adapt_single_route, get_adapter
+from retrocast.adapters import ADAPTER_MAP, ADAPTER_TYPES, adapt_routes, adapt_single_route, get_adapter
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import TargetInput
@@ -54,6 +54,31 @@ def test_adapt_single_route_uses_target_local_payload_contract():
 
     assert route is not None
     assert route.target.smiles == "CC"
+
+
+def test_adapt_routes_warns_for_target_local_payload_contract():
+    target = TargetInput(id="target_1", smiles="CC")
+    raw_routes = [
+        {
+            "type": "mol",
+            "smiles": "CC",
+            "children": [
+                {
+                    "type": "reaction",
+                    "smiles": "",
+                    "children": [{"type": "mol", "smiles": "C", "children": [], "in_stock": True}],
+                    "metadata": {},
+                }
+            ],
+            "in_stock": False,
+        }
+    ]
+
+    with pytest.warns(RetroCastFutureWarning, match="adapt_routes"):
+        routes = adapt_routes(raw_routes, target, "aizynth")
+
+    assert len(routes) == 1
+    assert routes[0].target.smiles == "CC"
 
 
 @pytest.mark.parametrize("adapter_name, adapter_type", ADAPTER_TYPES.items())

@@ -46,41 +46,26 @@ class TestLibraryAPIWithRealData:
         assert "CC" in leaf_smiles
         assert "O" in leaf_smiles
 
-    def test_adapt_routes_batch_example(self):
-        """Test Section 1.2: Adapting Batch Predictions"""
-        from retrocast import TargetInput, adapt_routes, deduplicate_routes
+    def test_adapt_provider_output_batch_example(self):
+        """Test adapting batch predictions with the v0.6 provider-output API."""
+        from retrocast import adapt_provider_output, deduplicate_routes, get_adapter
 
         # Simulate batch processing
-        smiles_list = ["CCO", "CC(C)O"]
-        targets = [TargetInput(id=f"t{i}", smiles=s) for i, s in enumerate(smiles_list)]
-
-        # Mock model outputs (DMS-style)
-        model_outputs = [
-            # Two routes for CCO
-            [
-                {"smiles": "CCO", "children": [{"smiles": "CC", "children": []}, {"smiles": "O", "children": []}]},
-                {
-                    "smiles": "CCO",
-                    "children": [{"smiles": "CC", "children": []}, {"smiles": "O", "children": []}],
-                },  # duplicate
-            ],
-            # One route for CC(C)O
-            [{"smiles": "CC(C)O", "children": [{"smiles": "CC", "children": []}, {"smiles": "CO", "children": []}]}],
+        raw_provider_output = [
+            {"smiles": "CCO", "children": [{"smiles": "CC", "children": []}, {"smiles": "O", "children": []}]},
+            {
+                "smiles": "CCO",
+                "children": [{"smiles": "CC", "children": []}, {"smiles": "O", "children": []}],
+            },  # duplicate
+            {"smiles": "CC(C)O", "children": [{"smiles": "CC", "children": []}, {"smiles": "CO", "children": []}]},
         ]
 
-        all_routes = []
-        for target, raw_output in zip(targets, model_outputs, strict=True):
-            # Adapt
-            routes = adapt_routes(raw_output, target, adapter_name="dms")
-
-            # Deduplicate based on topological signature
-            unique_routes = deduplicate_routes(routes)
-
-            all_routes.extend(unique_routes)
+        routes = adapt_provider_output(raw_provider_output, get_adapter("dms"))
+        unique_routes = deduplicate_routes(routes)
 
         # After deduplication, should have 2 unique routes total
-        assert len(all_routes) == 2
-        assert all(route is not None for route in all_routes)
+        assert len(unique_routes) == 2
+        assert all(route is not None for route in unique_routes)
 
     def test_score_predictions_example(self):
         """Test Section 2.A: Score Predictions"""
@@ -171,7 +156,6 @@ class TestLibraryAPIMinimal:
             ADAPTER_MAP,
             TargetInput,
             adapt_route,
-            adapt_routes,
             adapt_single_route,
             deduplicate_routes,
         )
@@ -186,7 +170,6 @@ class TestLibraryAPIMinimal:
         # Verify functions are callable
         assert callable(adapt_route)
         assert callable(adapt_single_route)
-        assert callable(adapt_routes)
         assert callable(deduplicate_routes)
         assert callable(load_benchmark)
         assert callable(load_routes)
