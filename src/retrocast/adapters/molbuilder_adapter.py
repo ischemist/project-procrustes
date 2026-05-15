@@ -122,7 +122,6 @@ class MolBuilderAdapter(BaseAdapter):
         raw_root: MolBuilderNode,
         target: TargetIdentity | None,
         ignore_stereo: bool = False,
-        expected_target: TargetIdentity | None = None,
     ) -> Route:
         """Transform a single MolBuilder tree into a Route."""
         target_molecule = self._build_molecule(raw_root, ignore_stereo=ignore_stereo)
@@ -148,7 +147,6 @@ class MolBuilderAdapter(BaseAdapter):
         node: MolBuilderNode,
         visited: set[SmilesStr] | None = None,
         ignore_stereo: bool = False,
-        expected_target: TargetIdentity | None = None,
     ) -> Molecule:
         """Recursively build a Molecule from a MolBuilder tree node."""
         if visited is None:

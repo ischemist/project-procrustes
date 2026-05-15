@@ -107,10 +107,10 @@ need a benchmark unless the raw file is already target-keyed.
 ```bash
 retrocast adapt \
   --input raw_predictions.json.gz \
-  --adapter aizynth \ # (1)!
-  --input-kind provider-output \ # (2)!
+  --adapter aizynth \
+  --input-kind provider-output \
   --output route-corpus.jsonl.gz \
-  --benchmark benchmark.json.gz  # (3)!
+  --benchmark benchmark.json.gz
 ```
 
 1. See available adapters with `retrocast list-adapters`

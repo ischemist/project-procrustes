@@ -94,7 +94,6 @@ def build_route_from_shape(shape: tuple[object, ...]) -> Route:
 
     return Route(
         target=_build(shape),
-        rank=7,
         metadata={"source": "generated", "nested": {"items": ["route"]}},
     )
 
@@ -149,7 +148,7 @@ class TestExciseReactionsFromRoute:
         mol_c = make_product("C", "INCHI-C", [mol_b])
         mol_d = make_product("D", "INCHI-D", [mol_c])
 
-        route = Route(target=mol_d, rank=1)
+        route = Route(target=mol_d)
 
         # Excise C <- B (the reaction producing C from B)
         sig_c_from_b: ReactionSignature = (frozenset(["INCHI-B"]), "INCHI-C")
@@ -183,7 +182,7 @@ class TestExciseReactionsFromRoute:
         mol_b = make_product("B", "INCHI-B", [leaf_a])
         mol_c = make_product("C", "INCHI-C", [mol_b])
 
-        route = Route(target=mol_c, rank=1)
+        route = Route(target=mol_c)
 
         # Excise B <- A
         sig_b_from_a: ReactionSignature = (frozenset(["INCHI-A"]), "INCHI-B")
@@ -205,7 +204,7 @@ class TestExciseReactionsFromRoute:
         mol_b = make_product("B", "INCHI-B", [leaf_a])
         mol_c = make_product("C", "INCHI-C", [mol_b])
 
-        route = Route(target=mol_c, rank=1)
+        route = Route(target=mol_c)
 
         # Excise C <- B (the top reaction)
         sig_c_from_b: ReactionSignature = (frozenset(["INCHI-B"]), "INCHI-C")
@@ -227,7 +226,7 @@ class TestExciseReactionsFromRoute:
         mol_b = make_product("B", "INCHI-B", [leaf_a])
         mol_d = make_product("D", "INCHI-D", [mol_b, leaf_c])
 
-        route = Route(target=mol_d, rank=1)
+        route = Route(target=mol_d)
 
         # Excise the top reaction D <- (B, C)
         sig_d: ReactionSignature = (frozenset(["INCHI-B", "INCHI-C"]), "INCHI-D")
@@ -250,7 +249,7 @@ class TestExciseReactionsFromRoute:
         mol_e = make_product("E", "INCHI-E", [leaf_b, leaf_c])
         mol_f = make_product("F", "INCHI-F", [mol_d, mol_e])
 
-        route = Route(target=mol_f, rank=1)
+        route = Route(target=mol_f)
 
         result = excise_reactions_from_route(route, {reaction_signature(mol_f)})
 
@@ -269,7 +268,7 @@ class TestExciseReactionsFromRoute:
         mol_e = make_product("E", "INCHI-E", [mol_d])
         mol_f = make_product("F", "INCHI-F", [mol_e])
 
-        route = Route(target=mol_f, rank=1)
+        route = Route(target=mol_f)
 
         result = excise_reactions_from_route(
             route,
@@ -299,7 +298,7 @@ class TestExciseReactionsFromRoute:
         leaf_a = make_leaf("A", "INCHI-A")
         mol_b = make_product("B", "INCHI-B", [leaf_a])
 
-        route = Route(target=mol_b, rank=1)
+        route = Route(target=mol_b)
 
         result = excise_reactions_from_route(route, set())
 
@@ -310,7 +309,7 @@ class TestExciseReactionsFromRoute:
     def test_excise_from_leaf_route(self):
         """Route with only a leaf (no reactions) should return empty."""
         leaf = make_leaf("A", "INCHI-A")
-        route = Route(target=leaf, rank=1)
+        route = Route(target=leaf)
 
         result = excise_reactions_from_route(route, set())
 
@@ -320,7 +319,7 @@ class TestExciseReactionsFromRoute:
         """Signatures not present in the route should be inert."""
         leaf_a = make_leaf("A", "INCHI-A")
         mol_b = make_product("B", "INCHI-B", [leaf_a])
-        route = Route(target=mol_b, rank=1)
+        route = Route(target=mol_b)
 
         result = excise_reactions_from_route(route, {(frozenset(["INCHI-Z"]), "INCHI-Y")})
 
@@ -348,7 +347,6 @@ class TestExciseReactionsFromRoute:
         )
         route = Route(
             target=mol_b,
-            rank=1,
             metadata={"nested": {"items": ["route"]}},
         )
 
@@ -378,7 +376,6 @@ class TestExciseReactionsFromRoute:
 
         route = Route(
             target=mol_c,
-            rank=1,
             metadata={"source": "test"},
         )
 

@@ -388,11 +388,15 @@ class PaRoutesAdapter(BaseAdapter):
         rxn_metadata = raw_reaction_node.metadata
         mapped_smiles_str = rxn_metadata.rsmi if rxn_metadata else None
         mapped_smiles = ReactionSmilesStr(mapped_smiles_str) if mapped_smiles_str else None
-        metadata_dict = _build_condition_slot_metadata(
-            source_id=rxn_metadata.id,
-            rsmi=rxn_metadata.rsmi,
-            ring_breaker=rxn_metadata.ring_breaker,
-            ignore_stereo=ignore_stereo,
+        metadata_dict = (
+            _build_condition_slot_metadata(
+                source_id=rxn_metadata.id,
+                rsmi=rxn_metadata.rsmi,
+                ring_breaker=rxn_metadata.ring_breaker,
+                ignore_stereo=ignore_stereo,
+            )
+            if rxn_metadata is not None
+            else {}
         )
         synthesis_step = ReactionStep(
             reactants=reactant_molecules,

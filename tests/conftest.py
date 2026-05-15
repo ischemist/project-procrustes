@@ -50,7 +50,7 @@ def _make_linear_route(depth: int) -> Route:
             synthesis_step=ReactionStep(reactants=[current]),
         )
 
-    return Route(target=current, rank=1)
+    return Route(target=current)
 
 
 def _make_convergent_route(depth: int) -> Route:
@@ -100,7 +100,7 @@ def _make_convergent_route(depth: int) -> Route:
         synthesis_step=ReactionStep(reactants=[branch1, branch2]),
     )
 
-    return Route(target=final, rank=1)
+    return Route(target=final)
 
 
 def _make_binary_tree_route(depth: int) -> Route:
@@ -138,7 +138,7 @@ def _make_binary_tree_route(depth: int) -> Route:
             synthesis_step=ReactionStep(reactants=[left, right]),
         )
 
-    return Route(target=_build_tree(depth), rank=1)
+    return Route(target=_build_tree(depth))
 
 
 @pytest.fixture
@@ -305,7 +305,7 @@ def sample_routes_with_reactions() -> dict[str, list]:
         inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
         synthesis_step=ReactionStep(reactants=[ethanol, acetic_acid]),
     )
-    route_A1 = Route(target=ethyl_acetate_1, rank=1)
+    route_A1 = Route(target=ethyl_acetate_1)
 
     # Route 2 for target_A: EtOAc from EtOH + Ac2O
     ethyl_acetate_2 = Molecule(
@@ -313,7 +313,7 @@ def sample_routes_with_reactions() -> dict[str, list]:
         inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
         synthesis_step=ReactionStep(reactants=[ethanol, acetic_anhydride]),
     )
-    route_A2 = Route(target=ethyl_acetate_2, rank=2)
+    route_A2 = Route(target=ethyl_acetate_2)
 
     # Route for target_B: Aspirin synthesis (2-step)
     # Step 1: Salicylic acid from phenol + CO2
@@ -328,6 +328,6 @@ def sample_routes_with_reactions() -> dict[str, list]:
         inchikey=InchiKeyStr("BSYNRYMUTXBXSQ-UHFFFAOYSA-N"),
         synthesis_step=ReactionStep(reactants=[salicylic_acid, acetic_anhydride]),
     )
-    route_B1 = Route(target=aspirin, rank=1)
+    route_B1 = Route(target=aspirin)
 
     return {"target_A": [route_A1, route_A2], "target_B": [route_B1]}

@@ -101,8 +101,8 @@ def _first_leaf_smiles(route: Route) -> str:
 class TestAdaptProviderOutput:
     def test_adapt_provider_output_supports_unkeyed_route_lists(self):
         raw_data = [
-            _make_simple_route("CC", "C", rank=9).model_dump(mode="json"),
-            _make_two_step_route("CCC", "CC", "C", rank=4).model_dump(mode="json"),
+            _make_simple_route("CC", "C").model_dump(mode="json"),
+            _make_two_step_route("CCC", "CC", "C").model_dump(mode="json"),
         ]
 
         routes = adapt_provider_output(raw_data, RouteFirstSyntheticAdapter())
@@ -111,7 +111,7 @@ class TestAdaptProviderOutput:
         assert [route.target.smiles for route in routes] == ["CC", "CCC"]
 
     def test_adapt_route_accepts_one_route_like_payload_without_target_context(self):
-        raw_data = _make_simple_route("CC", "C", rank=9).model_dump(mode="json")
+        raw_data = _make_simple_route("CC", "C").model_dump(mode="json")
 
         route = adapt_route(raw_data, SingleRouteSyntheticAdapter())
 
@@ -120,9 +120,9 @@ class TestAdaptProviderOutput:
 
     def test_adapt_target_keyed_provider_output_filters_to_benchmark_targets(self, synthetic_benchmark):
         raw_data = {
-            "target_1": [_make_simple_route("CC", "C", rank=7).model_dump(mode="json")],
-            "CCC": [_make_two_step_route("CCC", "CC", "C", rank=3).model_dump(mode="json")],
-            "unused": [_make_simple_route("CCCC", "CC", rank=1).model_dump(mode="json")],
+            "target_1": [_make_simple_route("CC", "C").model_dump(mode="json")],
+            "CCC": [_make_two_step_route("CCC", "CC", "C").model_dump(mode="json")],
+            "unused": [_make_simple_route("CCCC", "CC").model_dump(mode="json")],
         }
 
         routes = adapt_target_keyed_provider_output(raw_data, synthetic_benchmark, RouteFirstSyntheticAdapter())
@@ -150,8 +150,8 @@ class TestAdaptProviderOutput:
 @pytest.mark.unit
 class TestCollectBenchmarkPredictions:
     def test_collect_benchmark_predictions_orders_and_deduplicates(self, synthetic_benchmark):
-        route_o = _make_simple_route("CC", "O", rank=9)
-        route_c = _make_simple_route("CC", "C", rank=5)
+        route_o = _make_simple_route("CC", "O")
+        route_c = _make_simple_route("CC", "C")
         duplicate_route_o = Route.model_validate(route_o.model_dump(mode="json"))
 
         collected = collect_benchmark_predictions(
@@ -166,7 +166,7 @@ class TestCollectBenchmarkPredictions:
         assert _first_leaf_smiles(collected.routes_by_target["target_1"][1]) == "C"
 
     def test_collect_benchmark_predictions_reports_unmatched_routes(self, synthetic_benchmark):
-        unmatched_route = _make_simple_route("CCCC", "CC", rank=1)
+        unmatched_route = _make_simple_route("CCCC", "CC")
 
         collected = collect_benchmark_predictions([unmatched_route], synthetic_benchmark)
 
@@ -174,7 +174,7 @@ class TestCollectBenchmarkPredictions:
         assert collected.stats.final_unique_routes_saved == 0
 
     def test_collect_benchmark_predictions_warns_for_legacy_report_policy(self, synthetic_benchmark):
-        unmatched_route = _make_simple_route("CCCC", "CC", rank=1)
+        unmatched_route = _make_simple_route("CCCC", "CC")
 
         with pytest.warns(RetroCastFutureWarning, match="on_unmatched='ignore'"):
             collected = collect_benchmark_predictions(
@@ -203,7 +203,7 @@ class TestCollectBenchmarkPredictions:
                 ),
             },
         )
-        route = _make_simple_route("CC", "C", rank=1)
+        route = _make_simple_route("CC", "C")
 
         with pytest.raises(BenchmarkCollectionError) as exc_info:
             collect_benchmark_predictions([route], ambiguous_benchmark)

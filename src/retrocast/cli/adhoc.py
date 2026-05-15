@@ -310,7 +310,7 @@ def handle_adapt(args: Any) -> None:
 
         save_route_corpus(route_corpus, output_path)
         logger.info(
-            "Adapted %s canonical routes from %s raw payload buckets. Saved route corpus to %s",
+            "Adapted %s canonical routes from %s raw route entries. Saved route corpus to %s",
             len(route_corpus),
             stats.total_routes_in_raw_files,
             output_path,

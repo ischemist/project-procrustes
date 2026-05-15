@@ -34,7 +34,7 @@ route = adapt_route(raw_data, adapter)
 if route:
     print(f"Length: {route.length}")
     print(f"Leaves: {[m.smiles for m in route.leaves]}")
-    print(f"Hash: {route.content_hash}")
+    print(f"Hash: {route.structural_signature}")
 ```
 
 `adapt_route(...)` accepts one raw route-like payload and returns one canonical

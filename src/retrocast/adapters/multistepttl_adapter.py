@@ -77,7 +77,6 @@ class TtlRetroAdapter(BaseAdapter):
         route: TtlRoute,
         target: TargetIdentity | None,
         ignore_stereo: bool = False,
-        expected_target: TargetIdentity | None = None,
     ) -> Route:
         """
         orchestrates the transformation of a single ttlretro route.

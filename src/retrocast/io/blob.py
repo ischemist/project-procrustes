@@ -20,10 +20,29 @@ def load_json_artifact(path: Path) -> Any:
     if name.endswith((".jsonl", ".jsonl.gz")):
         if path.suffix == ".gz":
             return load_jsonl_gz(path)
+        if not path.exists():
+            raise ArtifactNotFoundError(
+                f"File not found: {path}",
+                code="io.not_found",
+                context={"path": str(path)},
+            )
         try:
+            rows: list[Any] = []
             with open(path, encoding="utf-8") as handle:
-                return [json.loads(line) for line in handle if line.strip()]
-        except (OSError, json.JSONDecodeError) as e:
+                for line_number, line in enumerate(handle, start=1):
+                    line_text = line.strip()
+                    if not line_text:
+                        continue
+                    try:
+                        rows.append(json.loads(line_text))
+                    except json.JSONDecodeError as e:
+                        raise ArtifactDecodeError(
+                            f"Failed to decode JSONL row {line_number} from {path}: {e}",
+                            code="io.decode_failed",
+                            context={"path": str(path), "line_number": line_number, "line_text": line_text},
+                        ) from e
+            return rows
+        except OSError as e:
             raise ArtifactDecodeError(
                 f"Failed to load {path}: {e}",
                 code="io.decode_failed",

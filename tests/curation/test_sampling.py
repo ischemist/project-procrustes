@@ -38,10 +38,9 @@ def many_routes_by_length(synthetic_route_factory):
     """
     routes = []
     for depth in [1, 2, 3]:
-        for i in range(3):
+        for _ in range(3):
             route = synthetic_route_factory("linear", depth=depth)
-            # Modify rank to make them distinguishable
-            route = Route(target=route.target, rank=i + 1)
+            route = Route(target=route.target)
             routes.append(route)
     return routes
 
@@ -187,9 +186,9 @@ class TestSampleKByLength:
         """When one group runs out, should continue with remaining groups."""
         # Create 1 route of length 1, 5 routes of length 2
         routes = [synthetic_route_factory("linear", depth=1)]
-        for i in range(5):
+        for _ in range(5):
             route = synthetic_route_factory("linear", depth=2)
-            route = Route(target=route.target, rank=i + 1)
+            route = Route(target=route.target)
             routes.append(route)
 
         result = sample_k_by_length(routes, max_total=4)

@@ -80,7 +80,14 @@ class AizynthAdapter(BaseAdapter):
         ignore_stereo: bool = False,
         expected_target: TargetIdentity | None = None,
     ) -> Route:
-        aizynth_root = AizynthMoleculeInput.model_validate(raw_route)
+        try:
+            aizynth_root = AizynthMoleculeInput.model_validate(raw_route)
+        except ValidationError as e:
+            raise adapter_schema_error(
+                "aizynth",
+                expected_target.id if expected_target is not None else "<unknown>",
+                "invalid molecule route root",
+            ) from e
         target_molecule = build_molecule_from_bipartite_node(
             raw_mol_node=aizynth_root,
             ignore_stereo=ignore_stereo,

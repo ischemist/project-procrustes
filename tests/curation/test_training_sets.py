@@ -658,7 +658,7 @@ class TestTrainingSetSplits:
             synthesis_step=ReactionStep(reactants=[mol_c]),
         )
 
-        full_route = Route(target=mol_d, rank=1)
+        full_route = Route(target=mol_d)
         holdout_route = Route(
             target=Molecule(
                 smiles=SmilesStr("c"),
@@ -672,7 +672,6 @@ class TestTrainingSetSplits:
                     ]
                 ),
             ),
-            rank=1,
         )
         result = TrainingRouteReleaseBuilder(
             all_routes=[make_adapted_route("full", full_route)],

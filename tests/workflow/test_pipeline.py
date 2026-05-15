@@ -167,7 +167,7 @@ def synthetic_benchmark() -> BenchmarkSet:
     targets = {}
 
     # Target 1: Simple one-step synthesis
-    gt_route_1 = _make_simple_route("CC", "C", rank=1)
+    gt_route_1 = _make_simple_route("CC", "C")
     targets["target_1"] = BenchmarkTarget(
         id="target_1",
         smiles=SmilesStr("CC"),
@@ -176,7 +176,7 @@ def synthetic_benchmark() -> BenchmarkSet:
     )
 
     # Target 2: Two-step synthesis
-    gt_route_2 = _make_two_step_route("CCC", "CC", "C", rank=1)
+    gt_route_2 = _make_two_step_route("CCC", "CC", "C")
     targets["target_2"] = BenchmarkTarget(
         id="target_2",
         smiles=SmilesStr("CCC"),
@@ -212,16 +212,16 @@ def synthetic_predictions(synthetic_benchmark: BenchmarkSet) -> dict[str, list[R
     predictions = {}
 
     # Target 1: Two routes
-    route_1a = _make_simple_route("CC", "C", rank=1)  # Matches GT
-    route_1b = _make_simple_route("CC", "O", rank=2)  # Different leaf
+    route_1a = _make_simple_route("CC", "C")  # Matches GT
+    route_1b = _make_simple_route("CC", "O")  # Different leaf
     predictions["target_1"] = [route_1a, route_1b]
 
     # Target 2: One route matching GT
-    route_2a = _make_two_step_route("CCC", "CC", "C", rank=1)
+    route_2a = _make_two_step_route("CCC", "CC", "C")
     predictions["target_2"] = [route_2a]
 
     # Target 3: One route
-    route_3a = _make_two_step_route("CCCC", "CCC", "CC", rank=1)
+    route_3a = _make_two_step_route("CCCC", "CCC", "CC")
     predictions["target_3"] = [route_3a]
 
     return predictions
@@ -271,7 +271,7 @@ class TestIngestModelPredictions:
         )
 
         # Check stats
-        assert stats.total_routes_in_raw_files == 3
+        assert stats.total_routes_in_raw_files == 4
         assert stats.num_targets_with_routes == 3
         assert stats.final_unique_routes_saved == 4  # 2 + 1 + 1
 
@@ -293,7 +293,7 @@ class TestIngestModelPredictions:
 
         # Only provide predictions for target_1
         raw_data = {
-            "target_1": [_make_simple_route("CC", "C", rank=1).model_dump(mode="json")],
+            "target_1": [_make_simple_route("CC", "C").model_dump(mode="json")],
         }
 
         processed, save_path, stats = ingest_model_predictions(
@@ -318,8 +318,8 @@ class TestIngestModelPredictions:
 
         # Key by SMILES instead of target ID
         raw_data = {
-            "CC": [_make_simple_route("CC", "C", rank=1).model_dump(mode="json")],
-            "CCC": [_make_two_step_route("CCC", "CC", "C", rank=1).model_dump(mode="json")],
+            "CC": [_make_simple_route("CC", "C").model_dump(mode="json")],
+            "CCC": [_make_two_step_route("CCC", "CC", "C").model_dump(mode="json")],
         }
 
         processed, save_path, stats = ingest_model_predictions(
@@ -366,7 +366,7 @@ class TestIngestModelPredictions:
         # Create 5 routes for target_1 with different leaves (so they don't deduplicate)
         # Use different leaf SMILES to create unique signatures
         leaves = ["C", "O", "N", "S", "F"]
-        routes = [_make_simple_route("CC", leaf, rank=i) for i, leaf in enumerate(leaves, start=1)]
+        routes = [_make_simple_route("CC", leaf) for i, leaf in enumerate(leaves, start=1)]
         raw_data = {
             "target_1": [r.model_dump(mode="json") for r in routes],
         }
@@ -617,7 +617,7 @@ class TestScoreModel:
     def test_score_missing_predictions_use_empty(self, synthetic_benchmark, minimal_stock):
         """Test scoring uses empty list for missing target predictions."""
         partial_predictions = {
-            "target_1": [_make_simple_route("CC", "C", rank=1)],
+            "target_1": [_make_simple_route("CC", "C")],
             # target_2 and target_3 missing
         }
 
@@ -713,7 +713,7 @@ class TestFullPipeline:
         adapter = SyntheticAdapter()
 
         # Create duplicate routes
-        route = _make_simple_route("CC", "C", rank=1)
+        route = _make_simple_route("CC", "C")
         raw_data = {
             "target_1": [
                 route.model_dump(mode="json"),
@@ -741,8 +741,8 @@ class TestFullPipeline:
         adapter = SyntheticAdapter()
 
         models = {
-            "model-a": {"target_1": [_make_simple_route("CC", "C", rank=1).model_dump(mode="json")]},
-            "model-b": {"target_1": [_make_simple_route("CC", "O", rank=1).model_dump(mode="json")]},
+            "model-a": {"target_1": [_make_simple_route("CC", "C").model_dump(mode="json")]},
+            "model-b": {"target_1": [_make_simple_route("CC", "O").model_dump(mode="json")]},
         }
 
         results = {}
@@ -782,7 +782,7 @@ class TestSyntheticAdapter:
     def test_adapter_yields_routes(self):
         """Test adapter yields Route objects from dict list."""
         adapter = SyntheticAdapter()
-        route = _make_simple_route("CC", "C", rank=1)
+        route = _make_simple_route("CC", "C")
         raw_data = [route.model_dump(mode="json")]
 
         target = BenchmarkTarget(

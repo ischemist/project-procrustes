@@ -130,11 +130,14 @@ class MyAdapter(BaseAdapter):
         # Input: "target >> int_1.int_2 | int_1 >> sm_1.sm_2"
         # Output: {"target": ["int_1", "int_2"], "int_1": ["sm_1", "sm_2"]}
         precursor_map = self._parse_custom_string(raw_route["route_string"]) # (1)!
-        
+
+        if expected_target is None:
+            raise ValueError("expected_target is required for this adapter")
+
         # 2. Build the tree
         # The helper walks the map recursively starting from the target SMILES # (2)!
         target_mol = build_molecule_from_precursor_map(expected_target.smiles, precursor_map)
-        
+
         return Route(target=target_mol, metadata={})
 ```
 
@@ -334,7 +337,7 @@ Once your adapter logic is written, you must register it so the CLI can find it.
 
 === "2. Update Config"
 
-    When using the adapter in a project, reference the key from `ADAPTER_MAP` in your `retrocast-config.yaml`:
+    When using the adapter in a project, reference the key from `ADAPTER_TYPES` in your `retrocast-config.yaml`:
 
     ```yaml title="retrocast-config.yaml"
     models:
@@ -343,7 +346,7 @@ Once your adapter logic is written, you must register it so the CLI can find it.
         raw_results_filename: predictions.json
     ```
 
-    1. Must match the key you added to `ADAPTER_MAP`
+    1. Must match the key you added to `ADAPTER_TYPES`
 
 ## Testing Your Adapter
 

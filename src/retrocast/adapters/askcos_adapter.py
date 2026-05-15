@@ -185,7 +185,6 @@ class AskcosAdapter(BaseAdapter):
         uuid2smiles: dict[str, str],
         node_dict: dict[str, AskcosNode],
         ignore_stereo: bool = False,
-        expected_target: TargetIdentity | None = None,
     ) -> Molecule:
         """build the root molecule for a single askcos pathway payload."""
         adj_list = defaultdict(list)
@@ -215,7 +214,6 @@ class AskcosAdapter(BaseAdapter):
         node_dict: dict[str, AskcosNode],
         visited: set[SmilesStr] | None = None,
         ignore_stereo: bool = False,
-        expected_target: TargetIdentity | None = None,
     ) -> Molecule:
         """recursively builds a canonical molecule from a chemical uuid."""
         if visited is None:
@@ -270,7 +268,6 @@ class AskcosAdapter(BaseAdapter):
         node_dict: dict[str, AskcosNode],
         visited: set[SmilesStr],
         ignore_stereo: bool = False,
-        expected_target: TargetIdentity | None = None,
     ) -> ReactionStep:
         """builds a canonical reaction step from a reaction uuid."""
         raw_smiles = uuid2smiles.get(rxn_uuid)

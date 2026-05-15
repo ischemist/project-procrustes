@@ -127,7 +127,6 @@ class DreamRetroAdapter(BaseAdapter):
         target_input: TargetIdentity | None,
         metadata: dict[str, Any],
         ignore_stereo: bool = False,
-        expected_target: TargetIdentity | None = None,
     ) -> Route:
         """
         orchestrates the transformation of a single dreamretro route string.

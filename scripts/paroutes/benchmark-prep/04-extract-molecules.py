@@ -89,11 +89,6 @@ def main():
             failures += 1
             continue
 
-        if route is None:
-            logger.warning("adapter returned no route for %s", target_id)
-            failures += 1
-            continue
-
         for mol in get_all_molecules(route.target):
             if mol.inchikey not in molecules:
                 molecules[mol.inchikey] = mol.smiles

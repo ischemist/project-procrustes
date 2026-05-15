@@ -10,8 +10,8 @@ from tests.helpers import _make_simple_route
 class TestRouteCorpusIO:
     def test_route_corpus_roundtrip(self, tmp_path):
         routes = [
-            _make_simple_route("CC", "C", rank=1),
-            _make_simple_route("CCC", "CC", rank=2),
+            _make_simple_route("CC", "C"),
+            _make_simple_route("CCC", "CC"),
         ]
         path = tmp_path / "route-corpus.jsonl.gz"
 

@@ -15,7 +15,7 @@ icon: lucide/book-open-text
 | `adapt_single_route(raw, target, adapter)` | Deprecated in v0.6; use `adapt_route(raw, adapter)` | `Route \| None` |
 | `collect_benchmark_predictions(routes, benchmark)` | Collect canonical routes onto benchmark targets | `CollectedBenchmarkRoutes` |
 | `deduplicate_routes(routes)` | Remove duplicate routes | `list[Route]` |
-| `score_predictions(benchmark, predictions, stock)` | Evaluate routes | `ScoredResults` |
+| `score_predictions(model_name, benchmark, predictions, stock)` | Evaluate routes | `ScoredResults` |
 | `compute_model_statistics(results, n_boot)` | Bootstrap statistics | `ModelStatistics` |
 | `load_benchmark(path)` | Load benchmark definition | `Benchmark` |
 | `load_stock_file(path)` | Load stock molecules | `set[str]` |

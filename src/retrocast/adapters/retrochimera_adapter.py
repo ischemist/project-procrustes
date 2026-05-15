@@ -139,7 +139,6 @@ class RetrochimeraAdapter(BaseAdapter):
         target_smiles: str,
         target: TargetIdentity | None,
         ignore_stereo: bool = False,
-        expected_target: TargetIdentity | None = None,
     ) -> Route:
         """
         orchestrates the transformation of a single retrochimera route.

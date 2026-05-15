@@ -20,7 +20,7 @@ class TestRouteContentHash:
             smiles=SmilesStr("CCO"),
             inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
 
         hash1 = route.get_content_hash()
         hash2 = route.get_content_hash()
@@ -34,8 +34,8 @@ class TestRouteContentHash:
             smiles=SmilesStr("CCO"),
             inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
         )
-        route1 = Route(target=target, rank=1)
-        route2 = Route(target=target, rank=2)
+        route1 = Route(target=target)
+        route2 = Route(target=target)
 
         assert route1.get_content_hash() == route2.get_content_hash()
         assert route1.get_structural_signature() == route2.get_structural_signature()
@@ -46,8 +46,8 @@ class TestRouteContentHash:
             smiles=SmilesStr("CCO"),
             inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
         )
-        route1 = Route(target=target, rank=1, metadata={"score": 0.9})
-        route2 = Route(target=target, rank=1, metadata={"score": 0.95})
+        route1 = Route(target=target, metadata={"score": 0.9})
+        route2 = Route(target=target, metadata={"score": 0.95})
 
         assert route1.get_content_hash() != route2.get_content_hash()
 
@@ -63,8 +63,8 @@ class TestRouteContentHash:
             inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
             metadata={"price": 20.0},
         )
-        route1 = Route(target=target1, rank=1)
-        route2 = Route(target=target2, rank=1)
+        route1 = Route(target=target1)
+        route2 = Route(target=target2)
 
         assert route1.get_content_hash() != route2.get_content_hash()
 
@@ -82,7 +82,7 @@ class TestRouteContentHash:
             inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"),
             synthesis_step=step1,
         )
-        route1 = Route(target=target1, rank=1)
+        route1 = Route(target=target1)
 
         # Route without template
         step2 = ReactionStep(reactants=[reactant])
@@ -91,7 +91,7 @@ class TestRouteContentHash:
             inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"),
             synthesis_step=step2,
         )
-        route2 = Route(target=target2, rank=1)
+        route2 = Route(target=target2)
 
         # Different content hash because template info differs
         assert route1.get_content_hash() != route2.get_content_hash()
@@ -104,8 +104,8 @@ class TestRouteContentHash:
             smiles=SmilesStr("CCO"),
             inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
         )
-        route1 = Route(target=target, rank=1, retrocast_version="1.0.0")
-        route2 = Route(target=target, rank=1, retrocast_version="2.0.0")
+        route1 = Route(target=target, retrocast_version="1.0.0")
+        route2 = Route(target=target, retrocast_version="2.0.0")
 
         assert route1.get_content_hash() != route2.get_content_hash()
 
@@ -121,7 +121,7 @@ class TestRouteContentHash:
             inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"),
             synthesis_step=step,
         )
-        route = Route(target=target, rank=1, metadata={"cost": 100})
+        route = Route(target=target, metadata={"cost": 100})
 
         signature = route.get_structural_signature()
         content_hash = route.get_content_hash()
@@ -154,7 +154,6 @@ class TestRouteAnnotatedSignature:
                     metadata={"condition_slot_smiles": ["O"]},
                 ),
             ),
-            rank=1,
         )
         route2 = Route(
             target=Molecule(
@@ -166,7 +165,6 @@ class TestRouteAnnotatedSignature:
                     metadata={"condition_slot_smiles": ["N"]},
                 ),
             ),
-            rank=1,
         )
 
         assert route1.get_structural_signature() == route2.get_structural_signature()
@@ -193,7 +191,7 @@ class TestRouteAnnotatedSignature:
             ),
         )
 
-        route1 = Route(target=target, rank=1, metadata={"patent_id": "a"})
+        route1 = Route(target=target, metadata={"patent_id": "a"})
         route2 = Route.model_validate(route1.model_dump(mode="json"))
         route2.metadata = {"patent_id": "b"}
         route2.retrocast_version = "999.0.0"
@@ -213,7 +211,6 @@ class TestRouteAnnotatedSignature:
                 smiles=SmilesStr("CCO"),
                 inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
             ),
-            rank=1,
         )
 
         with pytest.deprecated_call(match="get_structural_signature"):

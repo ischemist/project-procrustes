@@ -62,7 +62,7 @@ def main() -> None:
     )
     adapt_parser.add_argument(
         "--benchmark",
-        help="Optional benchmark definition used only for target-hint validation during adaptation",
+        help="Benchmark definition for target validation; required with --input-kind target-keyed-provider-output.",
     )
 
     collect_parser = subparsers.add_parser(

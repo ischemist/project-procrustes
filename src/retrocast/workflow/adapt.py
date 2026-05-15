@@ -45,6 +45,8 @@ def _adapt_entries(
     stats: RunStatistics | None = None,
 ) -> Iterator[Route]:
     for entry in entries:
+        if stats is not None:
+            stats.total_routes_in_raw_files += 1
         target = expected_target or _target_hint_from_entry(entry)
         try:
             route = adapter.cast(
@@ -88,8 +90,6 @@ def iter_adapted_routes(
     ignore_stereo: bool,
     stats: RunStatistics | None = None,
 ) -> Iterator[Route]:
-    if stats is not None:
-        stats.total_routes_in_raw_files += 1
     yield from _adapt_entries(
         adapter.iter_raw_entries(provider_output),
         adapter,
@@ -122,9 +122,6 @@ def iter_target_keyed_adapted_routes(
 
         if matched_key is None:
             continue
-
-        if stats is not None:
-            stats.total_routes_in_raw_files += 1
 
         payload = target_keyed_provider_output[matched_key]
         entries = adapter.iter_raw_entries(

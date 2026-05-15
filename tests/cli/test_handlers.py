@@ -38,7 +38,7 @@ def make_simple_route(target_smiles: str, leaf_smiles: str, rank: int = 1) -> Ro
         inchikey=get_inchi_key(target_smiles),
         synthesis_step=step,
     )
-    return Route(target=target, rank=rank)
+    return Route(target=target)
 
 
 # --- Test Classes ---

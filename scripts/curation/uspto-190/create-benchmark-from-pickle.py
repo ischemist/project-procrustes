@@ -21,7 +21,7 @@ import argparse
 import pickle
 from pathlib import Path
 
-from retrocast.adapters.retrostar_adapter import RetroStarAdapter
+from retrocast.adapters.retrostar_adapter import RetroStarAdapter, RetroStarRoutePayload
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import InvalidSmilesError, RetroCastException
 from retrocast.io import create_manifest, load_stock_file, save_json_gz
@@ -97,7 +97,10 @@ def create_benchmark_from_pickle(
 
             # Cast to Route object
             target_input = TargetInput(id=target_id, smiles=target_smiles)
-            route = adapter.cast({"succ": True, "routes": route_str}, expected_target=target_input)
+            route = adapter.cast(
+                RetroStarRoutePayload(route_str=route_str, route_cost=None),
+                expected_target=target_input,
+            )
 
             # If checking buyables, filter out unsolvable routes
             if check_buyables:

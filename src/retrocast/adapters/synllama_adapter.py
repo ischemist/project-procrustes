@@ -67,7 +67,6 @@ class SynLlaMaAdapter(BaseAdapter):
         route: SynLlamaRouteInput,
         target: TargetIdentity | None,
         ignore_stereo: bool = False,
-        expected_target: TargetIdentity | None = None,
     ) -> Route:
         """orchestrates the transformation of a single synllama route string."""
         # the final product is always the last element in the semicolon-delimited string.
@@ -87,7 +86,7 @@ class SynLlaMaAdapter(BaseAdapter):
                     expected_smiles=expected_smiles,
                     actual_smiles=parsed_target_smiles,
                 )
-            target_smiles = SmilesStr(target.smiles)
+            target_smiles = expected_smiles
         else:
             target_smiles = parsed_target_smiles
 

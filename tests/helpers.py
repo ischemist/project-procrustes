@@ -28,7 +28,7 @@ def _make_leaf_molecule(smiles: str) -> Molecule:
     )
 
 
-def _make_simple_route(target_smiles: str, leaf_smiles: str, rank: int = 1) -> Route:
+def _make_simple_route(target_smiles: str, leaf_smiles: str) -> Route:
     """Create a simple one-step route: target <- leaf."""
     leaf = _make_leaf_molecule(leaf_smiles)
     target = Molecule(
@@ -39,7 +39,7 @@ def _make_simple_route(target_smiles: str, leaf_smiles: str, rank: int = 1) -> R
     return Route(target=target)
 
 
-def _make_two_step_route(target_smiles: str, intermediate_smiles: str, leaf_smiles: str, rank: int = 1) -> Route:
+def _make_two_step_route(target_smiles: str, intermediate_smiles: str, leaf_smiles: str) -> Route:
     """Create a two-step route: target <- intermediate <- leaf."""
     leaf = _make_leaf_molecule(leaf_smiles)
     intermediate = Molecule(

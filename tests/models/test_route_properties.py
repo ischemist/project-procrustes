@@ -57,7 +57,7 @@ def simple_route_with_reactants(draw, min_reactants=2, max_reactants=5):
         synthesis_step=step,
     )
 
-    return Route(target=target, rank=1), reactants
+    return Route(target=target), reactants
 
 
 # =============================================================================
@@ -141,7 +141,7 @@ class TestRouteSignatureProperties:
             inchikey=InchiKeyStr("CCCCCCCCCCCCC-CCCCCCCCCC-N"),
             synthesis_step=step1,
         )
-        route1 = Route(target=target1, rank=1)
+        route1 = Route(target=target1)
 
         # Route 2: target <- [B, A] (swapped)
         step2 = ReactionStep(reactants=[leaf_b, leaf_a])
@@ -150,7 +150,7 @@ class TestRouteSignatureProperties:
             inchikey=InchiKeyStr("CCCCCCCCCCCCC-CCCCCCCCCC-N"),
             synthesis_step=step2,
         )
-        route2 = Route(target=target2, rank=1)
+        route2 = Route(target=target2)
 
         assert route1.get_structural_signature() == route2.get_structural_signature(), (
             "Swapping left/right children should not change signature"
@@ -187,7 +187,7 @@ class TestRouteSignatureProperties:
             inchikey=InchiKeyStr("TARGET-INCHKEY-N"),
             synthesis_step=ReactionStep(reactants=[intermediate_a, leaf_3]),
         )
-        route1 = Route(target=target1, rank=1)
+        route1 = Route(target=target1)
 
         # Target with swapped intermediate reactants
         target2 = Molecule(
@@ -195,7 +195,7 @@ class TestRouteSignatureProperties:
             inchikey=InchiKeyStr("TARGET-INCHKEY-N"),
             synthesis_step=ReactionStep(reactants=[intermediate_a_swapped, leaf_3]),
         )
-        route2 = Route(target=target2, rank=1)
+        route2 = Route(target=target2)
 
         # Target with swapped top-level reactants
         target3 = Molecule(
@@ -203,7 +203,7 @@ class TestRouteSignatureProperties:
             inchikey=InchiKeyStr("TARGET-INCHKEY-N"),
             synthesis_step=ReactionStep(reactants=[leaf_3, intermediate_a]),  # Swapped
         )
-        route3 = Route(target=target3, rank=1)
+        route3 = Route(target=target3)
 
         sig1 = route1.get_structural_signature()
         sig2 = route2.get_structural_signature()
@@ -231,7 +231,7 @@ class TestRouteSignatureProperties:
                 inchikey=InchiKeyStr("TARGET-INCHIKEY-N"),
                 synthesis_step=step,
             )
-            route = Route(target=target, rank=1)
+            route = Route(target=target)
             signatures.append(route.get_structural_signature())
 
         # All 6 permutations should produce the same signature

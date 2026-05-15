@@ -441,7 +441,7 @@ class StockStatistics(BaseModel):
 class RunStatistics(BaseModel):
     """A Pydantic model to hold and calculate statistics for a processing run."""
 
-    total_routes_in_raw_files: int = 0
+    total_routes_in_raw_files: int = 0  # Raw route-like entries visited during adaptation.
     routes_failed_transformation: int = 0  # Includes both validation and transformation failures
     successful_routes_before_dedup: int = 0
     final_unique_routes_saved: int = 0

@@ -47,7 +47,7 @@ def _make_linear_route_with_intermediates(depth: int) -> Route:
             synthesis_step=ReactionStep(reactants=[current]),
         )
 
-    return Route(target=current, rank=1)
+    return Route(target=current)
 
 
 def _make_convergent_route_with_intermediates() -> Route:
@@ -92,7 +92,7 @@ def _make_convergent_route_with_intermediates() -> Route:
         synthesis_step=ReactionStep(reactants=[intermediate_left_2, intermediate_right]),
     )
 
-    return Route(target=target, rank=1)
+    return Route(target=target)
 
 
 # =============================================================================
@@ -152,7 +152,7 @@ class TestGetStockIntermediates:
     def test_leaf_route_has_no_intermediates(self):
         """Route with only a leaf has no intermediates."""
         leaf = _make_leaf_molecule("C")
-        route = Route(target=leaf, rank=1)
+        route = Route(target=leaf)
         stock = {_synthetic_inchikey("C")}
 
         result = get_stock_intermediates(route, stock)
@@ -324,7 +324,7 @@ class TestGeneratePrunedRoutes:
     def test_leaf_route_returns_empty_list(self):
         """A leaf-only route should return empty list (no reactions to prune)."""
         leaf = _make_leaf_molecule("C")
-        route = Route(target=leaf, rank=1)
+        route = Route(target=leaf)
         stock = {_synthetic_inchikey("C")}
 
         result = generate_pruned_routes(route, stock)

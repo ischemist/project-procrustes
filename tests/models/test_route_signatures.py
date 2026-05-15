@@ -22,7 +22,7 @@ class TestRouteGetReactionSignatures:
             smiles=SmilesStr("CCO"),
             inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
 
         signatures = route.get_reaction_signatures()
         assert signatures == set()
@@ -44,7 +44,7 @@ class TestRouteGetReactionSignatures:
             inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
             synthesis_step=step,
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
 
         signatures = route.get_reaction_signatures()
 
@@ -74,7 +74,7 @@ class TestRouteGetReactionSignatures:
             synthesis_step=ReactionStep(reactants=[intermediate]),
         )
 
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         signatures = route.get_reaction_signatures()
 
         assert len(signatures) == 2
@@ -106,7 +106,7 @@ class TestRouteGetReactionSignatures:
             synthesis_step=ReactionStep(reactants=[intermediate_left, leaf2]),
         )
 
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         signatures = route.get_reaction_signatures()
 
         # Should have 2 reactions: leaf1->intermediate_left, (intermediate_left + leaf2)->target
@@ -161,7 +161,7 @@ class TestRouteGetReactionSignatures:
             synthesis_step=ReactionStep(reactants=[intermediate1, intermediate2]),
         )
 
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         signatures = route.get_reaction_signatures()
 
         # Should have 3 unique reactions
@@ -181,7 +181,7 @@ class TestRouteGetReactionSignatures:
             inchikey=InchiKeyStr("KEY-C"),
             synthesis_step=ReactionStep(reactants=[intermediate_b]),
         )
-        route1 = Route(target=target_c, rank=1)
+        route1 = Route(target=target_c)
 
         # Route 2: A -> B -> D (shares first reaction with route1)
         leaf_a2 = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("KEY-A"))
@@ -195,7 +195,7 @@ class TestRouteGetReactionSignatures:
             inchikey=InchiKeyStr("KEY-D"),
             synthesis_step=ReactionStep(reactants=[intermediate_b2]),
         )
-        route2 = Route(target=target_d, rank=1)
+        route2 = Route(target=target_d)
 
         # Route 3: X -> Y -> Z (no overlap with route1 or route2)
         leaf_x = Molecule(smiles=SmilesStr("N"), inchikey=InchiKeyStr("KEY-X"))
@@ -209,7 +209,7 @@ class TestRouteGetReactionSignatures:
             inchikey=InchiKeyStr("KEY-Z"),
             synthesis_step=ReactionStep(reactants=[intermediate_y]),
         )
-        route3 = Route(target=target_z, rank=1)
+        route3 = Route(target=target_z)
 
         sigs1 = route1.get_reaction_signatures()
         sigs2 = route2.get_reaction_signatures()
@@ -246,7 +246,7 @@ class TestRouteGetReactionSignatures:
         helper = TestPharmaRoutesContract()
         vonoprazan_data = pharma_routes_data["vonoprazan-1"]
         target_molecule = helper._build_molecule_tree(vonoprazan_data)
-        route = Route(target=target_molecule, rank=1)
+        route = Route(target=target_molecule)
 
         signatures = route.get_reaction_signatures()
 
@@ -274,7 +274,7 @@ class TestRouteGetReactionSignatures:
             inchikey=InchiKeyStr("VNWKTOKETHGBQD-UHFFFAOYSA-N"),
             synthesis_step=step,
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
 
         signatures = route.get_reaction_signatures()
 

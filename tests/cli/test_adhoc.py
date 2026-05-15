@@ -500,7 +500,7 @@ class TestHandleAdapt:
         benchmark_path = tmp_path / "benchmark.json.gz"
         output_path = tmp_path / "routes.json.gz"
 
-        save_route_corpus([_make_simple_route("CC", "C", rank=7)], input_path)
+        save_route_corpus([_make_simple_route("CC", "C")], input_path)
 
         benchmark = BenchmarkSet(
             name="collect-test",

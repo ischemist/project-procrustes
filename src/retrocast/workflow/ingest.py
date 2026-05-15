@@ -34,7 +34,6 @@ def ingest_model_predictions(
     sampling_strategy: str | None = None,
     sample_k: int | None = None,
     ignore_stereo: bool = False,
-    adapter_name: str | None = None,
     provider_output_kind: ProviderOutputKind = "target_keyed_provider_output",
 ) -> tuple[dict[str, list[Route]], Path, RunStatistics]:
     """
@@ -121,7 +120,7 @@ def ingest_model_predictions(
     save_routes(processed_routes, save_file)
 
     logger.info(
-        f"Ingestion complete. Found data for {stats.total_routes_in_raw_files}/{len(benchmark.targets)} targets. "
+        f"Ingestion complete. Adapted {stats.total_routes_in_raw_files} raw route entries. "
         f"Adapted {len(route_corpus)} canonical routes. "
         f"Matched {collected_routes.stats.matched_by_canonical_smiles} by smiles. "
         f"Saved {stats.final_unique_routes_saved} valid routes. "

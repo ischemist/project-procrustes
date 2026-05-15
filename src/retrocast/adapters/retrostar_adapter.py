@@ -122,7 +122,6 @@ class RetroStarAdapter(BaseAdapter):
         target: TargetIdentity | None,
         route_cost: float | None = None,
         ignore_stereo: bool = False,
-        expected_target: TargetIdentity | None = None,
     ) -> Route:
         """
         Orchestrates the transformation of a single RetroStar route string.
@@ -156,5 +155,4 @@ class RetroStarAdapter(BaseAdapter):
         if route_cost is not None:
             metadata["route_cost"] = route_cost
 
-        # RetroStar produces a single route per target, so rank is always 1
         return Route(target=target_molecule, metadata=metadata)
