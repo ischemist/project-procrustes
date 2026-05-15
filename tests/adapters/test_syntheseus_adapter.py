@@ -2,7 +2,7 @@ import pytest
 
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
 from retrocast.chem import canonicalize_smiles
-from retrocast.models.chem import Route, TargetInput
+from retrocast.models.chem import PredictedRoute, TargetInput
 from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
@@ -74,7 +74,7 @@ class TestSyntheseusAdapterContract:
     def test_all_routes_are_valid_route_objects(self, uspto_routes):
         """Verify all routes are Route instances."""
         for route in uspto_routes:
-            assert isinstance(route, Route)
+            assert isinstance(route, PredictedRoute)
 
     def test_all_routes_have_inchikeys(self, uspto_routes):
         """Verify all target molecules have InChIKeys."""

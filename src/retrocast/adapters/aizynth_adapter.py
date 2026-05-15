@@ -30,6 +30,7 @@ class AizynthMoleculeInput(AizynthBaseNode):
 
     type: Literal["mol"]
     in_stock: bool = False
+    scores: dict[str, float] = Field(default_factory=dict)
 
 
 class AizynthReactionInput(AizynthBaseNode):
@@ -104,4 +105,11 @@ class AizynthAdapter(BaseAdapter):
                     actual_smiles=target_molecule.smiles,
                 )
 
-        return Route(target=target_molecule, metadata={})
+        route_metadata: dict[str, Any] = {}
+        if aizynth_root.scores:
+            route_metadata["scores"] = aizynth_root.scores
+            state_score = aizynth_root.scores.get("state score")
+            if state_score is not None:
+                route_metadata["state_score"] = state_score
+
+        return Route(target=target_molecule, metadata=route_metadata)

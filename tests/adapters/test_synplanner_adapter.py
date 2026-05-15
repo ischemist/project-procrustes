@@ -2,7 +2,7 @@ import pytest
 
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.chem import canonicalize_smiles
-from retrocast.models.chem import Route, TargetInput
+from retrocast.models.chem import PredictedRoute, TargetInput
 from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
@@ -122,7 +122,7 @@ class TestSynPlannerAdapterContract:
     def test_all_routes_are_valid_route_objects(self, paracetamol_routes):
         """Verify all routes are Route instances."""
         for route in paracetamol_routes:
-            assert isinstance(route, Route)
+            assert isinstance(route, PredictedRoute)
 
     def test_all_routes_have_inchikeys(self, paracetamol_routes):
         """Verify all target molecules have InChIKeys."""

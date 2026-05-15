@@ -5,6 +5,7 @@ import json
 import statistics
 import warnings
 from collections.abc import Callable, Iterator
+from copy import deepcopy
 from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
@@ -15,6 +16,7 @@ from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
 
 # Type alias for a reaction signature: (frozenset of reactant InchiKeys, product InchiKey)
 ReactionSignature = tuple[frozenset[str], str]
+PREDICTION_METADATA_KEYS = frozenset({"score", "confidence", "state_score", "state score", "scores"})
 
 
 def _get_retrocast_version() -> str:
@@ -382,6 +384,88 @@ class Route(BaseModel):
             overlapping = route1_reactions & route2_reactions
         """
         return {reaction.signature for reaction in self.iter_reactions()}
+
+
+def _as_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    return None
+
+
+class PredictedRoute(BaseModel):
+    """A provider prediction envelope around canonical route chemistry."""
+
+    route: Route
+    rank: int | None = None
+    score: float | None = None
+    confidence: float | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def target(self) -> Molecule:
+        return self.route.target
+
+    @property
+    def length(self) -> int:
+        return self.route.length
+
+    @property
+    def leaves(self) -> set[Molecule]:
+        return self.route.leaves
+
+    @property
+    def has_convergent_reaction(self) -> bool:
+        return self.route.has_convergent_reaction
+
+    @property
+    def structural_signature(self) -> str:
+        return self.route.structural_signature
+
+    def get_structural_signature(self, match_level: InchiKeyLevel = InchiKeyLevel.FULL) -> str:
+        return self.route.get_structural_signature(match_level=match_level)
+
+    def get_content_hash(self) -> str:
+        return self.route.get_content_hash()
+
+    def get_reaction_signatures(self) -> set[ReactionSignature]:
+        return self.route.get_reaction_signatures()
+
+    @classmethod
+    def from_route(
+        cls,
+        route: Route,
+        *,
+        rank: int | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> PredictedRoute:
+        route_metadata = route.metadata
+        score = _as_float(route_metadata.get("score"))
+        confidence = _as_float(route_metadata.get("confidence"))
+
+        scores = route_metadata.get("scores")
+        if score is None and isinstance(scores, dict):
+            for key in ("state score", "state_score", "score"):
+                score = _as_float(scores.get(key))
+                if score is not None:
+                    break
+        if score is None:
+            score = _as_float(route_metadata.get("state_score"))
+
+        canonical_metadata = {
+            key: deepcopy(value) for key, value in route_metadata.items() if key not in PREDICTION_METADATA_KEYS
+        }
+        prediction_metadata = deepcopy(route_metadata)
+        prediction_metadata.update(deepcopy(metadata) if metadata is not None else {})
+
+        return cls(
+            route=route.model_copy(update={"metadata": canonical_metadata}),
+            rank=rank,
+            score=score,
+            confidence=confidence,
+            metadata=prediction_metadata,
+        )
 
 
 # We need to tell Pydantic to rebuild the forward references

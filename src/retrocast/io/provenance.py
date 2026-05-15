@@ -8,7 +8,7 @@ from typing import Any, Literal, TypeAlias
 
 from retrocast import __version__
 from retrocast.models.benchmark import BenchmarkSet
-from retrocast.models.chem import Route
+from retrocast.models.chem import PredictedRoute, Route
 from retrocast.models.provenance import FileInfo, Manifest
 
 logger = logging.getLogger(__name__)
@@ -26,8 +26,9 @@ class ContentType(StrEnum):
       This hashes Route objects (Pydantic models). Do NOT use during raw model
       execution (use "unknown" instead).
 
-    - ROUTE_CORPUS: Use for route-corpus.jsonl.gz artifacts (ordered list[Route]).
-      This preserves encounter order rather than target-keyed grouping.
+    - ROUTE_CORPUS: Use for route-corpus.jsonl.gz artifacts
+      (ordered list[PredictedRoute] or legacy list[Route]). This preserves
+      encounter order rather than target-keyed grouping.
 
     - STOCK: Use when hashing a stock dictionary mapping InChIKey -> SMILES.
 
@@ -131,9 +132,12 @@ def _calculate_predictions_content_hash(routes: dict[str, list[Route]]) -> str:
     return hashlib.sha256(combined.encode()).hexdigest()
 
 
-def _calculate_route_corpus_content_hash(routes: list[Route]) -> str:
-    """Internal: hash an ordered route corpus."""
-    route_hashes = [route.get_content_hash() for route in routes]
+def _calculate_route_corpus_content_hash(routes: list[Route | PredictedRoute]) -> str:
+    """Internal: hash an ordered prediction route corpus."""
+    route_hashes = [
+        route.route.get_content_hash() if isinstance(route, PredictedRoute) else route.get_content_hash()
+        for route in routes
+    ]
     combined = "".join(route_hashes)
     return hashlib.sha256(combined.encode()).hexdigest()
 

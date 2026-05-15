@@ -100,7 +100,7 @@ The data directory is resolved with the following priority:
 
 ### `adapt` - Convert Raw Predictions
 
-Convert raw output from a supported model into a canonical route corpus.
+Convert raw output from a supported model into a prediction route corpus.
 This is the standalone standardization step introduced in v0.6: it does not
 need a benchmark unless the raw file is already target-keyed.
 
@@ -121,7 +121,7 @@ retrocast adapt \
 
 ### `collect` - Align a Route Corpus to a Benchmark
 
-Collect a canonical route corpus into the benchmark-keyed `routes.json.gz` artifact used for scoring.
+Collect a prediction route corpus into the benchmark-keyed `routes.json.gz` artifact used for scoring.
 This is the benchmark-alignment step that used to be hidden inside `ingest`.
 
 ```bash
@@ -261,7 +261,7 @@ retrocast ingest \
 
 **Operations:**
 
-- Adapt raw payloads into a canonical route corpus
+- Adapt raw payloads into a prediction route corpus
 - Canonicalize SMILES (optionally ignoring stereochemistry with `--ignore-stereo`)
 - Collect canonical routes onto the benchmark by target smiles
 - Deduplicate routes within each benchmark target
@@ -502,7 +502,7 @@ Model: dms-explorer
 |:--------|:--------|:------|:-------|
 | `config` | Show resolved paths | - | Configuration display |
 | `init` | Initialize project | - | `retrocast-config.yaml` |
-| `adapt` | Convert raw → standardized | Raw predictions | Route objects |
+| `adapt` | Convert raw → standardized | Raw predictions | Prediction route corpus (`.jsonl.gz`) |
 | `score-file` | Evaluate routes | Routes + stock | Scored routes |
 | `create-benchmark` | Generate benchmark | SMILES list | Benchmark JSON |
 | `ingest` | Standardize (project mode) | `2-raw/` | `3-processed/` |

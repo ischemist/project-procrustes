@@ -255,7 +255,7 @@ def handle_score_file(args: Any) -> None:
 def handle_adapt(args: Any) -> None:
     """
     Handler for 'retrocast adapt'.
-    Converts a raw route-ish artifact into a canonical route corpus.
+    Converts a raw route-ish artifact into a prediction route corpus.
     """
     input_path = Path(args.input)
     output_path = Path(args.output)
@@ -310,7 +310,7 @@ def handle_adapt(args: Any) -> None:
 
         save_route_corpus(route_corpus, output_path)
         logger.info(
-            "Adapted %s canonical routes from %s raw route entries. Saved route corpus to %s",
+            "Adapted %s predicted routes from %s raw route entries. Saved route corpus to %s",
             len(route_corpus),
             stats.total_routes_in_raw_files,
             output_path,

@@ -26,7 +26,8 @@ class TestLibraryAPIWithRealData:
 
     def test_adapt_route_example(self):
         """Test Section 1.1: Adapting one route."""
-        from retrocast import adapt_route, get_adapter
+        from retrocast import adapt_route
+        from retrocast.adapters import DMSAdapter
 
         # 1. Provide raw data (simple DMS-style tree structure)
         raw_data = {
@@ -35,7 +36,8 @@ class TestLibraryAPIWithRealData:
         }
 
         # 2. Cast to Route
-        route = adapt_route(raw_data, get_adapter("dms"))
+        adapter = DMSAdapter()
+        route = adapt_route(raw_data, adapter)
 
         # Validate the route was created successfully
         assert route is not None
@@ -48,7 +50,10 @@ class TestLibraryAPIWithRealData:
 
     def test_adapt_provider_output_batch_example(self):
         """Test adapting batch predictions with the v0.6 provider-output API."""
-        from retrocast import adapt_provider_output, deduplicate_routes, get_adapter
+        from retrocast import adapt_provider_output, collect_benchmark_predictions
+        from retrocast.adapters import DMSAdapter
+        from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
+        from retrocast.typing import InchiKeyStr, SmilesStr
 
         # Simulate batch processing
         raw_provider_output = [
@@ -60,12 +65,29 @@ class TestLibraryAPIWithRealData:
             {"smiles": "CC(C)O", "children": [{"smiles": "CC", "children": []}, {"smiles": "CO", "children": []}]},
         ]
 
-        routes = adapt_provider_output(raw_provider_output, get_adapter("dms"))
-        unique_routes = deduplicate_routes(routes)
+        adapter = DMSAdapter()
+        predictions = adapt_provider_output(raw_provider_output, adapter)
+        benchmark = BenchmarkSet(
+            name="smoke-test",
+            targets={
+                "target-1": BenchmarkTarget(
+                    id="target-1",
+                    smiles=SmilesStr("CCO"),
+                    inchi_key=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+                    acceptable_routes=[],
+                ),
+                "target-2": BenchmarkTarget(
+                    id="target-2",
+                    smiles=SmilesStr("CC(C)O"),
+                    inchi_key=InchiKeyStr("KFZMGEQAYNKOFK-UHFFFAOYSA-N"),
+                    acceptable_routes=[],
+                ),
+            },
+        )
+        collected = collect_benchmark_predictions(predictions, benchmark)
 
         # After deduplication, should have 2 unique routes total
-        assert len(unique_routes) == 2
-        assert all(route is not None for route in unique_routes)
+        assert sum(len(routes) for routes in collected.routes_by_target.values()) == 2
 
     def test_score_predictions_example(self):
         """Test Section 2.A: Score Predictions"""
@@ -155,6 +177,7 @@ class TestLibraryAPIMinimal:
         from retrocast import (
             ADAPTER_MAP,
             TargetInput,
+            adapt_prediction,
             adapt_route,
             adapt_single_route,
             deduplicate_routes,
@@ -169,6 +192,7 @@ class TestLibraryAPIMinimal:
 
         # Verify functions are callable
         assert callable(adapt_route)
+        assert callable(adapt_prediction)
         assert callable(adapt_single_route)
         assert callable(deduplicate_routes)
         assert callable(load_benchmark)

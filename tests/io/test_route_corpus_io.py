@@ -3,6 +3,7 @@ import pytest
 from retrocast.exceptions import RetroCastIOError
 from retrocast.io.blob import save_jsonl_gz
 from retrocast.io.data import iter_route_corpus, load_route_corpus, save_route_corpus
+from retrocast.models.chem import PredictedRoute
 from tests.helpers import _make_simple_route
 
 
@@ -20,8 +21,21 @@ class TestRouteCorpusIO:
         streamed = list(iter_route_corpus(path))
 
         assert n_rows == 2
-        assert loaded == routes
-        assert streamed == routes
+        assert [prediction.route for prediction in loaded] == routes
+        assert [prediction.route for prediction in streamed] == routes
+
+    def test_predicted_route_corpus_roundtrip_preserves_envelope(self, tmp_path):
+        predictions = [
+            PredictedRoute.from_route(_make_simple_route("CC", "C"), rank=1, metadata={"source_key": "target_1"}),
+            PredictedRoute.from_route(_make_simple_route("CCC", "CC"), rank=2, metadata={"source_key": "target_2"}),
+        ]
+        path = tmp_path / "predicted-route-corpus.jsonl.gz"
+
+        n_rows = save_route_corpus(predictions, path)
+        loaded = load_route_corpus(path)
+
+        assert n_rows == 2
+        assert loaded == predictions
 
     def test_invalid_route_corpus_shape_raises_format_error(self, tmp_path):
         path = tmp_path / "route-corpus.jsonl.gz"
@@ -41,5 +55,5 @@ class TestRouteCorpusIO:
         loaded = load_route_corpus(path)
 
         assert len(loaded) == 1
-        assert not hasattr(loaded[0], "rank")
-        assert loaded[0].target.smiles == "CC"
+        assert loaded[0].rank is None
+        assert loaded[0].route.target.smiles == "CC"

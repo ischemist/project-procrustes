@@ -11,6 +11,7 @@ from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import SmilesStr
 from retrocast.workflow.adapt import (
     adapt_benchmark_keyed_route_corpus,
+    adapt_prediction,
     adapt_provider_output,
     adapt_route,
     adapt_route_corpus,
@@ -108,7 +109,8 @@ class TestAdaptProviderOutput:
         routes = adapt_provider_output(raw_data, RouteFirstSyntheticAdapter())
 
         assert len(routes) == 2
-        assert [route.target.smiles for route in routes] == ["CC", "CCC"]
+        assert [prediction.route.target.smiles for prediction in routes] == ["CC", "CCC"]
+        assert [prediction.rank for prediction in routes] == [1, 2]
 
     def test_adapt_route_accepts_one_route_like_payload_without_target_context(self):
         raw_data = _make_simple_route("CC", "C").model_dump(mode="json")
@@ -117,6 +119,21 @@ class TestAdaptProviderOutput:
 
         assert route is not None
         assert route.target.smiles == "CC"
+
+    def test_adapt_prediction_wraps_one_route_like_payload_with_metadata(self):
+        raw_data = _make_simple_route("CC", "C").model_dump(mode="json")
+
+        prediction = adapt_prediction(
+            raw_data,
+            SingleRouteSyntheticAdapter(),
+            rank=7,
+            metadata={"source": "manual"},
+        )
+
+        assert prediction is not None
+        assert prediction.route.target.smiles == "CC"
+        assert prediction.rank == 7
+        assert prediction.metadata["source"] == "manual"
 
     def test_adapt_target_keyed_provider_output_filters_to_benchmark_targets(self, synthetic_benchmark):
         raw_data = {
@@ -128,7 +145,7 @@ class TestAdaptProviderOutput:
         routes = adapt_target_keyed_provider_output(raw_data, synthetic_benchmark, RouteFirstSyntheticAdapter())
 
         assert len(routes) == 2
-        assert [route.target.smiles for route in routes] == ["CC", "CCC"]
+        assert [prediction.route.target.smiles for prediction in routes] == ["CC", "CCC"]
 
     def test_legacy_adapt_names_warn(self, synthetic_benchmark):
         provider_output = [_make_simple_route("CC", "C").model_dump(mode="json")]

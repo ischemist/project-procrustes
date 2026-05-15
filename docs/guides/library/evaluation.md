@@ -56,15 +56,16 @@ the benchmark ground truth.
 ## Complete Evaluation Sketch
 
 ```python title="Adapt, collect, score"
-from retrocast import adapt_provider_output, collect_benchmark_predictions, get_adapter, load_benchmark
+from retrocast import adapt_provider_output, collect_benchmark_predictions, load_benchmark
+from retrocast.adapters import AizynthAdapter
 from retrocast.api import load_stock_file, score_predictions
 
 benchmark = load_benchmark("benchmark.json.gz")
 stock = load_stock_file("stock.txt")
-adapter = get_adapter("aizynth")
+adapter = AizynthAdapter()
 
-routes = adapt_provider_output(raw_provider_output, adapter)
-collected = collect_benchmark_predictions(routes, benchmark)
+predictions = adapt_provider_output(raw_provider_output, adapter)
+collected = collect_benchmark_predictions(predictions, benchmark)
 
 results = score_predictions(
     benchmark=benchmark,

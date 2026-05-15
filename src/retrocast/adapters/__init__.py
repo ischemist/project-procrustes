@@ -70,7 +70,8 @@ def adapt_single_route(
     )
     adapter = get_adapter(adapter_name)
     try:
-        return next(adapt_target_routes(adapter, raw_route, target), None)
+        prediction = next(adapt_target_routes(adapter, raw_route, target), None)
+        return prediction.route if prediction is not None else None
     except (AdapterError, ChemError):
         return None
 
@@ -113,8 +114,8 @@ def adapt_routes(
     )
     adapter = get_adapter(adapter_name)
     routes = []
-    for i, route in enumerate(adapt_target_routes(adapter, raw_routes, target)):
-        routes.append(route)
+    for i, prediction in enumerate(adapt_target_routes(adapter, raw_routes, target)):
+        routes.append(prediction.route)
         if max_routes and i + 1 >= max_routes:
             break
 

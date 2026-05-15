@@ -168,10 +168,8 @@ Designed to assess practical utility. Targets are filtered to be solvable using 
 RetroCast is also a library. You can use it to integrate standardization directly into your training or inference loops.
 
 ```python
-from retrocast import adapt_single_route, TargetInput
-
-# Define the target
-target = TargetInput(id="t1", smiles="CC(=O)Oc1ccccc1C(=O)O")
+from retrocast import adapt_route
+from retrocast.adapters import DMSAdapter
 
 # Your model's raw output (any supported format)
 raw_output = {
@@ -180,7 +178,11 @@ raw_output = {
 }
 
 # Cast to the canonical Route object
-route = adapt_single_route(raw_output, target, adapter_name="dms")
+adapter = DMSAdapter()
+route = adapt_route(raw_output, adapter)
+
+if route is None:
+    raise ValueError("Could not adapt route")
 
 print(f"Depth: {route.length}")
 print(f"Leaves: {[m.smiles for m in route.leaves]}")

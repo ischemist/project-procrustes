@@ -66,6 +66,11 @@ class MyModelAdapter(BaseAdapter):
 know or care whether the caller is adapting a flat corpus, a target-local payload,
 or a benchmark-keyed prediction map.
 
+Provider-output adaptation wraps each `Route` returned by `cast(...)` in a
+`PredictedRoute` envelope. Put chemistry structure on the canonical route; put
+provider-level ordering or scalar prediction metadata on `RawRouteEntry` or
+route metadata so corpus workflows can preserve it on the prediction envelope.
+
 ## Common Architecture Patterns
 
 Most retrosynthesis models output data in one of three patterns. RetroCast provides helper functions (`retrocast.adapters.common`) to handle the heavy lifting for these patterns, including recursion and cycle detection.
@@ -169,7 +174,7 @@ mapping.
   - `cast(...)` parses one completion string into one canonical `Route`
 
 When `meta.product_smiles` is present, Ursa raw completions can be adapted into a
-canonical route corpus directly, without a benchmark and without a preprocessing
+prediction route corpus directly, without a benchmark and without a preprocessing
 step that re-keys the file by target. benchmark alignment happens later in the
 explicit `collect` workflow.
 
@@ -313,7 +318,7 @@ Retrosynthetic graphs must be acyclic trees.
 
 ### 4. Metadata
 
-Do not discard model-specific data (scores, template IDs, etc.). Store it in the `metadata` dictionary of the `Molecule` or `ReactionStep`. This data is preserved throughout the pipeline and can be used for custom analysis later.
+Do not discard model-specific data (scores, template IDs, etc.). Store route-level prediction scores in `Route.metadata` so `PredictedRoute` can expose them, and store step- or molecule-local data in the `metadata` dictionary of the relevant `Molecule` or `ReactionStep`. This data is preserved throughout the pipeline and can be used for custom analysis later.
 
 ## Registration
 

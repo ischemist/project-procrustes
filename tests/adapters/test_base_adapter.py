@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from retrocast.exceptions import AdapterLogicError, AdapterSchemaError
-from retrocast.models.chem import Route
+from retrocast.models.chem import PredictedRoute
 from retrocast.workflow.adapt import adapt_target_routes
 
 logger = logging.getLogger(__name__)
@@ -70,10 +70,10 @@ class BaseAdapterTest(ABC):
         """Tests that a valid raw route produces at least one Route."""
         routes = list(adapt_target_routes(adapter_instance, raw_valid_route_data, target_input))
         assert len(routes) >= 1
-        route = routes[0]
-        assert isinstance(route, Route)
-        assert route.target.smiles == target_input.smiles
-        assert route.target.inchikey  # Ensure InChIKey is populated
+        prediction = routes[0]
+        assert isinstance(prediction, PredictedRoute)
+        assert prediction.route.target.smiles == target_input.smiles
+        assert prediction.route.target.inchikey  # Ensure InChIKey is populated
 
     def test_adapt_handles_unsuccessful_run(self, adapter_instance, raw_unsuccessful_run_data, target_input):
         """Tests that data for an unsuccessful run yields no routes or a typed adapter failure."""

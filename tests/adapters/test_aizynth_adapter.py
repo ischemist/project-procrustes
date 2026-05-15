@@ -2,7 +2,7 @@ import pytest
 
 from retrocast.adapters.aizynth_adapter import AizynthAdapter
 from retrocast.chem import canonicalize_smiles
-from retrocast.models.chem import Route, TargetInput
+from retrocast.models.chem import PredictedRoute, TargetInput
 from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
@@ -71,8 +71,16 @@ class TestAizynthAdapterContract:
 
     def test_all_routes_are_valid_route_objects(self, aspirin_routes):
         """Verify all routes are Route instances."""
-        for route in aspirin_routes:
-            assert isinstance(route, Route)
+        for prediction in aspirin_routes:
+            assert isinstance(prediction, PredictedRoute)
+
+    def test_route_scores_are_preserved_on_prediction_envelope(self, aspirin_routes):
+        """AiZynth root state score is prediction metadata, not route chemistry."""
+        assert aspirin_routes[0].rank == 1
+        assert aspirin_routes[0].score == pytest.approx(aspirin_routes[0].metadata["state_score"])
+        assert "state score" in aspirin_routes[0].metadata["scores"]
+        assert "state_score" not in aspirin_routes[0].route.metadata
+        assert "scores" not in aspirin_routes[0].route.metadata
 
     def test_all_routes_have_inchikeys(self, aspirin_routes):
         """Verify all target molecules have InChIKeys."""

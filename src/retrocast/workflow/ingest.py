@@ -40,7 +40,7 @@ def ingest_model_predictions(
     Convert raw model outputs into benchmark-keyed routes.
 
     The workflow is explicit:
-    raw payloads -> canonical Route corpus -> benchmark collection -> routes.json.gz
+    raw payloads -> PredictedRoute corpus -> benchmark collection -> routes.json.gz
     """
     logger.info(f"Ingesting results for {model_name} on {benchmark.name}...")
 
@@ -121,7 +121,7 @@ def ingest_model_predictions(
 
     logger.info(
         f"Ingestion complete. Adapted {stats.total_routes_in_raw_files} raw route entries. "
-        f"Adapted {len(route_corpus)} canonical routes. "
+        f"Adapted {len(route_corpus)} predicted routes. "
         f"Matched {collected_routes.stats.matched_by_canonical_smiles} by smiles. "
         f"Saved {stats.final_unique_routes_saved} valid routes. "
         f"Duplication factor: {stats.duplication_factor}x"
