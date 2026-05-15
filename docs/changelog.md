@@ -27,6 +27,11 @@ project-mode convenience command that runs both.
 | `retrocast ingest` for project-mode benchmark runs | still `retrocast ingest` | Project mode keeps the one-command convenience wrapper. |
 | `Route.rank` | list order | Keeps canonical `Route` free of benchmark/list-position metadata. |
 
+Prediction manifest `content_hash` values are now order-sensitive within each
+target because route list order is the ranking signal. Re-exported manifests can
+therefore differ from older manifests even when the route structures are
+otherwise identical.
+
 `adapt_single_route(...)` and `adapt_routes(...)` emit `RetroCastFutureWarning`
 in v0.6 and are scheduled for removal in v0.7.
 

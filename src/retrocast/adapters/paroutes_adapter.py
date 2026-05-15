@@ -269,15 +269,13 @@ class PaRoutesAdapter(BaseAdapter):
                 code="adapter.multiple_patents",
                 context={"adapter": "paroutes", "target_id": target_id, "patent_ids": sorted(patent_ids)},
             )
-        elif len(patent_ids) == 1:
-            patent_id = list(patent_ids)[0]
-
         if not patent_ids:
             raise AdapterLogicError(
                 f"PaRoutes route for target '{target_id}' does not contain a patent id",
                 code="adapter.patent_id_missing",
                 context={"adapter": "paroutes", "target_id": target_id},
             )
+        patent_id = next(iter(patent_ids))
 
         return self._transform(
             raw_route,
