@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 
-from retrocast.adapters.paroutes_diagnostics import ConditionSlotParseStatistics, PatentIdParseStatistics
+from retrocast.adapters.paroutes_adapter import ConditionSlotParseStatistics
 from retrocast.curation.training import (
     TRAINING_RELEASE_ACTION,
     AdaptationStatistics,
@@ -205,10 +205,6 @@ class TestTrainingSetSplits:
                     uncanonicalizable_token_count=7,
                     uncanonicalizable_tokens={"noise": 1},
                 ),
-                patent_id_parse=PatentIdParseStatistics(
-                    year_counts={"2015": 3},
-                    unparsed_categories={"unknown_format": 2},
-                ),
             ),
             holdout_routes={"n1": [make_adapted_route("holdout", holdout)]},
             holdout_adaptation={
@@ -232,10 +228,6 @@ class TestTrainingSetSplits:
             "malformed_rsmi_count": 4,
             "uncanonicalizable_token_count": 7,
             "distinct_uncanonicalizable_token_count": 1,
-        }
-        assert result.summary["adaptation"]["all_routes"]["patent_id_parse"] == {
-            "year_counts": {"2015": 3},
-            "unparsed_categories": {"unknown_format": 2},
         }
 
     def test_route_release_builder_is_single_use(self):

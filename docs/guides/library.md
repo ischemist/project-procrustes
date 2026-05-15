@@ -92,14 +92,45 @@ for target, raw_output in zip(targets, model_outputs):
 print(f"Total unique routes: {len(all_routes)}")
 ```
 
-1. `adapt_routes` returns a generator of Route objects
+1. `adapt_routes` returns a list of successful Route objects
 2. Deduplication uses cryptographic hashing of route topology
 
 !!! info "Available adapters"
 
     See [full adapter list](../developers/adapters.md#common-architecture-patterns):
     
-    `aizynth`, `dms`, `retrostar`, `synplanner`, `syntheseus`, `askcos`, `retrochimera`, `dreamretro`, `multistepttl`, `synllama`, `paroutes`
+    `aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa-llm`
+
+### Explicit Adaptation Workflows
+
+For corpus-level processing, prefer the explicit workflow functions instead of the
+target-local convenience wrappers.
+
+```python title="Adapt then collect" hl_lines="1 11"
+from retrocast import (
+    adapt_benchmark_keyed_route_corpus,
+    adapt_route_corpus,
+    collect_benchmark_predictions,
+    get_adapter,
+    load_benchmark,
+)
+
+adapter = get_adapter("ursa-llm")
+
+# Flat corpus: list/jsonl-style artifact -> list[Route]
+route_corpus = adapt_route_corpus(raw_artifact, adapter)
+
+# Benchmark-keyed raw predictions: mapping[target_id or smiles, raw payload] -> list[Route]
+benchmark = load_benchmark("benchmark.json.gz")
+route_corpus = adapt_benchmark_keyed_route_corpus(raw_mapping, benchmark, adapter)
+
+# Route corpus -> benchmark-keyed routes.json.gz shape
+collected = collect_benchmark_predictions(route_corpus, benchmark)
+routes_by_target = collected.routes_by_target
+```
+
+Use `adapt_single_route(...)` and `adapt_routes(...)` when you already have
+target-local payloads in memory and just need the convenience wrappers.
 
 ## Evaluation Workflow
 
@@ -417,7 +448,10 @@ fig.write_html("diagnostics.html")
 | Function | Purpose | Returns |
 |:---------|:--------|:--------|
 | `adapt_single_route(raw, target, adapter)` | Convert single route | `Route \| None` |
-| `adapt_routes(raw, target, adapter)` | Convert multiple routes | `Generator[Route]` |
+| `adapt_routes(raw, target, adapter)` | Convert multiple routes | `list[Route]` |
+| `adapt_route_corpus(raw, adapter)` | Adapt a flat raw artifact | `list[Route]` |
+| `adapt_benchmark_keyed_route_corpus(raw, benchmark, adapter)` | Adapt a benchmark-keyed raw mapping | `list[Route]` |
+| `collect_benchmark_predictions(routes, benchmark)` | Collect a route corpus onto a benchmark | `CollectedBenchmarkRoutes` |
 | `deduplicate_routes(routes)` | Remove duplicate routes | `list[Route]` |
 | `score_predictions(benchmark, predictions, stock)` | Evaluate routes | `ScoredResults` |
 | `compute_model_statistics(results, n_boot)` | Bootstrap statistics | `ModelStatistics` |
@@ -443,4 +477,4 @@ for name in ADAPTER_MAP.keys():
     print(f"  - {name}")
 ```
 
-**Supported:** `aizynth`, `dms`, `retrostar`, `synplanner`, `syntheseus`, `askcos`, `retrochimera`, `dreamretro`, `multistepttl`, `synllama`, `paroutes`
+**Supported:** `aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa-llm`

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
+from collections import defaultdict
+from collections.abc import Iterator, Mapping
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -13,9 +14,8 @@ from retrocast.adapters.errors import (
     adapter_schema_error,
     adapter_target_mismatch,
 )
-from retrocast.adapters.paroutes_diagnostics import build_condition_slot_metadata
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError
+from retrocast.exceptions import AdapterLogicError, ChemError
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -55,6 +55,139 @@ PaRoutesNode = Annotated[PaRoutesMoleculeInput | PaRoutesReactionInput, Field(di
 # pydantic needs this to resolve the forward references in the recursive models
 PaRoutesMoleculeInput.model_rebuild()
 PaRoutesReactionInput.model_rebuild()
+
+
+class ConditionSlotParseStatistics(BaseModel):
+    malformed_rsmi_count: int = 0
+    uncanonicalizable_token_count: int = 0
+    uncanonicalizable_tokens: dict[str, int] = Field(default_factory=lambda: defaultdict(int))
+
+    @property
+    def distinct_uncanonicalizable_token_count(self) -> int:
+        return len(self.uncanonicalizable_tokens)
+
+    @property
+    def top_uncanonicalizable_tokens(self) -> list[tuple[str, int]]:
+        return sorted(self.uncanonicalizable_tokens.items(), key=lambda item: (-item[1], item[0]))[:5]
+
+    def to_manifest_dict(self) -> dict[str, int]:
+        return {
+            "malformed_rsmi_count": self.malformed_rsmi_count,
+            "uncanonicalizable_token_count": self.uncanonicalizable_token_count,
+            "distinct_uncanonicalizable_token_count": self.distinct_uncanonicalizable_token_count,
+        }
+
+
+def _extract_condition_slot(
+    rsmi: str | None,
+    *,
+    condition_slot_parse_statistics: ConditionSlotParseStatistics | None = None,
+) -> str | None:
+    if not rsmi:
+        return None
+
+    parts = rsmi.split(">")
+    if len(parts) != 3:
+        if condition_slot_parse_statistics is not None:
+            condition_slot_parse_statistics.malformed_rsmi_count += 1
+        return None
+
+    condition_slot = parts[1].strip()
+    return condition_slot or None
+
+
+def _parse_condition_slot_smiles(
+    condition_slot: str,
+    *,
+    ignore_stereo: bool,
+    condition_slot_parse_statistics: ConditionSlotParseStatistics | None = None,
+) -> list[SmilesStr]:
+    parsed_smiles: list[SmilesStr] = []
+    for token in condition_slot.split("."):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            parsed_smiles.append(
+                canonicalize_smiles(
+                    token,
+                    remove_mapping=True,
+                    ignore_stereo=ignore_stereo,
+                )
+            )
+        except ChemError:
+            if condition_slot_parse_statistics is not None:
+                condition_slot_parse_statistics.uncanonicalizable_token_count += 1
+                condition_slot_parse_statistics.uncanonicalizable_tokens[token] += 1
+
+    return sorted(parsed_smiles)
+
+
+def _build_condition_slot_metadata(
+    *,
+    source_id: str,
+    rsmi: str | None,
+    ring_breaker: bool | None,
+    ignore_stereo: bool,
+    condition_slot_parse_statistics: ConditionSlotParseStatistics | None = None,
+) -> dict[str, Any]:
+    metadata: dict[str, Any] = {"source_id": source_id}
+    if ring_breaker is not None:
+        metadata["ring_breaker"] = ring_breaker
+
+    condition_slot = _extract_condition_slot(
+        rsmi,
+        condition_slot_parse_statistics=condition_slot_parse_statistics,
+    )
+    if condition_slot is not None:
+        metadata["condition_slot"] = condition_slot
+        condition_slot_smiles = _parse_condition_slot_smiles(
+            condition_slot,
+            ignore_stereo=ignore_stereo,
+            condition_slot_parse_statistics=condition_slot_parse_statistics,
+        )
+        if condition_slot_smiles:
+            metadata["condition_slot_smiles"] = condition_slot_smiles
+
+    return metadata
+
+
+def analyze_condition_slots(
+    raw_route: Mapping[str, Any],
+    *,
+    stats: ConditionSlotParseStatistics,
+    ignore_stereo: bool = False,
+) -> None:
+    """Collect non-fatal PaRoutes condition-slot parsing telemetry from raw route payloads."""
+
+    def _visit(node: Mapping[str, Any]) -> None:
+        children = node.get("children")
+        if not isinstance(children, list):
+            return
+
+        for child in children:
+            if not isinstance(child, Mapping):
+                continue
+
+            if child.get("type") == "reaction":
+                metadata = child.get("metadata")
+                if isinstance(metadata, Mapping):
+                    source_id = metadata.get("ID")
+                    rsmi = metadata.get("rsmi")
+                    ring_breaker = metadata.get("RingBreaker")
+
+                    if isinstance(source_id, str):
+                        _build_condition_slot_metadata(
+                            source_id=source_id,
+                            rsmi=rsmi if isinstance(rsmi, str) else None,
+                            ring_breaker=ring_breaker if isinstance(ring_breaker, bool) else None,
+                            ignore_stereo=ignore_stereo,
+                            condition_slot_parse_statistics=stats,
+                        )
+
+            _visit(child)
+
+    _visit(raw_route)
 
 
 class PaRoutesAdapter(BaseAdapter):
@@ -255,7 +388,7 @@ class PaRoutesAdapter(BaseAdapter):
         rxn_metadata = raw_reaction_node.metadata
         mapped_smiles_str = rxn_metadata.rsmi if rxn_metadata else None
         mapped_smiles = ReactionSmilesStr(mapped_smiles_str) if mapped_smiles_str else None
-        metadata_dict = build_condition_slot_metadata(
+        metadata_dict = _build_condition_slot_metadata(
             source_id=rxn_metadata.id,
             rsmi=rxn_metadata.rsmi,
             ring_breaker=rxn_metadata.ring_breaker,

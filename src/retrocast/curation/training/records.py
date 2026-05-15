@@ -7,7 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, model_validator
 from pydantic import Field as PydanticField
 
-from retrocast.adapters.paroutes_diagnostics import ConditionSlotParseStatistics, PatentIdParseStatistics
+from retrocast.adapters.paroutes_adapter import ConditionSlotParseStatistics
 from retrocast.models.chem import ReactionSignature, Route
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -188,7 +188,6 @@ class AdaptationStatistics(BaseModel):
     skipped_without_error_code: int
     failures_by_code: dict[str, int]
     non_fatal_condition_slot_parse: ConditionSlotParseStatistics | None = None
-    patent_id_parse: PatentIdParseStatistics | None = None
 
     def to_manifest_dict(self) -> dict[str, Any]:
         manifest_dict = {
@@ -200,6 +199,4 @@ class AdaptationStatistics(BaseModel):
         }
         if self.non_fatal_condition_slot_parse is not None:
             manifest_dict["non_fatal_condition_slot_parse"] = self.non_fatal_condition_slot_parse.to_manifest_dict()
-        if self.patent_id_parse is not None:
-            manifest_dict["patent_id_parse"] = self.patent_id_parse.to_manifest_dict()
         return manifest_dict

@@ -14,13 +14,7 @@ from typing import Any
 from tqdm.auto import tqdm
 
 from retrocast.adapters.base_adapter import RawRouteEntry
-from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
-from retrocast.adapters.paroutes_diagnostics import (
-    ConditionSlotParseStatistics,
-    PatentIdParseStatistics,
-    collect_raw_paroutes_route_diagnostics,
-    log_patent_id_parse_statistics,
-)
+from retrocast.adapters.paroutes_adapter import ConditionSlotParseStatistics, PaRoutesAdapter, analyze_condition_slots
 from retrocast.curation.filtering import deduplicate_routes, excise_reactions_from_route
 from retrocast.curation.training.records import (
     AdaptationStatistics,
@@ -90,7 +84,6 @@ def adapt_training_routes(
 ) -> tuple[list[AdaptedTrainingRoute], AdaptationStatistics]:
     adapter = PaRoutesAdapter()
     parse_stats = ConditionSlotParseStatistics()
-    patent_id_stats = PatentIdParseStatistics()
     adapted_routes: list[AdaptedTrainingRoute] = []
     failures_by_code: dict[str, int] = defaultdict(int)
     reaction_hash_signature_pairs: set[tuple[str, ReactionSignature]] = set()
@@ -111,11 +104,7 @@ def adapt_training_routes(
         target = TargetInput(id=entry.target_hint_id, smiles=entry.target_hint_smiles)
         raw_route = entry.payload
         assert isinstance(raw_route, dict), "training route entries must preserve raw dict payloads"
-        collect_raw_paroutes_route_diagnostics(
-            raw_route,
-            patent_id_parse_statistics=patent_id_stats,
-            condition_slot_parse_statistics=parse_stats,
-        )
+        analyze_condition_slots(raw_route, stats=parse_stats)
         try:
             route = adapter.cast(
                 raw_route,
@@ -142,7 +131,6 @@ def adapt_training_routes(
             )
         )
     assert_paroutes_reaction_hash_matches_retrocast_signature(reaction_hash_signature_pairs)
-    log_patent_id_parse_statistics(patent_id_stats, logger_name=__name__)
     if parse_stats.malformed_rsmi_count or parse_stats.uncanonicalizable_token_count:
         logger.info(
             "PaRoutes condition-slot parsing for %s skipped %s malformed rsmi slots and %s "
@@ -165,7 +153,6 @@ def adapt_training_routes(
         skipped_without_error_code=skipped_without_error_code,
         failures_by_code=dict(failures_by_code),
         non_fatal_condition_slot_parse=parse_stats,
-        patent_id_parse=patent_id_stats,
     )
 
 

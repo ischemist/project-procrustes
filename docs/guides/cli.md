@@ -113,7 +113,7 @@ retrocast adapt \
 1. See available adapters with `retrocast list-adapters`
 2. Optional: supplies target hints during adaptation; benchmark collection still happens separately
 
-**Supported adapters:** `aizynth`, `dms`, `retrostar`, `synplanner`, `syntheseus`, `askcos`, `retrochimera`, `dreamretro`, `multistepttl`, `synllama`, `paroutes`
+**Supported adapters:** `aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa-llm`
 
 ### `collect` - Align a Route Corpus to a Benchmark
 

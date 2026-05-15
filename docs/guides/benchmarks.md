@@ -8,9 +8,9 @@ Evaluating retrosynthesis models on large, uncurated datasets is computationally
 
 !!! question "Which benchmark should I use?"
 
-    - **Chemists & application developers** → Use [Market Series](#1-market-series-mkt) (`mkt-*`) with commercial stock
-    - **Algorithm researchers** → Use [Reference Series](#2-reference-series-ref) (`ref-*`) with ground-truth stock
-    - **Have to deal with a reviewer 2?** → Use [Legacy Random Sets](#3-legacy-random-sets) (not recommended) 
+    - **Chemists & application developers** → Use the Market Series (`mkt-*`) with commercial stock
+    - **Algorithm researchers** → Use the Reference Series (`ref-*`) with ground-truth stock
+    - **Have to deal with a reviewer 2?** → Use the Legacy Random Sets (not recommended) 
 
 ## Stratification Methodology
 
