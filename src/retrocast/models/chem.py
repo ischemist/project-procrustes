@@ -141,7 +141,6 @@ class Route(BaseModel):
     """The root object for a single, complete synthesis route prediction."""
 
     target: Molecule
-    rank: int  # The rank of this prediction (e.g., 1 for top-1)
 
     # Metadata for the entire route
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -352,11 +351,11 @@ class Route(BaseModel):
         Generates a deterministic hash of the complete route content.
 
         Unlike get_structural_signature() which only considers route structure,
-        this method includes ALL data: rank, metadata, solvability, retrocast_version,
-        and all reaction details (mapped_smiles, templates, reagents, solvents, etc.).
+        this method includes route metadata, retrocast_version, and all reaction
+        details (mapped_smiles, templates, reagents, solvents, etc.).
 
         This is useful for verifying that two routes are semantically identical,
-        including all metadata and provenance information.
+        including all chemistry and attached annotations.
         """
 
         # Exclude computed fields to ensure deterministic serialization
@@ -442,7 +441,7 @@ class StockStatistics(BaseModel):
 class RunStatistics(BaseModel):
     """A Pydantic model to hold and calculate statistics for a processing run."""
 
-    total_routes_in_raw_files: int = 0
+    total_routes_in_raw_files: int = 0  # Raw route-like entries visited during adaptation.
     routes_failed_transformation: int = 0  # Includes both validation and transformation failures
     successful_routes_before_dedup: int = 0
     final_unique_routes_saved: int = 0

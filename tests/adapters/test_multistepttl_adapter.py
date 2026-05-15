@@ -4,6 +4,7 @@ from retrocast.adapters.multistepttl_adapter import TtlRetroAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import TargetInput
 from retrocast.utils.serializers import serialize_multistepttl_directory
+from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 IBUPROFEN_SMILES = canonicalize_smiles("CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O")
@@ -44,7 +45,7 @@ class TestTtlRetroAdapterUnit(BaseAdapterTest):
     def test_zero_step_route_returns_leaf_route(self, adapter_instance, target_input):
         raw_data = [{"reactions": [], "metadata": {"steps": 0}}]
 
-        routes = list(adapter_instance.cast(raw_data, target_input))
+        routes = list(adapt_target_routes(adapter_instance, raw_data, target_input))
 
         assert len(routes) == 1
         assert routes[0].target.smiles == target_input.smiles
@@ -62,7 +63,7 @@ class TestTtlRetroAdapterUnit(BaseAdapterTest):
             }
         ]
 
-        routes = list(adapter_instance.cast(raw_data, target_input))
+        routes = list(adapt_target_routes(adapter_instance, raw_data, target_input))
 
         assert routes == []
         assert "adapter.cycle_detected" in caplog.text
@@ -82,23 +83,17 @@ class TestTtlRetroAdapterContract:
         return data
 
     @pytest.mark.filterwarnings("ignore:numpy.core.numeric is deprecated:DeprecationWarning")
-    def test_all_routes_have_ranks(self, serialized_ibuprofen_data):
-        """all routes should have non-zero rank values."""
-        target_input = TargetInput(id="ibuprofen", smiles=IBUPROFEN_SMILES)
-        routes = list(self.adapter.cast(serialized_ibuprofen_data, target_input))
-        assert all(route.rank > 0 for route in routes)
-
     def test_all_routes_have_target_molecules_with_inchikeys(self, serialized_ibuprofen_data):
         """all routes should have target molecules with inchikeys."""
         target_input = TargetInput(id="ibuprofen", smiles=IBUPROFEN_SMILES)
-        routes = list(self.adapter.cast(serialized_ibuprofen_data, target_input))
+        routes = list(adapt_target_routes(self.adapter, serialized_ibuprofen_data, target_input))
         assert all(route.target.inchikey is not None for route in routes)
         assert all(len(route.target.inchikey) > 0 for route in routes)
 
     def test_all_starting_materials_have_no_synthesis_step(self, serialized_ibuprofen_data):
         """starting materials should have no synthesis step."""
         target_input = TargetInput(id="ibuprofen", smiles=IBUPROFEN_SMILES)
-        routes = list(self.adapter.cast(serialized_ibuprofen_data, target_input))
+        routes = list(adapt_target_routes(self.adapter, serialized_ibuprofen_data, target_input))
 
         def check_molecule(mol):
             if mol.synthesis_step is None:
@@ -113,7 +108,7 @@ class TestTtlRetroAdapterContract:
     def test_route_depth_calculation(self, serialized_ibuprofen_data):
         """route depth should match the number of steps in metadata."""
         target_input = TargetInput(id="ibuprofen", smiles=IBUPROFEN_SMILES)
-        routes = list(self.adapter.cast(serialized_ibuprofen_data, target_input))
+        routes = list(adapt_target_routes(self.adapter, serialized_ibuprofen_data, target_input))
 
         for route, raw_route in zip(routes, serialized_ibuprofen_data, strict=False):
             expected_steps = raw_route["metadata"]["steps"]
@@ -122,7 +117,7 @@ class TestTtlRetroAdapterContract:
     def test_all_molecules_have_inchikeys(self, serialized_ibuprofen_data):
         """all molecules in route should have inchikeys."""
         target_input = TargetInput(id="ibuprofen", smiles=IBUPROFEN_SMILES)
-        routes = list(self.adapter.cast(serialized_ibuprofen_data, target_input))
+        routes = list(adapt_target_routes(self.adapter, serialized_ibuprofen_data, target_input))
 
         def check_molecule(mol):
             assert mol.inchikey is not None
@@ -152,7 +147,7 @@ class TestTtlRetroAdapterRegression:
     def test_adapt_parses_all_routes(self, serialized_ibuprofen_data):
         """adapter should produce one route for each route in the serialized data."""
         target_input = TargetInput(id="ibuprofen", smiles=IBUPROFEN_SMILES)
-        routes = list(self.adapter.cast(serialized_ibuprofen_data, target_input))
+        routes = list(adapt_target_routes(self.adapter, serialized_ibuprofen_data, target_input))
         assert len(routes) == len(serialized_ibuprofen_data)
 
     def test_adapt_one_step_route(self, serialized_ibuprofen_data):
@@ -161,7 +156,7 @@ class TestTtlRetroAdapterRegression:
         one_step_route_data = next(r for r in serialized_ibuprofen_data if r["metadata"]["steps"] == 1)
         target_input = TargetInput(id="ibuprofen", smiles=IBUPROFEN_SMILES)
 
-        route = next(self.adapter.cast([one_step_route_data], target_input))
+        route = next(adapt_target_routes(self.adapter, [one_step_route_data], target_input))
         target_mol = route.target
         assert target_mol.smiles == IBUPROFEN_SMILES
 
@@ -183,7 +178,7 @@ class TestTtlRetroAdapterRegression:
         assert two_step_route_data["metadata"]["steps"] == 2
 
         target_input = TargetInput(id="ibuprofen", smiles=IBUPROFEN_SMILES)
-        route = next(self.adapter.cast([two_step_route_data], target_input))
+        route = next(adapt_target_routes(self.adapter, [two_step_route_data], target_input))
         target_mol = route.target
 
         # level 1
@@ -212,7 +207,7 @@ class TestTtlRetroAdapterRegression:
         three_step_route_data = next(r for r in serialized_ibuprofen_data if r["metadata"]["steps"] == 3)
         target_input = TargetInput(id="ibuprofen", smiles=IBUPROFEN_SMILES)
 
-        route = next(self.adapter.cast([three_step_route_data], target_input))
+        route = next(adapt_target_routes(self.adapter, [three_step_route_data], target_input))
         target_mol = route.target
 
         # level 1

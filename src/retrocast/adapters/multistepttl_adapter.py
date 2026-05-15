@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Generator
+from collections.abc import Iterator
 from typing import Any
 
 from pydantic import BaseModel, RootModel, ValidationError
 
-from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.errors import adapter_cycle_error, adapter_schema_error, adapter_target_mismatch
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
+from retrocast.adapters.errors import (
+    adapter_cycle_error,
+    adapter_route_transform_error,
+    adapter_schema_error,
+    adapter_target_mismatch,
+)
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -33,31 +37,58 @@ class TtlRouteList(RootModel[list[TtlRoute]]):
 class TtlRetroAdapter(BaseAdapter):
     """adapter for converting pre-processed ttlretro outputs to the route schema."""
 
-    def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+    ) -> Iterator[RawRouteEntry]:
         """
-        validates the pre-processed json data for ttlretro, transforms it, and yields route objects.
+        Validate raw TTLRetro data and expose one route-like payload per entry.
         """
+        target_id = source_key or "<unknown>"
         try:
-            validated_data = TtlRouteList.model_validate(raw_target_data)
+            validated_data = TtlRouteList.model_validate(raw_data)
         except ValidationError as e:
-            raise adapter_schema_error("multistepttl", target.id, "invalid pre-processed route list") from e
+            raise adapter_schema_error("multistepttl", target_id, "invalid pre-processed route list") from e
 
         for rank, route in enumerate(validated_data.root, start=1):
-            try:
-                adapted_route = self._transform(route, target, rank, ignore_stereo=ignore_stereo)
-                yield adapted_route
-            except RetroCastException as e:
-                logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
-                continue
+            yield RawRouteEntry(
+                payload=route,
+                source_key=source_key,
+                target_hint_id=None,
+                target_hint_smiles=None,
+                source_order=rank,
+            )
 
-    def _transform(self, route: TtlRoute, target: TargetIdentity, rank: int, ignore_stereo: bool = False) -> Route:
+    def cast(
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
+        if not isinstance(raw_route, TtlRoute):
+            raw_route = TtlRoute.model_validate(raw_route)
+        return self._transform(raw_route, expected_target, ignore_stereo=ignore_stereo)
+
+    def _transform(
+        self,
+        route: TtlRoute,
+        target: TargetIdentity | None,
+        ignore_stereo: bool = False,
+    ) -> Route:
         """
         orchestrates the transformation of a single ttlretro route.
         raises RetroCastException on failure.
         """
         if not route.reactions:
+            if target is None:
+                raise adapter_route_transform_error(
+                    "multistepttl",
+                    "<unknown>",
+                    "route does not encode target smiles for zero-reaction entries",
+                )
             # no reactions means the target is already a starting material
             target_molecule = Molecule(
                 smiles=SmilesStr(target.smiles),
@@ -65,23 +96,24 @@ class TtlRetroAdapter(BaseAdapter):
                 synthesis_step=None,
                 metadata={},
             )
-            return Route(target=target_molecule, rank=rank, metadata={})
+            return Route(target=target_molecule, metadata={})
 
         root_smiles = canonicalize_smiles(route.reactions[0].product, ignore_stereo=ignore_stereo)
-        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
-        if root_smiles != expected_smiles:
-            raise adapter_target_mismatch(
-                "multistepttl",
-                target.id,
-                expected_smiles=expected_smiles,
-                actual_smiles=root_smiles,
-            )
+        if target is not None:
+            expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
+            if root_smiles != expected_smiles:
+                raise adapter_target_mismatch(
+                    "multistepttl",
+                    target.id,
+                    expected_smiles=expected_smiles,
+                    actual_smiles=root_smiles,
+                )
 
         # build precursor map for recursive traversal
         precursor_map = self._build_precursor_map(route, ignore_stereo=ignore_stereo)
         target_molecule = self._build_molecule(root_smiles, precursor_map, visited=set(), ignore_stereo=ignore_stereo)
 
-        return Route(target=target_molecule, rank=rank, metadata=route.metadata)
+        return Route(target=target_molecule, metadata=route.metadata)
 
     def _build_precursor_map(self, route: TtlRoute, ignore_stereo: bool = False) -> dict[str, list[str]]:
         """

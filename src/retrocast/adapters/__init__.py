@@ -1,5 +1,6 @@
 from typing import Any
 
+from retrocast._warnings import warn_deprecated
 from retrocast.adapters.aizynth_adapter import AizynthAdapter
 from retrocast.adapters.askcos_adapter import AskcosAdapter
 from retrocast.adapters.base_adapter import BaseAdapter
@@ -13,43 +14,44 @@ from retrocast.adapters.retrostar_adapter import RetroStarAdapter
 from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
-from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter, prepare_ursa_llm_results
+from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter
 from retrocast.exceptions import AdapterError, AdapterResolutionError, ChemError
 from retrocast.models.chem import Route, TargetIdentity
+from retrocast.workflow.adapt import adapt_target_routes
 
-ADAPTER_MAP: dict[str, BaseAdapter] = {
-    "aizynth": AizynthAdapter(),
-    "askcos": AskcosAdapter(),
-    "dms": DMSAdapter(),
-    "dreamretro": DreamRetroAdapter(),
-    "molbuilder": MolBuilderAdapter(),
-    "multistepttl": TtlRetroAdapter(),
-    "paroutes": PaRoutesAdapter(),
-    "retrochimera": RetrochimeraAdapter(),
-    "retrostar": RetroStarAdapter(),
-    "synplanner": SynPlannerAdapter(),
-    "syntheseus": SyntheseusAdapter(),
-    "synllama": SynLlaMaAdapter(),
-    "ursa-llm": UrsaLlmAdapter(),
+ADAPTER_TYPES: dict[str, type[BaseAdapter]] = {
+    "aizynth": AizynthAdapter,
+    "askcos": AskcosAdapter,
+    "dms": DMSAdapter,
+    "dreamretro": DreamRetroAdapter,
+    "molbuilder": MolBuilderAdapter,
+    "multistepttl": TtlRetroAdapter,
+    "paroutes": PaRoutesAdapter,
+    "retrochimera": RetrochimeraAdapter,
+    "retrostar": RetroStarAdapter,
+    "synplanner": SynPlannerAdapter,
+    "syntheseus": SyntheseusAdapter,
+    "synllama": SynLlaMaAdapter,
+    "ursa-llm": UrsaLlmAdapter,
 }
 
-# Adapters that expect target-centric data format (dict with metadata + nested routes)
-# vs route-centric format (list of route objects)
-TARGET_CENTRIC_ADAPTERS = {"askcos", "retrochimera", "paroutes"}
+ADAPTER_MAP: dict[str, BaseAdapter] = {
+    adapter_name: adapter_type() for adapter_name, adapter_type in ADAPTER_TYPES.items()
+}
 
 
 def get_adapter(adapter_name: str) -> BaseAdapter:
     """
-    Retrieves an adapter instance from the `ADAPTER_MAP`.
+    Retrieves a fresh adapter instance from the adapter registry.
     """
-    adapter = ADAPTER_MAP.get(adapter_name)
-    if adapter is None:
+    adapter_type = ADAPTER_TYPES.get(adapter_name)
+    if adapter_type is None:
         raise AdapterResolutionError(
             f"unknown adapter '{adapter_name}'. Check `retrocast.adapters.ADAPTER_MAP` for available adapters.",
             code="adapter.unknown",
-            context={"adapter": adapter_name, "available": sorted(ADAPTER_MAP.keys())},
+            context={"adapter": adapter_name, "available": sorted(ADAPTER_TYPES.keys())},
         )
-    return adapter
+    return adapter_type()
 
 
 def adapt_single_route(
@@ -57,15 +59,18 @@ def adapt_single_route(
     target: TargetIdentity,
     adapter_name: str,
 ) -> Route | None:
-    """Adapt a single raw route to the unified Route format."""
+    """Deprecated wrapper returning the first route from a target-local payload."""
+    warn_deprecated(
+        old="adapt_single_route",
+        new="adapt_route(...)",
+        remove_in="0.7",
+        note="This wrapper returns the first successful route or None; "
+        "use target-free `adapt_route(...)` for single-route adaptation.",
+        stacklevel=2,
+    )
     adapter = get_adapter(adapter_name)
-    if adapter_name in TARGET_CENTRIC_ADAPTERS or isinstance(raw_route, list):
-        raw_data = raw_route
-    else:
-        raw_data = [raw_route]
-
     try:
-        return next(adapter.cast(raw_data, target), None)
+        return next(adapt_target_routes(adapter, raw_route, target), None)
     except (AdapterError, ChemError):
         return None
 
@@ -77,7 +82,7 @@ def adapt_routes(
     max_routes: int | None = None,
 ) -> list[Route]:
     """
-    Adapt multiple raw routes to the unified Route format.
+    Deprecated target-local wrapper for adapting multiple raw routes.
 
     Args:
         raw_routes: Routes in the model's native format (typically a list or dict).
@@ -98,10 +103,17 @@ def adapt_routes(
         >>> routes = adapt_routes(raw_routes, target, "aizynth", max_routes=10)
         >>> print(f"Adapted {len(routes)} routes successfully")
     """
+    warn_deprecated(
+        old="adapt_routes",
+        new="adapt_provider_output(...) or adapt_target_keyed_provider_output(...)",
+        remove_in="0.7",
+        note="Target-local adaptation is being removed from the public API. "
+        "Use provider-output workflows for route standardization.",
+        stacklevel=2,
+    )
     adapter = get_adapter(adapter_name)
     routes = []
-
-    for i, route in enumerate(adapter.cast(raw_routes, target)):
+    for i, route in enumerate(adapt_target_routes(adapter, raw_routes, target)):
         routes.append(route)
         if max_routes and i + 1 >= max_routes:
             break
@@ -114,7 +126,7 @@ __all__ = [
     "adapt_routes",
     "get_adapter",
     "ADAPTER_MAP",
-    "TARGET_CENTRIC_ADAPTERS",
+    "ADAPTER_TYPES",
     "BaseAdapter",
     "AizynthAdapter",
     "AskcosAdapter",
@@ -129,5 +141,4 @@ __all__ = [
     "SynPlannerAdapter",
     "SyntheseusAdapter",
     "SynLlaMaAdapter",
-    "prepare_ursa_llm_results",
 ]

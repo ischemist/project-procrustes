@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Generator
+from collections.abc import Iterator
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
-from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.common import build_molecule_from_bipartite_node
 from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles
-from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Route, TargetIdentity
 
 logger = logging.getLogger(__name__)
@@ -51,48 +50,58 @@ class AizynthRouteList(RootModel[list[AizynthMoleculeInput]]):
 
 
 class AizynthAdapter(BaseAdapter):
-    """adapter for converting aizynthfinder-style outputs to the benchmarktree schema."""
+    """adapter for converting aizynthfinder-style outputs to the route schema."""
 
-    def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
-        """
-        validates raw aizynthfinder data, transforms it, and yields route objects.
-        """
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+    ) -> Iterator[RawRouteEntry]:
+        target_id = source_key or "<unknown>"
         try:
-            validated_routes = AizynthRouteList.model_validate(raw_target_data)
+            validated_routes = AizynthRouteList.model_validate(raw_data)
         except ValidationError as e:
-            raise adapter_schema_error("aizynth", target.id, "invalid route list") from e
+            raise adapter_schema_error("aizynth", target_id, "invalid route list") from e
 
         for rank, aizynth_tree_root in enumerate(validated_routes.root, start=1):
-            try:
-                route = self._transform(aizynth_tree_root, target, rank, ignore_stereo=ignore_stereo)
-                yield route
-            except RetroCastException as e:
-                logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
-                continue
+            yield RawRouteEntry(
+                payload=aizynth_tree_root,
+                source_key=source_key,
+                target_hint_id=None,
+                target_hint_smiles=None,
+                source_order=rank,
+            )
 
-    def _transform(
-        self, aizynth_root: AizynthMoleculeInput, target: TargetIdentity, rank: int, ignore_stereo: bool = False
+    def cast(
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
     ) -> Route:
-        """
-        orchestrates the transformation of a single aizynthfinder output tree.
-        raises RetroCastException on failure.
-        """
-        # use the common recursive builder with new schema
+        try:
+            aizynth_root = AizynthMoleculeInput.model_validate(raw_route)
+        except ValidationError as e:
+            raise adapter_schema_error(
+                "aizynth",
+                expected_target.id if expected_target is not None else "<unknown>",
+                "invalid molecule route root",
+            ) from e
         target_molecule = build_molecule_from_bipartite_node(
             raw_mol_node=aizynth_root,
             ignore_stereo=ignore_stereo,
             adapter="aizynth",
         )
 
-        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
-        if target_molecule.smiles != expected_smiles:
-            raise adapter_target_mismatch(
-                "aizynth",
-                target.id,
-                expected_smiles=expected_smiles,
-                actual_smiles=target_molecule.smiles,
-            )
+        if expected_target is not None:
+            expected_smiles = canonicalize_smiles(expected_target.smiles, ignore_stereo=ignore_stereo)
+            if target_molecule.smiles != expected_smiles:
+                raise adapter_target_mismatch(
+                    "aizynth",
+                    expected_target.id,
+                    expected_smiles=expected_smiles,
+                    actual_smiles=target_molecule.smiles,
+                )
 
-        return Route(target=target_molecule, rank=rank, metadata={})
+        return Route(target=target_molecule, metadata={})

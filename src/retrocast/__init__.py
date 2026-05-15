@@ -6,11 +6,22 @@ from retrocast._version import __version__
 from retrocast.adapters import ADAPTER_MAP, adapt_routes, adapt_single_route, get_adapter
 from retrocast.curation.filtering import deduplicate_routes
 from retrocast.curation.sampling import sample_k_by_length, sample_random_k, sample_top_k
+from retrocast.io import iter_route_corpus, load_benchmark, load_route_corpus, save_route_corpus
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetInput
+from retrocast.models.collections import CollectedBenchmarkRoutes
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.provenance import FileInfo, Manifest
 from retrocast.models.stats import ModelStatistics
+from retrocast.workflow.adapt import (
+    adapt_benchmark_keyed_route_corpus,
+    adapt_provider_output,
+    adapt_route,
+    adapt_route_corpus,
+    adapt_target_keyed_provider_output,
+    adapt_target_routes,
+)
+from retrocast.workflow.collect import collect_benchmark_predictions
 
 __all__ = [
     "__version__",
@@ -19,12 +30,21 @@ __all__ = [
     "Molecule",
     "ReactionStep",
     "TargetInput",
+    "CollectedBenchmarkRoutes",
     # Workflow Schemas
     "BenchmarkSet",
     "EvaluationResults",
     "ModelStatistics",
     "FileInfo",
     "Manifest",
+    # Explicit adaptation / collection workflow
+    "adapt_route",
+    "adapt_provider_output",
+    "adapt_target_keyed_provider_output",
+    "adapt_route_corpus",
+    "adapt_benchmark_keyed_route_corpus",
+    "adapt_target_routes",
+    "collect_benchmark_predictions",
     # Adapter functions
     "adapt_single_route",
     "adapt_routes",
@@ -35,4 +55,9 @@ __all__ = [
     "sample_top_k",
     "sample_random_k",
     "sample_k_by_length",
+    # Route-corpus io
+    "load_benchmark",
+    "save_route_corpus",
+    "load_route_corpus",
+    "iter_route_corpus",
 ]

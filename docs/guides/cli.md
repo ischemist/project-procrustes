@@ -100,29 +100,45 @@ The data directory is resolved with the following priority:
 
 ### `adapt` - Convert Raw Predictions
 
-Convert raw output from a supported model into the standardized RetroCast format.
+Convert raw output from a supported model into a canonical route corpus.
+This is the standalone standardization step introduced in v0.6: it does not
+need a benchmark unless the raw file is already target-keyed.
 
 ```bash
 retrocast adapt \
   --input raw_predictions.json.gz \
-  --adapter aizynth \ # (1)!
-  --output standardized_routes.json.gz \
-  --benchmark benchmark.json.gz  # (2)!
+  --adapter aizynth \
+  --input-kind provider-output \
+  --output route-corpus.jsonl.gz \
+  --benchmark benchmark.json.gz
 ```
 
 1. See available adapters with `retrocast list-adapters`
-2. Optional: Ensures target IDs match exactly
+2. Use `target-keyed-provider-output` when the top-level raw object is keyed by target id or target smiles
+3. Optional for `provider-output`; required for `target-keyed-provider-output`
 
-**Supported adapters:** `aizynth`, `dms`, `retrostar`, `synplanner`, `syntheseus`, `askcos`, `retrochimera`, `dreamretro`, `multistepttl`, `synllama`, `paroutes`
+**Supported adapters:** `aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa-llm`
+
+### `collect` - Align a Route Corpus to a Benchmark
+
+Collect a canonical route corpus into the benchmark-keyed `routes.json.gz` artifact used for scoring.
+This is the benchmark-alignment step that used to be hidden inside `ingest`.
+
+```bash
+retrocast collect \
+  --input route-corpus.jsonl.gz \
+  --benchmark benchmark.json.gz \
+  --output routes.json.gz
+```
 
 ### `score-file` - Evaluate Routes
 
-Evaluate standardized routes against a stock file.
+Evaluate benchmark-keyed routes against a stock file.
 
 ```bash
 retrocast score-file \
   --benchmark benchmark.json.gz \
-  --routes standardized_routes.json.gz \
+  --routes routes.json.gz \
   --stock stock_smiles.txt \ # (1)!
   --output scores.json.gz \
   --model-name "My-Experiment"
@@ -222,14 +238,17 @@ graph LR
 
 All paths are relative to your data directory (default: `data/retrocast/`).
 
-### `ingest` - Standardize Routes
+### `ingest` - Adapt and Collect Routes
 
-Transforms raw model outputs into standardized `Route` objects.
+Transforms raw model outputs into benchmark-keyed routes by running adaptation and collection as one command.
+In v0.6, this command remains as the project-mode convenience wrapper around
+the two lower-level operations: `adapt` followed by `collect`.
 
 ```bash
 retrocast ingest \
   --model dms-explorer \
   --dataset paroutes-n1 \
+  --input-kind target-keyed-provider-output \
   --anonymize \  # (1)!
   --ignore-stereo  # (2)!
 ```
@@ -242,9 +261,10 @@ retrocast ingest \
 
 **Operations:**
 
-- Parse raw format via adapter
+- Adapt raw payloads into a canonical route corpus
 - Canonicalize SMILES (optionally ignoring stereochemistry with `--ignore-stereo`)
-- Deduplicate routes
+- Collect canonical routes onto the benchmark by target smiles
+- Deduplicate routes within each benchmark target
 - Apply sampling strategy (if configured)
 
 !!! warning "Stereochemistry-agnostic processing"

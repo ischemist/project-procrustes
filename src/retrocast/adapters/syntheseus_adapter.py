@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Generator
+from collections.abc import Iterator
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
-from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.common import build_molecule_from_bipartite_node
 from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles
-from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import Route, TargetIdentity
 
 logger = logging.getLogger(__name__)
@@ -54,27 +53,47 @@ class SyntheseusRouteList(RootModel[list[SyntheseusMoleculeInput]]):
 class SyntheseusAdapter(BaseAdapter):
     """adapter for converting serialized syntheseus outputs to the route schema."""
 
-    def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+    ) -> Iterator[RawRouteEntry]:
         """
-        validates raw syntheseus data, transforms it, and yields route objects.
+        Validate raw Syntheseus data and expose one route-like payload per entry.
         """
+        target_id = source_key or "<unknown>"
         try:
-            validated_routes = SyntheseusRouteList.model_validate(raw_target_data)
+            validated_routes = SyntheseusRouteList.model_validate(raw_data)
         except ValidationError as e:
-            raise adapter_schema_error("syntheseus", target.id, "invalid route list") from e
+            raise adapter_schema_error("syntheseus", target_id, "invalid route list") from e
 
         for rank, syntheseus_tree_root in enumerate(validated_routes.root, start=1):
-            try:
-                route = self._transform(syntheseus_tree_root, target, rank, ignore_stereo=ignore_stereo)
-                yield route
-            except RetroCastException as e:
-                logger.warning(f"  - route for '{target.id}' failed transformation: {e} [{e.code}]")
-                continue
+            yield RawRouteEntry(
+                payload=syntheseus_tree_root,
+                source_key=source_key,
+                target_hint_id=None,
+                target_hint_smiles=None,
+                source_order=rank,
+            )
+
+    def cast(
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
+        if not isinstance(raw_route, SyntheseusMoleculeInput):
+            raw_route = SyntheseusMoleculeInput.model_validate(raw_route)
+        return self._transform(raw_route, expected_target, ignore_stereo=ignore_stereo)
 
     def _transform(
-        self, syntheseus_root: SyntheseusMoleculeInput, target: TargetIdentity, rank: int, ignore_stereo: bool = False
+        self,
+        syntheseus_root: SyntheseusMoleculeInput,
+        target: TargetIdentity | None,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
     ) -> Route:
         """
         orchestrates the transformation of a single serialized syntheseus output tree.
@@ -87,13 +106,14 @@ class SyntheseusAdapter(BaseAdapter):
             adapter="syntheseus",
         )
 
-        expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
-        if target_molecule.smiles != expected_smiles:
-            raise adapter_target_mismatch(
-                "syntheseus",
-                target.id,
-                expected_smiles=expected_smiles,
-                actual_smiles=target_molecule.smiles,
-            )
+        if target is not None:
+            expected_smiles = canonicalize_smiles(target.smiles, ignore_stereo=ignore_stereo)
+            if target_molecule.smiles != expected_smiles:
+                raise adapter_target_mismatch(
+                    "syntheseus",
+                    target.id,
+                    expected_smiles=expected_smiles,
+                    actual_smiles=target_molecule.smiles,
+                )
 
-        return Route(target=target_molecule, rank=rank, metadata={})
+        return Route(target=target_molecule, metadata={})

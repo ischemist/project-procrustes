@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from retrocast.adapters import get_adapter
+from retrocast.adapters import ADAPTER_TYPES
 from retrocast.adapters.resolve import (
     DEFAULT_RAW_RESULTS_FILENAME,
     _read_manifest_directives,
@@ -51,7 +51,7 @@ class TestResolveAdapter:
             model_name="test-model",
         )
 
-        assert adapter is get_adapter("aizynth")
+        assert isinstance(adapter, ADAPTER_TYPES["aizynth"])
         assert source == "cli"
 
     def test_resolve_adapter_uses_manifest_when_cli_is_absent(self, tmp_path):
@@ -63,7 +63,7 @@ class TestResolveAdapter:
             model_name="test-model",
         )
 
-        assert adapter is get_adapter("askcos")
+        assert isinstance(adapter, ADAPTER_TYPES["askcos"])
         assert source == "manifest"
 
     def test_resolve_adapter_invalid_cli_override_raises(self, tmp_path):

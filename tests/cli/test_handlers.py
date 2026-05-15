@@ -16,6 +16,7 @@ import pytest
 from retrocast.chem import get_inchi_key
 from retrocast.cli import adhoc, handlers
 from retrocast.io.blob import save_json_gz
+from retrocast.io.data import load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Molecule, ReactionStep, Route
 from tests.helpers import _synthetic_inchikey
@@ -37,7 +38,7 @@ def make_simple_route(target_smiles: str, leaf_smiles: str, rank: int = 1) -> Ro
         inchikey=get_inchi_key(target_smiles),
         synthesis_step=step,
     )
-    return Route(target=target, rank=rank)
+    return Route(target=target)
 
 
 # --- Test Classes ---
@@ -283,6 +284,68 @@ class TestHandleList:
 
         captured = capsys.readouterr()
         assert "No models with manifests found" in captured.out
+
+
+@pytest.mark.integration
+class TestHandleIngest:
+    def test_ingest_single_loads_jsonl_raw_artifacts(self, tmp_path):
+        data_dir = tmp_path / "data"
+        raw_dir = data_dir / "2-raw" / "ursa-model" / "ursa-bench"
+        benchmark_dir = data_dir / "1-benchmarks" / "definitions"
+        raw_dir.mkdir(parents=True)
+        benchmark_dir.mkdir(parents=True)
+
+        benchmark = BenchmarkSet(
+            name="ursa-bench",
+            targets={
+                "acetone": BenchmarkTarget(
+                    id="acetone",
+                    smiles="CC(C)=O",
+                    inchi_key=_synthetic_inchikey("CC(C)=O"),
+                    acceptable_routes=[],
+                )
+            },
+        )
+        save_json_gz(benchmark, benchmark_dir / "ursa-bench.json.gz")
+
+        completion_record = {
+            "meta": {"product_smiles": "CC(=O)C"},
+            "completion": (
+                "<synthesis_step><product><smiles>CC(=O)C</smiles></product>"
+                "<reactant><smiles>CC(=O)O</smiles></reactant>"
+                "<reactant><smiles>C</smiles></reactant></synthesis_step>"
+            ),
+        }
+        (raw_dir / "completions.jsonl").write_text(json.dumps(completion_record) + "\n", encoding="utf-8")
+        with open(raw_dir / "manifest.json", "w", encoding="utf-8") as handle:
+            json.dump(
+                {
+                    "schema_version": "1.1",
+                    "directives": {"adapter": "ursa-llm", "raw_results_filename": "completions.jsonl"},
+                    "action": "test",
+                    "parameters": {},
+                    "source_files": [],
+                    "output_files": [],
+                    "statistics": {},
+                },
+                handle,
+            )
+
+        args = Namespace(
+            adapter=None,
+            sampling_strategy=None,
+            k=None,
+            input_kind="provider-output",
+            ignore_stereo=False,
+            anonymize=False,
+        )
+
+        handlers._ingest_single("ursa-model", "ursa-bench", handlers._get_paths({"data_dir": str(data_dir)}), args)
+
+        routes_path = data_dir / "3-processed" / "ursa-bench" / "ursa-model" / "routes.json.gz"
+        assert routes_path.exists()
+        saved_routes = load_routes(routes_path)
+        assert len(saved_routes["acetone"]) == 1
 
 
 @pytest.mark.unit

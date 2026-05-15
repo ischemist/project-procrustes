@@ -13,8 +13,8 @@ from retrocast.adapters.resolve import resolve_adapter, resolve_raw_results_file
 from retrocast.chem import InchiKeyLevel
 from retrocast.cli.errors import log_expected_error
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
-from retrocast.exceptions import AdapterResolutionError, RetroCastException, SecurityError
-from retrocast.io.blob import load_json_gz, save_json_gz
+from retrocast.exceptions import AdapterResolutionError, InputError, RetroCastException, SecurityError
+from retrocast.io.blob import load_json_artifact, load_json_gz, save_json_gz
 from retrocast.io.data import load_benchmark, load_execution_stats, load_routes, load_stock_file
 from retrocast.io.provenance import create_manifest
 from retrocast.models.evaluation import EvaluationResults
@@ -29,9 +29,27 @@ from retrocast.paths import (
 )
 from retrocast.visualization.report import create_single_model_summary_table, generate_markdown_report
 from retrocast.workflow import analyze, ingest, score, verify
+from retrocast.workflow.ingest import ProviderOutputKind
 
 console = Console()
 logger = logging.getLogger(__name__)
+
+
+def _normalize_provider_output_kind(input_kind: object) -> ProviderOutputKind:
+    """Convert CLI spelling to the workflow's typed provider-output kind."""
+    normalized = str(input_kind).replace("-", "_")
+    if normalized == "provider_output":
+        return "provider_output"
+    if normalized == "target_keyed_provider_output":
+        return "target_keyed_provider_output"
+    raise InputError(
+        f"Unknown input kind: {input_kind}",
+        code="input.invalid_provider_output_kind",
+        context={
+            "input_kind": input_kind,
+            "available_input_kinds": ["provider-output", "target-keyed-provider-output"],
+        },
+    )
 
 
 def _get_paths(config: dict) -> dict[str, Path]:
@@ -199,14 +217,12 @@ def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any)
         return
 
     ignore_stereo = getattr(args, "ignore_stereo", False)
+    input_kind = _normalize_provider_output_kind(getattr(args, "input_kind", "target-keyed-provider-output"))
 
     try:
         benchmark = load_benchmark(paths["benchmarks"] / f"{benchmark_name}.json.gz")
 
-        if raw_path.suffix == ".gz":
-            raw_data = load_json_gz(raw_path)
-        else:
-            raise NotImplementedError("Unsupported file format (only .json.gz supported currently)")
+        raw_data = load_json_artifact(raw_path)
 
         processed_routes, out_path, stats = ingest.ingest_model_predictions(
             model_name=model_name,
@@ -218,6 +234,7 @@ def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any)
             sampling_strategy=strategy,
             sample_k=k,
             ignore_stereo=ignore_stereo,
+            provider_output_kind=input_kind,
         )
 
         manifest = create_manifest(
@@ -225,7 +242,13 @@ def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any)
             sources=[raw_path, paths["benchmarks"] / f"{benchmark_name}.json.gz"],
             outputs=[(out_path, processed_routes, "predictions")],
             root_dir=paths["raw"].parent,  # The 'data/' directory
-            parameters={"model": model_name, "benchmark": benchmark_name, "sampling": strategy, "k": k},
+            parameters={
+                "model": model_name,
+                "benchmark": benchmark_name,
+                "sampling": strategy,
+                "k": k,
+                "input_kind": getattr(args, "input_kind", "target-keyed-provider-output"),
+            },
             statistics=stats.to_manifest_dict(),
         )
 

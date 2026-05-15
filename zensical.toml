@@ -21,9 +21,17 @@ nav = [
   { "Home" = "index.md" },
   { "Quick Start" = "quick-start.md" },
   { "Concepts" = "concepts.md" },
+  { "Changelog" = "changelog.md" },
   { "Guides" = [
     "guides/cli.md",
-    "guides/library.md",
+    { "Python Library" = [
+      "guides/library/index.md",
+      "guides/library/adaptation.md",
+      "guides/library/evaluation.md",
+      "guides/library/statistics.md",
+      "guides/library/visualization.md",
+      "guides/library/reference.md"
+    ] },
     "guides/benchmarks.md",
     "guides/workflows.md",
     "guides/training-sets.md"

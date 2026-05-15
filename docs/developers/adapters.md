@@ -13,30 +13,58 @@ The adapter is the **"air gap"** between a model's internal representation and R
 
 ## The Adapter Contract
 
-A RetroCast adapter is a class that inherits from `BaseAdapter`. It implements a ==single method==, `cast`, which validates raw model output and transforms it into `Route` objects.
+A RetroCast adapter is route-first. It inherits from `BaseAdapter` and implements
+==two explicit responsibilities==:
+
+1. `iter_raw_entries(...)`: split a provider artifact into raw route-like entries
+2. `cast(...)`: convert ==one== raw route-like payload into ==one== canonical `Route`
 
 ```python title="src/retrocast/adapters/my_adapter.py"
-from retrocast.adapters.base_adapter import BaseAdapter
+from collections.abc import Iterator
+from typing import Any
+
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.models.chem import Route, TargetIdentity
-from typing import Any, Generator
+
 
 class MyModelAdapter(BaseAdapter):
-    def cast(self, raw_target_data: Any, target: TargetIdentity) -> Generator[Route, None, None]:
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+    ) -> Iterator[RawRouteEntry]:
+        for row_index, raw_route in enumerate(raw_data, start=1):
+            yield RawRouteEntry(
+                payload=raw_route,
+                source_key=source_key,
+                source_row_index=row_index,
+                source_order=row_index,
+            )
+
+    def cast(
+        self,
+        raw_route: Any,
+        *,
+        expected_target: TargetIdentity | None = None,
+        ignore_stereo: bool = False,
+    ) -> Route:
         """
         Args:
-            raw_target_data: A single entry from the raw results file (dict or list).
-            target: The expected target identity (ID and canonical SMILES).
-            
-        Yields:
-            Valid Route objects.
+            raw_route: One raw route-like payload from the provider artifact.
+            expected_target: Optional benchmark or workflow target to validate against.
+            ignore_stereo: Whether SMILES canonicalization should strip stereochemistry.
+
+        Returns:
+            One valid canonical Route object.
         """
-        # 1. Validate raw_target_data (Pydantic recommended) # (1)!
-        # 2. Transform to Route objects
-        # 3. Yield valid routes
-        yield route
+        target_molecule = ...
+        return Route(target=target_molecule, metadata={})
 ```
 
-1. Always use Pydantic for validation! See [Define Pydantic Schemas](#1-define-pydantic-schemas) below.
+`iter_raw_entries(...)` is where corpus traversal lives. `cast(...)` should not
+know or care whether the caller is adapting a flat corpus, a target-local payload,
+or a benchmark-keyed prediction map.
 
 ## Common Architecture Patterns
 
@@ -55,26 +83,29 @@ In this pattern, the output is a nested JSON tree where ==Molecule nodes point t
 
 To use this, your raw data structure must conform (via duck typing or Protocol) to the `BipartiteMolNode` interface: it must have `smiles` (str), `type` ("mol"), and `children` (list of reaction nodes).
 
-```python hl_lines="10"
+```python hl_lines="4 11"
+from collections.abc import Iterator
+
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
+from retrocast.adapters.errors import adapter_target_mismatch
 from retrocast.adapters.common import build_molecule_from_bipartite_node
+from retrocast.models.chem import Route
 
 class MyAdapter(BaseAdapter):
-    def cast(self, raw_data, target):
-        # Validate that raw_data fits the Bipartite schema
+    def iter_raw_entries(self, raw_data, *, source_key=None) -> Iterator[RawRouteEntry]:
         validated = MyRawOutput.model_validate(raw_data)
-        
-        for i, tree_root in enumerate(validated.trees):
-            try:
-                # The helper handles the recursive tree construction # (1)!
-                target_mol = build_molecule_from_bipartite_node(tree_root)
-                
-                # Verify the root matches the target
-                if target_mol.smiles != target.smiles:
-                    continue
+        for row_index, tree_root in enumerate(validated.trees, start=1):
+            yield RawRouteEntry(payload=tree_root, source_key=source_key, source_order=row_index)
 
-                yield Route(target=target_mol, rank=i+1, metadata={})
-            except RetroCastException:
-                continue
+    def cast(self, raw_route, *, expected_target=None, ignore_stereo=False):
+        # The helper handles the recursive tree construction # (1)!
+        target_mol = build_molecule_from_bipartite_node(raw_route)
+
+        # Verify the root matches the expected target when one is provided
+        if expected_target is not None and target_mol.smiles != expected_target.smiles:
+            raise adapter_target_mismatch(...)
+
+        return Route(target=target_mol, metadata={})
 ```
 
 1. The helper automatically handles canonicalization and cycle detection
@@ -89,20 +120,25 @@ In this pattern, the output is a ==flat list of reactions== or a string represen
 You simply need to parse the raw format into a Python dictionary mapping `Product SMILES -> [Reactant SMILES, ...]`.
 
 ```python hl_lines="8 11"
+from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.adapters.common import build_molecule_from_precursor_map
+from retrocast.models.chem import Route
 
 class MyAdapter(BaseAdapter):
-    def cast(self, raw_data, target):
+    def cast(self, raw_route, *, expected_target=None, ignore_stereo=False):
         # 1. Parse your model's specific string format
         # Input: "target >> int_1.int_2 | int_1 >> sm_1.sm_2"
         # Output: {"target": ["int_1", "int_2"], "int_1": ["sm_1", "sm_2"]}
-        precursor_map = self._parse_custom_string(raw_data["route_string"]) # (1)!
-        
+        precursor_map = self._parse_custom_string(raw_route["route_string"]) # (1)!
+
+        if expected_target is None:
+            raise ValueError("expected_target is required for this adapter")
+
         # 2. Build the tree
         # The helper walks the map recursively starting from the target SMILES # (2)!
-        target_mol = build_molecule_from_precursor_map(target.smiles, precursor_map)
-        
-        yield Route(target=target_mol, rank=1, metadata={})
+        target_mol = build_molecule_from_precursor_map(expected_target.smiles, precursor_map)
+
+        return Route(target=target_mol, metadata={})
 ```
 
 1. Implement this parsing method specific to your model's format
@@ -119,26 +155,23 @@ Some models have unique structures that don't fit the above patterns (e.g., grap
 
     See `retrocast.adapters.dms_adapter` for a complete example of implementing a custom recursive builder with cycle detection.
 
-### Compatibility Preparation: Ursa LLM
+### Flat Completion Corpora: Ursa LLM
 
-`UrsaLlmAdapter` is the current bridge for flat Ursa completion corpora that contain
-`<synthesis_step>` XML blocks rather than pre-keyed per-target payloads.
-
-today's `ingest` workflow is still benchmark-centric, so Ursa support intentionally
-uses a small preparation step before adaptation:
+`UrsaLlmAdapter` is the reference example of a route-first adapter for flat raw
+artifacts. Its input is a completion corpus containing `<synthesis_step>` XML
+blocks, usually as `.jsonl` or `.jsonl.gz`, not a benchmark-keyed `results.json.gz`
+mapping.
 
 - canonical adapter key: `ursa-llm`
-- library helper: `retrocast.adapters.prepare_ursa_llm_results(...)`
-- wrapper script: `uv run scripts/ursa-llm/1-prepare-raw-results.py --input ... --output ...`
+- raw artifact shape: list of records with `completion` text and `meta.product_smiles`
+- adapter seam:
+  - `iter_raw_entries(...)` yields one `RawRouteEntry` per completion row
+  - `cast(...)` parses one completion string into one canonical `Route`
 
-the preparation helper accepts `.json`, `.json.gz`, `.jsonl`, and `.jsonl.gz`
-completion artifacts, canonicalizes `meta.product_smiles`, and writes the current
-compatibility `results.json.gz` keyed by canonical target smiles. it does not
-create a separate manifest or `summary.json`; durable statistics belong to the
-downstream `ingest` artifact boundary.
-
-this is deliberate: the Ursa parsing logic lives in library code, while the output
-artifact remains compatible with today's benchmark-first `ingest` path.
+When `meta.product_smiles` is present, Ursa raw completions can be adapted into a
+canonical route corpus directly, without a benchmark and without a preprocessing
+step that re-keys the file by target. benchmark alignment happens later in the
+explicit `collect` workflow.
 
 ## Implementation Guidelines
 
@@ -148,7 +181,7 @@ artifact remains compatible with today's benchmark-first `ingest` path.
     
     1. **Canonicalization** - Use `retrocast.chem.canonicalize_smiles` for all SMILES
     2. **Cycle detection** - Ensure no molecule appears twice in a path
-    3. **Target validation** - Verify the root matches `target.smiles`
+    3. **Target validation** - Verify the root matches `expected_target.smiles` when an expected target is provided
 
 ## Adaptation Errors
 
@@ -160,7 +193,7 @@ An adapter may raise these expected errors from `cast`:
 
 | exception | code | when it is raised | caller policy |
 | --- | --- | --- | --- |
-| `AdapterSchemaError` | `adapter.schema_invalid` | the raw target payload does not match the adapter's declared input schema | workflow records the failure for that target and continues |
+| `AdapterSchemaError` | `adapter.schema_invalid` | the raw route payload or entry does not match the adapter's declared input schema | workflow records the failure and continues |
 | `AdapterLogicError` | `adapter.target_mismatch` | a transformed route root does not match the benchmark target | adapter logs/skips that route when other routes may still be usable |
 | `AdapterLogicError` | `adapter.cycle_detected` | route graph revisits the same molecule in one path | adapter logs/skips that route when the failure is route-local |
 | `AdapterLogicError` | `adapter.node_type_invalid` | a bipartite graph node has the wrong role, such as molecule where reaction is required | adapter logs/skips that route when the failure is route-local |
@@ -286,17 +319,17 @@ Do not discard model-specific data (scores, template IDs, etc.). Store it in the
 
 Once your adapter logic is written, you must register it so the CLI can find it.
 
-=== "1. Add to Factory"
+=== "1. Register the Adapter"
 
-    Add your adapter to the map in `src/retrocast/adapters/factory.py`:
+    Add your adapter to the map in `src/retrocast/adapters/__init__.py`:
 
-    ```python title="src/retrocast/adapters/factory.py"
+    ```python title="src/retrocast/adapters/__init__.py"
     from retrocast.adapters.my_adapter import MyModelAdapter
 
-    ADAPTER_MAP = {
-        "aizynth": AizynthAdapter(),
+    ADAPTER_TYPES = {
+        "aizynth": AizynthAdapter,
         # ...
-        "my-model": MyModelAdapter(), # (1)!
+        "my-model": MyModelAdapter, # (1)!
     }
     ```
 
@@ -304,7 +337,7 @@ Once your adapter logic is written, you must register it so the CLI can find it.
 
 === "2. Update Config"
 
-    When using the adapter in a project, reference the key from `ADAPTER_MAP` in your `retrocast-config.yaml`:
+    When using the adapter in a project, reference the key from `ADAPTER_TYPES` in your `retrocast-config.yaml`:
 
     ```yaml title="retrocast-config.yaml"
     models:
@@ -313,7 +346,7 @@ Once your adapter logic is written, you must register it so the CLI can find it.
         raw_results_filename: predictions.json
     ```
 
-    1. Must match the key you added to `ADAPTER_MAP`
+    1. Must match the key you added to `ADAPTER_TYPES`
 
 ## Testing Your Adapter
 

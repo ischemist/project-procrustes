@@ -73,7 +73,6 @@ def excise_reactions_from_route(
                         # Reactant still has reactions, create sub-route
                         new_route = Route(
                             target=rebuilt_reactant,
-                            rank=route.rank,
                             metadata=deepcopy(route.metadata),
                         )
                         sub_routes.append(new_route)
@@ -110,7 +109,6 @@ def excise_reactions_from_route(
     if main_target.synthesis_step is not None:
         main_route = Route(
             target=main_target,
-            rank=route.rank,
             metadata=deepcopy(route.metadata),
         )
         result.append(main_route)

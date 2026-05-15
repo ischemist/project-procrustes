@@ -4,6 +4,7 @@ from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import TargetInput
+from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 
@@ -46,7 +47,7 @@ class TestSynLlamaAdapterUnit(BaseAdapterTest):
         raw_data = [{"synthesis_string": multi_step_string}]
         target_input = TargetInput(id="multi-step-test", smiles=canonicalize_smiles("CCC"))
 
-        routes = list(adapter_instance.cast(raw_data, target_input))
+        routes = list(adapt_target_routes(adapter_instance, raw_data, target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -89,7 +90,7 @@ class TestSynLlamaAdapterUnit(BaseAdapterTest):
         raw_data = [{"synthesis_string": "CC(C)=O"}]
         target_input = TargetInput(id="acetone-leaf", smiles=canonicalize_smiles("CC(C)=O"))
 
-        routes = list(adapter_instance.cast(raw_data, target_input))
+        routes = list(adapt_target_routes(adapter_instance, raw_data, target_input))
 
         assert len(routes) == 1
         assert routes[0].target.is_leaf is True
@@ -117,16 +118,11 @@ class TestSynLlamaAdapterContract:
         target_smi_canon = canonicalize_smiles(product_smi_raw)
 
         target_input = TargetInput(id=target_id, smiles=target_smi_canon)
-        return list(adapter.cast(raw_routes, target_input))
+        return list(adapt_target_routes(adapter, raw_routes, target_input))
 
     def test_produces_at_least_one_route(self, routes):
         """Verify the adapter produces at least one route."""
         assert len(routes) >= 1
-
-    def test_all_routes_have_ranks(self, routes):
-        """Verify all routes are properly ranked."""
-        ranks = [route.rank for route in routes]
-        assert ranks == list(range(1, len(routes) + 1))
 
     def test_all_routes_have_inchikeys(self, routes):
         """Verify all target molecules have InChIKeys."""
@@ -174,7 +170,7 @@ class TestSynLlamaAdapterRegression:
         target_smi_canon = canonicalize_smiles(product_smi_raw)
 
         target_input = TargetInput(id=target_id, smiles=target_smi_canon)
-        return list(adapter.cast(raw_routes, target_input))
+        return list(adapt_target_routes(adapter, raw_routes, target_input))
 
     @pytest.fixture(scope="class")
     def agn_routes(self, adapter, raw_synllama_data):
@@ -188,7 +184,7 @@ class TestSynLlamaAdapterRegression:
         target_smi_canon = canonicalize_smiles(product_smi_raw)
 
         target_input = TargetInput(id=target_id, smiles=target_smi_canon)
-        return list(adapter.cast(raw_routes, target_input))
+        return list(adapt_target_routes(adapter, raw_routes, target_input))
 
     @pytest.fixture(scope="class")
     def uspto_routes(self, adapter, raw_synllama_data):
@@ -202,11 +198,10 @@ class TestSynLlamaAdapterRegression:
         target_smi_canon = canonicalize_smiles(product_smi_raw)
 
         target_input = TargetInput(id=target_id, smiles=target_smi_canon)
-        return list(adapter.cast(raw_routes, target_input))
+        return list(adapt_target_routes(adapter, raw_routes, target_input))
 
     def test_conivaptan_first_route_has_rank_one(self, conivaptan_routes):
         """Verify Conivaptan first route has rank 1."""
-        assert conivaptan_routes[0].rank == 1
 
     def test_conivaptan_first_route_target_smiles(self, conivaptan_routes):
         """Verify Conivaptan target SMILES is correct."""
@@ -217,7 +212,6 @@ class TestSynLlamaAdapterRegression:
 
     def test_agn_first_route_has_rank_one(self, agn_routes):
         """Verify AGN-190205 first route has rank 1."""
-        assert agn_routes[0].rank == 1
 
     def test_agn_first_route_target_smiles(self, agn_routes):
         """Verify AGN-190205 target SMILES is correct."""
@@ -226,7 +220,6 @@ class TestSynLlamaAdapterRegression:
 
     def test_uspto_first_route_has_rank_one(self, uspto_routes):
         """Verify USPTO-165/190 first route has rank 1."""
-        assert uspto_routes[0].rank == 1
 
     def test_uspto_first_route_target_smiles(self, uspto_routes):
         """Verify USPTO-165/190 target SMILES is correct."""

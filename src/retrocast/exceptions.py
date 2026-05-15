@@ -65,6 +65,16 @@ class WorkflowError(RetroCastException):
     default_code = "workflow.error"
 
 
+class BenchmarkCollectionError(WorkflowError):
+    """Raised when benchmark collection cannot classify or place canonical routes."""
+
+    default_code = "collection.error"
+
+
+class PredictionCollectionError(BenchmarkCollectionError):
+    """Deprecated alias for benchmark collection failures."""
+
+
 class DatasetError(RetroCastException):
     """Raised for expected hosted dataset resolution, download, or verification failures."""
 

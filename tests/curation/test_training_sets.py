@@ -42,7 +42,7 @@ def make_route(name: str, depth: int) -> Route:
             inchikey=InchiKeyStr(f"INCHI-{name}-{idx}"),
             synthesis_step=ReactionStep(reactants=[current]),
         )
-    return Route(target=current, rank=1)
+    return Route(target=current)
 
 
 def make_convergent_route(name: str) -> Route:
@@ -63,7 +63,7 @@ def make_convergent_route(name: str) -> Route:
         inchikey=InchiKeyStr(f"INCHI-{name}-target"),
         synthesis_step=ReactionStep(reactants=[left_intermediate, right_intermediate]),
     )
-    return Route(target=target, rank=1)
+    return Route(target=target)
 
 
 def make_reaction_route(
@@ -88,7 +88,7 @@ def make_reaction_route(
             metadata=metadata,
         ),
     )
-    return Route(target=target, rank=1, metadata={"patent_id": patent_id})
+    return Route(target=target, metadata={"patent_id": patent_id})
 
 
 def make_adapted_route(
@@ -658,7 +658,7 @@ class TestTrainingSetSplits:
             synthesis_step=ReactionStep(reactants=[mol_c]),
         )
 
-        full_route = Route(target=mol_d, rank=1)
+        full_route = Route(target=mol_d)
         holdout_route = Route(
             target=Molecule(
                 smiles=SmilesStr("c"),
@@ -672,7 +672,6 @@ class TestTrainingSetSplits:
                     ]
                 ),
             ),
-            rank=1,
         )
         result = TrainingRouteReleaseBuilder(
             all_routes=[make_adapted_route("full", full_route)],

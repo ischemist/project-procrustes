@@ -80,7 +80,7 @@ def score_model(
         # Counter for the "Effective Rank" (only increments on solvable routes)
         effective_rank_counter = 1
 
-        for route in predicted_routes:
+        for rank, route in enumerate(predicted_routes, start=1):
             # 1. Metric: Solvability
             solved = is_route_solved(route, stock_inchikeys, match_level=match_level)
 
@@ -95,7 +95,7 @@ def score_model(
             # Store pre-computed flags for fast stats later
             scored_routes.append(
                 ScoredRoute(
-                    rank=route.rank,
+                    rank=rank,
                     is_solved=solved,
                     matches_acceptable=matched_idx is not None,
                     matched_acceptable_index=matched_idx,

@@ -4,6 +4,7 @@ from retrocast.adapters.dreamretro_adapter import DreamRetroAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import TargetInput
+from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 # ============================================================================
@@ -81,7 +82,7 @@ class TestDreamRetroAdapterContract:
         raw_route_str = raw_data["routes"]
         product_smi_raw, _ = raw_route_str.split(">>")
         target_input = TargetInput(id="Mirabegron", smiles=canonicalize_smiles(product_smi_raw))
-        return list(self.adapter.cast(raw_data, target_input))
+        return list(adapt_target_routes(self.adapter, raw_data, target_input))
 
     @pytest.fixture(scope="class")
     def anagliptin_routes(self, raw_dreamretro_data):
@@ -90,13 +91,12 @@ class TestDreamRetroAdapterContract:
         raw_route_str = raw_data["routes"]
         root_smi_raw, _, _ = raw_route_str.split(">>")[0].split("|")[0].partition(">")
         target_input = TargetInput(id="Anagliptin", smiles=canonicalize_smiles(root_smi_raw))
-        return list(self.adapter.cast(raw_data, target_input))
+        return list(adapt_target_routes(self.adapter, raw_data, target_input))
 
     def test_route_has_required_fields(self, mirabegron_routes):
         """All routes must have required Route fields populated."""
         for route in mirabegron_routes:
             assert route.target is not None
-            assert route.rank > 0
             assert route.metadata is not None
 
     def test_molecule_has_required_fields(self, mirabegron_routes):
@@ -180,7 +180,7 @@ class TestDreamRetroAdapterRegression:
         product_smi_raw, reactants_smi_raw = raw_route_str.split(">>")
 
         target_input = TargetInput(id="Mirabegron", smiles=canonicalize_smiles(product_smi_raw))
-        routes = list(self.adapter.cast(raw_data, target_input))
+        routes = list(adapt_target_routes(self.adapter, raw_data, target_input))
 
         assert len(routes) == 1
         route = routes[0]
@@ -189,7 +189,6 @@ class TestDreamRetroAdapterRegression:
         # Target molecule
         assert root.smiles == canonicalize_smiles(product_smi_raw)
         assert root.synthesis_step is not None
-        assert route.rank == 1
 
         # Synthesis step
         reaction = root.synthesis_step
@@ -210,7 +209,7 @@ class TestDreamRetroAdapterRegression:
         root_smi_raw, _, _ = raw_route_str.split(">>")[0].split("|")[0].partition(">")
         target_input = TargetInput(id="Anagliptin", smiles=canonicalize_smiles(root_smi_raw))
 
-        routes = list(self.adapter.cast(raw_data, target_input))
+        routes = list(adapt_target_routes(self.adapter, raw_data, target_input))
         assert len(routes) == 1
         root = routes[0].target
 

@@ -83,14 +83,9 @@ def main():
 
         target_input = TargetInput(id=target_id, smiles=smiles)
         try:
-            route = next(adapter.cast(raw_item, target_input), None)
+            route = adapter.cast(raw_item, expected_target=target_input)
         except RetroCastException as exc:
             logger.warning("failed to cast route %s: %s [%s]", target_id, exc, exc.code)
-            failures += 1
-            continue
-
-        if route is None:
-            logger.warning("adapter returned no route for %s", target_id)
             failures += 1
             continue
 
@@ -101,7 +96,6 @@ def main():
     logger.info(
         f"Casting complete. {len(molecules)} unique molecules from {len(raw_list) - failures} routes ({failures} rejected)."
     )
-    adapter.report_statistics()
 
     # --- Step 2: Build tag sets from subset benchmarks ---
     tag_columns = list(SUBSETS.values())

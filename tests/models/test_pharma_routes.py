@@ -36,10 +36,9 @@ class TestPharmaRoutesContract:
         """Test building and analyzing vonoprazan-1 route."""
         vonoprazan_data = pharma_routes_data["vonoprazan-1"]
         target_molecule = self._build_molecule_tree(vonoprazan_data)
-        route = Route(target=target_molecule, rank=1)
+        route = Route(target=target_molecule)
 
         # Verify route properties
-        assert route.rank == 1
         assert not route.target.is_leaf
         assert route.length > 0
 
@@ -56,10 +55,9 @@ class TestPharmaRoutesContract:
         """Test building and analyzing mitapivat-1 route (deeper tree)."""
         mitapivat_data = pharma_routes_data["mitapivat-1"]
         target_molecule = self._build_molecule_tree(mitapivat_data)
-        route = Route(target=target_molecule, rank=1)
+        route = Route(target=target_molecule)
 
         # Verify route properties
-        assert route.rank == 1
         assert not route.target.is_leaf
         assert route.length >= 3  # Mitapivat has a deeper tree
 
@@ -79,8 +77,8 @@ class TestPharmaRoutesContract:
         vonoprazan_target = self._build_molecule_tree(vonoprazan_data)
         mitapivat_target = self._build_molecule_tree(mitapivat_data)
 
-        route1 = Route(target=vonoprazan_target, rank=1)
-        route2 = Route(target=mitapivat_target, rank=1)
+        route1 = Route(target=vonoprazan_target)
+        route2 = Route(target=mitapivat_target)
 
         # Different routes should have different signatures
         assert route1.get_structural_signature() != route2.get_structural_signature()
@@ -90,19 +88,16 @@ class TestPharmaRoutesContract:
         for route_id, route_data in pharma_routes_data.items():
             # Build route from JSON data
             target_molecule = self._build_molecule_tree(route_data)
-            original_route = Route(target=target_molecule, rank=1)
+            original_route = Route(target=target_molecule)
 
             # Serialize to dict
             route_dict = original_route.model_dump(exclude={"leaves", "depth"})
             assert "target" in route_dict
-            assert "rank" in route_dict
-            assert route_dict["rank"] == 1
 
             # Reconstruct from dict (this is the "round trip")
             reconstructed_route = Route.model_validate(route_dict)
 
             # Verify reconstructed route matches original
-            assert reconstructed_route.rank == original_route.rank
             assert reconstructed_route.target.smiles == original_route.target.smiles
             assert reconstructed_route.target.inchikey == original_route.target.inchikey
 
@@ -119,7 +114,7 @@ class TestPharmaRoutesContract:
         """Test specific depth calculation for vonoprazan route."""
         vonoprazan_data = pharma_routes_data["vonoprazan-1"]
         target_molecule = self._build_molecule_tree(vonoprazan_data)
-        route = Route(target=target_molecule, rank=1)
+        route = Route(target=target_molecule)
 
         # Based on the structure in pharma_routes.json:
         # vonoprazan-1 has 2 levels of reactions
@@ -131,7 +126,7 @@ class TestPharmaRoutesContract:
         """Test specific depth calculation for mitapivat route."""
         mitapivat_data = pharma_routes_data["mitapivat-1"]
         target_molecule = self._build_molecule_tree(mitapivat_data)
-        route = Route(target=target_molecule, rank=1)
+        route = Route(target=target_molecule)
 
         # Mitapivat has a deeper tree structure
         # Should have depth >= 4 based on the nested structure

@@ -99,10 +99,9 @@ class TestBasicFunctionality:
         from retrocast.models.chem import Molecule, Route
 
         mol = Molecule(smiles="CC", inchikey=get_inchi_key("CC"))
-        route = Route(target=mol, rank=1)
+        route = Route(target=mol)
 
         assert route.target.smiles == "CC"
-        assert route.rank == 1
 
     def test_create_evaluation_results(self):
         from retrocast.models.evaluation import EvaluationResults

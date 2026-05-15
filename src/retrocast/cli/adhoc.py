@@ -5,18 +5,17 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from tqdm import tqdm
-
 from retrocast.adapters import ADAPTER_MAP, get_adapter
 from retrocast.api import score_predictions
 from retrocast.cli.errors import log_expected_error
-from retrocast.curation.filtering import deduplicate_routes
-from retrocast.exceptions import AdapterError, ChemError, RetroCastException
-from retrocast.io.blob import load_json_gz, save_json_gz
-from retrocast.io.data import load_benchmark, load_routes, save_routes
+from retrocast.exceptions import InputError, RetroCastException
+from retrocast.io.blob import load_json_artifact, save_json_gz
+from retrocast.io.data import load_benchmark, load_route_corpus, load_routes, save_route_corpus, save_routes
 from retrocast.io.provenance import create_manifest
 from retrocast.models.benchmark import create_benchmark, create_benchmark_target
-from retrocast.models.chem import TargetInput
+from retrocast.models.chem import RunStatistics
+from retrocast.workflow.adapt import adapt_provider_output, adapt_target_keyed_provider_output
+from retrocast.workflow.collect import collect_benchmark_predictions
 
 logger = logging.getLogger(__name__)
 
@@ -256,8 +255,7 @@ def handle_score_file(args: Any) -> None:
 def handle_adapt(args: Any) -> None:
     """
     Handler for 'retrocast adapt'.
-    Converts a raw predictions file into the standardized RetroCast schema using a specific adapter.
-    Does NOT require a full benchmark definition (infers targets from keys if needed).
+    Converts a raw route-ish artifact into a canonical route corpus.
     """
     input_path = Path(args.input)
     output_path = Path(args.output)
@@ -268,74 +266,64 @@ def handle_adapt(args: Any) -> None:
         sys.exit(1)
 
     try:
-        # 1. Load Resources
         adapter = get_adapter(adapter_name)
-        raw_data = load_json_gz(input_path)  # Assume JSON/GZ for now, could expand
+        raw_data = load_json_artifact(input_path)
 
-        # 2. Determine Targets
-        # If benchmark is provided, use it as source of truth.
-        # If not, iterate the raw_data keys and assume they are SMILES or IDs.
-        targets_to_process = []
-
+        benchmark_path: Path | None = None
+        benchmark = None
         if args.benchmark:
             benchmark_path = Path(args.benchmark)
             if not benchmark_path.exists():
                 logger.error(f"Benchmark file not found: {benchmark_path}")
                 sys.exit(1)
-            bm = load_benchmark(benchmark_path)
-            # Create (TargetInput, RawPayload) tuples
-            for tid, target in bm.targets.items():
-                payload = None
-                if tid in raw_data:
-                    payload = raw_data[tid]
-                elif target.smiles in raw_data:
-                    payload = raw_data[target.smiles]
+            benchmark = load_benchmark(benchmark_path)
 
-                if payload:
-                    targets_to_process.append((TargetInput(id=tid, smiles=target.smiles), payload))
+        input_kind = getattr(args, "input_kind", "provider-output")
+
+        stats = RunStatistics()
+        if input_kind == "target-keyed-provider-output":
+            if benchmark is None:
+                raise InputError(
+                    "target-keyed provider output requires --benchmark so keys can be resolved",
+                    code="input.missing_benchmark",
+                    context={"input_kind": input_kind},
+                )
+            route_corpus = adapt_target_keyed_provider_output(
+                raw_data,
+                benchmark,
+                adapter,
+                stats=stats,
+            )
+        elif input_kind == "provider-output":
+            route_corpus = adapt_provider_output(
+                raw_data,
+                adapter,
+                stats=stats,
+            )
         else:
-            logger.info("No benchmark provided. Inferring targets from raw data keys.")
-            if not isinstance(raw_data, dict):
-                logger.error("Raw data must be a dictionary to infer targets (key=SMILES or ID).")
-                sys.exit(1)
+            raise InputError(
+                f"unknown input kind: {input_kind}",
+                code="input.invalid_provider_output_kind",
+                context={"input_kind": input_kind},
+            )
+        stats.final_unique_routes_saved = len(route_corpus)
 
-            for key, payload in raw_data.items():
-                # We blindly assume the key is the SMILES for the TargetInput
-                # The adapter will validate this against the internal structure usually
-                # If key is an ID, this might fail strict SMILES validation in some adapters
-                # but 'TargetInput' doesn't validate SMILES format strictly on init.
-                targets_to_process.append((TargetInput(id=str(key), smiles=str(key)), payload))
+        save_route_corpus(route_corpus, output_path)
+        logger.info(
+            "Adapted %s canonical routes from %s raw route entries. Saved route corpus to %s",
+            len(route_corpus),
+            stats.total_routes_in_raw_files,
+            output_path,
+        )
 
-        # 3. Processing Loop
-        processed_routes = {}
-        success_count = 0
-
-        for target_input, payload in tqdm(targets_to_process, desc=f"Adapting ({adapter_name})"):
-            try:
-                routes = list(adapter.cast(payload, target=target_input))
-                if routes:
-                    unique = deduplicate_routes(routes)
-                    processed_routes[target_input.id] = unique
-                    success_count += 1
-                else:
-                    processed_routes[target_input.id] = []
-            except (AdapterError, ChemError) as e:
-                logger.debug(f"Failed to adapt {target_input.id}: {e}")
-                processed_routes[target_input.id] = []
-
-        # 4. Save
-        save_routes(processed_routes, output_path)
-        logger.info(f"Adapted {success_count}/{len(targets_to_process)} targets. Saved to {output_path}")
-
-        # 5. Manifest
         manifest_path = output_path.with_name(output_path.name + ".manifest.json")
         manifest = create_manifest(
             action="[cli]adapt",
-            sources=[input_path],
-            outputs=[(output_path, processed_routes, "predictions")],
+            sources=[input_path] + ([benchmark_path] if benchmark_path is not None else []),
+            outputs=[("route_corpus", output_path, route_corpus, "route_corpus")],
             root_dir=output_path.parent,
-            parameters={"adapter": adapter_name, "benchmark_provided": bool(args.benchmark)},
-            statistics={"n_routes_saved": sum(len(r) for r in processed_routes.values())},
+            parameters={"adapter": adapter_name, "benchmark_provided": bool(args.benchmark), "input_kind": input_kind},
+            statistics=stats.to_manifest_dict(),
         )
         with open(manifest_path, "w") as f:
             f.write(manifest.model_dump_json(indent=2))
@@ -345,4 +333,49 @@ def handle_adapt(args: Any) -> None:
         sys.exit(1)
     except Exception as e:
         logger.critical(f"Adaptation failed: {e}", exc_info=True)
+        sys.exit(1)
+
+
+def handle_collect(args: Any) -> None:
+    """Handler for 'retrocast collect'."""
+    input_path = Path(args.input)
+    benchmark_path = Path(args.benchmark)
+    output_path = Path(args.output)
+
+    if not input_path.exists():
+        logger.error(f"Input file not found: {input_path}")
+        sys.exit(1)
+    if not benchmark_path.exists():
+        logger.error(f"Benchmark file not found: {benchmark_path}")
+        sys.exit(1)
+
+    try:
+        benchmark = load_benchmark(benchmark_path)
+        route_corpus = load_route_corpus(input_path)
+        collected_routes = collect_benchmark_predictions(route_corpus, benchmark)
+
+        save_routes(collected_routes.routes_by_target, output_path)
+        logger.info(
+            "Collected %s routes by smiles. Saved %s benchmark-aligned routes to %s",
+            collected_routes.stats.matched_by_canonical_smiles,
+            collected_routes.stats.final_unique_routes_saved,
+            output_path,
+        )
+
+        manifest_path = output_path.with_name(output_path.name + ".manifest.json")
+        manifest = create_manifest(
+            action="[cli]collect",
+            sources=[input_path, benchmark_path],
+            outputs=[("predictions", output_path, collected_routes.routes_by_target, "predictions")],
+            root_dir=output_path.parent,
+            statistics=collected_routes.stats.model_dump(mode="json"),
+        )
+        with open(manifest_path, "w") as f:
+            f.write(manifest.model_dump_json(indent=2))
+
+    except RetroCastException as e:
+        log_expected_error(logger, "Collection failed", e, exc_info=True)
+        sys.exit(1)
+    except Exception as e:
+        logger.critical(f"Collection failed: {e}", exc_info=True)
         sys.exit(1)

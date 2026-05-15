@@ -21,7 +21,7 @@ import argparse
 import pickle
 from pathlib import Path
 
-from retrocast.adapters.retrostar_adapter import RetroStarAdapter
+from retrocast.adapters.retrostar_adapter import RetroStarAdapter, RetroStarRoutePayload
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import InvalidSmilesError, RetroCastException
 from retrocast.io import create_manifest, load_stock_file, save_json_gz
@@ -97,17 +97,18 @@ def create_benchmark_from_pickle(
 
             # Cast to Route object
             target_input = TargetInput(id=target_id, smiles=target_smiles)
-            cast_routes = list(adapter.cast({"succ": True, "routes": route_str}, target_input))
-
-            if not cast_routes:
-                raise ValueError("Adapter produced no routes")
-
-            route = cast_routes[0]
+            route = adapter.cast(
+                RetroStarRoutePayload(route_str=route_str, route_cost=None),
+                expected_target=target_input,
+            )
 
             # If checking buyables, filter out unsolvable routes
-            if check_buyables and not is_route_solved(route, stock):
-                unsolvable += 1
-                continue
+            if check_buyables:
+                if stock is None:
+                    raise ValueError("stock must be loaded when check_buyables=True")
+                if not is_route_solved(route, stock):
+                    unsolvable += 1
+                    continue
 
             # Create benchmark target
             benchmark_target = create_benchmark_target(
@@ -128,8 +129,8 @@ def create_benchmark_from_pickle(
     # Log route length distribution
     length_counts: dict[int, int] = {}
     for target in benchmark_targets.values():
-        if target.acceptable_routes:  # type: ignore
-            length = target.acceptable_routes[0].length  # type: ignore
+        if target.acceptable_routes:
+            length = target.acceptable_routes[0].length
             length_counts[length] = length_counts.get(length, 0) + 1
 
     if length_counts:
@@ -140,6 +141,8 @@ def create_benchmark_from_pickle(
     name = f"uspto-{n_success}"
 
     if check_buyables:
+        if stock is None:
+            raise ValueError("stock must be loaded when check_buyables=True")
         # All routes have been pre-filtered for solvability, so validation will pass
         description = f"USPTO-{n_success} benchmark with buyables-solvable routes from retro* pickle."
         benchmark = create_benchmark(

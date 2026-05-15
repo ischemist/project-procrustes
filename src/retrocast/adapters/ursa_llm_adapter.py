@@ -1,19 +1,15 @@
 from __future__ import annotations
 
-import gzip
-import json
 import logging
 import re
-from collections.abc import Generator
-from pathlib import Path
+from collections.abc import Iterator
 from typing import Any
 
-from retrocast.adapters.base_adapter import BaseAdapter
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
 from retrocast.adapters.errors import adapter_route_transform_error, adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import RetroCastException
-from retrocast.io.blob import save_json_gz
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import SmilesStr
 
@@ -39,22 +35,6 @@ def _extract_smiles(block: str) -> str | None:
     return inner if inner else None
 
 
-def _is_json_array_input(input_path: Path) -> bool:
-    name = input_path.name
-    if name.endswith((".json", ".json.gz")):
-        return True
-    if name.endswith((".jsonl", ".jsonl.gz")):
-        return False
-    raise ValueError("unsupported input format; expected .json, .json.gz, .jsonl, or .jsonl.gz")
-
-
-def _read_input_text(input_path: Path) -> str:
-    if input_path.suffix == ".gz":
-        with gzip.open(input_path, "rt", encoding="utf-8") as handle:
-            return handle.read()
-    return input_path.read_text(encoding="utf-8")
-
-
 def _extract_completion_text(raw_record: Any) -> str | None:
     if not isinstance(raw_record, dict):
         return None
@@ -62,94 +42,19 @@ def _extract_completion_text(raw_record: Any) -> str | None:
     return completion if isinstance(completion, str) else None
 
 
-def _extract_raw_completion(raw_record: Any) -> tuple[str, str] | None:
+def _extract_source_target_smiles(raw_record: Any) -> str | None:
     if not isinstance(raw_record, dict):
         return None
 
     meta = raw_record.get("meta")
-    completion = raw_record.get("completion")
-    if not isinstance(meta, dict) or not isinstance(completion, str):
+    if not isinstance(meta, dict):
         return None
 
     product_smiles = meta.get("product_smiles")
     if not isinstance(product_smiles, str):
         return None
 
-    return product_smiles, completion
-
-
-def load_ursa_llm_records(input_path: Path) -> list[Any]:
-    """Load raw Ursa completion records from json/jsonl, optionally gzipped."""
-    raw_text = _read_input_text(input_path).strip()
-    if not raw_text:
-        return []
-
-    if _is_json_array_input(input_path):
-        data = json.loads(raw_text)
-        if not isinstance(data, list):
-            raise ValueError("top-level JSON must be a list of records")
-        return data
-
-    records = []
-    for line in raw_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        records.append(json.loads(line))
-    return records
-
-
-def prepare_ursa_llm_results(input_path: Path) -> tuple[dict[str, list[dict[str, str]]], dict[str, int]]:
-    """Build the current benchmark-centric compatibility artifact from raw Ursa completions."""
-    records = load_ursa_llm_records(input_path)
-
-    grouped_completions: dict[str, list[dict[str, str]]] = {}
-    skipped_records = 0
-    accepted_records = 0
-
-    for raw_record in records:
-        prepared = _extract_raw_completion(raw_record)
-        if prepared is None:
-            skipped_records += 1
-            continue
-
-        product_smiles, completion = prepared
-        try:
-            canonical_target = canonicalize_smiles(product_smiles)
-        except RetroCastException:
-            skipped_records += 1
-            continue
-
-        grouped_completions.setdefault(canonical_target, []).append({"completion": completion})
-        accepted_records += 1
-
-    results = dict(sorted(grouped_completions.items()))
-    summary = {
-        "solved_count": len(results),
-        "total_records": len(records),
-        "accepted_records": accepted_records,
-        "skipped_records": skipped_records,
-    }
-    return results, summary
-
-
-def write_prepared_ursa_llm_results(*, input_path: Path, output_dir: Path) -> dict[str, int]:
-    """Persist the compatibility artifact for raw Ursa completions."""
-    results, summary = prepare_ursa_llm_results(input_path)
-    results_path = output_dir / "results.json.gz"
-
-    logger.info(
-        "found %s unique targets across %s accepted completions.",
-        summary["solved_count"],
-        summary["accepted_records"],
-    )
-    if summary["skipped_records"]:
-        logger.warning("skipped %s invalid or incomplete records.", summary["skipped_records"])
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    save_json_gz(results, results_path)
-    logger.info("successfully wrote pre-processed data to %s", results_path)
-    return summary
+    return product_smiles
 
 
 class UrsaLlmAdapter(BaseAdapter):
@@ -157,28 +62,76 @@ class UrsaLlmAdapter(BaseAdapter):
 
     adapter_key = "ursa-llm"
 
-    def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
-        if not isinstance(raw_target_data, list):
-            raise adapter_schema_error(self.adapter_key, target.id, "expected a list of completion records")
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+    ) -> Iterator[RawRouteEntry]:
+        target_id = source_key or "<unknown>"
+        if not isinstance(raw_data, list):
+            raise adapter_schema_error(self.adapter_key, target_id, "expected a list of completion records")
 
-        for rank, raw_record in enumerate(raw_target_data, start=1):
+        for row_index, raw_record in enumerate(raw_data, start=1):
             completion = _extract_completion_text(raw_record)
             if completion is None:
                 raise adapter_schema_error(
                     self.adapter_key,
-                    target.id,
+                    target_id,
                     "each completion record must be a dict with a string 'completion' field",
-                    record_index=rank - 1,
+                    record_index=row_index - 1,
                 )
-            try:
-                yield self._transform(completion, target, rank=rank, ignore_stereo=ignore_stereo)
-            except RetroCastException as e:
-                logger.warning(f"  - completion #{rank} for '{target.id}' failed transformation: {e} [{e.code}]")
-                continue
+            source_target_smiles = _extract_source_target_smiles(raw_record)
+            target_hint_smiles: str | None = None
+            if source_target_smiles is None:
+                if source_key is None:
+                    raise adapter_schema_error(
+                        self.adapter_key,
+                        target_id,
+                        "completion records must include meta.product_smiles",
+                        record_index=row_index - 1,
+                    )
+            else:
+                try:
+                    target_hint_smiles = canonicalize_smiles(source_target_smiles)
+                except RetroCastException as exc:
+                    raise adapter_schema_error(
+                        self.adapter_key,
+                        target_id,
+                        "completion record has invalid meta.product_smiles",
+                        record_index=row_index - 1,
+                    ) from exc
+            yield RawRouteEntry(
+                payload=completion,
+                source_key=source_key,
+                source_row_index=row_index,
+                target_hint_id=None,
+                target_hint_smiles=target_hint_smiles,
+                source_order=row_index,
+            )
 
-    def _transform(self, completion: str, target: TargetIdentity, rank: int, ignore_stereo: bool = False) -> Route:
+    def cast(
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
+        if not isinstance(raw_route, str):
+            raise adapter_schema_error(
+                self.adapter_key,
+                expected_target.id if expected_target is not None else "<unknown>",
+                "expected completion text",
+            )
+        if expected_target is None:
+            raise adapter_route_transform_error(
+                self.adapter_key,
+                "<unknown>",
+                "ursa llm adaptation requires an expected target",
+            )
+        return self._transform(raw_route, expected_target, ignore_stereo=ignore_stereo)
+
+    def _transform(self, completion: str, target: TargetIdentity, ignore_stereo: bool = False) -> Route:
         precursor_map = self._parse_completion(completion, ignore_stereo=ignore_stereo)
         if not precursor_map:
             raise adapter_route_transform_error(self.adapter_key, target.id, "no synthesis steps found in completion")
@@ -198,7 +151,7 @@ class UrsaLlmAdapter(BaseAdapter):
             ignore_stereo=ignore_stereo,
             adapter=self.adapter_key,
         )
-        return Route(target=molecule, rank=rank, metadata={})
+        return Route(target=molecule, metadata={})
 
     def _parse_completion(self, completion: str, ignore_stereo: bool = False) -> PrecursorMap:
         """Parse `<synthesis_step>` blocks from a completion into a precursor map."""
@@ -244,7 +197,4 @@ class UrsaLlmAdapter(BaseAdapter):
 
 __all__ = [
     "UrsaLlmAdapter",
-    "prepare_ursa_llm_results",
-    "write_prepared_ursa_llm_results",
-    "load_ursa_llm_records",
 ]

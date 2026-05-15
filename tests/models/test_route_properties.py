@@ -57,7 +57,7 @@ def simple_route_with_reactants(draw, min_reactants=2, max_reactants=5):
         synthesis_step=step,
     )
 
-    return Route(target=target, rank=1), reactants
+    return Route(target=target), reactants
 
 
 # =============================================================================
@@ -86,7 +86,7 @@ class TestRouteSignatureProperties:
             inchikey=route.target.inchikey,
             synthesis_step=shuffled_step,
         )
-        shuffled_route = Route(target=shuffled_target, rank=route.rank)
+        shuffled_route = Route(target=shuffled_target)
         shuffled_signature = shuffled_route.get_structural_signature()
 
         assert original_signature == shuffled_signature, "Signature should be identical regardless of reactant order"
@@ -141,7 +141,7 @@ class TestRouteSignatureProperties:
             inchikey=InchiKeyStr("CCCCCCCCCCCCC-CCCCCCCCCC-N"),
             synthesis_step=step1,
         )
-        route1 = Route(target=target1, rank=1)
+        route1 = Route(target=target1)
 
         # Route 2: target <- [B, A] (swapped)
         step2 = ReactionStep(reactants=[leaf_b, leaf_a])
@@ -150,7 +150,7 @@ class TestRouteSignatureProperties:
             inchikey=InchiKeyStr("CCCCCCCCCCCCC-CCCCCCCCCC-N"),
             synthesis_step=step2,
         )
-        route2 = Route(target=target2, rank=1)
+        route2 = Route(target=target2)
 
         assert route1.get_structural_signature() == route2.get_structural_signature(), (
             "Swapping left/right children should not change signature"
@@ -187,7 +187,7 @@ class TestRouteSignatureProperties:
             inchikey=InchiKeyStr("TARGET-INCHKEY-N"),
             synthesis_step=ReactionStep(reactants=[intermediate_a, leaf_3]),
         )
-        route1 = Route(target=target1, rank=1)
+        route1 = Route(target=target1)
 
         # Target with swapped intermediate reactants
         target2 = Molecule(
@@ -195,7 +195,7 @@ class TestRouteSignatureProperties:
             inchikey=InchiKeyStr("TARGET-INCHKEY-N"),
             synthesis_step=ReactionStep(reactants=[intermediate_a_swapped, leaf_3]),
         )
-        route2 = Route(target=target2, rank=1)
+        route2 = Route(target=target2)
 
         # Target with swapped top-level reactants
         target3 = Molecule(
@@ -203,7 +203,7 @@ class TestRouteSignatureProperties:
             inchikey=InchiKeyStr("TARGET-INCHKEY-N"),
             synthesis_step=ReactionStep(reactants=[leaf_3, intermediate_a]),  # Swapped
         )
-        route3 = Route(target=target3, rank=1)
+        route3 = Route(target=target3)
 
         sig1 = route1.get_structural_signature()
         sig2 = route2.get_structural_signature()
@@ -231,7 +231,7 @@ class TestRouteSignatureProperties:
                 inchikey=InchiKeyStr("TARGET-INCHIKEY-N"),
                 synthesis_step=step,
             )
-            route = Route(target=target, rank=1)
+            route = Route(target=target)
             signatures.append(route.get_structural_signature())
 
         # All 6 permutations should produce the same signature
@@ -255,24 +255,19 @@ class TestRouteContentHashProperties:
 
         assert hash1 == hash2, "Content hash must be deterministic"
 
-    @given(simple_route_with_reactants(), st.integers(min_value=1, max_value=100))
+    @given(simple_route_with_reactants(), st.floats(allow_nan=False, allow_infinity=False))
     @settings(max_examples=50)
     @pytest.mark.unit
-    def test_content_hash_changes_with_rank(self, route_and_reactants, new_rank):
-        """Test that content hash differs when rank changes."""
+    def test_content_hash_changes_with_metadata(self, route_and_reactants, score):
+        """Test that content hash differs when route metadata changes."""
         route, _ = route_and_reactants
-
-        # Create route with different rank
-        different_rank_route = Route(
+        changed_route = Route(
             target=route.target,
-            rank=new_rank if new_rank != route.rank else new_rank + 1,
+            metadata={"score": score},
         )
 
-        # Content hash should differ
-        assert route.get_content_hash() != different_rank_route.get_content_hash()
-
-        # But tree signature should be the same
-        assert route.get_structural_signature() == different_rank_route.get_structural_signature()
+        assert route.get_content_hash() != changed_route.get_content_hash()
+        assert route.get_structural_signature() == changed_route.get_structural_signature()
 
 
 class TestRouteTopologyProperties:
@@ -346,7 +341,6 @@ class TestSyntheticRouteFactory:
             route = synthetic_route_factory(structure, depth=depth)
 
             assert isinstance(route, Route)
-            assert route.rank == 1
             assert route.target is not None
             assert isinstance(route.get_structural_signature(), str)
 

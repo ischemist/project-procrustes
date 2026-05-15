@@ -7,25 +7,49 @@ Tests follow the testing framework philosophy:
 - Integration tests for end-to-end handler behavior
 """
 
+import json
 from argparse import Namespace
 from collections.abc import Generator
 from typing import Any
 
 import pytest
 
-from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.cli.adhoc import handle_adapt, handle_create_benchmark
+from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
+from retrocast.adapters.retrostar_adapter import RetroStarAdapter
+from retrocast.cli.adhoc import handle_adapt, handle_collect, handle_create_benchmark
 from retrocast.exceptions import ChemRuntimeError
 from retrocast.io.blob import load_json_gz, save_json_gz
-from retrocast.models.benchmark import BenchmarkSet
+from retrocast.io.data import load_route_corpus, save_route_corpus
+from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Route, TargetIdentity
+from retrocast.typing import SmilesStr
+from tests.helpers import _make_simple_route, _synthetic_inchikey
 
 
 class ChemFailingAdapter(BaseAdapter):
+    def iter_raw_entries(
+        self,
+        raw_data: Any,
+        *,
+        source_key: str | None = None,
+    ) -> Generator[RawRouteEntry, None, None]:
+        if isinstance(raw_data, dict):
+            for key, payload in raw_data.items():
+                yield RawRouteEntry(payload=payload, source_key=str(key))
+            return
+        yield RawRouteEntry(payload=raw_data, source_key=source_key)
+
     def cast(
-        self, raw_target_data: Any, target: TargetIdentity, ignore_stereo: bool = False
-    ) -> Generator[Route, None, None]:
-        raise ChemRuntimeError("synthetic chemistry failure", context={"target_id": target.id})
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
+        raise ChemRuntimeError(
+            "synthetic chemistry failure",
+            context={"target_id": expected_target.id if expected_target else None},
+        )
 
 
 @pytest.mark.integration
@@ -396,7 +420,7 @@ class TestHandleCreateBenchmark:
 class TestHandleAdapt:
     def test_adapt_skips_target_local_chem_failures(self, tmp_path, monkeypatch):
         input_path = tmp_path / "raw.json.gz"
-        output_path = tmp_path / "routes.json.gz"
+        output_path = tmp_path / "route-corpus.jsonl.gz"
         save_json_gz({"CCO": {"bad": "payload"}}, input_path)
         monkeypatch.setattr("retrocast.cli.adhoc.get_adapter", lambda name: ChemFailingAdapter())
 
@@ -409,7 +433,99 @@ class TestHandleAdapt:
 
         handle_adapt(args)
 
-        assert load_json_gz(output_path) == {"CCO": []}
+        assert load_route_corpus(output_path) == []
+
+    def test_adapt_loads_flat_jsonl_corpora(self, tmp_path):
+        input_path = tmp_path / "completions.jsonl"
+        output_path = tmp_path / "route-corpus.jsonl.gz"
+        record = {
+            "meta": {"product_smiles": "CC(=O)C"},
+            "completion": (
+                "<synthesis_step><product><smiles>CC(=O)C</smiles></product>"
+                "<reactant><smiles>CC(=O)O</smiles></reactant>"
+                "<reactant><smiles>C</smiles></reactant></synthesis_step>"
+            ),
+        }
+        input_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+        args = Namespace(
+            input=str(input_path),
+            output=str(output_path),
+            adapter="ursa-llm",
+            benchmark=None,
+        )
+
+        handle_adapt(args)
+
+        route_corpus = load_route_corpus(output_path)
+        assert len(route_corpus) == 1
+        assert route_corpus[0].target.smiles == "CC(C)=O"
+
+    def test_adapt_benchmark_does_not_reinterpret_provider_dict_as_target_keyed(self, tmp_path, monkeypatch):
+        input_path = tmp_path / "retrostar.json.gz"
+        output_path = tmp_path / "route-corpus.jsonl.gz"
+        benchmark_path = tmp_path / "benchmark.json.gz"
+        save_json_gz({"succ": True, "routes": "CC>>C"}, input_path)
+        monkeypatch.setattr("retrocast.cli.adhoc.get_adapter", lambda name: RetroStarAdapter())
+
+        benchmark = BenchmarkSet(
+            name="provider-output-test",
+            targets={
+                "target_1": BenchmarkTarget(
+                    id="target_1",
+                    smiles=SmilesStr("CC"),
+                    inchi_key=_synthetic_inchikey("CC"),
+                    acceptable_routes=[],
+                )
+            },
+        )
+        save_json_gz(benchmark.model_dump(mode="json"), benchmark_path)
+
+        args = Namespace(
+            input=str(input_path),
+            output=str(output_path),
+            adapter="retrostar",
+            benchmark=str(benchmark_path),
+            input_kind="provider-output",
+        )
+
+        handle_adapt(args)
+
+        route_corpus = load_route_corpus(output_path)
+        assert len(route_corpus) == 1
+        assert route_corpus[0].target.smiles == "CC"
+
+    def test_collect_builds_benchmark_keyed_routes(self, tmp_path):
+        input_path = tmp_path / "route-corpus.jsonl.gz"
+        benchmark_path = tmp_path / "benchmark.json.gz"
+        output_path = tmp_path / "routes.json.gz"
+
+        save_route_corpus([_make_simple_route("CC", "C")], input_path)
+
+        benchmark = BenchmarkSet(
+            name="collect-test",
+            targets={
+                "target_1": BenchmarkTarget(
+                    id="target_1",
+                    smiles=SmilesStr("CC"),
+                    inchi_key=_synthetic_inchikey("CC"),
+                    acceptable_routes=[],
+                )
+            },
+        )
+        save_json_gz(benchmark.model_dump(mode="json"), benchmark_path)
+
+        args = Namespace(
+            input=str(input_path),
+            benchmark=str(benchmark_path),
+            output=str(output_path),
+        )
+
+        handle_collect(args)
+
+        saved_routes = load_json_gz(output_path)
+        assert list(saved_routes.keys()) == ["target_1"]
+        assert len(saved_routes["target_1"]) == 1
 
 
 if __name__ == "__main__":

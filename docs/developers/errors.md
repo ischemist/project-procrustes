@@ -52,10 +52,11 @@ except ValidationError as exc:
 Handle failures by class and code, not by message text:
 
 ```python
+from retrocast.workflow.adapt import adapt_target_routes
 from retrocast.exceptions import AdapterError, ChemError
 
 try:
-    routes = list(adapter.cast(raw_payload, target=target))
+    routes = list(adapt_target_routes(adapter, raw_payload, target))
 except (AdapterError, ChemError) as exc:
     stats.record_failure(exc.code, target_id=target_id)
     routes = []
@@ -78,7 +79,7 @@ except (AdapterError, ChemError) as exc:
 
 ## Adapter Policy
 
-Adapter schema errors are fatal for one target payload and counted by the workflow. Individual route transform errors may be logged and skipped when the adapter can keep processing the rest of the target.
+Adapter schema errors are fatal for one raw payload or entry and counted by the workflow. Individual route transform errors may be logged and skipped when the adapter can keep processing the rest of the input artifact.
 
 Route root mismatches should use `adapter.target_mismatch`; malformed raw payloads should use `adapter.schema_invalid`.
 

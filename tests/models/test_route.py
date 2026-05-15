@@ -20,9 +20,8 @@ class TestRoute:
             smiles=SmilesStr("CCO"),
             inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         assert route.target == target
-        assert route.rank == 1
         assert route.metadata == {}
 
     def test_depth_single_leaf(self):
@@ -31,7 +30,7 @@ class TestRoute:
             smiles=SmilesStr("CCO"),
             inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         assert route.length == 0
 
     def test_depth_single_step(self):
@@ -50,7 +49,7 @@ class TestRoute:
             inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
             synthesis_step=step,
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         assert route.length == 1
 
     def test_depth_multi_step_linear(self):
@@ -76,7 +75,7 @@ class TestRoute:
             synthesis_step=ReactionStep(reactants=[intermediate2]),
         )
 
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         assert route.length == 3
 
     def test_iter_steps_and_reactions_are_root_first(self):
@@ -91,7 +90,7 @@ class TestRoute:
             inchikey=InchiKeyStr("FAKE-KEY-1"),
             synthesis_step=ReactionStep(reactants=[intermediate], mapped_smiles="CO>>COC"),
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
 
         assert [step.mapped_smiles for step in route.iter_steps()] == ["CO>>COC", "C>>CO"]
         assert [(reaction.product.smiles, reaction.step.mapped_smiles) for reaction in route.iter_reactions()] == [
@@ -123,7 +122,7 @@ class TestRoute:
             synthesis_step=ReactionStep(reactants=[intermediate_left, leaf2]),
         )
 
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         # Max depth: 1 (to intermediate_left) + 1 (to leaf1) = 2 for left branch
         # Right branch is just 1 (to leaf2)
         # So max is 2
@@ -135,7 +134,7 @@ class TestRoute:
             smiles=SmilesStr("CCO"),
             inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         assert route.leaves == {target}
         assert len(route.leaves) == 1
 
@@ -155,7 +154,7 @@ class TestRoute:
             inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
             synthesis_step=step,
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         assert route.leaves == {reactant1, reactant2}
         assert len(route.leaves) == 2
 
@@ -177,7 +176,7 @@ class TestRoute:
             inchikey=InchiKeyStr("FAKE-KEY-4"),
             synthesis_step=step,
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         assert len(route.leaves) == 2  # Deduplicated
         assert common_reactant in route.leaves
         assert unique_reactant in route.leaves
@@ -198,7 +197,7 @@ class TestRoute:
             inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
             synthesis_step=step,
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
 
         sig1 = route.get_structural_signature()
         sig2 = route.get_structural_signature()
@@ -224,7 +223,7 @@ class TestRoute:
             inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
             synthesis_step=step1,
         )
-        route1 = Route(target=target1, rank=1)
+        route1 = Route(target=target1)
 
         # Create identical second route (different objects, same structure)
         reactant1_copy = Molecule(
@@ -241,7 +240,7 @@ class TestRoute:
             inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
             synthesis_step=step2,
         )
-        route2 = Route(target=target2, rank=2)
+        route2 = Route(target=target2)
 
         assert route1.get_structural_signature() == route2.get_structural_signature()
 
@@ -263,7 +262,7 @@ class TestRoute:
             inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
             synthesis_step=step1,
         )
-        route1 = Route(target=target1, rank=1)
+        route1 = Route(target=target1)
 
         # Different route (different reactants)
         reactant3 = Molecule(
@@ -276,7 +275,7 @@ class TestRoute:
             inchikey=InchiKeyStr("OKKJLVBELUTLKV-UHFFFAOYSA-N"),
             synthesis_step=step2,
         )
-        route2 = Route(target=target2, rank=1)
+        route2 = Route(target=target2)
 
         assert route1.get_structural_signature() != route2.get_structural_signature()
 
@@ -298,7 +297,7 @@ class TestRoute:
             inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
             synthesis_step=step1,
         )
-        route1 = Route(target=target1, rank=1)
+        route1 = Route(target=target1)
 
         # Reversed order
         reactant1_copy = Molecule(
@@ -315,7 +314,7 @@ class TestRoute:
             inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
             synthesis_step=step2,
         )
-        route2 = Route(target=target2, rank=1)
+        route2 = Route(target=target2)
 
         # Should be the same due to sorting in get_signature
         assert route1.get_structural_signature() == route2.get_structural_signature()
@@ -352,7 +351,7 @@ class TestRoute:
             synthesis_step=ReactionStep(reactants=[branch1_intermediate, branch2_intermediate]),
         )
 
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         signature = route.get_structural_signature()
 
         # Should produce a valid signature
@@ -366,7 +365,7 @@ class TestRoute:
             inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
         )
         metadata = {"total_score": 0.95, "search_time": 42.5}
-        route = Route(target=target, rank=1, metadata=metadata)
+        route = Route(target=target, metadata=metadata)
         assert route.metadata["total_score"] == 0.95
         assert route.metadata["search_time"] == 42.5
 
@@ -376,7 +375,7 @@ class TestRoute:
             smiles=SmilesStr("CCO"),
             inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         assert route.has_convergent_reaction is False
 
     def test_has_convergent_reaction_linear_route(self):
@@ -402,7 +401,7 @@ class TestRoute:
             synthesis_step=ReactionStep(reactants=[intermediate2]),
         )
 
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         assert route.has_convergent_reaction is False
 
     def test_has_convergent_reaction_two_leaves_combine(self):
@@ -421,7 +420,7 @@ class TestRoute:
             inchikey=InchiKeyStr("XEKOWRVHYACXOJ-UHFFFAOYSA-N"),
             synthesis_step=step,
         )
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         assert route.has_convergent_reaction is False
 
     def test_has_convergent_reaction_two_intermediates_combine(self):
@@ -449,7 +448,7 @@ class TestRoute:
             synthesis_step=ReactionStep(reactants=[intermediate1, intermediate2]),
         )
 
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         assert route.has_convergent_reaction is True
 
     def test_has_convergent_reaction_nested_convergence(self):
@@ -484,7 +483,7 @@ class TestRoute:
             synthesis_step=ReactionStep(reactants=[intermediate3]),
         )
 
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         assert route.has_convergent_reaction is True
 
     def test_has_convergent_reaction_one_intermediate_one_leaf(self):
@@ -504,5 +503,5 @@ class TestRoute:
             synthesis_step=ReactionStep(reactants=[intermediate, leaf2]),
         )
 
-        route = Route(target=target, rank=1)
+        route = Route(target=target)
         assert route.has_convergent_reaction is False

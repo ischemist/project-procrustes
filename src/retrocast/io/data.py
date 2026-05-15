@@ -16,7 +16,7 @@ from retrocast.exceptions import (
     ArtifactNotFoundError,
     ArtifactWriteError,
 )
-from retrocast.io.blob import iter_jsonl_gz, iter_lines_gz, load_json_gz, save_json_gz
+from retrocast.io.blob import iter_jsonl_gz, iter_lines_gz, load_json_gz, save_json_gz, save_jsonl_gz
 from retrocast.io.provenance import create_manifest
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
 from retrocast.models.chem import Route, StockStatistics
@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 # Pre-define the adapter for performance and reuse
 RoutesDict = dict[str, list[Route]]
 _ROUTES_ADAPTER = TypeAdapter(RoutesDict)
+_ROUTE_ADAPTER = TypeAdapter(Route)
 
 
 def save_routes(routes: RoutesDict, path: Path) -> None:
@@ -134,6 +135,37 @@ def load_raw_paroutes_list(path: Path) -> list[dict]:
 def load_training_route_records(path: Path) -> list[TrainingRouteRecord]:
     """Load structured route training records from a JSONL artifact."""
     return list(iter_training_route_records(path))
+
+
+def save_route_corpus(routes: Iterator[Route] | list[Route], path: Path) -> int:
+    """Save a canonical route corpus to a JSONL artifact."""
+    path = Path(path)
+    try:
+        return save_jsonl_gz((route.model_dump(mode="json") for route in routes), path)
+    except (OSError, TypeError, ValueError) as e:
+        raise ArtifactWriteError(
+            f"Failed to save route corpus to {path}: {e}",
+            code="io.write_failed",
+            context={"path": str(path), "artifact": "route_corpus"},
+        ) from e
+
+
+def load_route_corpus(path: Path) -> list[Route]:
+    """Load a canonical route corpus from a JSONL artifact."""
+    return list(iter_route_corpus(path))
+
+
+def iter_route_corpus(path: Path) -> Iterator[Route]:
+    """Stream a canonical route corpus from a JSONL artifact."""
+    for row_index, row in enumerate(iter_jsonl_gz(path), start=1):
+        try:
+            yield _ROUTE_ADAPTER.validate_python(row)
+        except ValidationError as e:
+            raise ArtifactFormatError(
+                f"Invalid route corpus JSONL format in {path}: {e}",
+                code="io.invalid_artifact_shape",
+                context={"path": str(path), "artifact": "route_corpus", "row_index": row_index},
+            ) from e
 
 
 def iter_training_route_records(path: Path) -> Iterator[TrainingRouteRecord]:

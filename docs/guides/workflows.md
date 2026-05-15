@@ -152,8 +152,8 @@ uv run scripts/04-rank.py \
 
 **Terminal:** Table showing:
 
-- Expected rank (E[rank])
-- Probability of achieving 1st place (P(rank=1))
+- Expected rank (`E[rank]`)
+- Probability of achieving 1st place (`P(rank=1)`)
 
 **File:** `data/6-comparisons/stratified-linear-600/ranking_heatmap_top-1.html`
 

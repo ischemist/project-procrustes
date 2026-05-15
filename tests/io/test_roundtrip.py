@@ -423,14 +423,13 @@ class TestPredictionsContentHash:
 
         assert _calculate_predictions_content_hash(routes1) == _calculate_predictions_content_hash(routes2)
 
-    def test_content_sensitive_rank_change(self, synthetic_route_factory):
-        """Changing route rank should change hash."""
+    def test_content_sensitive_route_order_change(self, synthetic_route_factory):
+        """Changing route list order should change the predictions hash."""
         route1 = synthetic_route_factory("linear", depth=1)
-        route2 = synthetic_route_factory("linear", depth=1)
-        route2.rank = 2
+        route2 = synthetic_route_factory("linear", depth=2)
 
-        routes1 = {"t1": [route1]}
-        routes2 = {"t1": [route2]}
+        routes1 = {"t1": [route1, route2]}
+        routes2 = {"t1": [route2, route1]}
 
         assert _calculate_predictions_content_hash(routes1) != _calculate_predictions_content_hash(routes2)
 
@@ -571,7 +570,6 @@ class TestRouteRoundtrip:
 
         loaded_route = loaded["target_1"][0]
         assert loaded_route.target.smiles == route.target.smiles
-        assert loaded_route.rank == route.rank
         assert loaded_route.length == route.length
 
     def test_empty_routes_dict(self, tmp_path):
@@ -584,14 +582,11 @@ class TestRouteRoundtrip:
 
         assert loaded == {}
 
-    def test_multiple_routes_preserve_rank_order(self, tmp_path, synthetic_route_factory):
-        """Multiple routes for same target should preserve ranks."""
+    def test_multiple_routes_preserve_list_order(self, tmp_path, synthetic_route_factory):
+        """Multiple routes for the same target should preserve list order."""
         route1 = synthetic_route_factory("linear", depth=1)
         route2 = synthetic_route_factory("linear", depth=2)
         route3 = synthetic_route_factory("linear", depth=3)
-        route1.rank = 1
-        route2.rank = 2
-        route3.rank = 3
 
         routes = {"target": [route1, route2, route3]}
         path = tmp_path / "routes.json.gz"
@@ -599,7 +594,7 @@ class TestRouteRoundtrip:
         save_routes(routes, path)
         loaded = load_routes(path)
 
-        assert [r.rank for r in loaded["target"]] == [1, 2, 3]
+        assert [route.length for route in loaded["target"]] == [1, 2, 3]
 
     def test_load_routes_missing_file_raises_not_found_code(self, tmp_path):
         """Missing routes files should be typed as missing artifacts."""
