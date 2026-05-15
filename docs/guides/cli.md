@@ -101,6 +101,8 @@ The data directory is resolved with the following priority:
 ### `adapt` - Convert Raw Predictions
 
 Convert raw output from a supported model into a canonical route corpus.
+This is the standalone standardization step introduced in v0.6: it does not
+need a benchmark unless the raw file is already target-keyed.
 
 ```bash
 retrocast adapt \
@@ -120,6 +122,7 @@ retrocast adapt \
 ### `collect` - Align a Route Corpus to a Benchmark
 
 Collect a canonical route corpus into the benchmark-keyed `routes.json.gz` artifact used for scoring.
+This is the benchmark-alignment step that used to be hidden inside `ingest`.
 
 ```bash
 retrocast collect \
@@ -238,6 +241,8 @@ All paths are relative to your data directory (default: `data/retrocast/`).
 ### `ingest` - Adapt and Collect Routes
 
 Transforms raw model outputs into benchmark-keyed routes by running adaptation and collection as one command.
+In v0.6, this command remains as the project-mode convenience wrapper around
+the two lower-level operations: `adapt` followed by `collect`.
 
 ```bash
 retrocast ingest \

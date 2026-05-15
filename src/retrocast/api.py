@@ -74,6 +74,7 @@ from retrocast.workflow import analyze as analyze_workflow
 from retrocast.workflow import score as score_workflow
 from retrocast.workflow.adapt import adapt_benchmark_keyed_route_corpus as adapt_benchmark_keyed_route_corpus
 from retrocast.workflow.adapt import adapt_provider_output as adapt_provider_output
+from retrocast.workflow.adapt import adapt_route as adapt_route
 from retrocast.workflow.adapt import adapt_route_corpus as adapt_route_corpus
 from retrocast.workflow.adapt import adapt_target_keyed_provider_output as adapt_target_keyed_provider_output
 from retrocast.workflow.adapt import adapt_target_routes as adapt_target_routes

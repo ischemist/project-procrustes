@@ -1,5 +1,6 @@
 from typing import Any
 
+from retrocast._warnings import warn_deprecated
 from retrocast.adapters.aizynth_adapter import AizynthAdapter
 from retrocast.adapters.askcos_adapter import AskcosAdapter
 from retrocast.adapters.base_adapter import BaseAdapter
@@ -58,7 +59,15 @@ def adapt_single_route(
     target: TargetIdentity,
     adapter_name: str,
 ) -> Route | None:
-    """Adapt a single raw route to the unified Route format."""
+    """Deprecated wrapper returning the first route from a target-local payload."""
+    warn_deprecated(
+        old="adapt_single_route",
+        new="adapt_route(...)",
+        remove_in="0.7",
+        note="This wrapper returns the first successful route or None; "
+        "use target-free `adapt_route(...)` for single-route adaptation.",
+        stacklevel=2,
+    )
     adapter = get_adapter(adapter_name)
     try:
         return next(adapt_target_routes(adapter, raw_route, target), None)

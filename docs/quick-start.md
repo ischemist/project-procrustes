@@ -188,6 +188,9 @@ Read [Concepts](concepts.md) to understand why we use adapters and manifests.
 **Use the Python API**  
 Want to use RetroCast inside your own scripts? See the [Library Guide](guides/library.md).
 
+**Migrating from v0.5.x**  
+See the [Changelog](changelog.md) for the v0.6 adapter workflow split.
+
 **Write Custom Adapters**  
 Need to support a new output format? Learn how to write an [Adapter](developers/adapters.md).
 

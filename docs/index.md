@@ -64,6 +64,7 @@ New to RetroCast? Start here:
 - **[Concepts](concepts.md)** - Understand the architecture and philosophy
 - **[CLI Reference](guides/cli.md)** - Full command documentation
 - **[Python Library](guides/library.md)** - Integrate RetroCast into your research pipelines
+- **[Changelog](changelog.md)** - Release notes and migration guides
 - **[Training Sets](guides/training-sets.md)** - Load PaRoutes route and reaction training artifacts
 - **[Training-Set Release Rationale](rationale/training-set-releases.md)** - How PaRoutes route and single-step releases are created
 - **[Error Handling](developers/errors.md)** - Stable error codes and boundary contracts

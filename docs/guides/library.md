@@ -39,26 +39,46 @@ RetroCast is designed as a modular Python library. While the CLI handles file-ba
     ```bash
     pip install retrocast[viz]
     ```
-## Standardization (Adapters)
+## Standardization And Benchmark Collection
 
-The most common use case is converting raw model outputs into the canonical `Route` format. This creates a unified interface for any downstream task.
+Before v0.6, RetroCast's public mental model centered on `ingest`: take raw
+predictions, adapt them, and write benchmark-keyed `routes.json.gz`. That is
+still useful, but it hides two different operations.
 
-### Adapting the First Route
+In v0.6, those operations are exposed as separate library workflows:
 
-```python title="Convert target-local raw output to one Route object" hl_lines="6 9"
-from retrocast import adapt_single_route, TargetInput
+| Workflow | Input | Output | Requires benchmark targets? |
+| --- | --- | --- | --- |
+| Adaptation | Raw provider output | Canonical `Route` objects | No |
+| Benchmark collection | Canonical `Route` objects plus a benchmark | Target-keyed route mapping | Yes |
 
-# 1. Define the target context
-target = TargetInput(id="mol-1", smiles="CCO") # (1)!
+Use adaptation when you want the general library promise: "give me whatever the
+planner emitted and I will give you standard `Route` objects." Use benchmark
+collection only when you need the `routes.json.gz` shape for benchmark scoring
+or aggregate target-level statistics.
 
-# 2. Provide one target-local payload from your model
+RetroCast uses two naming axes for adapter workflows:
+
+| Name | Raw or canonical? | Target-keyed? | Function |
+| --- | --- | --- | --- |
+| raw route-like payload | Raw provider output | No | `adapt_route(raw_route, adapter)` |
+| `provider_output` | Raw provider output | No | `adapt_provider_output(provider_output, adapter)` |
+| `target_keyed_provider_output` | Raw provider output | Yes | `adapt_target_keyed_provider_output(raw, benchmark, adapter)` |
+| `routes` | Canonical `Route` objects | No | returned by adaptation functions |
+| `target_keyed_routes` | Canonical `Route` objects | Yes | `collect_benchmark_predictions(routes, benchmark)` |
+
+### Adapt One Route
+
+```python title="Convert one raw route-like payload to one Route" hl_lines="1 10"
+from retrocast import adapt_route, get_adapter
+
 raw_data = {
     "smiles": "CCO",
-    "children": [{"smiles": "CC", "children": []}, {"smiles": "O", "children": []}] # (2)!
+    "children": [{"smiles": "CC", "children": []}, {"smiles": "O", "children": []}], # (1)!
 }
 
-# 3. Return the first successful Route
-route = adapt_single_route([raw_data], target, adapter_name="dms") # (3)!
+adapter = get_adapter("dms")
+route = adapt_route(raw_data, adapter) # (2)!
 
 if route:
     print(f"Length: {route.length}")
@@ -66,33 +86,27 @@ if route:
     print(f"Hash: {route.content_hash}") # (4)!
 ```
 
-1. ID is a unique identifier for the target molecule
-2. Raw data format varies by model - this is a DMS example
-3. Adapter automatically handles schema validation and tree construction
+1. Raw route-like payload format varies by model - this is a DMS example
+2. `adapt_route(...)` returns the first successfully adapted `Route`, or `None`
+3. Adapters infer target identity from the route payload when it includes it
 4. Content hash used for deduplication
 
-### Adapting Batch Predictions
+### Adapt Provider Output
 
-```python title="Process multiple predictions" hl_lines="8 11"
-from retrocast import adapt_routes, deduplicate_routes, TargetInput
+```python title="Convert raw provider output to canonical routes" hl_lines="1 8"
+from retrocast import adapt_provider_output, deduplicate_routes, get_adapter
 
-# Create target list
-targets = [TargetInput(id=f"t{i}", smiles=s) for i, s in enumerate(smiles_list)]
-all_routes = []
+adapter = get_adapter("aizynth")
 
-for target, raw_output in zip(targets, model_outputs):
-    # Adapt raw predictions to Route objects
-    routes = adapt_routes(raw_output, target, adapter_name="aizynth") # (1)!
-    
-    # Deduplicate based on topological signature
-    unique_routes = deduplicate_routes(routes) # (2)!
-    
-    all_routes.extend(unique_routes)
+# raw_provider_output can be one planner dump, service response, script output,
+# or any shape the selected adapter knows how to split into route entries.
+routes = adapt_provider_output(raw_provider_output, adapter) # (1)!
+unique_routes = deduplicate_routes(routes) # (2)!
 
-print(f"Total unique routes: {len(all_routes)}")
+print(f"Total unique routes: {len(unique_routes)}")
 ```
 
-1. `adapt_routes` returns a list of successful Route objects
+1. `adapt_provider_output` returns successful canonical `Route` objects
 2. Deduplication uses cryptographic hashing of route topology
 
 !!! info "Available adapters"
@@ -101,12 +115,12 @@ print(f"Total unique routes: {len(all_routes)}")
     
     `aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa-llm`
 
-### Explicit Adaptation Workflows
+### Collect For A Benchmark
 
-For corpus-level processing, prefer the explicit workflow functions instead of the
-target-local convenience wrappers.
+Collection is a separate step. It takes canonical routes and assigns them to
+benchmark targets, producing the target-keyed shape used by scoring.
 
-```python title="Adapt then collect" hl_lines="1 11"
+```python title="Adapt then collect" hl_lines="1 13"
 from retrocast import (
     adapt_provider_output,
     adapt_target_keyed_provider_output,
@@ -117,20 +131,28 @@ from retrocast import (
 
 adapter = get_adapter("ursa-llm")
 
-# Provider output: one raw blob from a planner, service, script, or jsonl corpus.
+# Target-free adaptation: raw provider output -> list[Route].
 routes = adapt_provider_output(raw_provider_output, adapter)
 
-# Target-keyed provider output: mapping[target_id or smiles, raw payload].
 benchmark = load_benchmark("benchmark.json.gz")
+
+# Optional benchmark-aware adaptation for already target-keyed raw output.
 routes = adapt_target_keyed_provider_output(raw_mapping, benchmark, adapter)
 
-# Routes -> benchmark-keyed routes.json.gz shape.
+# Benchmark collection: list[Route] -> dict[target_id, list[Route]].
 collected = collect_benchmark_predictions(routes, benchmark)
 routes_by_target = collected.routes_by_target
 ```
 
-Use `adapt_single_route(...)` and `adapt_routes(...)` when you already have
-target-local payloads in memory and just need the convenience wrappers.
+`adapt_target_keyed_provider_output(...)` is not required for ordinary
+standardization. Use it only when the raw provider output is already keyed by
+target ID or target SMILES and you want RetroCast to validate those keys against
+a benchmark during adaptation.
+
+`adapt_routes(...)` is a lower-level target-local compatibility helper for
+callers that already have a single target context in memory.
+`adapt_single_route(...)` is deprecated in v0.6 and will be removed in v0.7; use
+`adapt_route(...)` for target-free single-route adaptation.
 
 !!! note "Route ordering"
 
@@ -453,10 +475,11 @@ fig.write_html("diagnostics.html")
 
 | Function | Purpose | Returns |
 |:---------|:--------|:--------|
-| `adapt_single_route(raw, target, adapter)` | Return first successful route from a target-local payload | `Route \| None` |
-| `adapt_routes(raw, target, adapter)` | Convert multiple routes | `list[Route]` |
+| `adapt_route(raw, adapter)` | Adapt the first successful route from raw provider output | `Route \| None` |
 | `adapt_provider_output(raw, adapter)` | Adapt one raw provider output | `list[Route]` |
 | `adapt_target_keyed_provider_output(raw, benchmark, adapter)` | Adapt raw output keyed by target id or smiles | `list[Route]` |
+| `adapt_routes(raw, target, adapter)` | Lower-level target-local compatibility helper | `list[Route]` |
+| `adapt_single_route(raw, target, adapter)` | Deprecated in v0.6; use `adapt_route(raw, adapter)` | `Route \| None` |
 | `collect_benchmark_predictions(routes, benchmark)` | Collect a route corpus onto a benchmark | `CollectedBenchmarkRoutes` |
 | `deduplicate_routes(routes)` | Remove duplicate routes | `list[Route]` |
 | `score_predictions(benchmark, predictions, stock)` | Evaluate routes | `ScoredResults` |

@@ -24,7 +24,7 @@ def _normalize_collection_policy(policy: str, *, name: str) -> Literal["ignore",
         warn_deprecated(
             old=f"{name}={policy!r}",
             new=f"{name}='ignore'",
-            remove_in="0.6",
+            remove_in="0.7",
             note="'skip' and 'report' were aliases for the ignore behavior.",
             stacklevel=3,
         )

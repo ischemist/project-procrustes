@@ -1,5 +1,6 @@
 import pytest
 
+from retrocast._warnings import RetroCastFutureWarning
 from retrocast.adapters import ADAPTER_MAP, ADAPTER_TYPES, adapt_single_route, get_adapter
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.exceptions import RetroCastException
@@ -48,7 +49,8 @@ def test_adapt_single_route_uses_target_local_payload_contract():
         }
     ]
 
-    route = adapt_single_route(raw_routes, target, "aizynth")
+    with pytest.warns(RetroCastFutureWarning, match="adapt_single_route"):
+        route = adapt_single_route(raw_routes, target, "aizynth")
 
     assert route is not None
     assert route.target.smiles == "CC"

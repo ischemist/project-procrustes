@@ -24,21 +24,18 @@ ROUTES_PATH = DATA_DIR / "3-processed/mkt-cnv-160/dms-explorer-xl/routes.json.gz
 class TestLibraryAPIWithRealData:
     """Test library API examples from docs/library.md using real DMS data."""
 
-    def test_adapt_single_route_example(self):
-        """Test Section 1.1: Adapting a Single Route"""
-        from retrocast import TargetInput, adapt_single_route
+    def test_adapt_route_example(self):
+        """Test Section 1.1: Adapting one route."""
+        from retrocast import adapt_route, get_adapter
 
-        # 1. Define the target context
-        target = TargetInput(id="mol-1", smiles="CCO")
-
-        # 2. Provide raw data (simple DMS-style tree structure)
+        # 1. Provide raw data (simple DMS-style tree structure)
         raw_data = {
             "smiles": "CCO",
             "children": [{"smiles": "CC", "children": []}, {"smiles": "O", "children": []}],
         }
 
-        # 3. Cast to Route
-        route = adapt_single_route([raw_data], target, adapter_name="dms")
+        # 2. Cast to Route
+        route = adapt_route(raw_data, get_adapter("dms"))
 
         # Validate the route was created successfully
         assert route is not None
@@ -173,6 +170,7 @@ class TestLibraryAPIMinimal:
         from retrocast import (
             ADAPTER_MAP,
             TargetInput,
+            adapt_route,
             adapt_routes,
             adapt_single_route,
             deduplicate_routes,
@@ -186,6 +184,7 @@ class TestLibraryAPIMinimal:
         )
 
         # Verify functions are callable
+        assert callable(adapt_route)
         assert callable(adapt_single_route)
         assert callable(adapt_routes)
         assert callable(deduplicate_routes)

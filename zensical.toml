@@ -21,6 +21,7 @@ nav = [
   { "Home" = "index.md" },
   { "Quick Start" = "quick-start.md" },
   { "Concepts" = "concepts.md" },
+  { "Changelog" = "changelog.md" },
   { "Guides" = [
     "guides/cli.md",
     "guides/library.md",

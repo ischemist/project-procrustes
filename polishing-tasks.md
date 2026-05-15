@@ -25,7 +25,9 @@ the canonical output nouns are:
 
 - renamed `adapt_route_corpus(...)` to `adapt_provider_output(...)`
 - renamed `adapt_benchmark_keyed_route_corpus(...)` to `adapt_target_keyed_provider_output(...)`
+- added `adapt_route(...)` for target-free single-route adaptation
 - kept deprecated aliases for both old names with `RetroCastFutureWarning`
+- deprecated `adapt_single_route(...)` with guidance to use `adapt_route(...)`
 - removed `dict`-shape inference from workflow and ad hoc cli adaptation
 - added explicit `--input-kind provider-output | target-keyed-provider-output`
 - defaulted ad hoc `retrocast adapt` to `provider-output`
@@ -44,10 +46,11 @@ the canonical output nouns are:
 
 library callable renames use `FutureWarning` through `RetroCastFutureWarning`.
 
-deprecated names scheduled for removal in `0.6`:
+deprecated names scheduled for removal in `0.7`:
 
 - `adapt_route_corpus(...)`
 - `adapt_benchmark_keyed_route_corpus(...)`
+- `adapt_single_route(...)`
 - `on_unmatched="skip" | "report"`
 - `on_ambiguous="skip" | "report"`
 

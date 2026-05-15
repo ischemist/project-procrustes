@@ -170,6 +170,26 @@ def adapt_provider_output(
     return list(iter_adapted_routes(provider_output, adapter, ignore_stereo=ignore_stereo, stats=stats))
 
 
+def adapt_route(
+    raw_route: Any,
+    adapter: BaseAdapter,
+    *,
+    ignore_stereo: bool = False,
+    stats: RunStatistics | None = None,
+) -> Route | None:
+    """Return one canonical Route from one raw route-like payload."""
+    entry = RawRouteEntry(payload=raw_route)
+    return next(
+        _adapt_entries(
+            iter([entry]),
+            adapter,
+            ignore_stereo=ignore_stereo,
+            stats=stats,
+        ),
+        None,
+    )
+
+
 def adapt_target_keyed_provider_output(
     target_keyed_provider_output: Mapping[Any, Any],
     benchmark: BenchmarkSet,
@@ -201,7 +221,7 @@ def adapt_route_corpus(
     warn_deprecated(
         old="adapt_route_corpus(...)",
         new="adapt_provider_output(...)",
-        remove_in="0.6",
+        remove_in="0.7",
         stacklevel=2,
     )
     return adapt_provider_output(raw_data, adapter, ignore_stereo=ignore_stereo, stats=stats)
@@ -219,7 +239,7 @@ def adapt_benchmark_keyed_route_corpus(
     warn_deprecated(
         old="adapt_benchmark_keyed_route_corpus(...)",
         new="adapt_target_keyed_provider_output(...)",
-        remove_in="0.6",
+        remove_in="0.7",
         stacklevel=2,
     )
     return adapt_target_keyed_provider_output(

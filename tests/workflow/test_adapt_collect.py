@@ -12,6 +12,7 @@ from retrocast.typing import SmilesStr
 from retrocast.workflow.adapt import (
     adapt_benchmark_keyed_route_corpus,
     adapt_provider_output,
+    adapt_route,
     adapt_route_corpus,
     adapt_target_keyed_provider_output,
 )
@@ -58,6 +59,19 @@ class RouteFirstSyntheticAdapter(BaseAdapter):
         return route
 
 
+class SingleRouteSyntheticAdapter(BaseAdapter):
+    """Minimal adapter for one raw route-like payload."""
+
+    def cast(
+        self,
+        raw_route: Any,
+        *,
+        ignore_stereo: bool = False,
+        expected_target: TargetIdentity | None = None,
+    ) -> Route:
+        return raw_route if isinstance(raw_route, Route) else Route.model_validate(raw_route)
+
+
 @pytest.fixture
 def synthetic_benchmark() -> BenchmarkSet:
     return BenchmarkSet(
@@ -95,6 +109,14 @@ class TestAdaptProviderOutput:
 
         assert len(routes) == 2
         assert [route.target.smiles for route in routes] == ["CC", "CCC"]
+
+    def test_adapt_route_accepts_one_route_like_payload_without_target_context(self):
+        raw_data = _make_simple_route("CC", "C", rank=9).model_dump(mode="json")
+
+        route = adapt_route(raw_data, SingleRouteSyntheticAdapter())
+
+        assert route is not None
+        assert route.target.smiles == "CC"
 
     def test_adapt_target_keyed_provider_output_filters_to_benchmark_targets(self, synthetic_benchmark):
         raw_data = {
