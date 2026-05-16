@@ -39,7 +39,7 @@ jobs:
 
       - name: create pull request
         if: steps.cleanup.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           branch: cooldown-guard/reconcile
           commit-message: relax cooldown exception after window elapsed
