@@ -4,18 +4,34 @@ icon: lucide/history
 
 # Changelog
 
-## v0.6 Adapter Workflow Split
+## v0.6.0
 
-v0.6 makes the adapter API more explicit. Earlier versions centered the public workflow on `ingest`, which did two jobs at once:
+v0.6.0 makes RetroCast more useful as a general route-standardization library, not only as a benchmark runner. The main design change is the split between adapting provider output into canonical predictions and collecting those predictions onto benchmark targets for scoring.
+
+For the full machine-generated change list, see the GitHub comparison after the release tag is published: [v0.5.3...v0.6.0](https://github.com/ischemist/project-procrustes/compare/v0.5.3...v0.6.0).
+
+### Highlights
+
+- Added `PredictedRoute`, an envelope around canonical `Route` chemistry for provider-level rank, score, confidence, source row, and metadata.
+- Split adaptation from benchmark collection with `adapt_provider_output(...)`, `adapt_target_keyed_provider_output(...)`, and `collect_benchmark_predictions(...)`.
+- Kept `retrocast ingest` as the project-mode convenience command for the common raw-output-to-benchmark-routes workflow.
+- Added route-corpus IO and CLI support for streamable prediction artifacts such as `.jsonl.gz`.
+- Added support for flat LLM completion corpora with `<synthesis_step>` XML blocks.
+- Added new adapter coverage, including MolBuilder, and renamed public adapter classes/slugs toward canonical planner names.
+- Added stable error codes for adapter, IO, CLI, and workflow boundaries, with ingest failure counts persisted into manifests.
+- Added PaRoutes training-set release utilities and hosted dataset loaders.
+- Improved release packaging so PyPI releases build from the release tag, support intentional dev releases, and use Hatchling/Hatch VCS for dynamic versions.
+
+### Adapter Workflow Split
+
+Earlier versions centered the public workflow on `ingest`, which did two jobs at once:
 
 1. standardize raw planner output into canonical `Route` objects
 2. collect those routes onto benchmark targets and write `routes.json.gz`
 
-That shape worked for benchmark runs, but it made RetroCast feel less like a general route-standardization library. In v0.6, standardization and benchmark collection are separate library workflows. `ingest` still exists as the project-mode convenience command that runs both.
+That shape worked for benchmark runs, but it made RetroCast feel less like a general route-standardization library. In v0.6.0, standardization and benchmark collection are separate library workflows. `ingest` still exists as the one-command wrapper that runs both.
 
-### What Changed
-
-| Before v0.6 | v0.6 replacement | Why |
+| Before v0.6.0 | v0.6.0 replacement | Why |
 | --- | --- | --- |
 | `adapt_single_route(raw, target, adapter_name)` | `adapt_route(raw_route, adapter)` | The one-route API no longer requires target context when the raw route carries its own target. |
 | `adapt_routes(raw, target, adapter_name)` | `adapt_provider_output(raw_provider_output, adapter)` | Standardization can now handle one provider output without benchmark target context. |
@@ -23,13 +39,22 @@ That shape worked for benchmark runs, but it made RetroCast feel less like a gen
 | `retrocast ingest` for project-mode benchmark runs | still `retrocast ingest` | Project mode keeps the one-command convenience wrapper. |
 | `Route.rank` | `PredictedRoute.rank` during provider-output adaptation, list order in scoring inputs | Keeps canonical `Route` free of benchmark/list-position metadata while preserving provider rank. |
 
-Provider-output adaptation APIs now return `PredictedRoute`, an envelope around canonical `Route` chemistry. It carries provider-level metadata such as rank, score, confidence, and source row provenance. `adapt_route(...)` remains the single-payload chemistry API and returns `Route | None`; use `adapt_prediction(...)` when you explicitly want a one-off prediction envelope. Scoring artifacts remain benchmark-keyed `dict[target_id, list[Route]]` so existing evaluation semantics stay stable.
+Provider-output adaptation APIs now return `PredictedRoute`, an envelope around canonical `Route` chemistry. It carries provider-level metadata such as rank, score, confidence, and source row provenance. `adapt_route(...)` remains the single-payload chemistry API and returns `Route | None`; use `adapt_prediction(...)` when you explicitly want a one-off prediction envelope.
 
-Prediction manifest `content_hash` values are now order-sensitive within each target because route list order is the ranking signal. Re-exported manifests can therefore differ from older manifests even when the route structures are otherwise identical.
+Scoring artifacts remain benchmark-keyed `dict[target_id, list[Route]]` so existing evaluation semantics stay stable. Prediction manifest `content_hash` values are now order-sensitive within each target because route list order is the ranking signal. Re-exported manifests can therefore differ from older manifests even when the route structures are otherwise identical.
 
-`adapt_single_route(...)` and `adapt_routes(...)` emit `RetroCastFutureWarning` in v0.6 and are scheduled for removal in v0.9. See the [deprecation schedule](developers/deprecations.md) for the current removal plan.
+### Deprecations
 
-### 1-5 Minute Migration
+The v0.6.0 compatibility layer intentionally warns instead of removing the old names immediately. These surfaces are scheduled for removal in v0.9.0:
+
+- legacy adapter slugs such as `aizynth`, `dms`, `dreamretro`, and `ursa-llm`
+- legacy adapter class aliases such as `AizynthAdapter`, `DMSAdapter`, `DreamRetroAdapter`, and `UrsaLlmAdapter`
+- target-local adaptation helpers such as `adapt_single_route(...)`, `adapt_routes(...)`, `adapt_route_corpus(...)`, and `adapt_benchmark_keyed_route_corpus(...)`
+- collection policy aliases `skip` and `report`
+
+See the [deprecation schedule](developers/deprecations.md) for the canonical removal plan.
+
+### Migration
 
 For one raw route-like payload:
 
@@ -81,8 +106,6 @@ collected = collect_benchmark_predictions(predictions, benchmark)
 routes_by_target = collected.routes_by_target
 ```
 
-### CLI Migration
-
 Ad-hoc CLI users can now run the two steps explicitly:
 
 ```bash
@@ -98,4 +121,4 @@ retrocast collect \
   --output routes.json.gz
 ```
 
-Project-mode users can keep using `retrocast ingest`. In v0.6 it remains the one-command wrapper that adapts raw output and then collects routes onto the selected benchmark.
+Project-mode users can keep using `retrocast ingest`.
