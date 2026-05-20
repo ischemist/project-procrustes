@@ -44,8 +44,8 @@ dev = [
 ]
 
 [build-system]
-requires = ["setuptools>=64", "setuptools-scm>=8"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.27.0", "hatch-vcs>=0.5.0"]
+build-backend = "hatchling.build"
 
 [tool.coverage.run]
 omit = [
@@ -91,12 +91,23 @@ lint.select = [
 ]
 lint.ignore = ["E501", "SIM108"]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.hatch.version]
+source = "vcs"
 
-[tool.setuptools_scm]
+[tool.hatch.version.raw-options]
 version_scheme = "guess-next-dev"
 local_scheme = "no-local-version"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/retrocast"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/LICENSE",
+  "/README.md",
+  "/pyproject.toml",
+  "/src/retrocast",
+]
 
 [tool.ty.src]
 exclude = ["tests", "scripts"]

@@ -169,7 +169,7 @@ def __getattr__(name: str) -> Any:
     warn_deprecated(
         old=f"{__name__}.{name}",
         new=f"{__name__}.DreamRetroErAdapter",
-        remove_in="0.7",
+        remove_in="0.9",
         stacklevel=2,
     )
     globals()[name] = adapter_type

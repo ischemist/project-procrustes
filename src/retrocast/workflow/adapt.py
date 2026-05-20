@@ -288,7 +288,7 @@ def adapt_route_corpus(
     warn_deprecated(
         old="adapt_route_corpus(...)",
         new="adapt_provider_output(...)",
-        remove_in="0.7",
+        remove_in="0.9",
         stacklevel=2,
     )
     return adapt_provider_output(raw_data, adapter, ignore_stereo=ignore_stereo, stats=stats)
@@ -306,7 +306,7 @@ def adapt_benchmark_keyed_route_corpus(
     warn_deprecated(
         old="adapt_benchmark_keyed_route_corpus(...)",
         new="adapt_target_keyed_provider_output(...)",
-        remove_in="0.7",
+        remove_in="0.9",
         stacklevel=2,
     )
     return adapt_target_keyed_provider_output(
