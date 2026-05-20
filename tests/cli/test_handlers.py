@@ -239,7 +239,7 @@ class TestHandleList:
         # Create manifests with directives
         manifest_a = {
             "schema_version": "1.1",
-            "directives": {"adapter": "aizynth", "raw_results_filename": "results.json.gz"},
+            "directives": {"adapter": "aizynthfinder", "raw_results_filename": "results.json.gz"},
             "action": "test",
             "parameters": {},
             "source_files": [],
@@ -248,7 +248,7 @@ class TestHandleList:
         }
         manifest_b = {
             "schema_version": "1.1",
-            "directives": {"adapter": "dms", "raw_results_filename": "results.json.gz"},
+            "directives": {"adapter": "directmultistep", "raw_results_filename": "results.json.gz"},
             "action": "test",
             "parameters": {},
             "source_files": [],
@@ -270,8 +270,8 @@ class TestHandleList:
         assert "2 models" in captured.out
         assert "model-a" in captured.out
         assert "model-b" in captured.out
-        assert "aizynth" in captured.out
-        assert "dms" in captured.out
+        assert "aizynthfinder" in captured.out
+        assert "directmultistep" in captured.out
 
     def test_handle_list_no_manifests(self, tmp_path, capsys):
         """Test list handler with no manifests."""
@@ -321,7 +321,7 @@ class TestHandleIngest:
             json.dump(
                 {
                     "schema_version": "1.1",
-                    "directives": {"adapter": "ursa-llm", "raw_results_filename": "completions.jsonl"},
+                    "directives": {"adapter": "ursa", "raw_results_filename": "completions.jsonl"},
                     "action": "test",
                     "parameters": {},
                     "source_files": [],

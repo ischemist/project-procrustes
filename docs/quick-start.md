@@ -66,7 +66,7 @@ By default, RetroCast uses `data/retrocast/` with subdirectories for benchmarks,
 For one-off runs, pass the adapter directly to `ingest`:
 
 ```bash
-retrocast ingest --model my-new-model --dataset mkt-cnv-160 --adapter aizynth
+retrocast ingest --model my-new-model --dataset mkt-cnv-160 --adapter aizynthfinder
 ```
 
 For repeatable raw-data folders, put a `manifest.json` next to the raw results file with `directives.adapter` and, when needed, `directives.raw_results_filename`. If no filename is declared, project-mode ingest reads `results.json.gz`.

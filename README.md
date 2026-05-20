@@ -91,7 +91,7 @@ Have a raw output file from a model? Score it immediately.
 # Convert raw AiZynthFinder JSON to RetroCast format
 retrocast adapt \
     --input raw_predictions.json.gz \
-    --adapter aizynth \
+    --adapter aizynthfinder \
     --output routes.json.gz
 
 # Score against a stock file
@@ -120,7 +120,7 @@ Project mode reads raw model outputs from `data/retrocast/2-raw/<model>/<benchma
 ```json
 {
   "directives": {
-    "adapter": "dms",
+    "adapter": "directmultistep",
     "raw_results_filename": "predictions.json"
   }
 }
@@ -130,7 +130,7 @@ Project mode reads raw model outputs from `data/retrocast/2-raw/<model>/<benchma
 
 ```bash
 # 1. Ingest: Standardize raw outputs from data/2-raw/
-retrocast ingest --model dms-explorer --dataset ref-lin-600 --adapter dms
+retrocast ingest --model dms-explorer --dataset ref-lin-600 --adapter directmultistep
 
 # 2. Score: Evaluate against the benchmark's defined stock
 retrocast score --model dms-explorer --dataset ref-lin-600

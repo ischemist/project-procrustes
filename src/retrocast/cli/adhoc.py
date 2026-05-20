@@ -7,7 +7,7 @@ from typing import Any
 
 from rich.console import Console
 
-from retrocast.adapters import ADAPTER_MAP, get_adapter
+from retrocast.adapters import ADAPTER_TYPES, DEPRECATED_ADAPTER_SLUGS, get_adapter, normalize_adapter_slug
 from retrocast.api import score_predictions
 from retrocast.cli.errors import log_expected_error
 from retrocast.cli.progress import create_cli_progress, estimate_raw_route_entries, quiet_info_logs
@@ -39,10 +39,10 @@ def handle_list_adapters(args: Any) -> None:
     """
     # Mapping of adapter names to their display names and format descriptions
     adapter_info = {
-        "aizynth": ("AiZynthFinder", "bipartite graph"),
+        "aizynthfinder": ("AiZynthFinder", "bipartite graph"),
         "askcos": ("ASKCOS", "custom format"),
-        "dms": ("DirectMultiStep", "recursive dict"),
-        "dreamretro": ("DreamRetro", "precursor map"),
+        "directmultistep": ("DirectMultiStep", "recursive dict"),
+        "dreamretroer": ("DreamRetroEr", "precursor map"),
         "multistepttl": ("MultiStepTTL", "custom format"),
         "paroutes": ("PaRoutes", "reference format"),
         "retrochimera": ("RetroChimera", "precursor map"),
@@ -50,13 +50,16 @@ def handle_list_adapters(args: Any) -> None:
         "synllama": ("SynLlama", "precursor map"),
         "synplanner": ("SynPlanner", "bipartite graph"),
         "syntheseus": ("Syntheseus", "bipartite graph"),
-        "ursa-llm": ("Ursa LLM", "<synthesis_step> XML blocks"),
+        "ursa": ("URSA", "<synthesis_step> XML blocks"),
     }
 
     print("Available adapters:")
-    for name in sorted(ADAPTER_MAP.keys()):
+    for name in sorted(ADAPTER_TYPES.keys()):
         display_name, format_type = adapter_info.get(name, (name, "unknown format"))
         print(f"  - {name}: {display_name} ({format_type})")
+        aliases = [alias for alias, canonical in DEPRECATED_ADAPTER_SLUGS.items() if canonical == name]
+        if aliases:
+            print(f"      deprecated aliases: {', '.join(sorted(aliases))}")
 
 
 def _find_column(fieldnames: Sequence[str], candidates: Sequence[str]) -> str | None:
@@ -278,6 +281,7 @@ def handle_adapt(args: Any) -> None:
         sys.exit(1)
 
     try:
+        adapter_name = normalize_adapter_slug(adapter_name)
         adapter = get_adapter(adapter_name)
         raw_data = load_json_artifact(input_path)
 

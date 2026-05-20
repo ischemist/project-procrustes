@@ -452,7 +452,7 @@ class TestHandleAdapt:
         args = Namespace(
             input=str(input_path),
             output=str(output_path),
-            adapter="ursa-llm",
+            adapter="ursa",
             benchmark=None,
         )
 

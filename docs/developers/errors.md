@@ -25,8 +25,8 @@ All boundary-facing exceptions expose:
 ```json
 {
   "code": "adapter.schema_invalid",
-  "message": "raw data for target 'x' failed DMS schema validation",
-  "context": { "adapter": "dms", "target_id": "x" },
+  "message": "raw data for target 'x' failed DirectMultiStep schema validation",
+  "context": { "adapter": "directmultistep", "target_id": "x" },
   "retryable": false
 }
 ```
@@ -45,7 +45,7 @@ from retrocast.adapters.errors import adapter_schema_error
 try:
     validated = MyRawOutput.model_validate(raw_target_data)
 except ValidationError as exc:
-    raise adapter_schema_error("dms", target.id, "invalid route list") from exc
+    raise adapter_schema_error("directmultistep", target.id, "invalid route list") from exc
 ```
 
 Handle failures by class and code, not by message text:

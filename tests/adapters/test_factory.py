@@ -32,9 +32,9 @@ from retrocast.models.chem import TargetInput
 def test_get_adapter_known_adapter():
     """
     tests that a known adapter name returns an instance of baseadapter.
-    we test one specific case ('aizynth') to ensure the mechanism works.
+    we test one specific case ('aizynthfinder') to ensure the mechanism works.
     """
-    adapter_name = "aizynth"
+    adapter_name = "aizynthfinder"
     adapter = get_adapter(adapter_name)
     assert isinstance(adapter, BaseAdapter)
     assert isinstance(adapter, ADAPTER_TYPES[adapter_name])
@@ -53,12 +53,28 @@ def test_get_adapter_unknown_adapter_raises_exception():
     assert exc_info.value.context["adapter"] == unknown_name
 
 
+@pytest.mark.parametrize(
+    ("old_slug", "new_slug"),
+    [
+        ("aizynth", "aizynthfinder"),
+        ("dms", "directmultistep"),
+        ("dreamretro", "dreamretroer"),
+        ("ursa-llm", "ursa"),
+    ],
+)
+def test_get_adapter_warns_for_deprecated_slugs(old_slug, new_slug):
+    with pytest.warns(RetroCastFutureWarning, match=old_slug):
+        adapter = get_adapter(old_slug)
+
+    assert isinstance(adapter, ADAPTER_TYPES[new_slug])
+
+
 def test_public_adapter_names_match_registry_slugs():
     assert {
-        "aizynth": AiZynthFinderAdapter,
+        "aizynthfinder": AiZynthFinderAdapter,
         "askcos": AskcosAdapter,
-        "dms": DirectMultiStepAdapter,
-        "dreamretro": DreamRetroErAdapter,
+        "directmultistep": DirectMultiStepAdapter,
+        "dreamretroer": DreamRetroErAdapter,
         "molbuilder": MolBuilderAdapter,
         "multistepttl": MultiStepTTLAdapter,
         "paroutes": PaRoutesAdapter,
@@ -67,7 +83,7 @@ def test_public_adapter_names_match_registry_slugs():
         "synllama": SynLlamaAdapter,
         "synplanner": SynPlannerAdapter,
         "syntheseus": SyntheseusAdapter,
-        "ursa-llm": UrsaAdapter,
+        "ursa": UrsaAdapter,
     } == ADAPTER_TYPES
 
 
@@ -128,7 +144,7 @@ def test_adapt_single_route_uses_target_local_payload_contract():
     ]
 
     with pytest.warns(RetroCastFutureWarning, match="adapt_single_route"):
-        route = adapt_single_route(raw_routes, target, "aizynth")
+        route = adapt_single_route(raw_routes, target, "aizynthfinder")
 
     assert route is not None
     assert route.target.smiles == "CC"
@@ -153,7 +169,7 @@ def test_adapt_routes_warns_for_target_local_payload_contract():
     ]
 
     with pytest.warns(RetroCastFutureWarning, match="adapt_routes"):
-        routes = adapt_routes(raw_routes, target, "aizynth")
+        routes = adapt_routes(raw_routes, target, "aizynthfinder")
 
     assert len(routes) == 1
     assert routes[0].target.smiles == "CC"

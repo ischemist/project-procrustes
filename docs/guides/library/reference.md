@@ -39,4 +39,4 @@ for name in ADAPTER_MAP:
 
 Supported adapters:
 
-`aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa-llm`
+`aizynthfinder`, `askcos`, `directmultistep`, `dreamretroer`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa`

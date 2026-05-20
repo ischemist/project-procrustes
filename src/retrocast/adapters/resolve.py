@@ -70,38 +70,40 @@ def resolve_adapter(
         AdapterResolutionError: If no adapter can be resolved from any source.
     """
     # Avoid circular import — ADAPTER_MAP is built at import time in __init__
-    from retrocast.adapters import ADAPTER_MAP, get_adapter
+    from retrocast.adapters import ADAPTER_TYPES, all_adapter_slugs, get_adapter, normalize_adapter_slug
 
     # 1. CLI override (explicit intent)
     if cli_adapter is not None:
-        if cli_adapter not in ADAPTER_MAP:
+        canonical_adapter = normalize_adapter_slug(cli_adapter)
+        if canonical_adapter not in ADAPTER_TYPES:
             raise AdapterResolutionError(
-                f"CLI adapter '{cli_adapter}' is not a valid adapter. Available: {sorted(ADAPTER_MAP.keys())}",
+                f"CLI adapter '{cli_adapter}' is not a valid adapter. Available: {all_adapter_slugs()}",
                 code="adapter.unknown",
-                context={"source": "cli", "adapter": cli_adapter, "available": sorted(ADAPTER_MAP.keys())},
+                context={"source": "cli", "adapter": cli_adapter, "available": all_adapter_slugs()},
             )
-        logger.info(f"Resolved adapter '{cli_adapter}' from cli")
-        return get_adapter(cli_adapter), "cli"
+        logger.info(f"Resolved adapter '{canonical_adapter}' from cli")
+        return get_adapter(canonical_adapter), "cli"
 
     # 2. Manifest directives (self-describing data)
     directives = _read_manifest_directives(raw_dir)
     manifest_adapter = directives.get("adapter")
 
     if manifest_adapter is not None:
-        if manifest_adapter not in ADAPTER_MAP:
+        canonical_adapter = normalize_adapter_slug(manifest_adapter)
+        if canonical_adapter not in ADAPTER_TYPES:
             raise AdapterResolutionError(
                 f"Manifest in {raw_dir} declares adapter '{manifest_adapter}', "
-                f"but it is not a valid adapter. Available: {sorted(ADAPTER_MAP.keys())}",
+                f"but it is not a valid adapter. Available: {all_adapter_slugs()}",
                 code="adapter.unknown",
                 context={
                     "source": "manifest",
                     "adapter": manifest_adapter,
                     "raw_dir": str(raw_dir),
-                    "available": sorted(ADAPTER_MAP.keys()),
+                    "available": all_adapter_slugs(),
                 },
             )
-        logger.info(f"Resolved adapter '{manifest_adapter}' from manifest")
-        return get_adapter(manifest_adapter), "manifest"
+        logger.info(f"Resolved adapter '{canonical_adapter}' from manifest")
+        return get_adapter(canonical_adapter), "manifest"
 
     # 3. Failure — no guessing
     raise AdapterResolutionError(

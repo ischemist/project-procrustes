@@ -164,7 +164,7 @@ class TestLibraryAPIWithRealData:
         assert len(adapter_names) > 0
 
         # Verify expected adapters are present (from docs)
-        expected_adapters = ["aizynth", "dms", "retrostar", "askcos"]
+        expected_adapters = ["aizynthfinder", "directmultistep", "retrostar", "askcos"]
         for adapter in expected_adapters:
             assert adapter in adapter_names, f"Expected adapter '{adapter}' not found in ADAPTER_MAP"
 

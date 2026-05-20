@@ -157,7 +157,7 @@ Some models have unique structures that don't fit the above patterns (e.g., grap
 
 `UrsaAdapter` is the reference example of a route-first adapter for flat raw artifacts. Its input is a completion corpus containing `<synthesis_step>` XML blocks, usually as `.jsonl` or `.jsonl.gz`, not a benchmark-keyed `results.json.gz` mapping.
 
-- canonical adapter key: `ursa-llm`
+- canonical adapter key: `ursa`
 - raw artifact shape: list of records with `completion` text and `meta.product_smiles`
 - adapter seam:
   - `iter_raw_entries(...)` yields one `RawRouteEntry` per completion row
@@ -319,7 +319,7 @@ Once your adapter logic is written, you must register it so the CLI can find it.
     from retrocast.adapters.my_adapter import MyModelAdapter
 
     ADAPTER_TYPES = {
-        "aizynth": AiZynthFinderAdapter,
+        "aizynthfinder": AiZynthFinderAdapter,
         # ...
         "my-model": MyModelAdapter, # (1)!
     }
@@ -327,15 +327,17 @@ Once your adapter logic is written, you must register it so the CLI can find it.
 
     1. Use a descriptive, lowercase key with hyphens
 
-=== "2. Update Config"
+=== "2. Reference The Adapter"
 
-    When using the adapter in a project, reference the key from `ADAPTER_TYPES` in your `retrocast-config.yaml`:
+    When using the adapter in a project, reference the key from `ADAPTER_TYPES` with `--adapter` or in the raw directory manifest:
 
-    ```yaml title="retrocast-config.yaml"
-    models:
-      experimental-run-1:
-        adapter: my-model # (1)!
-        raw_results_filename: predictions.json
+    ```json title="data/retrocast/2-raw/experimental-run-1/my-benchmark/manifest.json"
+    {
+      "directives": {
+        "adapter": "my-model",
+        "raw_results_filename": "predictions.json"
+      }
+    }
     ```
 
     1. Must match the key you added to `ADAPTER_TYPES`

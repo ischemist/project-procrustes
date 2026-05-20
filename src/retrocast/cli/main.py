@@ -53,7 +53,11 @@ def main() -> None:
     )
     adapt_parser.add_argument("--input", required=True, help="Path to raw predictions (.json.gz)")
     adapt_parser.add_argument("--output", required=True, help="Path to save route corpus (.jsonl.gz)")
-    adapt_parser.add_argument("--adapter", required=True, help="Name of the adapter to use (e.g. aizynth, dms)")
+    adapt_parser.add_argument(
+        "--adapter",
+        required=True,
+        help="Name of the adapter to use (e.g. aizynthfinder, directmultistep)",
+    )
     adapt_parser.add_argument(
         "--input-kind",
         choices=["provider-output", "target-keyed-provider-output"],

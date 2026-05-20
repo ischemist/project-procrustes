@@ -88,7 +88,7 @@ Ad-hoc CLI users can now run the two steps explicitly:
 ```bash
 retrocast adapt \
   --input raw_predictions.json.gz \
-  --adapter aizynth \
+  --adapter aizynthfinder \
   --input-kind provider-output \
   --output route-corpus.jsonl.gz
 

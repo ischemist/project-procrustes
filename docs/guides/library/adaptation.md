@@ -146,4 +146,4 @@ Use `adapt_target_keyed_provider_output(...)` when your planner writes a mapping
 
 See the [adapter developer guide](../../developers/adapters.md#common-architecture-patterns).
 
-`aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa-llm`
+`aizynthfinder`, `askcos`, `directmultistep`, `dreamretroer`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa`

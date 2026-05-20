@@ -20,10 +20,10 @@ from retrocast.models.chem import Route, TargetIdentity
 from retrocast.workflow.adapt import adapt_target_routes
 
 ADAPTER_TYPES: dict[str, type[BaseAdapter]] = {
-    "aizynth": AiZynthFinderAdapter,
+    "aizynthfinder": AiZynthFinderAdapter,
     "askcos": AskcosAdapter,
-    "dms": DirectMultiStepAdapter,
-    "dreamretro": DreamRetroErAdapter,
+    "directmultistep": DirectMultiStepAdapter,
+    "dreamretroer": DreamRetroErAdapter,
     "molbuilder": MolBuilderAdapter,
     "multistepttl": MultiStepTTLAdapter,
     "paroutes": PaRoutesAdapter,
@@ -32,11 +32,18 @@ ADAPTER_TYPES: dict[str, type[BaseAdapter]] = {
     "synplanner": SynPlannerAdapter,
     "syntheseus": SyntheseusAdapter,
     "synllama": SynLlamaAdapter,
-    "ursa-llm": UrsaAdapter,
+    "ursa": UrsaAdapter,
 }
 
 ADAPTER_MAP: dict[str, BaseAdapter] = {
     adapter_name: adapter_type() for adapter_name, adapter_type in ADAPTER_TYPES.items()
+}
+
+DEPRECATED_ADAPTER_SLUGS: dict[str, str] = {
+    "aizynth": "aizynthfinder",
+    "dms": "directmultistep",
+    "dreamretro": "dreamretroer",
+    "ursa-llm": "ursa",
 }
 
 _DEPRECATED_ADAPTER_ALIASES: dict[str, type[BaseAdapter]] = {
@@ -80,14 +87,39 @@ def get_adapter(adapter_name: str) -> BaseAdapter:
     """
     Retrieves a fresh adapter instance from the adapter registry.
     """
-    adapter_type = ADAPTER_TYPES.get(adapter_name)
+    canonical_name = normalize_adapter_slug(adapter_name)
+    adapter_type = ADAPTER_TYPES.get(canonical_name)
     if adapter_type is None:
         raise AdapterResolutionError(
             f"unknown adapter '{adapter_name}'. Check `retrocast.adapters.ADAPTER_MAP` for available adapters.",
             code="adapter.unknown",
-            context={"adapter": adapter_name, "available": sorted(ADAPTER_TYPES.keys())},
+            context={
+                "adapter": adapter_name,
+                "available": sorted(ADAPTER_TYPES.keys()),
+                "deprecated_aliases": sorted(DEPRECATED_ADAPTER_SLUGS.keys()),
+            },
         )
     return adapter_type()
+
+
+def normalize_adapter_slug(adapter_name: str) -> str:
+    """Return the canonical adapter slug, warning for deprecated pre-0.7 slugs."""
+    canonical_name = DEPRECATED_ADAPTER_SLUGS.get(adapter_name)
+    if canonical_name is None:
+        return adapter_name
+    warn_deprecated(
+        old=f"adapter slug '{adapter_name}'",
+        new=f"'{canonical_name}'",
+        remove_in="0.7",
+        note="Update --adapter flags and manifest directives.",
+        stacklevel=3,
+    )
+    return canonical_name
+
+
+def all_adapter_slugs() -> list[str]:
+    """Return canonical and deprecated adapter slugs accepted by get_adapter."""
+    return sorted([*ADAPTER_TYPES.keys(), *DEPRECATED_ADAPTER_SLUGS.keys()])
 
 
 def adapt_single_route(
@@ -137,7 +169,7 @@ def adapt_routes(
         >>> target = TargetIdentity(id="ibuprofen", smiles="CC(C)Cc1ccc(cc1)C(C)C(=O)O")
         >>> raw_routes = [route1, route2, route3, ...]  # Your model's output
         >>>
-        >>> routes = adapt_routes(raw_routes, target, "aizynth", max_routes=10)
+        >>> routes = adapt_routes(raw_routes, target, "aizynthfinder", max_routes=10)
         >>> print(f"Adapted {len(routes)} routes successfully")
     """
     warn_deprecated(
@@ -162,8 +194,11 @@ __all__ = [
     "adapt_single_route",
     "adapt_routes",
     "get_adapter",
+    "normalize_adapter_slug",
+    "all_adapter_slugs",
     "ADAPTER_MAP",
     "ADAPTER_TYPES",
+    "DEPRECATED_ADAPTER_SLUGS",
     "BaseAdapter",
     "AiZynthFinderAdapter",
     "AizynthAdapter",

@@ -105,7 +105,7 @@ Convert raw output from a supported model into a prediction route corpus. This i
 ```bash
 retrocast adapt \
   --input raw_predictions.json.gz \
-  --adapter aizynth \
+  --adapter aizynthfinder \
   --input-kind provider-output \
   --output route-corpus.jsonl.gz \
   --benchmark benchmark.json.gz \
@@ -119,7 +119,7 @@ retrocast adapt \
 
 By default, `adapt` shows route-level progress with count, elapsed time, ETA, and routes per second.
 
-**Supported adapters:** `aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa-llm`
+**Supported adapters:** `aizynthfinder`, `askcos`, `directmultistep`, `dreamretroer`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa`
 
 ### `collect` - Align a Route Corpus to a Benchmark
 
@@ -201,7 +201,7 @@ If the raw filename is not declared in `manifest.json`, ingest reads `results.js
 ```json title="data/retrocast/2-raw/my-model/mkt-cnv-160/manifest.json"
 {
   "directives": {
-    "adapter": "aizynth",
+    "adapter": "aizynthfinder",
     "raw_results_filename": "results.json.gz"
   }
 }
@@ -429,8 +429,8 @@ retrocast list
 
 ```
 Configured models:
-  - dms-explorer (adapter: dms)
-  - aizynthfinder-mcts (adapter: aizynth)
+  - dms-explorer (adapter: directmultistep)
+  - aizynthfinder-mcts (adapter: aizynthfinder)
   - retro-star (adapter: retrostar)
 ```
 
@@ -446,17 +446,23 @@ retrocast list-adapters
 
 ```
 Available adapters:
-  - aizynth: AiZynthFinder (bipartite graph)
-  - dms: DirectMultiStep (recursive dict)
+  - aizynthfinder: AiZynthFinder (bipartite graph)
+      deprecated aliases: aizynth
+  - askcos: ASKCOS (custom format)
+  - directmultistep: DirectMultiStep (recursive dict)
+      deprecated aliases: dms
+  - dreamretroer: DreamRetroEr (precursor map)
+      deprecated aliases: dreamretro
+  - molbuilder: MolBuilder (tree format)
+  - multistepttl: MultiStepTTL (custom format)
+  - paroutes: PaRoutes (reference format)
+  - retrochimera: RetroChimera (precursor map)
   - retrostar: Retro* (precursor map)
+  - synllama: SynLlama (precursor map)
   - synplanner: SynPlanner (bipartite graph)
   - syntheseus: Syntheseus (bipartite graph)
-  - askcos: ASKCOS (custom format)
-  - retrochimera: RetroChimera (precursor map)
-  - dreamretro: DreamRetro (precursor map)
-  - multistepttl: MultiStepTTL (custom format)
-  - synllama: SynLlama (precursor map)
-  - paroutes: PaRoutes (reference format)
+  - ursa: URSA (<synthesis_step> XML blocks)
+      deprecated aliases: ursa-llm
 ```
 
 ### `info` - Show Model Details
@@ -471,7 +477,7 @@ retrocast info --model dms-explorer
 
 ```yaml
 Model: dms-explorer
-  Adapter: dms
+  Adapter: directmultistep
   Raw results filename: predictions.json
   Sampling:
     Strategy: top-k
