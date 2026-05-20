@@ -422,6 +422,20 @@ class TestPredictedRoute:
             prediction.route.get_content_hash() == Route(target=target, metadata={"source": "kept"}).get_content_hash()
         )
 
+    def test_content_hash_includes_prediction_envelope(self):
+        target = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+        )
+        route = Route(target=target, metadata={"source": "kept"})
+
+        first = PredictedRoute.from_route(route, rank=1, metadata={"source_key": "target-1"})
+        second = PredictedRoute.from_route(route, rank=2, metadata={"source_key": "target-2"})
+
+        assert first.get_content_hash() != second.get_content_hash()
+        assert first.get_route_content_hash() == route.get_content_hash()
+        assert second.get_route_content_hash() == route.get_content_hash()
+
     def test_from_route_uses_explicit_envelope_metadata_for_typed_prediction_fields(self):
         target = Molecule(
             smiles=SmilesStr("CCO"),

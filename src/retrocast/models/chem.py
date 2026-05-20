@@ -442,16 +442,23 @@ class PredictedRoute(BaseModel):
     def get_structural_signature(self, match_level: InchiKeyLevel = InchiKeyLevel.FULL) -> str:
         return self.route.get_structural_signature(match_level=match_level)
 
-    def get_content_hash(self) -> str:
-        """Return the route-chemistry hash, excluding prediction envelope metadata.
-
-        This delegates to `Route.get_content_hash()` and intentionally ignores
-        rank, score, confidence, source keys, and other prediction-level fields.
-        Corpus provenance hashing uses
-        `retrocast.io.provenance._calculate_predicted_route_content_hash()`
-        when envelope metadata must affect artifact identity.
-        """
+    def get_route_content_hash(self) -> str:
+        """Return the chemistry-only hash for the wrapped canonical route."""
         return self.route.get_content_hash()
+
+    def get_content_hash(self) -> str:
+        """Return an envelope-aware prediction hash.
+
+        Includes the wrapped route chemistry plus prediction-level fields such
+        as rank, score, confidence, and metadata. Excludes computed route fields
+        so equivalent serialized predictions hash consistently.
+        """
+        payload = self.model_dump(
+            mode="json",
+            exclude={"route": {"leaves", "length", "content_hash", "signature"}},
+        )
+        route_json = json.dumps(payload, sort_keys=True)
+        return hashlib.sha256(route_json.encode()).hexdigest()
 
     def get_reaction_signatures(self) -> set[ReactionSignature]:
         return self.route.get_reaction_signatures()
