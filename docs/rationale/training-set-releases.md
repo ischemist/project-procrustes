@@ -26,18 +26,15 @@ RetroCast is an open-source effort, so we do not release this as an authoritativ
 
     Separating test routes from the `all-routes` is not as straightforward as it might seem because the correct procedure depends on the representation of the data. For example, if you represent routes as nested/bigraph dictionaries, you need to come up with serialization strategy if you want to exclude by containment check (you can't put dictionary in a set). Or even if you're willing to pay the price of O(n) comparison, you still need to make sure your equality check is permutation-invariant (a route A + B -> C (+ D) -> E is the same regardless of whether C or D is the left child). [DirectMultiStep](https://directmultistep.com) implemented generator of all permutations of routes and used flattening serialization. In RetroCast, we utilize route signatures (see more below). The point here is not that this is an unusually algorithmically hard problem, but rather that it requires careful consideration and there's no reason for every single model developer to have to implement this themselves.
 
-
 ## Overview
 
-RetroCast produces three PaRoutes-derived artifacts from `all-routes.json.gz`,
-`n1-routes.json.gz`, and `n5-routes.json.gz`:
+RetroCast produces three PaRoutes-derived artifacts from `all-routes.json.gz`, `n1-routes.json.gz`, and `n5-routes.json.gz`:
 
 1. `route-holdout-n1-n5`
 2. `reaction-holdout-n1-n5`
 3. `single-step-reaction-holdout-n1-n5`
 
-`all` is the candidate training universe. `n1` and `n5` are the holdout
-reference sets.
+`all` is the candidate training universe. `n1` and `n5` are the holdout reference sets.
 
 ## Route Releases
 
@@ -47,58 +44,36 @@ Entrypoint:
 
 Implementation:
 
-- `adapt_training_routes()` converts raw PaRoutes dictionaries into RetroCast
-  `Route` objects and records provenance.
-- `TrainingRouteReleaseBuilder` applies holdout, deduplication, and split
-  assignment.
+- `adapt_training_routes()` converts raw PaRoutes dictionaries into RetroCast `Route` objects and records provenance.
+- `TrainingRouteReleaseBuilder` applies holdout, deduplication, and split assignment.
 - `write_training_release()` writes the final artifact.
 
 The route release has two modes.
 
-`route-holdout-n1-n5` removes every candidate route whose
-`Route.get_structural_signature()` appears in `n1 ∪ n5`.
+`route-holdout-n1-n5` removes every candidate route whose `Route.get_structural_signature()` appears in `n1 ∪ n5`.
 
-`reaction-holdout-n1-n5` first removes exact holdout routes, then removes
-holdout reactions from surviving routes. If a route still has valid fragments
-after excision, those fragments remain candidates.
+`reaction-holdout-n1-n5` first removes exact holdout routes, then removes holdout reactions from surviving routes. If a route still has valid fragments after excision, those fragments remain candidates.
 
-During adaptation, RetroCast sanity-checks PaRoutes `reaction_hash` values
-against `ReactionSignature`. PaRoutes `reaction_hash` is reaction SMILES
-represented with InChIKeys, so it should describe the same identity as
-RetroCast's reactant/product InChIKey signature. If the check passes,
-`reaction_hash` is not carried through the release pipeline.
+During adaptation, RetroCast sanity-checks PaRoutes `reaction_hash` values against `ReactionSignature`. PaRoutes `reaction_hash` is reaction SMILES represented with InChIKeys, so it should describe the same identity as RetroCast's reactant/product InChIKey signature. If the check passes, `reaction_hash` is not carried through the release pipeline.
 
-PaRoutes condition slots stay in step metadata. We do not populate structured
-`solvents` or `reagents` fields because the slot is not reliably one or the
-other; it can also contain material that should have been modeled as a reactant.
-RetroCast tries to canonicalize the slot into `condition_slot_smiles`, but keeps
-the raw `condition_slot` when parsing fails or when the raw text may still help
-an end user.
+PaRoutes condition slots stay in step metadata. We do not populate structured `solvents` or `reagents` fields because the slot is not reliably one or the other; it can also contain material that should have been modeled as a reactant. RetroCast tries to canonicalize the slot into `condition_slot_smiles`, but keeps the raw `condition_slot` when parsing fails or when the raw text may still help an end user.
 
 ## Route Deduplication
 
 Routes are deduplicated twice:
 
-1. exact annotated chemistry:
-   `route.get_annotated_signature(include_mapped_smiles=True)`
+1. exact annotated chemistry: `route.get_annotated_signature(include_mapped_smiles=True)`
 2. same route structure and conditions, different atom mapping
 
-The second pass groups by route structural signature plus per-step condition
-identity. Condition identity is `condition_slot_smiles` when available and
-`condition_slot` otherwise.
+The second pass groups by route structural signature plus per-step condition identity. Condition identity is `condition_slot_smiles` when available and `condition_slot` otherwise.
 
-When mapped variants collapse, the kept mapped profile is chosen by source
-support, then lexicographic order, then raw route hash. Non-kept mapped reactions
-are preserved in step metadata as `alternative_mapped_smiles`.
+When mapped variants collapse, the kept mapped profile is chosen by source support, then lexicographic order, then raw route hash. Non-kept mapped reactions are preserved in step metadata as `alternative_mapped_smiles`.
 
-Merged route provenance stays in `sources`. Released route metadata drops the
-single-source `patent_id` and writes `source_patent_ids` at materialization.
+Merged route provenance stays in `sources`. Released route metadata drops the single-source `patent_id` and writes `source_patent_ids` at materialization.
 
 ## Splits And Files
 
-Route releases assign `training` / `validation` after holdout and deduplication.
-The split is stratified by route length and whether the route is convergent,
-using `val_fraction` and `seed` from config.
+Route releases assign `training` / `validation` after holdout and deduplication. The split is stratified by route length and whether the route is convergent, using `val_fraction` and `seed` from config.
 
 Each route release writes:
 
@@ -115,23 +90,15 @@ Entrypoint:
 
 Implementation:
 
-- `load_training_route_records()` reads the released
-  `reaction-holdout-n1-n5` route artifact.
-- `TrainingReactionReleaseBuilder` flattens routes into reactions, deduplicates
-  each split, and removes validation reactions that overlap training.
+- `load_training_route_records()` reads the released `reaction-holdout-n1-n5` route artifact.
+- `TrainingReactionReleaseBuilder` flattens routes into reactions, deduplicates each split, and removes validation reactions that overlap training.
 - `write_training_reaction_release()` writes the final artifact.
 
-The single-step release does not re-adapt raw PaRoutes. It derives from the
-released `reaction-holdout-n1-n5` route artifact so the single-step predictor and
-multistep planner train from compatible data.
+The single-step release does not re-adapt raw PaRoutes. It derives from the released `reaction-holdout-n1-n5` route artifact so the single-step predictor and multistep planner train from compatible data.
 
-Each flattened reaction keeps reactants, product, mapped smiles, alternative
-mapped smiles, condition metadata, and route-step provenance. Reaction sources
-store `route_id`, `step_index`, and optional PaRoutes `source_id`; raw route
-hashes and patent ids stay in the parent route release.
+Each flattened reaction keeps reactants, product, mapped smiles, alternative mapped smiles, condition metadata, and route-step provenance. Reaction sources store `route_id`, `step_index`, and optional PaRoutes `source_id`; raw route hashes and patent ids stay in the parent route release.
 
-The structured `jsonl.gz` files are canonical. The `*.rsmi.txt.gz` files are
-convenience exports.
+The structured `jsonl.gz` files are canonical. The `*.rsmi.txt.gz` files are convenience exports.
 
 ## Audit
 
@@ -139,8 +106,7 @@ Run:
 
 - `scripts/paroutes/training-set-prep/03-audit-release.py`
 
-The audit checks release counts, split balance, route/reaction overlap, and
-metadata expectations.
+The audit checks release counts, split balance, route/reaction overlap, and metadata expectations.
 
 ## Change Points
 

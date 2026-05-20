@@ -19,7 +19,7 @@ We employ stratified sampling to address two specific structural issues with raw
 !!! warning "Problems with raw patent datasets"
 
     1. **Metric Insensitivity due to Imbalance**: 74% of the routes in n5 are length 3-4. General Solvability/Top-K metrics can mask significant performance differences on longer routes (5+ steps) or specific topologies (linear vs. convergent).
-    
+
     2. **The Stock Definition Problem**: Only ~46% of PaRoutes leaf molecules are present in Buyables stock, suggesting many "routes" are arbitrary fragments cut off where the patent description ended.
 
 To address this, we provide two series of benchmarks: one for **practical utility** (Market) and one for **algorithmic comparison** (Reference).
@@ -30,7 +30,7 @@ To address this, we provide two series of benchmarks: one for **practical utilit
 
     - **Convergent route**: Contains at least one reaction combining ≥2 non-leaf molecules
     - **Linear route**: All other routes (no convergent steps)
-    
+
     Note: Only ~10% of routes in n5 are convergent.
 
 ## 1. Market Series (`mkt-`)
@@ -61,14 +61,12 @@ stock_path = download_stock("buyables-stock", format="hdf5")
 assets = download_benchmark_assets("mkt-cnv-160")
 ```
 
-`download_benchmark_assets(...)` downloads the benchmark definition plus its
-declared stock. all three helpers use the managed cache by default. use
-`output_dir=...` when you want project-owned paths.
+`download_benchmark_assets(...)` downloads the benchmark definition plus its declared stock. all three helpers use the managed cache by default. use `output_dir=...` when you want project-owned paths.
 
-| Benchmark | Targets | Description |
-| :--- | :--- | :--- |
-| **mkt-lin-500** | 500 | Linear routes of lengths 2, 3, 4, 5, 6 (100 each) |
-| **mkt-cnv-160** | 160 | Convergent routes of depths 2, 3, 4, 5 (40 each) |
+| Benchmark       | Targets | Description                                       |
+| :-------------- | :------ | :------------------------------------------------ |
+| **mkt-lin-500** | 500     | Linear routes of lengths 2, 3, 4, 5, 6 (100 each) |
+| **mkt-cnv-160** | 160     | Convergent routes of depths 2, 3, 4, 5 (40 each)  |
 
 !!! tip "Training data decontamination"
 
@@ -83,17 +81,17 @@ These subsets use the **original stock definition** from PaRoutes (the leaves of
 
 **Stock to use:** `n5-stock` (except `ref-lng-84` which uses `n1-n5-stock`)
 
-| Benchmark | Targets | Description |
-| :--- | :--- | :--- |
-| **ref-lin-600** | 600 | Linear routes of lengths 2–7 (100 each) |
-| **ref-cnv-400** | 400 | Convergent routes of lengths 2–5 (100 each) |
-| **ref-lng-84** | 84 | All available routes with length 8–10 from n1 and n5 |
+| Benchmark       | Targets | Description                                          |
+| :-------------- | :------ | :--------------------------------------------------- |
+| **ref-lin-600** | 600     | Linear routes of lengths 2–7 (100 each)              |
+| **ref-cnv-400** | 400     | Convergent routes of lengths 2–5 (100 each)          |
+| **ref-lng-84**  | 84      | All available routes with length 8–10 from n1 and n5 |
 
 ## 3. Legacy Random Sets
 
 **Target Audience:** Reviewer #3 :eyes:
 
-We provide random samples of the n5 dataset (100, 200, 500, 1k, 2k targets) for cheaper estimation of performance on the full n5 dataset. 
+We provide random samples of the n5 dataset (100, 200, 500, 1k, 2k targets) for cheaper estimation of performance on the full n5 dataset.
 
 !!! warning "Not recommended"
 

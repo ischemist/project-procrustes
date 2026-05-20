@@ -21,7 +21,7 @@ RetroCast includes a suite of analysis scripts designed for rigorous statistical
 ## Quick Reference
 
 | Script | Purpose | Key Output |
-|:-------|:--------|:-----------|
+| :-- | :-- | :-- |
 | `02-compare.py` | Multi-model comparison on one benchmark | Interactive HTML plots |
 | `03-compare-paired.py` | Statistical significance testing | Confidence intervals for differences |
 | `04-rank.py` | Probabilistic ranking with uncertainty | Rank probability heatmap |
@@ -74,7 +74,6 @@ uv run scripts/02-compare.py \
 - `solvability_overall.html` - Overall performance comparison
 - `solvability_stratified.html` - Performance by route length
 - `topk_accuracy.html` - Top-1, Top-5, Top-10 comparison
-
 
 ## Paired Hypothesis Testing
 

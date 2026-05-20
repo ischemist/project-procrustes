@@ -7,7 +7,7 @@ icon: lucide/book-open-text
 ## Core Functions
 
 | Function | Purpose | Returns |
-|:---------|:--------|:--------|
+| :-- | :-- | :-- |
 | `adapt_route(raw, adapter)` | Adapt one raw route-like payload | `Route \| None` |
 | `adapt_prediction(raw, adapter)` | Adapt one raw prediction payload | `PredictedRoute \| None` |
 | `adapt_provider_output(raw, adapter)` | Adapt one raw provider output | `list[PredictedRoute]` |
@@ -23,10 +23,10 @@ icon: lucide/book-open-text
 
 ## Visualization Functions
 
-| Function | Purpose | Returns |
-|:---------|:--------|:--------|
-| `plot_diagnostics(stats)` | Single model performance | `plotly.Figure` |
-| `plot_comparison(models_stats, metric_type, k)` | Multi-model comparison | `plotly.Figure` |
+| Function                                        | Purpose                  | Returns         |
+| :---------------------------------------------- | :----------------------- | :-------------- |
+| `plot_diagnostics(stats)`                       | Single model performance | `plotly.Figure` |
+| `plot_comparison(models_stats, metric_type, k)` | Multi-model comparison   | `plotly.Figure` |
 
 ## Adapters
 
@@ -39,6 +39,4 @@ for name in ADAPTER_MAP:
 
 Supported adapters:
 
-`aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`,
-`paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`,
-`syntheseus`, `ursa-llm`
+`aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa-llm`

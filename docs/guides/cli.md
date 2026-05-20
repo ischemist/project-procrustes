@@ -10,8 +10,8 @@ The RetroCast CLI provides a unified interface for standardizing, scoring, and a
 
     **Project Mode**
     Structured workflow for reproducible benchmarking of multiple models
-    
-    **Ad-Hoc Mode**  
+
+    **Ad-Hoc Mode**
     Direct commands for processing individual files without configuration
 
 ## Installation
@@ -21,9 +21,9 @@ The RetroCast CLI provides a unified interface for standardizing, scoring, and a
     ```bash
     uv tool install retrocast
     ```
-    
+
     or, optionally, if you want to create plots during analysis:
-    
+
     ```bash
     uv tool install "retrocast[viz]"
     ```
@@ -33,9 +33,9 @@ The RetroCast CLI provides a unified interface for standardizing, scoring, and a
     ```bash
     pip install retrocast
     ```
-    
+
     or, optionally, if you want to create plots during analysis:
-    
+
     ```bash
     uv tool install "retrocast[viz]"
     ```
@@ -54,10 +54,10 @@ These options apply to all commands:
 retrocast [--config CONFIG] [--data-dir DATA_DIR] <command>
 ```
 
-| Option | Description | Default |
-|:-------|:------------|:--------|
-| `--config` | Path to config file | `retrocast-config.yaml` |
-| `--data-dir` | Override data directory | `data/retrocast/` |
+| Option       | Description             | Default                 |
+| :----------- | :---------------------- | :---------------------- |
+| `--config`   | Path to config file     | `retrocast-config.yaml` |
+| `--data-dir` | Override data directory | `data/retrocast/`       |
 
 ### Data Directory Resolution
 
@@ -73,10 +73,10 @@ The data directory is resolved with the following priority:
     ```bash
     # Use CLI flag (highest priority)
     retrocast --data-dir ./my-data ingest --model my-model --dataset mkt-cnv-160
-    
+
     # Use environment variable
     RETROCAST_DATA_DIR=./my-data retrocast ingest --model my-model --dataset mkt-cnv-160
-    
+
     # Check current configuration
     retrocast config
     ```
@@ -84,7 +84,7 @@ The data directory is resolved with the following priority:
 !!! warning "Migration from older versions"
 
     The default data directory changed from `data/` to `data/retrocast/` in version 0.6. If you have existing data at `data/`, either:
-    
+
     - Move it: `mv data/1-benchmarks data/retrocast/`
     - Or set the environment variable: `export RETROCAST_DATA_DIR=data`
 
@@ -93,16 +93,14 @@ The data directory is resolved with the following priority:
 !!! tip "When to use ad-hoc mode"
 
     Use these commands to process single files immediately without setting up a project directory. Great for:
-    
+
     - Quick experiments
     - One-off evaluations
     - Testing new adapters
 
 ### `adapt` - Convert Raw Predictions
 
-Convert raw output from a supported model into a prediction route corpus.
-This is the standalone standardization step introduced in v0.6: it does not
-need a benchmark unless the raw file is already target-keyed.
+Convert raw output from a supported model into a prediction route corpus. This is the standalone standardization step introduced in v0.6: it does not need a benchmark unless the raw file is already target-keyed.
 
 ```bash
 retrocast adapt \
@@ -121,8 +119,7 @@ retrocast adapt \
 
 ### `collect` - Align a Route Corpus to a Benchmark
 
-Collect a prediction route corpus into the benchmark-keyed `routes.json.gz` artifact used for scoring.
-This is the benchmark-alignment step that used to be hidden inside `ingest`.
+Collect a prediction route corpus into the benchmark-keyed `routes.json.gz` artifact used for scoring. This is the benchmark-alignment step that used to be hidden inside `ingest`.
 
 ```bash
 retrocast collect \
@@ -169,7 +166,7 @@ retrocast create-benchmark \
 !!! success "Recommended for research"
 
     For large-scale evaluations, use project mode for:
-    
+
     - Reproducible benchmarking
     - Multiple models comparison
     - Cryptographic audit trail
@@ -233,16 +230,14 @@ graph LR
     D --> E[4-scored/]
     E --> F[analyze]
     F --> G[5-results/]
-    
+
 ```
 
 All paths are relative to your data directory (default: `data/retrocast/`).
 
 ### `ingest` - Adapt and Collect Routes
 
-Transforms raw model outputs into benchmark-keyed routes by running adaptation and collection as one command.
-In v0.6, this command remains as the project-mode convenience wrapper around
-the two lower-level operations: `adapt` followed by `collect`.
+Transforms raw model outputs into benchmark-keyed routes by running adaptation and collection as one command. In v0.6, this command remains as the project-mode convenience wrapper around the two lower-level operations: `adapt` followed by `collect`.
 
 ```bash
 retrocast ingest \
@@ -270,7 +265,7 @@ retrocast ingest \
 !!! warning "Stereochemistry-agnostic processing"
 
     The `--ignore-stereo` flag removes stereochemical information during canonicalization. This is useful for model developers who want to isolate whether their model struggles specifically with stereochemistry or has broader issues with reaction prediction and stock termination.
-    
+
     **Not recommended for production evaluation** - stereochemistry is critical for experimental chemistry.
 
 ### `score` - Evaluate Routes
@@ -301,9 +296,9 @@ retrocast score \
 !!! warning "Stereochemistry-agnostic evaluation"
 
     The `--ignore-stereo` flag enables stereochemistry-agnostic evaluation. When enabled, molecules that differ only in stereochemistry are treated as identical during scoring. This allows model developers to calculate Top-K accuracy metrics focused on molecular connectivity rather than stereochemical correctness.
-    
+
     **Use case:** Helps distinguish between stereochemistry-specific issues and fundamental retrosynthesis planning problems.
-    
+
     **Not recommended for production evaluation** - stereochemistry is critical for experimental chemistry.
 
 ### `analyze` - Generate Reports
@@ -341,7 +336,7 @@ retrocast analyze \
 !!! info "Cryptographic audit trail"
 
     RetroCast generates a `manifest.json` for every file it creates, tracking:
-    
+
     - Input file SHA256 hashes
     - Command parameters
     - Output file hashes
@@ -364,7 +359,7 @@ retrocast verify \
 === "Standard Check"
 
     Verifies that the file on disk matches the SHA256 hash in its manifest.
-    
+
     ```bash
     retrocast verify --target 4-scored/model/dataset/
     ```
@@ -372,13 +367,13 @@ retrocast verify \
 === "Deep Check"
 
     Recursively verifies the entire dependency graph:
-    
+
     ```
     Analyze → Score → Ingest → Raw
     ```
-    
+
     Ensures logical consistency across the pipeline.
-    
+
     ```bash
     retrocast verify --target 5-results/model/dataset/ --deep
     ```
@@ -499,7 +494,7 @@ Model: dms-explorer
 ### Quick Lookup
 
 | Command | Purpose | Input | Output |
-|:--------|:--------|:------|:-------|
+| :-- | :-- | :-- | :-- |
 | `config` | Show resolved paths | - | Configuration display |
 | `init` | Initialize project | - | `retrocast-config.yaml` |
 | `adapt` | Convert raw → standardized | Raw predictions | Prediction route corpus (`.jsonl.gz`) |
@@ -520,12 +515,12 @@ Model: dms-explorer
 Both `ingest` and `score` commands support the `--ignore-stereo` flag for stereochemistry-agnostic processing:
 
 | Command | Flag | Purpose | Use Case |
-|:--------|:-----|:--------|:---------|
+| :-- | :-- | :-- | :-- |
 | `ingest` | `--ignore-stereo` | Strip stereochemistry during canonicalization | Analyze stock termination rate/solvability without stereochemical constraints |
 | `score` | `--ignore-stereo` | Perform stereochemistry-agnostic matching | Calculate Top-K accuracy independent of stereochemistry |
 
 !!! note "For model developers"
 
     The `--ignore-stereo` flag is primarily useful for model development and diagnostic purposes. It allows you to determine whether prediction errors stem from stereochemical confusion or more fundamental retrosynthetic planning issues.
-    
+
     **Not recommended for evaluating production models** - stereochemistry is critical for experimental chemistry.

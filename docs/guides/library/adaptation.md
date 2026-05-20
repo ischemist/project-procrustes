@@ -4,12 +4,7 @@ icon: lucide/git-branch
 
 # Adaptation
 
-Single-route adaptation converts one raw payload into one canonical `Route`.
-Provider-output adaptation converts raw provider output into `PredictedRoute`
-envelopes around canonical routes, preserving rank and source metadata when
-there is corpus context. Benchmark collection is separate: it assigns those
-predictions to benchmark targets when you need the target-keyed `routes.json.gz`
-shape used for scoring.
+Single-route adaptation converts one raw payload into one canonical `Route`. Provider-output adaptation converts raw provider output into `PredictedRoute` envelopes around canonical routes, preserving rank and source metadata when there is corpus context. Benchmark collection is separate: it assigns those predictions to benchmark targets when you need the target-keyed `routes.json.gz` shape used for scoring.
 
 ## Vocabulary
 
@@ -42,11 +37,9 @@ if route:
     print(f"Hash: {route.structural_signature}")
 ```
 
-`adapt_route(...)` accepts one raw route-like payload and returns one
-canonical `Route`, or `None` when the adapter cannot adapt it.
+`adapt_route(...)` accepts one raw route-like payload and returns one canonical `Route`, or `None` when the adapter cannot adapt it.
 
-Use `adapt_prediction(...)` when you explicitly want the prediction envelope for
-one payload:
+Use `adapt_prediction(...)` when you explicitly want the prediction envelope for one payload:
 
 ```python title="Convert one raw prediction payload to one PredictedRoute"
 from retrocast import adapt_prediction
@@ -60,8 +53,7 @@ if prediction:
     print(f"Length: {prediction.route.length}")
 ```
 
-The canonical chemistry is available at `prediction.route`; rank, score,
-confidence, and source provenance live on the envelope.
+The canonical chemistry is available at `prediction.route`; rank, score, confidence, and source provenance live on the envelope.
 
 ## Adapt Provider Output
 
@@ -80,9 +72,7 @@ print(f"Total predictions: {len(predictions)}")
 
 ## Collect For A Benchmark
 
-Collection takes predictions and assigns their canonical routes to benchmark
-targets. The result keeps both shapes: `predicted_routes_by_target` for
-prediction metadata, and `routes_by_target` for scoring.
+Collection takes predictions and assigns their canonical routes to benchmark targets. The result keeps both shapes: `predicted_routes_by_target` for prediction metadata, and `routes_by_target` for scoring.
 
 ```python title="Adapt then collect"
 from retrocast import (
@@ -120,16 +110,9 @@ collected = collect_benchmark_predictions(predictions, benchmark)
 routes_by_target = collected.routes_by_target
 ```
 
-`adapt_target_keyed_provider_output(...)` is not required for ordinary
-standardization. Use it only when the raw provider output is already keyed by
-target ID or target SMILES and you want RetroCast to validate those keys against
-a benchmark during adaptation.
+`adapt_target_keyed_provider_output(...)` is not required for ordinary standardization. Use it only when the raw provider output is already keyed by target ID or target SMILES and you want RetroCast to validate those keys against a benchmark during adaptation.
 
-`adapt_routes(...)` and `adapt_single_route(...)` are deprecated target-local
-compatibility helpers in v0.6 and will be removed in v0.7. Use `adapt_route(...)`
-for one raw route, `adapt_provider_output(...)` for ordinary standardization, or
-`adapt_target_keyed_provider_output(...)` when the raw provider output is keyed
-by target.
+`adapt_routes(...)` and `adapt_single_route(...)` are deprecated target-local compatibility helpers in v0.6 and will be removed in v0.7. Use `adapt_route(...)` for one raw route, `adapt_provider_output(...)` for ordinary standardization, or `adapt_target_keyed_provider_output(...)` when the raw provider output is keyed by target.
 
 !!! note "Route ordering"
 
@@ -141,6 +124,4 @@ by target.
 
 See the [adapter developer guide](../../developers/adapters.md#common-architecture-patterns).
 
-`aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`,
-`paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`,
-`syntheseus`, `ursa-llm`
+`aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa-llm`

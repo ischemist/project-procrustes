@@ -132,10 +132,21 @@ def _calculate_predictions_content_hash(routes: dict[str, list[Route]]) -> str:
     return hashlib.sha256(combined.encode()).hexdigest()
 
 
+def _calculate_predicted_route_content_hash(route: PredictedRoute) -> str:
+    payload = route.model_dump(
+        mode="json",
+        exclude={"route": {"leaves", "length", "content_hash", "signature"}},
+    )
+    route_json = json.dumps(payload, sort_keys=True)
+    return hashlib.sha256(route_json.encode()).hexdigest()
+
+
 def _calculate_route_corpus_content_hash(routes: list[Route | PredictedRoute]) -> str:
     """Internal: hash an ordered prediction route corpus."""
     route_hashes = [
-        route.route.get_content_hash() if isinstance(route, PredictedRoute) else route.get_content_hash()
+        _calculate_predicted_route_content_hash(route)
+        if isinstance(route, PredictedRoute)
+        else route.get_content_hash()
         for route in routes
     ]
     combined = "".join(route_hashes)

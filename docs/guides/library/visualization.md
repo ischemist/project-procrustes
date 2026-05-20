@@ -4,8 +4,7 @@ icon: lucide/chart-spline
 
 # Visualization
 
-Visualization helpers create interactive Plotly figures from
-`ModelStatistics` objects.
+Visualization helpers create interactive Plotly figures from `ModelStatistics` objects.
 
 !!! warning "Requires visualization dependencies"
 

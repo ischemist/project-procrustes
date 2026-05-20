@@ -394,6 +394,22 @@ def _as_float(value: Any) -> float | None:
     return None
 
 
+def _prediction_scalars_from_metadata(metadata: dict[str, Any]) -> tuple[float | None, float | None]:
+    score = _as_float(metadata.get("score"))
+    confidence = _as_float(metadata.get("confidence"))
+
+    scores = metadata.get("scores")
+    if score is None and isinstance(scores, dict):
+        for key in ("state score", "state_score", "score"):
+            score = _as_float(scores.get(key))
+            if score is not None:
+                break
+    if score is None:
+        score = _as_float(metadata.get("state_score"))
+
+    return score, confidence
+
+
 class PredictedRoute(BaseModel):
     """A provider prediction envelope around canonical route chemistry."""
 
@@ -441,23 +457,12 @@ class PredictedRoute(BaseModel):
         metadata: dict[str, Any] | None = None,
     ) -> PredictedRoute:
         route_metadata = route.metadata
-        score = _as_float(route_metadata.get("score"))
-        confidence = _as_float(route_metadata.get("confidence"))
-
-        scores = route_metadata.get("scores")
-        if score is None and isinstance(scores, dict):
-            for key in ("state score", "state_score", "score"):
-                score = _as_float(scores.get(key))
-                if score is not None:
-                    break
-        if score is None:
-            score = _as_float(route_metadata.get("state_score"))
-
         canonical_metadata = {
             key: deepcopy(value) for key, value in route_metadata.items() if key not in PREDICTION_METADATA_KEYS
         }
         prediction_metadata = deepcopy(route_metadata)
         prediction_metadata.update(deepcopy(metadata) if metadata is not None else {})
+        score, confidence = _prediction_scalars_from_metadata(prediction_metadata)
 
         return cls(
             route=route.model_copy(update={"metadata": canonical_metadata}),

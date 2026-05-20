@@ -422,6 +422,24 @@ class TestPredictedRoute:
             prediction.route.get_content_hash() == Route(target=target, metadata={"source": "kept"}).get_content_hash()
         )
 
+    def test_from_route_uses_explicit_envelope_metadata_for_typed_prediction_fields(self):
+        target = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+        )
+        route = Route(target=target, metadata={"source": "kept"})
+
+        prediction = PredictedRoute.from_route(
+            route,
+            metadata={"score": 0.9, "confidence": 0.8, "scores": {"state score": 0.7}},
+        )
+
+        assert prediction.score == 0.9
+        assert prediction.confidence == 0.8
+        assert prediction.metadata["score"] == 0.9
+        assert prediction.metadata["confidence"] == 0.8
+        assert prediction.route.metadata == {"source": "kept"}
+
     def test_has_convergent_reaction_linear_route(self):
         """Test that linear route (single reactant per step) has no convergent reaction."""
         # Build linear route: A → B → C → D

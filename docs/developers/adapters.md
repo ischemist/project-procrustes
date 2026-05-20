@@ -2,7 +2,6 @@
 icon: lucide/code-xml
 ---
 
-
 # Writing a Custom Adapter
 
 The adapter is the **"air gap"** between a model's internal representation and RetroCast's canonical `Route` schema. If you are integrating a new model, you will likely need to write a new adapter.
@@ -13,8 +12,7 @@ The adapter is the **"air gap"** between a model's internal representation and R
 
 ## The Adapter Contract
 
-A RetroCast adapter is route-first. It inherits from `BaseAdapter` and implements
-==two explicit responsibilities==:
+A RetroCast adapter is route-first. It inherits from `BaseAdapter` and implements ==two explicit responsibilities==:
 
 1. `iter_raw_entries(...)`: split a provider artifact into raw route-like entries
 2. `cast(...)`: convert ==one== raw route-like payload into ==one== canonical `Route`
@@ -62,14 +60,9 @@ class MyModelAdapter(BaseAdapter):
         return Route(target=target_molecule, metadata={})
 ```
 
-`iter_raw_entries(...)` is where corpus traversal lives. `cast(...)` should not
-know or care whether the caller is adapting a flat corpus, a target-local payload,
-or a benchmark-keyed prediction map.
+`iter_raw_entries(...)` is where corpus traversal lives. `cast(...)` should not know or care whether the caller is adapting a flat corpus, a target-local payload, or a benchmark-keyed prediction map.
 
-Provider-output adaptation wraps each `Route` returned by `cast(...)` in a
-`PredictedRoute` envelope. Put chemistry structure on the canonical route; put
-provider-level ordering or scalar prediction metadata on `RawRouteEntry` or
-route metadata so corpus workflows can preserve it on the prediction envelope.
+Provider-output adaptation is the built-in RetroCast workflow for converting a raw provider artifact into canonical predictions. Adapter authors do not create a separate provider-output adapter class. Instead, implement `iter_raw_entries(...)` to split the raw artifact into route-like records and `cast(...)` to convert one record into one canonical `Route`. RetroCast's workflow layer then calls those hooks, wraps each `Route` in a `PredictedRoute` envelope, and preserves provider-level provenance such as ordering, source row metadata, or scalar prediction fields. Put chemistry structure on the canonical route; put provider-level ordering or scalar prediction metadata on `RawRouteEntry` or route metadata so corpus workflows can preserve it on the prediction envelope.
 
 ## Common Architecture Patterns
 
@@ -162,10 +155,7 @@ Some models have unique structures that don't fit the above patterns (e.g., grap
 
 ### Flat Completion Corpora: Ursa LLM
 
-`UrsaLlmAdapter` is the reference example of a route-first adapter for flat raw
-artifacts. Its input is a completion corpus containing `<synthesis_step>` XML
-blocks, usually as `.jsonl` or `.jsonl.gz`, not a benchmark-keyed `results.json.gz`
-mapping.
+`UrsaLlmAdapter` is the reference example of a route-first adapter for flat raw artifacts. Its input is a completion corpus containing `<synthesis_step>` XML blocks, usually as `.jsonl` or `.jsonl.gz`, not a benchmark-keyed `results.json.gz` mapping.
 
 - canonical adapter key: `ursa-llm`
 - raw artifact shape: list of records with `completion` text and `meta.product_smiles`
@@ -173,17 +163,14 @@ mapping.
   - `iter_raw_entries(...)` yields one `RawRouteEntry` per completion row
   - `cast(...)` parses one completion string into one canonical `Route`
 
-When `meta.product_smiles` is present, Ursa raw completions can be adapted into a
-prediction route corpus directly, without a benchmark and without a preprocessing
-step that re-keys the file by target. benchmark alignment happens later in the
-explicit `collect` workflow.
+When `meta.product_smiles` is present, Ursa raw completions can be adapted into a prediction route corpus directly, without a benchmark and without a preprocessing step that re-keys the file by target. benchmark alignment happens later in the explicit `collect` workflow.
 
 ## Implementation Guidelines
 
 !!! warning "Critical requirements"
 
     Your adapter **must** handle:
-    
+
     1. **Canonicalization** - Use `retrocast.chem.canonicalize_smiles` for all SMILES
     2. **Cycle detection** - Ensure no molecule appears twice in a path
     3. **Target validation** - Verify the root matches `expected_target.smiles` when an expected target is provided
@@ -223,13 +210,13 @@ These examples use tiny fake payloads to show what each route-local code means.
 
 ```json
 {
-    "smiles": "CCO",
-    "children": [
-        {
-            "smiles": "CC=O",
-            "children": [{"smiles": "CCO", "children": []}]
-        }
-    ]
+  "smiles": "CCO",
+  "children": [
+    {
+      "smiles": "CC=O",
+      "children": [{ "smiles": "CCO", "children": [] }]
+    }
+  ]
 }
 ```
 
@@ -237,9 +224,9 @@ These examples use tiny fake payloads to show what each route-local code means.
 
 ```json
 {
-    "type": "mol",
-    "smiles": "CCO",
-    "children": [{"type": "mol", "smiles": "CC=O", "children": []}]
+  "type": "mol",
+  "smiles": "CCO",
+  "children": [{ "type": "mol", "smiles": "CC=O", "children": [] }]
 }
 ```
 
@@ -247,9 +234,9 @@ These examples use tiny fake payloads to show what each route-local code means.
 
 ```json
 {
-    "uuid2smiles": {"root": "CCO", "rxn1": "CC=O>>CCO"},
-    "node_dict": {"CCO": {"type": "chemical", "smiles": "CCO"}},
-    "pathways": [[{"source": "root", "target": "rxn1"}]]
+  "uuid2smiles": { "root": "CCO", "rxn1": "CC=O>>CCO" },
+  "node_dict": { "CCO": { "type": "chemical", "smiles": "CCO" } },
+  "pathways": [[{ "source": "root", "target": "rxn1" }]]
 }
 ```
 
@@ -258,13 +245,13 @@ Here `rxn1` resolves to `CC=O>>CCO`, but `node_dict["CC=O>>CCO"]` is missing.
 `adapter.route_string_empty`: a string-based route field is empty after trimming/splitting.
 
 ```json
-{"succ": true, "routes": ""}
+{ "succ": true, "routes": "" }
 ```
 
 `adapter.route_string_invalid`: the route string exists, but its grammar is malformed.
 
 ```json
-{"succ": true, "routes": "CCO>CC=O"}
+{ "succ": true, "routes": "CCO>CC=O" }
 ```
 
 RetroStar and DreamRetro-style route steps need product, metadata/reagents, and reactants, e.g. `CCO>0.9>CC=O.[H][H]`.
@@ -273,16 +260,16 @@ RetroStar and DreamRetro-style route steps need product, metadata/reagents, and 
 
 ```json
 {
-    "target_id": "ethanol",
-    "expected_smiles": "CCO",
-    "actual_root_smiles": "CCC"
+  "target_id": "ethanol",
+  "expected_smiles": "CCO",
+  "actual_root_smiles": "CCC"
 }
 ```
 
 `adapter.schema_invalid`: the raw payload does not match the adapter's top-level expected schema.
 
 ```json
-{"succ": true, "routes": 123}
+{ "succ": true, "routes": 123 }
 ```
 
 If `routes` must be a string, this is schema-invalid.
@@ -370,7 +357,7 @@ class TestMyAdapter(BaseAdapterTest):
     def raw_valid_route_data(self):
         # Return a sample JSON blob that represents a valid output
         return {"smiles": "CCO", "tree": ...}
-    
+
     @pytest.fixture
     def raw_unsuccessful_run_data(self):
         # Return data representing a failed prediction (empty list, success=False, etc.)
@@ -380,7 +367,7 @@ class TestMyAdapter(BaseAdapterTest):
     def raw_invalid_schema_data(self):
         # Return malformed data that should fail Pydantic validation
         return {"malformed": True}
-    
+
     # ... implement target identity fixtures ...
 ```
 
@@ -393,7 +380,7 @@ pytest tests/adapters/test_my_adapter.py
 !!! success "What the test suite validates"
 
     The `BaseAdapterTest` automatically verifies that your adapter:
-    
+
     1. Correctly parses valid data
     2. Rejects invalid schemas with `AdapterSchemaError`
     3. Correctly identifies target mismatches

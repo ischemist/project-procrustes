@@ -9,7 +9,7 @@ This guide gets you from raw model output to a rigorous statistical report in un
 !!! tip "What you'll learn"
 
     - Install RetroCast and initialize a project
-    - Configure an adapter for your model's output format  
+    - Configure an adapter for your model's output format
     - Run the `ingest` → `score` → `analyze` pipeline
     - Generate statistical reports with confidence intervals
 
@@ -57,11 +57,11 @@ This creates:
 !!! tip "Custom data directory"
 
     You can customize the data directory location via:
-    
+
     - CLI flag: `retrocast --data-dir ./my-data <command>`
     - Environment variable: `export RETROCAST_DATA_DIR=./my-data`
     - Config file: Add `data_dir: ./my-data` to `retrocast-config.yaml`
-    
+
     Run `retrocast config` to see the resolved paths.
 
 ### Configure Your Model
@@ -95,7 +95,7 @@ graph LR
     A[Place Raw Data<br/>2-raw/] --> B[Ingest<br/>Standardize]
     B --> C[Score<br/>Evaluate]
     C --> D[Analyze<br/>Statistics]
-    
+
     B -.-> E[3-processed/]
     C -.-> F[4-scored/]
     D -.-> G[5-results/]
@@ -122,7 +122,7 @@ cp predictions.json data/retrocast/2-raw/my-new-model/mkt-cnv-160/
 !!! info "Available benchmarks"
 
     See [Benchmarks Guide](guides/benchmarks.md) for details on evaluation sets:
-    
+
     - **Market Series** (`mkt-*`): Practical utility with commercial stock
     - **Reference Series** (`ref-*`): Algorithm comparison with ground-truth stock
 
@@ -185,14 +185,11 @@ retrocast analyze --model my-new-model --dataset mkt-cnv-160
 **Learn the Concepts**  
 Read [Concepts](concepts.md) to understand why we use adapters and manifests.
 
-**Use the Python API**
-Want to use RetroCast inside your own scripts? See the [Library Guide](guides/library/).
+**Use the Python API** Want to use RetroCast inside your own scripts? See the [Library Guide](guides/library/).
 
-**Migrating from v0.5.x**
-See the [Changelog](changelog.md) for the v0.6 adapter workflow split.
+**Migrating from v0.5.x** See the [Changelog](changelog.md) for the v0.6 adapter workflow split.
 
-**Write Custom Adapters**
-Need to support a new output format? Learn how to write an [Adapter](developers/adapters.md).
+**Write Custom Adapters** Need to support a new output format? Learn how to write an [Adapter](developers/adapters.md).
 
 **Full CLI Reference**  
 See all available commands in the [CLI Reference](guides/cli.md).
