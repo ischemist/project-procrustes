@@ -27,7 +27,7 @@ Provider-output adaptation APIs now return `PredictedRoute`, an envelope around 
 
 Prediction manifest `content_hash` values are now order-sensitive within each target because route list order is the ranking signal. Re-exported manifests can therefore differ from older manifests even when the route structures are otherwise identical.
 
-`adapt_single_route(...)` and `adapt_routes(...)` emit `RetroCastFutureWarning` in v0.6 and are scheduled for removal in v0.7.
+`adapt_single_route(...)` and `adapt_routes(...)` emit `RetroCastFutureWarning` in v0.6 and are scheduled for removal in v0.9. See the [deprecation schedule](developers/deprecations.md) for the current removal plan.
 
 ### 1-5 Minute Migration
 

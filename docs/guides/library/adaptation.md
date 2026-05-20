@@ -134,7 +134,7 @@ Use `adapt_provider_output(...)` when your planner writes a streamable corpus, s
 
 Use `adapt_target_keyed_provider_output(...)` when your planner writes a mapping like `{target_id: raw_predictions_for_target}` or `{target_smiles: raw_predictions_for_target}`. This can simplify model runners because target association is explicit at the top level, and RetroCast can reject unknown or ambiguous keys early.
 
-`adapt_routes(...)` and `adapt_single_route(...)` are deprecated target-local compatibility helpers in v0.6 and will be removed in v0.7. Use `adapt_route(...)` for one raw route, `adapt_provider_output(...)` for ordinary standardization, or `adapt_target_keyed_provider_output(...)` when the raw provider output is keyed by target.
+`adapt_routes(...)` and `adapt_single_route(...)` are deprecated target-local compatibility helpers in v0.6 and will be removed in v0.9. Use `adapt_route(...)` for one raw route, `adapt_provider_output(...)` for ordinary standardization, or `adapt_target_keyed_provider_output(...)` when the raw provider output is keyed by target. See the [deprecation schedule](../../developers/deprecations.md) for the current removal plan.
 
 !!! note "Route ordering"
 

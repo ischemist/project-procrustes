@@ -76,7 +76,7 @@ def __getattr__(name: str) -> Any:
     warn_deprecated(
         old=f"{__name__}.{name}",
         new=f"{__name__}.{_DEPRECATED_ADAPTER_REPLACEMENTS[name]}",
-        remove_in="0.7",
+        remove_in="0.9",
         stacklevel=2,
     )
     globals()[name] = adapter_type
@@ -103,14 +103,14 @@ def get_adapter(adapter_name: str) -> BaseAdapter:
 
 
 def normalize_adapter_slug(adapter_name: str) -> str:
-    """Return the canonical adapter slug, warning for deprecated pre-0.7 slugs."""
+    """Return the canonical adapter slug, warning for deprecated pre-0.9 slugs."""
     canonical_name = DEPRECATED_ADAPTER_SLUGS.get(adapter_name)
     if canonical_name is None:
         return adapter_name
     warn_deprecated(
         old=f"adapter slug '{adapter_name}'",
         new=f"'{canonical_name}'",
-        remove_in="0.7",
+        remove_in="0.9",
         note="Update --adapter flags and manifest directives.",
         stacklevel=3,
     )
@@ -131,7 +131,7 @@ def adapt_single_route(
     warn_deprecated(
         old="adapt_single_route",
         new="adapt_route(...)",
-        remove_in="0.7",
+        remove_in="0.9",
         note="This wrapper returns the first successful route or None; "
         "use target-free `adapt_route(...)` for single-route adaptation.",
         stacklevel=2,
@@ -175,7 +175,7 @@ def adapt_routes(
     warn_deprecated(
         old="adapt_routes",
         new="adapt_provider_output(...) or adapt_target_keyed_provider_output(...)",
-        remove_in="0.7",
+        remove_in="0.9",
         note="Target-local adaptation is being removed from the public API. "
         "Use provider-output workflows for route standardization.",
         stacklevel=2,

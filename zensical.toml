@@ -41,7 +41,8 @@ nav = [
   ] },
   { "Developers" = [
     "developers/adapters.md",
-    "developers/errors.md"
+    "developers/errors.md",
+    "developers/deprecations.md"
   ] }
 ]
 # With the "extra_css" option you can add your own CSS styling to customize
