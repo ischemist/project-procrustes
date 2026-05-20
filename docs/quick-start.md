@@ -180,6 +180,18 @@ retrocast analyze --model my-new-model --dataset mkt-cnv-160
 
     This skips the config setup and directly evaluates a single predictions file.
 
+## Choose A Path
+
+RetroCast has three common entry points depending on what you are trying to do:
+
+| Goal | Use this | Details |
+| --- | --- | --- |
+| Standardize raw payloads inside your own Python code | `adapt_route(...)`, `adapt_prediction(...)`, or `adapt_provider_output(...)` | [Library adaptation guide](guides/library/adaptation.md#choose-a-workflow) |
+| Prepare model results for a benchmark | `adapt_provider_output(...)` or `adapt_target_keyed_provider_output(...)`, then `collect_benchmark_predictions(...)` | [Collect for a benchmark](guides/library/adaptation.md#collect-for-a-benchmark) |
+| Run the managed file-based benchmark workflow | `retrocast ingest` → `retrocast score` → `retrocast analyze` | This quick start |
+
+If you are not sure which layer you need, start with the [adaptation decision table](guides/library/adaptation.md#choose-a-workflow). It explains the difference between single-route adaptation, provider-output adaptation, and benchmark collection.
+
 ## Next Steps
 
 **Learn the Concepts**  

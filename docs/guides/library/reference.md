@@ -11,7 +11,7 @@ icon: lucide/book-open-text
 | `adapt_route(raw, adapter)` | Adapt one raw route-like payload | `Route \| None` |
 | `adapt_prediction(raw, adapter)` | Adapt one raw prediction payload | `PredictedRoute \| None` |
 | `adapt_provider_output(raw, adapter)` | Adapt one raw provider output | `list[PredictedRoute]` |
-| `adapt_target_keyed_provider_output(raw, benchmark, adapter)` | Adapt raw output keyed by target id or smiles | `list[PredictedRoute]` |
+| `adapt_target_keyed_provider_output(raw, benchmark, adapter)` | Adapt target-keyed raw output with benchmark key validation | `list[PredictedRoute]` |
 | `adapt_routes(raw, target, adapter)` | Deprecated in v0.6; use provider-output workflows | `list[Route]` |
 | `adapt_single_route(raw, target, adapter)` | Deprecated in v0.6; use `adapt_route(raw, adapter)` | `Route \| None` |
 | `collect_benchmark_predictions(predictions, benchmark)` | Collect predictions onto benchmark targets | `CollectedBenchmarkRoutes` |

@@ -137,6 +137,12 @@ We deem the bipartite structure, explicitly separating `Molecule` and `ReactionS
 
     Model developers are **not required** to use this schema internally. RetroCast treats it as an interchange format: the adapter casts your native output into this structure. Extra data (attention weights, search trees, etc.) can be preserved in `metadata` dictionaries if you need them for downstream analysis.
 
+### Route vs. PredictedRoute
+
+`Route` owns the canonical chemistry tree. It is the right object when you want to inspect route length, leaves, reactions, structural signatures, or chemistry-level metadata.
+
+`PredictedRoute` owns provider-level prediction context around a `Route`: rank, score, confidence, source row index, source record ID, and source key. Library workflows return `PredictedRoute` when they are adapting a provider output rather than one isolated route. For the practical decision table, see [Library Adaptation](guides/library/adaptation.md#choose-a-workflow).
+
 ## Data Organization and Lifecycle
 
 RetroCast enforces a structured directory layout to manage the transformation of data from raw predictions to final statistics. This structure ensures ==reproducibility and traceability==.

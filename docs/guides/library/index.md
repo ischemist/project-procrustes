@@ -41,13 +41,14 @@ RetroCast is a modular Python library for standardizing retrosynthesis planner o
 
 ## Choose A Guide
 
-| Task                                                      | Start here                        |
-| --------------------------------------------------------- | --------------------------------- |
-| Convert raw planner output into canonical `Route` objects | [Adaptation](adaptation.md)       |
-| Score benchmark-keyed routes against stock                | [Evaluation](evaluation.md)       |
-| Compute confidence intervals and aggregate metrics        | [Statistics](statistics.md)       |
-| Plot model diagnostics and comparisons                    | [Visualization](visualization.md) |
-| Look up public functions quickly                          | [Reference](reference.md)         |
+| Task                                                    | Start here                        |
+| ------------------------------------------------------- | --------------------------------- |
+| Choose the right standardization path for your use case | [Adaptation](adaptation.md)       |
+| Convert raw planner output into canonical predictions   | [Adaptation](adaptation.md)       |
+| Score benchmark-keyed routes against stock              | [Evaluation](evaluation.md)       |
+| Compute confidence intervals and aggregate metrics      | [Statistics](statistics.md)       |
+| Plot model diagnostics and comparisons                  | [Visualization](visualization.md) |
+| Look up public functions quickly                        | [Reference](reference.md)         |
 
 ## v0.6 Mental Model
 
@@ -57,7 +58,8 @@ In v0.6, those operations are exposed as separate library workflows:
 
 | Workflow | Input | Output | Requires benchmark targets? |
 | --- | --- | --- | --- |
-| Adaptation | Raw provider output | Canonical `Route` objects | No |
-| Benchmark collection | Canonical `Route` objects plus a benchmark | Target-keyed route mapping | Yes |
+| Single-route adaptation | One raw route-like payload | `Route` or `PredictedRoute` | No |
+| Provider-output adaptation | Raw provider output | `list[PredictedRoute]` | No |
+| Benchmark collection | `PredictedRoute` objects plus a benchmark | Target-keyed route mapping | Yes |
 
-Use adaptation when you want the general library promise: "give me whatever the planner emitted and I will give you standard `Route` objects." Use benchmark collection only when you need the `routes.json.gz` shape for benchmark scoring or aggregate target-level statistics.
+Use adaptation when you want the general library promise: "give me whatever the planner emitted and I will give you standard RetroCast objects." Use benchmark collection only when you need the `routes.json.gz` shape for benchmark scoring or aggregate target-level statistics. The [Adaptation guide](adaptation.md#choose-a-workflow) has the decision table.
