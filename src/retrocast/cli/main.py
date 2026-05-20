@@ -49,11 +49,15 @@ def main() -> None:
 
     # --- ADAPT (Ad-Hoc) ---
     adapt_parser = subparsers.add_parser(
-        "adapt", help="Convert a raw route artifact into a canonical route corpus (No config needed)"
+        "adapt", help="Convert a raw route artifact into a prediction route corpus (No config needed)"
     )
     adapt_parser.add_argument("--input", required=True, help="Path to raw predictions (.json.gz)")
     adapt_parser.add_argument("--output", required=True, help="Path to save route corpus (.jsonl.gz)")
-    adapt_parser.add_argument("--adapter", required=True, help="Name of the adapter to use (e.g. aizynth, dms)")
+    adapt_parser.add_argument(
+        "--adapter",
+        required=True,
+        help="Name of the adapter to use (e.g. aizynthfinder, directmultistep)",
+    )
     adapt_parser.add_argument(
         "--input-kind",
         choices=["provider-output", "target-keyed-provider-output"],
@@ -64,9 +68,14 @@ def main() -> None:
         "--benchmark",
         help="Benchmark definition for target validation; required with --input-kind target-keyed-provider-output.",
     )
+    adapt_parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable progress bars during adaptation",
+    )
 
     collect_parser = subparsers.add_parser(
-        "collect", help="Collect a canonical route corpus into benchmark-keyed routes (No config needed)"
+        "collect", help="Collect a prediction route corpus into benchmark-keyed routes (No config needed)"
     )
     collect_parser.add_argument("--input", required=True, help="Path to route corpus (.jsonl.gz)")
     collect_parser.add_argument("--benchmark", required=True, help="Path to benchmark definition (.json.gz)")
@@ -117,6 +126,11 @@ def main() -> None:
         "--ignore-stereo",
         action="store_true",
         help="Strip stereochemistry during SMILES canonicalization",
+    )
+    ingest_parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable progress bars during ingestion",
     )
 
     # --- SCORE ---

@@ -1,7 +1,12 @@
 import logging
 import os
+import warnings
+from typing import TextIO
+
+from retrocast._warnings import RetroCastFutureWarning
 
 logger = logging.getLogger("retrocast")
+_ORIGINAL_SHOWWARNING = warnings.showwarning
 
 # Default to silence. This ensures that if someone imports retrocast
 # but doesn't configure logging, they don't get spammed.
@@ -33,3 +38,23 @@ def configure_script_logging(use_rich: bool = True, log_level: str = "INFO") -> 
 
     # Ensure our library logger respects the level
     logger.setLevel(log_level)
+    _route_retrocast_warnings_to_logger()
+
+
+def _route_retrocast_warnings_to_logger() -> None:
+    """Render public RetroCast warnings through the configured CLI logger."""
+
+    def showwarning(
+        message: Warning | str,
+        category: type[Warning],
+        filename: str,
+        lineno: int,
+        file: TextIO | None = None,
+        line: str | None = None,
+    ) -> None:
+        if issubclass(category, RetroCastFutureWarning):
+            logger.warning(str(message))
+            return
+        _ORIGINAL_SHOWWARNING(message, category, filename, lineno, file=file, line=line)
+
+    warnings.showwarning = showwarning  # ty: ignore[invalid-assignment]

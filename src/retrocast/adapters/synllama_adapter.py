@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, RootModel, ValidationError
 
+from retrocast._warnings import warn_deprecated
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.common import build_molecule_from_precursor_map
 from retrocast.adapters.errors import adapter_route_string_error, adapter_schema_error, adapter_target_mismatch
@@ -26,7 +27,7 @@ class SynLlamaRouteList(RootModel[list[SynLlamaRouteInput]]):
     pass
 
 
-class SynLlaMaAdapter(BaseAdapter):
+class SynLlamaAdapter(BaseAdapter):
     """adapter for converting pre-processed synllama outputs to the Route schema."""
 
     def iter_raw_entries(
@@ -150,3 +151,23 @@ class SynLlaMaAdapter(BaseAdapter):
             reactant_start_idx = product_idx + 1
 
         return precursor_map
+
+
+_DEPRECATED_ADAPTER_ALIASES: dict[str, type[BaseAdapter]] = {
+    "SynLlaMaAdapter": SynLlamaAdapter,
+    "SynLLaMaAdapter": SynLlamaAdapter,
+}
+
+
+def __getattr__(name: str) -> Any:
+    adapter_type = _DEPRECATED_ADAPTER_ALIASES.get(name)
+    if adapter_type is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    warn_deprecated(
+        old=f"{__name__}.{name}",
+        new=f"{__name__}.SynLlamaAdapter",
+        remove_in="0.7",
+        stacklevel=2,
+    )
+    globals()[name] = adapter_type
+    return adapter_type

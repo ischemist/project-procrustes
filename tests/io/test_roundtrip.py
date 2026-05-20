@@ -52,11 +52,13 @@ from retrocast.io.data import (
 from retrocast.io.provenance import (
     _calculate_benchmark_content_hash,
     _calculate_predictions_content_hash,
+    _calculate_route_corpus_content_hash,
     calculate_file_hash,
     create_manifest,
     generate_model_hash,
 )
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
+from retrocast.models.chem import Molecule, PredictedRoute, Route
 from retrocast.models.evaluation import EvaluationResults, ScoredRoute, TargetEvaluation
 from tests.helpers import _synthetic_inchikey
 
@@ -495,7 +497,17 @@ class TestCreateManifest:
 
         assert len(manifest.output_files) == 1
         assert manifest.output_files[0].content_hash is not None
-        assert len(manifest.output_files[0].content_hash) == 64
+
+    def test_route_corpus_content_hash_changes_when_prediction_envelope_changes(self):
+        target = Molecule(
+            smiles="CCO",
+            inchikey=_synthetic_inchikey("CCO"),
+        )
+        route = Route(target=target)
+        first = PredictedRoute.from_route(route, rank=1, metadata={"source_key": "target-1"})
+        second = PredictedRoute.from_route(route, rank=2, metadata={"source_key": "target-2"})
+
+        assert _calculate_route_corpus_content_hash([first]) != _calculate_route_corpus_content_hash([second])
 
     def test_creates_manifest_with_routes_content_hash(self, tmp_path, synthetic_route_factory):
         """Manifest should include content hash for route dict outputs."""

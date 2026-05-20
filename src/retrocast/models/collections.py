@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from retrocast.models.chem import Route
+from retrocast.models.chem import PredictedRoute, Route
 
 
 class BenchmarkCollectionStats(BaseModel):
@@ -20,4 +20,5 @@ class CollectedBenchmarkRoutes(BaseModel):
     """Benchmark-keyed routes plus collection statistics."""
 
     routes_by_target: dict[str, list[Route]] = Field(default_factory=dict)
+    predicted_routes_by_target: dict[str, list[PredictedRoute]] = Field(default_factory=dict)
     stats: BenchmarkCollectionStats = Field(default_factory=BenchmarkCollectionStats)

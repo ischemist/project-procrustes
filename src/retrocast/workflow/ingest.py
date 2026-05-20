@@ -35,12 +35,13 @@ def ingest_model_predictions(
     sample_k: int | None = None,
     ignore_stereo: bool = False,
     provider_output_kind: ProviderOutputKind = "target_keyed_provider_output",
+    progress_callback: Callable[[], None] | None = None,
 ) -> tuple[dict[str, list[Route]], Path, RunStatistics]:
     """
     Convert raw model outputs into benchmark-keyed routes.
 
     The workflow is explicit:
-    raw payloads -> canonical Route corpus -> benchmark collection -> routes.json.gz
+    raw payloads -> PredictedRoute corpus -> benchmark collection -> routes.json.gz
     """
     logger.info(f"Ingesting results for {model_name} on {benchmark.name}...")
 
@@ -74,6 +75,7 @@ def ingest_model_predictions(
             adapter,
             ignore_stereo=ignore_stereo,
             stats=stats,
+            progress_callback=progress_callback,
         )
     elif provider_output_kind == "provider_output":
         route_corpus = adapt_provider_output(
@@ -81,6 +83,7 @@ def ingest_model_predictions(
             adapter,
             ignore_stereo=ignore_stereo,
             stats=stats,
+            progress_callback=progress_callback,
         )
     else:
         raise InputError(
@@ -121,7 +124,7 @@ def ingest_model_predictions(
 
     logger.info(
         f"Ingestion complete. Adapted {stats.total_routes_in_raw_files} raw route entries. "
-        f"Adapted {len(route_corpus)} canonical routes. "
+        f"Adapted {len(route_corpus)} predicted routes. "
         f"Matched {collected_routes.stats.matched_by_canonical_smiles} by smiles. "
         f"Saved {stats.final_unique_routes_saved} valid routes. "
         f"Duplication factor: {stats.duplication_factor}x"

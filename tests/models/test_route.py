@@ -2,7 +2,7 @@
 
 import pytest
 
-from retrocast.models.chem import Molecule, ReactionStep, Route
+from retrocast.models.chem import Molecule, PredictedRoute, ReactionStep, Route
 from retrocast.typing import InchiKeyStr, SmilesStr
 
 # ==============================================================================
@@ -377,6 +377,82 @@ class TestRoute:
         )
         route = Route(target=target)
         assert route.has_convergent_reaction is False
+
+
+@pytest.mark.unit
+class TestPredictedRoute:
+    """Tests for the PredictedRoute envelope."""
+
+    def test_from_route_preserves_zero_score_from_scores_metadata(self):
+        target = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+        )
+        route = Route(target=target, metadata={"scores": {"state score": 0.0}})
+
+        prediction = PredictedRoute.from_route(route, rank=1)
+
+        assert prediction.rank == 1
+        assert prediction.score == 0.0
+        assert prediction.metadata == {"scores": {"state score": 0.0}}
+        assert prediction.route.metadata == {}
+
+    def test_from_route_strips_prediction_only_metadata_from_wrapped_route(self):
+        target = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+        )
+        route = Route(
+            target=target,
+            metadata={
+                "score": 0.9,
+                "confidence": 0.8,
+                "state_score": 0.7,
+                "source": "kept",
+            },
+        )
+
+        prediction = PredictedRoute.from_route(route)
+
+        assert prediction.score == 0.9
+        assert prediction.confidence == 0.8
+        assert prediction.metadata["state_score"] == 0.7
+        assert prediction.route.metadata == {"source": "kept"}
+        assert (
+            prediction.route.get_content_hash() == Route(target=target, metadata={"source": "kept"}).get_content_hash()
+        )
+
+    def test_content_hash_includes_prediction_envelope(self):
+        target = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+        )
+        route = Route(target=target, metadata={"source": "kept"})
+
+        first = PredictedRoute.from_route(route, rank=1, metadata={"source_key": "target-1"})
+        second = PredictedRoute.from_route(route, rank=2, metadata={"source_key": "target-2"})
+
+        assert first.get_content_hash() != second.get_content_hash()
+        assert first.get_route_content_hash() == route.get_content_hash()
+        assert second.get_route_content_hash() == route.get_content_hash()
+
+    def test_from_route_uses_explicit_envelope_metadata_for_typed_prediction_fields(self):
+        target = Molecule(
+            smiles=SmilesStr("CCO"),
+            inchikey=InchiKeyStr("LFQSCWFLJHTTHZ-UHFFFAOYSA-N"),
+        )
+        route = Route(target=target, metadata={"source": "kept"})
+
+        prediction = PredictedRoute.from_route(
+            route,
+            metadata={"score": 0.9, "confidence": 0.8, "scores": {"state score": 0.7}},
+        )
+
+        assert prediction.score == 0.9
+        assert prediction.confidence == 0.8
+        assert prediction.metadata["score"] == 0.9
+        assert prediction.metadata["confidence"] == 0.8
+        assert prediction.route.metadata == {"source": "kept"}
 
     def test_has_convergent_reaction_linear_route(self):
         """Test that linear route (single reactant per step) has no convergent reaction."""

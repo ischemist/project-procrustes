@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from retrocast._warnings import warn_deprecated
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.common import build_molecule_from_precursor_map
 from retrocast.adapters.errors import adapter_route_transform_error, adapter_schema_error, adapter_target_mismatch
@@ -65,7 +66,7 @@ class RetrochimeraData(BaseModel):
     result: RetrochimeraResult
 
 
-class RetrochimeraAdapter(BaseAdapter):
+class RetroChimeraAdapter(BaseAdapter):
     """adapter for converting retrochimera-style outputs to the Route schema."""
 
     def iter_raw_entries(
@@ -181,3 +182,22 @@ class RetrochimeraAdapter(BaseAdapter):
             canon_reactants = [canonicalize_smiles(r, ignore_stereo=ignore_stereo) for r in reaction.reactants]
             precursor_map[canon_product] = canon_reactants
         return precursor_map
+
+
+_DEPRECATED_ADAPTER_ALIASES: dict[str, type[BaseAdapter]] = {
+    "RetrochimeraAdapter": RetroChimeraAdapter,
+}
+
+
+def __getattr__(name: str) -> Any:
+    adapter_type = _DEPRECATED_ADAPTER_ALIASES.get(name)
+    if adapter_type is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    warn_deprecated(
+        old=f"{__name__}.{name}",
+        new=f"{__name__}.RetroChimeraAdapter",
+        remove_in="0.7",
+        stacklevel=2,
+    )
+    globals()[name] = adapter_type
+    return adapter_type

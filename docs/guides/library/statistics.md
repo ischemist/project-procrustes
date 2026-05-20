@@ -4,8 +4,7 @@ icon: lucide/chart-no-axes-combined
 
 # Statistics
 
-RetroCast uses bootstrap resampling to calculate confidence intervals for
-scored model results.
+RetroCast uses bootstrap resampling to calculate confidence intervals for scored model results.
 
 ## Compute Statistics
 
@@ -27,8 +26,7 @@ for length, metric in stats.solvability.by_group.items():
     print(f"  Length {length}: {metric.value:.1%} [{metric.ci_lower:.1%}, {metric.ci_upper:.1%}]")
 ```
 
-Typical metrics include overall solvability, Top-K accuracy, ground-truth match
-rate, and stratified performance by route length.
+Typical metrics include overall solvability, Top-K accuracy, ground-truth match rate, and stratified performance by route length.
 
 ??? example "Example output"
 

@@ -4,9 +4,7 @@ icon: lucide/database-zap
 
 # Training Sets
 
-RetroCast publishes PaRoutes training artifacts as hosted, versioned datasets.
-The official Python workflow is centered on `retrocast.datasets`. Use the shell
-helper when you need a download path outside Python.
+RetroCast publishes PaRoutes training artifacts as hosted, versioned datasets. The official Python workflow is centered on `retrocast.datasets`. Use the shell helper when you need a download path outside Python.
 
 !!! warning "Requires the hosted training-set API"
 
@@ -113,8 +111,7 @@ You do not need to import these models from `retrocast.curation.training`.
 
 ## Artifact Matrix
 
-Use `reaction-holdout-n1-n5` unless you specifically need a route-holdout
-baseline.
+Use `reaction-holdout-n1-n5` unless you specifically need a route-holdout baseline.
 
 | artifact | intended training target | holdout rule | valid `format` values | files published per split |
 | --- | --- | --- | --- | --- |
@@ -132,20 +129,16 @@ Each release directory includes:
 
 ## Python API
 
-`download_training_set()` gives you the verified local artifact path.
-it also materializes sibling `manifest.json` and release-level `SHA256SUMS`.
-`format` describes which wire file you want:
+`download_training_set()` gives you the verified local artifact path. it also materializes sibling `manifest.json` and release-level `SHA256SUMS`. `format` describes which wire file you want:
 
 - `jsonl` -> structured JSONL artifact
 - `rsmi` -> plain reaction-smiles text artifact
 
-Use `jsonl` unless you explicitly want the single-step reaction-smiles text
-projection. route artifacts only support `jsonl`.
+Use `jsonl` unless you explicitly want the single-step reaction-smiles text projection. route artifacts only support `jsonl`.
 
 ### Streaming
 
-Use `retrocast.io` when you want to stream a verified local artifact without
-loading the full file into memory:
+Use `retrocast.io` when you want to stream a verified local artifact without loading the full file into memory:
 
 ```python
 from retrocast.datasets import download_training_set
@@ -176,8 +169,7 @@ The intended split is:
 - `retrocast.datasets` resolves releases, downloads artifacts, and verifies checksums
 - `retrocast.io` parses eager or streaming views from a local path
 
-That keeps the local artifact path explicit, which is usually useful in real
-training pipelines.
+That keeps the local artifact path explicit, which is usually useful in real training pipelines.
 
 ### Local Metadata
 
@@ -228,8 +220,7 @@ from retrocast.datasets import resolve_latest_training_set_release
 release = resolve_latest_training_set_release("paroutes")
 ```
 
-`resolve_training_set_release()` is still available when you want to resolve a
-specific label yourself:
+`resolve_training_set_release()` is still available when you want to resolve a specific label yourself:
 
 ```python
 from retrocast.datasets import resolve_training_set_release
@@ -239,10 +230,7 @@ release = resolve_training_set_release(dataset="paroutes", release="latest")
 
 ### Explicit Output Directories
 
-Use `output_dir=...` when you want a project-owned dataset root instead of the
-managed cache. this path is treated as the root for one dataset, so releases
-land directly under it with no extra `retrocast/training-sets/<dataset>`
-scaffolding:
+Use `output_dir=...` when you want a project-owned dataset root instead of the managed cache. this path is treated as the root for one dataset, so releases land directly under it with no extra `retrocast/training-sets/<dataset>` scaffolding:
 
 ```python
 from pathlib import Path
@@ -259,8 +247,7 @@ path = download_training_set(
 
 ## Canonical Wire Examples
 
-These are the public on-disk wire formats published by the hosted training-set
-artifacts.
+These are the public on-disk wire formats published by the hosted training-set artifacts.
 
 ### `route_records`
 
@@ -322,8 +309,7 @@ One row from `training.jsonl.gz` for a route artifact:
 
 ### `routes`
 
-`routes` is the nested `route` object from a `route_records` row, validated as a
-`Route`. The hosted file is still the same `*.jsonl.gz` artifact shown above.
+`routes` is the nested `route` object from a `route_records` row, validated as a `Route`. The hosted file is still the same `*.jsonl.gz` artifact shown above.
 
 ### `reaction_records`
 
@@ -394,14 +380,11 @@ Override the shared cache with:
 - `RETROCAST_TRAINING_SET_CACHE_DIR` for both shell and Python
 - `cache_dir=...` in Python for per-call control
 
-Use `cache_dir` when you want to relocate the shared cache root but still keep
-the managed `paroutes/<release>/...` structure. Use `output_dir` when you want
-to own the dataset root yourself.
+Use `cache_dir` when you want to relocate the shared cache root but still keep the managed `paroutes/<release>/...` structure. Use `output_dir` when you want to own the dataset root yourself.
 
 ## Shell API
 
-The shell helper mirrors the Python surface, but it is the fallback story, not
-the primary one.
+The shell helper mirrors the Python surface, but it is the fallback story, not the primary one.
 
 Download route JSONL:
 
@@ -429,15 +412,11 @@ curl -fsSL https://files.ischemist.com/retrocast/get-training-set.sh | bash -s -
 
 ## Conditions
 
-PaRoutes condition slots remain metadata, not structured solvents or reagents,
-because the source labels are not trustworthy enough for that. A slot may be a
-solvent, reagent, mixed bag, or even something that should have been modeled as
-a reactant.
+PaRoutes condition slots remain metadata, not structured solvents or reagents, because the source labels are not trustworthy enough for that. A slot may be a solvent, reagent, mixed bag, or even something that should have been modeled as a reactant.
 
 Single-step records expose both:
 
 - `condition_slot`: raw PaRoutes text
 - `condition_slot_smiles`: best-effort canonicalized SMILES tokens
 
-Use `condition_slot_smiles` when present. Keep `condition_slot` when you want
-the original raw signal.
+Use `condition_slot_smiles` when present. Keep `condition_slot` when you want the original raw signal.

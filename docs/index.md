@@ -4,11 +4,7 @@ icon: lucide/home
 
 # RetroCast: A Unified Framework for Multistep Retrosynthesis
 
-[![isChemist Protocol v1.0.0](https://img.shields.io/badge/protocol-isChemist%20v1.0.0-blueviolet)](https://github.com/ischemist/protocol)
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![ty](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json)](https://github.com/astral-sh/ty)
-![coverage](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/ischemist/project-procrustes/master/coverage.json&query=$.totals.percent_covered_display&label=coverage&color=brightgreen&suffix=%25)
-[![arXiv](https://img.shields.io/badge/arXiv-2512.07079-b31b1b.svg)](https://arxiv.org/abs/2512.07079)
+[![isChemist Protocol v1.0.0](https://img.shields.io/badge/protocol-isChemist%20v1.0.0-blueviolet)](https://github.com/ischemist/protocol) [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) [![ty](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json)](https://github.com/astral-sh/ty) ![coverage](https://img.shields.io/badge/dynamic/json?url=https://raw.githubusercontent.com/ischemist/project-procrustes/master/coverage.json&query=$.totals.percent_covered_display&label=coverage&color=brightgreen&suffix=%25) [![arXiv](https://img.shields.io/badge/arXiv-2512.07079-b31b1b.svg)](https://arxiv.org/abs/2512.07079)
 
 **RetroCast** is a comprehensive toolkit for standardizing, scoring, and analyzing multistep retrosynthesis models. It decouples **prediction** from **evaluation**, enabling rigorous, apples-to-apples comparison of disparate algorithms on a unified playing field.
 
@@ -24,7 +20,7 @@ The field of retrosynthesis evaluation is fragmented:
 
 ## Key Features
 
-- **Universal Adapters:** Translation layers for *AiZynthFinder*, *Retro\**, *DirectMultiStep*, *SynPlanner*, *Syntheseus*, *ASKCOS*, *RetroChimera*, *DreamRetro*, *MultiStepTTL*, *SynLlama*, and *PaRoutes*.
+- **Universal Adapters:** Translation layers for _AiZynthFinder_, \*Retro\**, *DirectMultiStep*, *SynPlanner*, *Syntheseus*, *ASKCOS*, *RetroChimera*, *DreamRetro*, *MultiStepTTL*, *SynLlama*, and *PaRoutes\*.
 - **Canonical Schema:** All routes cast into a strict, recursive `Molecule` / `ReactionStep` Pydantic model.
 - **Curated Benchmarks:** **Reference Series** (algorithm comparison) and **Market Series** (practical utility), stratified by route length and topology.
 - **Rigorous Statistics:** Built-in bootstrapping (95% CI), pairwise tournaments, and probabilistic ranking.
@@ -74,21 +70,23 @@ New to RetroCast? Start here:
 RetroCast introduces two benchmark series derived from PaRoutes:
 
 ### Reference Series (`ref-`)
-*For algorithm developers*
 
-| Benchmark | Targets | Description |
-| :--- | :--- | :--- |
-| **ref-lin-600** | 600 | Linear routes stratified by length (100 each for lengths 2–7) |
-| **ref-cnv-400** | 400 | Convergent routes stratified by length (100 each for lengths 2–5) |
-| **ref-lng-84** | 84 | All available routes of extreme length (8–10 steps) |
+_For algorithm developers_
+
+| Benchmark       | Targets | Description                                                       |
+| :-------------- | :------ | :---------------------------------------------------------------- |
+| **ref-lin-600** | 600     | Linear routes stratified by length (100 each for lengths 2–7)     |
+| **ref-cnv-400** | 400     | Convergent routes stratified by length (100 each for lengths 2–5) |
+| **ref-lng-84**  | 84      | All available routes of extreme length (8–10 steps)               |
 
 ### Market Series (`mkt-`)
-*For practical utility*
 
-| Benchmark | Targets | Description |
-| :--- | :--- | :--- |
-| **mkt-lin-500** | 500 | Linear routes solvable with commercial buyables (stratified) |
-| **mkt-cnv-160** | 160 | Convergent routes solvable with commercial buyables (stratified) |
+_For practical utility_
+
+| Benchmark       | Targets | Description                                                      |
+| :-------------- | :------ | :--------------------------------------------------------------- |
+| **mkt-lin-500** | 500     | Linear routes solvable with commercial buyables (stratified)     |
+| **mkt-cnv-160** | 160     | Convergent routes solvable with commercial buyables (stratified) |
 
 See **[Benchmarks Guide](guides/benchmarks.md)** for details.
 
@@ -138,7 +136,6 @@ RetroCast powers **[SynthArena](https://syntharena.ischemist.com)**, an open-sou
 ## Citation
 
 If you use RetroCast in your research, please cite: [arXiv:2512.07079](https://arxiv.org/abs/2512.07079)
-
 
 ```bibtex
 @misc{retrocast,

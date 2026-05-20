@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from retrocast.adapters.retrochimera_adapter import RetrochimeraAdapter
+from retrocast.adapters.retrochimera_adapter import RetroChimeraAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import TargetInput
@@ -10,10 +10,10 @@ from retrocast.workflow.adapt import adapt_target_routes
 from tests.adapters.test_base_adapter import BaseAdapterTest
 
 
-class TestRetrochimeraAdapterUnit(BaseAdapterTest):
+class TestRetroChimeraAdapterUnit(BaseAdapterTest):
     @pytest.fixture
     def adapter_instance(self):
-        return RetrochimeraAdapter()
+        return RetroChimeraAdapter()
 
     @pytest.fixture
     def raw_valid_route_data(self):
@@ -115,12 +115,12 @@ class TestRetrochimeraAdapterUnit(BaseAdapterTest):
 
 
 @pytest.mark.integration
-class TestRetrochimeraAdapterContract:
+class TestRetroChimeraAdapterContract:
     """Contract tests: verify the adapter produces valid Route objects with required fields populated."""
 
     @pytest.fixture(scope="class")
-    def adapter(self) -> RetrochimeraAdapter:
-        return RetrochimeraAdapter()
+    def adapter(self) -> RetroChimeraAdapter:
+        return RetroChimeraAdapter()
 
     @pytest.fixture(scope="class")
     def ebastine_target_input(self) -> TargetInput:
@@ -161,12 +161,12 @@ class TestRetrochimeraAdapterContract:
 
 
 @pytest.mark.integration
-class TestRetrochimeraAdapterRegression:
+class TestRetroChimeraAdapterRegression:
     """Regression tests: verify specific routes match expected structures and values."""
 
     @pytest.fixture(scope="class")
-    def adapter(self) -> RetrochimeraAdapter:
-        return RetrochimeraAdapter()
+    def adapter(self) -> RetroChimeraAdapter:
+        return RetroChimeraAdapter()
 
     @pytest.fixture(scope="class")
     def ebastine_target_input(self) -> TargetInput:

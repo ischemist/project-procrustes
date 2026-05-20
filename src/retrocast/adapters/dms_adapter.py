@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
+from retrocast._warnings import warn_deprecated
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.errors import adapter_cycle_error, adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
@@ -33,8 +34,8 @@ class DMSRouteList(RootModel[list[DMSTree]]):
     pass
 
 
-class DMSAdapter(BaseAdapter):
-    """Adapter for converting DMS-style model outputs to the Route schema."""
+class DirectMultiStepAdapter(BaseAdapter):
+    """Adapter for converting DirectMultiStep-style model outputs to the Route schema."""
 
     def iter_raw_entries(
         self,
@@ -141,7 +142,26 @@ class DMSAdapter(BaseAdapter):
 
         max_child_length = 0
         for child in dms_node.children:
-            child_length = DMSAdapter.calculate_route_length(child)
+            child_length = DirectMultiStepAdapter.calculate_route_length(child)
             max_child_length = max(max_child_length, child_length)
 
         return max_child_length + 1
+
+
+_DEPRECATED_ADAPTER_ALIASES: dict[str, type[BaseAdapter]] = {
+    "DMSAdapter": DirectMultiStepAdapter,
+}
+
+
+def __getattr__(name: str) -> Any:
+    adapter_type = _DEPRECATED_ADAPTER_ALIASES.get(name)
+    if adapter_type is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    warn_deprecated(
+        old=f"{__name__}.{name}",
+        new=f"{__name__}.DirectMultiStepAdapter",
+        remove_in="0.7",
+        stacklevel=2,
+    )
+    globals()[name] = adapter_type
+    return adapter_type

@@ -13,8 +13,9 @@ from typing import Any
 import pytest
 
 from retrocast.chem import get_inchi_key
-from retrocast.cli import handlers
+from retrocast.cli import adhoc, handlers
 from retrocast.io.blob import save_json_gz
+from retrocast.io.data import load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from tests.helpers import _synthetic_inchikey
 
@@ -149,6 +150,52 @@ class TestCLIHandlerIntegration:
 
         # Check manifest exists
         assert (expected_file.parent / "manifest.json").exists()
+
+    def test_ingest_matches_adapt_then_collect(self, synthetic_config, synthetic_data):
+        """Project ingest should write the same routes as adhoc adapt followed by collect."""
+        base = Path(synthetic_config["data_dir"])
+        raw_path = base / "2-raw" / "test-model" / "test-bench" / "results.json.gz"
+        benchmark_path = base / "1-benchmarks" / "definitions" / "test-bench.json.gz"
+        route_corpus_path = base / "route-corpus.jsonl.gz"
+        collected_path = base / "routes-col.json.gz"
+
+        adhoc.handle_adapt(
+            SimpleNamespace(
+                input=str(raw_path),
+                output=str(route_corpus_path),
+                adapter="paroutes",
+                benchmark=str(benchmark_path),
+                input_kind="target-keyed-provider-output",
+                no_progress=True,
+            )
+        )
+        adhoc.handle_collect(
+            SimpleNamespace(
+                input=str(route_corpus_path),
+                benchmark=str(benchmark_path),
+                output=str(collected_path),
+            )
+        )
+
+        handlers.handle_ingest(
+            SimpleNamespace(
+                model="test-model",
+                dataset="test-bench",
+                all_models=False,
+                all_datasets=False,
+                sampling_strategy=None,
+                k=None,
+                anonymize=False,
+                adapter="paroutes",
+                input_kind="target-keyed-provider-output",
+                ignore_stereo=False,
+                no_progress=True,
+            ),
+            synthetic_config,
+        )
+
+        ingest_path = base / "3-processed" / "test-bench" / "test-model" / "routes.json.gz"
+        assert load_routes(ingest_path) == load_routes(collected_path)
 
     def test_score_flow(self, synthetic_config, synthetic_data):
         """Test handle_score -> creates evaluation file."""

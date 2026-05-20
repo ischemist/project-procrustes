@@ -4,7 +4,7 @@ import csv
 import gzip
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, overload
 
@@ -19,7 +19,7 @@ from retrocast.exceptions import (
 from retrocast.io.blob import iter_jsonl_gz, iter_lines_gz, load_json_gz, save_json_gz, save_jsonl_gz
 from retrocast.io.provenance import create_manifest
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
-from retrocast.models.chem import Route, StockStatistics
+from retrocast.models.chem import PredictedRoute, Route, StockStatistics
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.stats import ModelStatistics
 from retrocast.typing import InchiKeyStr, SmilesStr
@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 RoutesDict = dict[str, list[Route]]
 _ROUTES_ADAPTER = TypeAdapter(RoutesDict)
 _ROUTE_ADAPTER = TypeAdapter(Route)
+_PREDICTED_ROUTE_ADAPTER = TypeAdapter(PredictedRoute)
 
 
 def save_routes(routes: RoutesDict, path: Path) -> None:
@@ -137,11 +138,17 @@ def load_training_route_records(path: Path) -> list[TrainingRouteRecord]:
     return list(iter_training_route_records(path))
 
 
-def save_route_corpus(routes: Iterator[Route] | list[Route], path: Path) -> int:
-    """Save a canonical route corpus to a JSONL artifact."""
+def _ensure_predicted_route(route: Route | PredictedRoute) -> PredictedRoute:
+    if isinstance(route, PredictedRoute):
+        return route
+    return PredictedRoute.from_route(route)
+
+
+def save_route_corpus(routes: Iterable[Route | PredictedRoute], path: Path) -> int:
+    """Save a canonical prediction route corpus to a JSONL artifact."""
     path = Path(path)
     try:
-        return save_jsonl_gz((route.model_dump(mode="json") for route in routes), path)
+        return save_jsonl_gz((_ensure_predicted_route(route).model_dump(mode="json") for route in routes), path)
     except (OSError, TypeError, ValueError) as e:
         raise ArtifactWriteError(
             f"Failed to save route corpus to {path}: {e}",
@@ -150,16 +157,19 @@ def save_route_corpus(routes: Iterator[Route] | list[Route], path: Path) -> int:
         ) from e
 
 
-def load_route_corpus(path: Path) -> list[Route]:
-    """Load a canonical route corpus from a JSONL artifact."""
+def load_route_corpus(path: Path) -> list[PredictedRoute]:
+    """Load a canonical prediction route corpus from a JSONL artifact."""
     return list(iter_route_corpus(path))
 
 
-def iter_route_corpus(path: Path) -> Iterator[Route]:
-    """Stream a canonical route corpus from a JSONL artifact."""
+def iter_route_corpus(path: Path) -> Iterator[PredictedRoute]:
+    """Stream a canonical prediction route corpus from a JSONL artifact."""
     for row_index, row in enumerate(iter_jsonl_gz(path), start=1):
         try:
-            yield _ROUTE_ADAPTER.validate_python(row)
+            if isinstance(row, dict) and "route" in row:
+                yield _PREDICTED_ROUTE_ADAPTER.validate_python(row)
+            else:
+                yield PredictedRoute.from_route(_ROUTE_ADAPTER.validate_python(row))
         except ValidationError as e:
             raise ArtifactFormatError(
                 f"Invalid route corpus JSONL format in {path}: {e}",

@@ -6,9 +6,12 @@ from retrocast.exceptions import AdapterLogicError, AdapterSchemaError
 
 ADAPTER_DISPLAY_NAMES = {
     "aizynth": "AiZynthFinder",
+    "aizynthfinder": "AiZynthFinder",
     "askcos": "ASKCOS",
     "dms": "DMS",
+    "directmultistep": "DirectMultiStep",
     "dreamretro": "DreamRetro",
+    "dreamretroer": "DreamRetroEr",
     "molbuilder": "MolBuilder",
     "multistepttl": "MultiStepTTL",
     "paroutes": "PaRoutes",
@@ -17,6 +20,7 @@ ADAPTER_DISPLAY_NAMES = {
     "synllama": "SynLlama",
     "synplanner": "SynPlanner",
     "syntheseus": "Syntheseus",
+    "ursa": "URSA",
     "ursa-llm": "Ursa LLM",
 }
 

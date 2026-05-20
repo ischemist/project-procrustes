@@ -4,8 +4,7 @@ icon: lucide/clipboard-check
 
 # Evaluation
 
-Evaluation scores benchmark-keyed routes against a stock file. If you start
-from raw planner output, adapt and collect routes first.
+Evaluation scores benchmark-keyed routes against a stock file. If you start from raw planner output, adapt and collect routes first.
 
 ## Tracking Runtime
 
@@ -49,22 +48,21 @@ for target_id, evaluation in results.results.items():
     print(f"  Best route length: {evaluation.best_route_length}")
 ```
 
-Predictions must be keyed by benchmark target ID. Each route is evaluated by
-checking whether all leaves are present in stock and whether the route matches
-the benchmark ground truth.
+Predictions must be keyed by benchmark target ID. Each route is evaluated by checking whether all leaves are present in stock and whether the route matches the benchmark ground truth.
 
 ## Complete Evaluation Sketch
 
 ```python title="Adapt, collect, score"
-from retrocast import adapt_provider_output, collect_benchmark_predictions, get_adapter, load_benchmark
+from retrocast import adapt_provider_output, collect_benchmark_predictions, load_benchmark
+from retrocast.adapters import AiZynthFinderAdapter
 from retrocast.api import load_stock_file, score_predictions
 
 benchmark = load_benchmark("benchmark.json.gz")
 stock = load_stock_file("stock.txt")
-adapter = get_adapter("aizynth")
+adapter = AiZynthFinderAdapter()
 
-routes = adapt_provider_output(raw_provider_output, adapter)
-collected = collect_benchmark_predictions(routes, benchmark)
+predictions = adapt_provider_output(raw_provider_output, adapter)
+collected = collect_benchmark_predictions(predictions, benchmark)
 
 results = score_predictions(
     benchmark=benchmark,

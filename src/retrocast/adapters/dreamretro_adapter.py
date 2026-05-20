@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
+from retrocast._warnings import warn_deprecated
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
 from retrocast.adapters.errors import adapter_route_string_error, adapter_schema_error, adapter_target_mismatch
@@ -21,8 +22,8 @@ class DreamRetroRoutePayload:
     metadata: dict[str, Any]
 
 
-class DreamRetroAdapter(BaseAdapter):
-    """adapter for converting dreamretro-style outputs to the route schema."""
+class DreamRetroErAdapter(BaseAdapter):
+    """adapter for converting dreamretroer-style outputs to the route schema."""
 
     def iter_raw_entries(
         self,
@@ -154,3 +155,22 @@ class DreamRetroAdapter(BaseAdapter):
         )
 
         return Route(target=molecule, metadata=metadata)
+
+
+_DEPRECATED_ADAPTER_ALIASES: dict[str, type[BaseAdapter]] = {
+    "DreamRetroAdapter": DreamRetroErAdapter,
+}
+
+
+def __getattr__(name: str) -> Any:
+    adapter_type = _DEPRECATED_ADAPTER_ALIASES.get(name)
+    if adapter_type is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    warn_deprecated(
+        old=f"{__name__}.{name}",
+        new=f"{__name__}.DreamRetroErAdapter",
+        remove_in="0.7",
+        stacklevel=2,
+    )
+    globals()[name] = adapter_type
+    return adapter_type

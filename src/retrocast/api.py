@@ -66,6 +66,7 @@ from retrocast.io import (
 from retrocast.metrics.bootstrap import compute_metric_with_ci as compute_metric_with_ci
 from retrocast.metrics.ranking import compute_probabilistic_ranking as compute_probabilistic_ranking
 from retrocast.models.benchmark import BenchmarkSet
+from retrocast.models.chem import PredictedRoute as PredictedRoute
 from retrocast.models.collections import CollectedBenchmarkRoutes as CollectedBenchmarkRoutes
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.stats import ModelStatistics
@@ -73,6 +74,7 @@ from retrocast.typing import InchiKeyStr
 from retrocast.workflow import analyze as analyze_workflow
 from retrocast.workflow import score as score_workflow
 from retrocast.workflow.adapt import adapt_benchmark_keyed_route_corpus as adapt_benchmark_keyed_route_corpus
+from retrocast.workflow.adapt import adapt_prediction as adapt_prediction
 from retrocast.workflow.adapt import adapt_provider_output as adapt_provider_output
 from retrocast.workflow.adapt import adapt_route as adapt_route
 from retrocast.workflow.adapt import adapt_route_corpus as adapt_route_corpus

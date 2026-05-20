@@ -8,8 +8,8 @@ This guide gets you from raw model output to a rigorous statistical report in un
 
 !!! tip "What you'll learn"
 
-    - Install RetroCast and initialize a project
-    - Configure an adapter for your model's output format  
+    - Install RetroCast and inspect the data directory layout
+    - Place raw model output where project-mode commands expect it
     - Run the `ingest` → `score` → `analyze` pipeline
     - Generate statistical reports with confidence intervals
 
@@ -41,50 +41,35 @@ Verify installation:
 retrocast --version
 ```
 
-## 2. Initialize Project
+## 2. Check Project Paths
 
-Go to your working directory and create the default configuration and directory structure:
+Project-mode commands use a structured data directory. Inspect the resolved layout before placing files:
 
 ```bash
-retrocast init
+retrocast config
 ```
 
-This creates:
-
-- `retrocast-config.yaml` - Configuration file
-- `data/retrocast/` - Structured data directories (1-benchmarks, 2-raw, 3-processed, 4-scored, 5-results)
+By default, RetroCast uses `data/retrocast/` with subdirectories for benchmarks, raw model outputs, processed routes, scored results, and reports. The directories are created as commands write artifacts.
 
 !!! tip "Custom data directory"
 
     You can customize the data directory location via:
-    
+
     - CLI flag: `retrocast --data-dir ./my-data <command>`
     - Environment variable: `export RETROCAST_DATA_DIR=./my-data`
     - Config file: Add `data_dir: ./my-data` to `retrocast-config.yaml`
-    
+
     Run `retrocast config` to see the resolved paths.
 
-### Configure Your Model
+### Choose Your Adapter
 
-Open `retrocast-config.yaml` and register your model. You need to tell RetroCast which **adapter** to use to parse your files.
+For one-off runs, pass the adapter directly to `ingest`:
 
-```yaml title="retrocast-config.yaml" hl_lines="3 5 7"
-models:
-  # The name you will use in CLI commands
-  my-new-model: # (1)!
-    # The parser logic (see docs/developers/adapters.md)
-    adapter: aizynth # (2)!
-    # The filename RetroCast looks for in 2-raw/
-    raw_results_filename: predictions.json # (3)!
-    sampling: # (4)!
-      strategy: top-k
-      k: 10
+```bash
+retrocast ingest --model my-new-model --dataset mkt-cnv-160 --adapter aizynthfinder
 ```
 
-1. Choose a descriptive name (lowercase with hyphens)
-2. See [supported adapters](concepts.md#the-core-philosophy-adapters-as-an-air-gap) - includes AiZynthFinder, Retro\*, DMS, SynPlanner, Syntheseus, ASKCOS, and more
-3. Must match the filename you'll place in `2-raw/` within your data directory
-4. Optional: Limit routes per target (omit to keep all routes)
+For repeatable raw-data folders, put a `manifest.json` next to the raw results file with `directives.adapter` and, when needed, `directives.raw_results_filename`. If no filename is declared, project-mode ingest reads `results.json.gz`.
 
 ## 3. The Workflow (Ingest → Score → Analyze)
 
@@ -95,7 +80,7 @@ graph LR
     A[Place Raw Data<br/>2-raw/] --> B[Ingest<br/>Standardize]
     B --> C[Score<br/>Evaluate]
     C --> D[Analyze<br/>Statistics]
-    
+
     B -.-> E[3-processed/]
     C -.-> F[4-scored/]
     D -.-> G[5-results/]
@@ -122,13 +107,13 @@ cp predictions.json data/retrocast/2-raw/my-new-model/mkt-cnv-160/
 !!! info "Available benchmarks"
 
     See [Benchmarks Guide](guides/benchmarks.md) for details on evaluation sets:
-    
+
     - **Market Series** (`mkt-*`): Practical utility with commercial stock
     - **Reference Series** (`ref-*`): Algorithm comparison with ground-truth stock
 
 ### Step B: Ingest
 
-Convert raw output into benchmark-keyed routes for scoring. Under the hood, `ingest` first adapts raw payloads into a canonical route corpus, then collects those routes onto the benchmark.
+Convert raw output into benchmark-keyed routes for scoring. Under the hood, `ingest` first adapts raw payloads into prediction envelopes around canonical routes, then collects those routes onto the benchmark.
 
 ```bash
 retrocast ingest --model my-new-model --dataset mkt-cnv-160
@@ -180,19 +165,28 @@ retrocast analyze --model my-new-model --dataset mkt-cnv-160
 
     This skips the config setup and directly evaluates a single predictions file.
 
+## Choose A Path
+
+RetroCast has three common entry points depending on what you are trying to do:
+
+| Goal | Use this | Details |
+| --- | --- | --- |
+| Standardize raw payloads inside your own Python code | `adapt_route(...)`, `adapt_prediction(...)`, or `adapt_provider_output(...)` | [Library adaptation guide](guides/library/adaptation.md#choose-a-workflow) |
+| Prepare model results for a benchmark | `adapt_provider_output(...)` or `adapt_target_keyed_provider_output(...)`, then `collect_benchmark_predictions(...)` | [Collect for a benchmark](guides/library/adaptation.md#collect-for-a-benchmark) |
+| Run the managed file-based benchmark workflow | `retrocast ingest` → `retrocast score` → `retrocast analyze` | This quick start |
+
+If you are not sure which layer you need, start with the [adaptation decision table](guides/library/adaptation.md#choose-a-workflow). It explains the difference between single-route adaptation, provider-output adaptation, and benchmark collection.
+
 ## Next Steps
 
 **Learn the Concepts**  
 Read [Concepts](concepts.md) to understand why we use adapters and manifests.
 
-**Use the Python API**
-Want to use RetroCast inside your own scripts? See the [Library Guide](guides/library/).
+**Use the Python API** Want to use RetroCast inside your own scripts? See the [Library Guide](guides/library/).
 
-**Migrating from v0.5.x**
-See the [Changelog](changelog.md) for the v0.6 adapter workflow split.
+**Migrating from v0.5.x** See the [Changelog](changelog.md) for the v0.6 adapter workflow split.
 
-**Write Custom Adapters**
-Need to support a new output format? Learn how to write an [Adapter](developers/adapters.md).
+**Write Custom Adapters** Need to support a new output format? Learn how to write an [Adapter](developers/adapters.md).
 
 **Full CLI Reference**  
 See all available commands in the [CLI Reference](guides/cli.md).

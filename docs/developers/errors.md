@@ -2,7 +2,6 @@
 icon: lucide/triangle-alert
 ---
 
-
 # Error Handling
 
 RetroCast treats expected boundary failures as typed exceptions with stable codes. Messages are for humans; codes and context are the contract.
@@ -25,10 +24,10 @@ All boundary-facing exceptions expose:
 
 ```json
 {
-    "code": "adapter.schema_invalid",
-    "message": "raw data for target 'x' failed DMS schema validation",
-    "context": {"adapter": "dms", "target_id": "x"},
-    "retryable": false
+  "code": "adapter.schema_invalid",
+  "message": "raw data for target 'x' failed DirectMultiStep schema validation",
+  "context": { "adapter": "directmultistep", "target_id": "x" },
+  "retryable": false
 }
 ```
 
@@ -46,7 +45,7 @@ from retrocast.adapters.errors import adapter_schema_error
 try:
     validated = MyRawOutput.model_validate(raw_target_data)
 except ValidationError as exc:
-    raise adapter_schema_error("dms", target.id, "invalid route list") from exc
+    raise adapter_schema_error("directmultistep", target.id, "invalid route list") from exc
 ```
 
 Handle failures by class and code, not by message text:
@@ -91,12 +90,12 @@ For `ingest`, `ingest_model_predictions()` logs the sorted failure summary and r
 
 ```json
 {
-    "statistics": {
-        "failures_by_code": {
-            "adapter.schema_invalid": 2,
-            "chem.runtime_error": 1
-        }
+  "statistics": {
+    "failures_by_code": {
+      "adapter.schema_invalid": 2,
+      "chem.runtime_error": 1
     }
+  }
 }
 ```
 

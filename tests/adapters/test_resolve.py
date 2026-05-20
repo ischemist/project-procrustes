@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from retrocast._warnings import RetroCastFutureWarning
 from retrocast.adapters import ADAPTER_TYPES
 from retrocast.adapters.resolve import (
     DEFAULT_RAW_RESULTS_FILENAME,
@@ -46,12 +47,23 @@ class TestReadManifestDirectives:
 class TestResolveAdapter:
     def test_resolve_adapter_prefers_cli_override(self, tmp_path):
         adapter, source = resolve_adapter(
-            cli_adapter="aizynth",
+            cli_adapter="aizynthfinder",
             raw_dir=tmp_path,
             model_name="test-model",
         )
 
-        assert isinstance(adapter, ADAPTER_TYPES["aizynth"])
+        assert isinstance(adapter, ADAPTER_TYPES["aizynthfinder"])
+        assert source == "cli"
+
+    def test_resolve_adapter_warns_for_deprecated_cli_override(self, tmp_path):
+        with pytest.warns(RetroCastFutureWarning, match="aizynth"):
+            adapter, source = resolve_adapter(
+                cli_adapter="aizynth",
+                raw_dir=tmp_path,
+                model_name="test-model",
+            )
+
+        assert isinstance(adapter, ADAPTER_TYPES["aizynthfinder"])
         assert source == "cli"
 
     def test_resolve_adapter_uses_manifest_when_cli_is_absent(self, tmp_path):
@@ -64,6 +76,19 @@ class TestResolveAdapter:
         )
 
         assert isinstance(adapter, ADAPTER_TYPES["askcos"])
+        assert source == "manifest"
+
+    def test_resolve_adapter_warns_for_deprecated_manifest_adapter(self, tmp_path):
+        (tmp_path / "manifest.json").write_text(json.dumps({"directives": {"adapter": "dms"}}))
+
+        with pytest.warns(RetroCastFutureWarning, match="dms"):
+            adapter, source = resolve_adapter(
+                cli_adapter=None,
+                raw_dir=tmp_path,
+                model_name="test-model",
+            )
+
+        assert isinstance(adapter, ADAPTER_TYPES["directmultistep"])
         assert source == "manifest"
 
     def test_resolve_adapter_invalid_cli_override_raises(self, tmp_path):

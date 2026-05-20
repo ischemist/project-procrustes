@@ -434,6 +434,7 @@ class TestHandleAdapt:
         handle_adapt(args)
 
         assert load_route_corpus(output_path) == []
+        assert (tmp_path / "route-corpus.manifest.json").exists()
 
     def test_adapt_loads_flat_jsonl_corpora(self, tmp_path):
         input_path = tmp_path / "completions.jsonl"
@@ -451,7 +452,7 @@ class TestHandleAdapt:
         args = Namespace(
             input=str(input_path),
             output=str(output_path),
-            adapter="ursa-llm",
+            adapter="ursa",
             benchmark=None,
         )
 
@@ -526,6 +527,7 @@ class TestHandleAdapt:
         saved_routes = load_json_gz(output_path)
         assert list(saved_routes.keys()) == ["target_1"]
         assert len(saved_routes["target_1"]) == 1
+        assert (tmp_path / "routes.manifest.json").exists()
 
 
 if __name__ == "__main__":

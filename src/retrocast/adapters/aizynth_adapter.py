@@ -6,6 +6,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
+from retrocast._warnings import warn_deprecated
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.common import build_molecule_from_bipartite_node
 from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
@@ -30,6 +31,7 @@ class AizynthMoleculeInput(AizynthBaseNode):
 
     type: Literal["mol"]
     in_stock: bool = False
+    scores: dict[str, float] = Field(default_factory=dict)
 
 
 class AizynthReactionInput(AizynthBaseNode):
@@ -49,7 +51,7 @@ class AizynthRouteList(RootModel[list[AizynthMoleculeInput]]):
     pass
 
 
-class AizynthAdapter(BaseAdapter):
+class AiZynthFinderAdapter(BaseAdapter):
     """adapter for converting aizynthfinder-style outputs to the route schema."""
 
     def iter_raw_entries(
@@ -104,4 +106,30 @@ class AizynthAdapter(BaseAdapter):
                     actual_smiles=target_molecule.smiles,
                 )
 
-        return Route(target=target_molecule, metadata={})
+        route_metadata: dict[str, Any] = {}
+        if aizynth_root.scores:
+            route_metadata["scores"] = aizynth_root.scores
+            state_score = aizynth_root.scores.get("state score")
+            if state_score is not None:
+                route_metadata["state_score"] = state_score
+
+        return Route(target=target_molecule, metadata=route_metadata)
+
+
+_DEPRECATED_ADAPTER_ALIASES: dict[str, type[BaseAdapter]] = {
+    "AizynthAdapter": AiZynthFinderAdapter,
+}
+
+
+def __getattr__(name: str) -> Any:
+    adapter_type = _DEPRECATED_ADAPTER_ALIASES.get(name)
+    if adapter_type is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    warn_deprecated(
+        old=f"{__name__}.{name}",
+        new=f"{__name__}.AiZynthFinderAdapter",
+        remove_in="0.7",
+        stacklevel=2,
+    )
+    globals()[name] = adapter_type
+    return adapter_type

@@ -10,8 +10,8 @@ The RetroCast CLI provides a unified interface for standardizing, scoring, and a
 
     **Project Mode**
     Structured workflow for reproducible benchmarking of multiple models
-    
-    **Ad-Hoc Mode**  
+
+    **Ad-Hoc Mode**
     Direct commands for processing individual files without configuration
 
 ## Installation
@@ -21,11 +21,11 @@ The RetroCast CLI provides a unified interface for standardizing, scoring, and a
     ```bash
     uv tool install retrocast
     ```
-    
+
     or, optionally, if you want to create plots during analysis:
-    
+
     ```bash
-    uv tool install "retrocast[viz]"
+    pip install "retrocast[viz]"
     ```
 
 === "pip"
@@ -33,9 +33,9 @@ The RetroCast CLI provides a unified interface for standardizing, scoring, and a
     ```bash
     pip install retrocast
     ```
-    
+
     or, optionally, if you want to create plots during analysis:
-    
+
     ```bash
     uv tool install "retrocast[viz]"
     ```
@@ -54,10 +54,10 @@ These options apply to all commands:
 retrocast [--config CONFIG] [--data-dir DATA_DIR] <command>
 ```
 
-| Option | Description | Default |
-|:-------|:------------|:--------|
-| `--config` | Path to config file | `retrocast-config.yaml` |
-| `--data-dir` | Override data directory | `data/retrocast/` |
+| Option       | Description             | Default                 |
+| :----------- | :---------------------- | :---------------------- |
+| `--config`   | Path to config file     | `retrocast-config.yaml` |
+| `--data-dir` | Override data directory | `data/retrocast/`       |
 
 ### Data Directory Resolution
 
@@ -73,10 +73,10 @@ The data directory is resolved with the following priority:
     ```bash
     # Use CLI flag (highest priority)
     retrocast --data-dir ./my-data ingest --model my-model --dataset mkt-cnv-160
-    
+
     # Use environment variable
     RETROCAST_DATA_DIR=./my-data retrocast ingest --model my-model --dataset mkt-cnv-160
-    
+
     # Check current configuration
     retrocast config
     ```
@@ -84,7 +84,7 @@ The data directory is resolved with the following priority:
 !!! warning "Migration from older versions"
 
     The default data directory changed from `data/` to `data/retrocast/` in version 0.6. If you have existing data at `data/`, either:
-    
+
     - Move it: `mv data/1-benchmarks data/retrocast/`
     - Or set the environment variable: `export RETROCAST_DATA_DIR=data`
 
@@ -93,36 +93,37 @@ The data directory is resolved with the following priority:
 !!! tip "When to use ad-hoc mode"
 
     Use these commands to process single files immediately without setting up a project directory. Great for:
-    
+
     - Quick experiments
     - One-off evaluations
     - Testing new adapters
 
 ### `adapt` - Convert Raw Predictions
 
-Convert raw output from a supported model into a canonical route corpus.
-This is the standalone standardization step introduced in v0.6: it does not
-need a benchmark unless the raw file is already target-keyed.
+Convert raw output from a supported model into a prediction route corpus. This is the standalone standardization step introduced in v0.6: it does not need a benchmark unless the raw file is already target-keyed.
 
 ```bash
 retrocast adapt \
   --input raw_predictions.json.gz \
-  --adapter aizynth \
+  --adapter aizynthfinder \
   --input-kind provider-output \
   --output route-corpus.jsonl.gz \
-  --benchmark benchmark.json.gz
+  --benchmark benchmark.json.gz \
+  --no-progress
 ```
 
 1. See available adapters with `retrocast list-adapters`
 2. Use `target-keyed-provider-output` when the top-level raw object is keyed by target id or target smiles
 3. Optional for `provider-output`; required for `target-keyed-provider-output`
+4. Optional: Disable progress bars and use log output only
 
-**Supported adapters:** `aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa-llm`
+By default, `adapt` shows route-level progress with count, elapsed time, ETA, and routes per second.
+
+**Supported adapters:** `aizynthfinder`, `askcos`, `directmultistep`, `dreamretroer`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa`
 
 ### `collect` - Align a Route Corpus to a Benchmark
 
-Collect a canonical route corpus into the benchmark-keyed `routes.json.gz` artifact used for scoring.
-This is the benchmark-alignment step that used to be hidden inside `ingest`.
+Collect a prediction route corpus into the benchmark-keyed `routes.json.gz` artifact used for scoring. This is the benchmark-alignment step that used to be hidden inside `ingest`.
 
 ```bash
 retrocast collect \
@@ -169,59 +170,42 @@ retrocast create-benchmark \
 !!! success "Recommended for research"
 
     For large-scale evaluations, use project mode for:
-    
+
     - Reproducible benchmarking
     - Multiple models comparison
     - Cryptographic audit trail
     - Automated manifest tracking
 
-### `init` - Initialize Project
+### Project Setup
 
-Generate a default configuration file and directory structure:
+There is no project initializer command in the current CLI. Project mode uses the data directory reported by:
 
 ```bash
-retrocast init
+retrocast config
 ```
 
-**Creates:**
+Place raw outputs under:
 
-- `retrocast-config.yaml` - Model configuration
-- `data/` directory structure
-
-### Configuration
-
-Edit `retrocast-config.yaml` to register your models:
-
-```yaml title="retrocast-config.yaml"
-models:
-  dms-explorer: # (1)!
-    adapter: dms # (2)!
-    raw_results_filename: predictions.json # (3)!
-    sampling: # (4)!
-      strategy: top-k
-      k: 50
+```text
+<data-dir>/2-raw/<model>/<benchmark>/<raw-results-file>
 ```
 
-1. Model identifier (used in CLI commands)
-2. Adapter type (see `retrocast list-adapters`)
-3. Expected filename in `2-raw/<model>/<benchmark>/`
-4. Optional: Limit routes per target
+Project-mode `ingest` resolves the adapter in this order:
 
-??? example "Advanced configuration"
+1. `--adapter` passed on the command line
+2. `manifest.json` next to the raw file with `directives.adapter`
+3. error if neither is provided
 
-    ```yaml
-    models:
-      my-model:
-        adapter: aizynth
-        raw_results_filename: results.json.gz
-        sampling:
-          strategy: top-k
-          k: 100
-        # Custom metadata
-        metadata:
-          version: "2.0"
-          training_data: "USPTO-50k"
-    ```
+If the raw filename is not declared in `manifest.json`, ingest reads `results.json.gz`.
+
+```json title="data/retrocast/2-raw/my-model/mkt-cnv-160/manifest.json"
+{
+  "directives": {
+    "adapter": "aizynthfinder",
+    "raw_results_filename": "results.json.gz"
+  }
+}
+```
 
 ### The Pipeline
 
@@ -233,16 +217,14 @@ graph LR
     D --> E[4-scored/]
     E --> F[analyze]
     F --> G[5-results/]
-    
+
 ```
 
 All paths are relative to your data directory (default: `data/retrocast/`).
 
 ### `ingest` - Adapt and Collect Routes
 
-Transforms raw model outputs into benchmark-keyed routes by running adaptation and collection as one command.
-In v0.6, this command remains as the project-mode convenience wrapper around
-the two lower-level operations: `adapt` followed by `collect`.
+Transforms raw model outputs into benchmark-keyed routes by running adaptation and collection as one command. In v0.6, this command remains as the project-mode convenience wrapper around the two lower-level operations: `adapt` followed by `collect`.
 
 ```bash
 retrocast ingest \
@@ -250,27 +232,31 @@ retrocast ingest \
   --dataset paroutes-n1 \
   --input-kind target-keyed-provider-output \
   --anonymize \  # (1)!
-  --ignore-stereo  # (2)!
+  --ignore-stereo \  # (2)!
+  --no-progress  # (3)!
 ```
 
 1. Optional: Hashes the model name for blind review
 2. Optional: Strip stereochemistry during SMILES canonicalization
+3. Optional: Disable progress bars and use log output only
 
 **Input:** `<data-dir>/2-raw/<model>/<dataset>/<raw_results_filename>`  
 **Output:** `<data-dir>/3-processed/<model>/<dataset>/routes.json.gz`
 
 **Operations:**
 
-- Adapt raw payloads into a canonical route corpus
+- Adapt raw payloads into a prediction route corpus
 - Canonicalize SMILES (optionally ignoring stereochemistry with `--ignore-stereo`)
 - Collect canonical routes onto the benchmark by target smiles
 - Deduplicate routes within each benchmark target
 - Apply sampling strategy (if configured)
 
+For a single model/dataset job, `ingest` shows route-level progress with count, ETA, and routes per second. For `--all-models` or `--all-datasets`, it shows one global job-level progress bar instead of one route-level bar per job. Use `--no-progress` when logs are easier to capture.
+
 !!! warning "Stereochemistry-agnostic processing"
 
     The `--ignore-stereo` flag removes stereochemical information during canonicalization. This is useful for model developers who want to isolate whether their model struggles specifically with stereochemistry or has broader issues with reaction prediction and stock termination.
-    
+
     **Not recommended for production evaluation** - stereochemistry is critical for experimental chemistry.
 
 ### `score` - Evaluate Routes
@@ -301,9 +287,9 @@ retrocast score \
 !!! warning "Stereochemistry-agnostic evaluation"
 
     The `--ignore-stereo` flag enables stereochemistry-agnostic evaluation. When enabled, molecules that differ only in stereochemistry are treated as identical during scoring. This allows model developers to calculate Top-K accuracy metrics focused on molecular connectivity rather than stereochemical correctness.
-    
+
     **Use case:** Helps distinguish between stereochemistry-specific issues and fundamental retrosynthesis planning problems.
-    
+
     **Not recommended for production evaluation** - stereochemistry is critical for experimental chemistry.
 
 ### `analyze` - Generate Reports
@@ -341,7 +327,7 @@ retrocast analyze \
 !!! info "Cryptographic audit trail"
 
     RetroCast generates a `manifest.json` for every file it creates, tracking:
-    
+
     - Input file SHA256 hashes
     - Command parameters
     - Output file hashes
@@ -364,7 +350,7 @@ retrocast verify \
 === "Standard Check"
 
     Verifies that the file on disk matches the SHA256 hash in its manifest.
-    
+
     ```bash
     retrocast verify --target 4-scored/model/dataset/
     ```
@@ -372,13 +358,13 @@ retrocast verify \
 === "Deep Check"
 
     Recursively verifies the entire dependency graph:
-    
+
     ```
     Analyze → Score → Ingest → Raw
     ```
-    
+
     Ensures logical consistency across the pipeline.
-    
+
     ```bash
     retrocast verify --target 5-results/model/dataset/ --deep
     ```
@@ -443,8 +429,8 @@ retrocast list
 
 ```
 Configured models:
-  - dms-explorer (adapter: dms)
-  - aizynthfinder-mcts (adapter: aizynth)
+  - dms-explorer (adapter: directmultistep)
+  - aizynthfinder-mcts (adapter: aizynthfinder)
   - retro-star (adapter: retrostar)
 ```
 
@@ -460,17 +446,23 @@ retrocast list-adapters
 
 ```
 Available adapters:
-  - aizynth: AiZynthFinder (bipartite graph)
-  - dms: DirectMultiStep (recursive dict)
+  - aizynthfinder: AiZynthFinder (bipartite graph)
+      deprecated aliases: aizynth
+  - askcos: ASKCOS (custom format)
+  - directmultistep: DirectMultiStep (recursive dict)
+      deprecated aliases: dms
+  - dreamretroer: DreamRetroEr (precursor map)
+      deprecated aliases: dreamretro
+  - molbuilder: MolBuilder (tree format)
+  - multistepttl: MultiStepTTL (custom format)
+  - paroutes: PaRoutes (reference format)
+  - retrochimera: RetroChimera (precursor map)
   - retrostar: Retro* (precursor map)
+  - synllama: SynLlama (precursor map)
   - synplanner: SynPlanner (bipartite graph)
   - syntheseus: Syntheseus (bipartite graph)
-  - askcos: ASKCOS (custom format)
-  - retrochimera: RetroChimera (precursor map)
-  - dreamretro: DreamRetro (precursor map)
-  - multistepttl: MultiStepTTL (custom format)
-  - synllama: SynLlama (precursor map)
-  - paroutes: PaRoutes (reference format)
+  - ursa: URSA (<synthesis_step> XML blocks)
+      deprecated aliases: ursa-llm
 ```
 
 ### `info` - Show Model Details
@@ -485,7 +477,7 @@ retrocast info --model dms-explorer
 
 ```yaml
 Model: dms-explorer
-  Adapter: dms
+  Adapter: directmultistep
   Raw results filename: predictions.json
   Sampling:
     Strategy: top-k
@@ -499,19 +491,17 @@ Model: dms-explorer
 ### Quick Lookup
 
 | Command | Purpose | Input | Output |
-|:--------|:--------|:------|:-------|
+| :-- | :-- | :-- | :-- |
 | `config` | Show resolved paths | - | Configuration display |
-| `init` | Initialize project | - | `retrocast-config.yaml` |
-| `adapt` | Convert raw → standardized | Raw predictions | Route objects |
+| `adapt` | Convert raw → standardized | Raw predictions | Prediction route corpus (`.jsonl.gz`) |
 | `score-file` | Evaluate routes | Routes + stock | Scored routes |
 | `create-benchmark` | Generate benchmark | SMILES list | Benchmark JSON |
 | `ingest` | Standardize (project mode) | `2-raw/` | `3-processed/` |
 | `score` | Evaluate (project mode) | `3-processed/` | `4-scored/` |
 | `analyze` | Generate report | `4-scored/` | `5-results/` |
 | `verify` | Audit integrity | Manifest files | Validation report |
-| `list` | Show models | `retrocast-config.yaml` | Model list |
+| `list` | Show models discovered from raw manifests | `2-raw/` | Model list |
 | `list-adapters` | Show adapters | - | Adapter list |
-| `info` | Show model config | Model name | Config details |
 
 ### Advanced Options
 
@@ -520,12 +510,12 @@ Model: dms-explorer
 Both `ingest` and `score` commands support the `--ignore-stereo` flag for stereochemistry-agnostic processing:
 
 | Command | Flag | Purpose | Use Case |
-|:--------|:-----|:--------|:---------|
+| :-- | :-- | :-- | :-- |
 | `ingest` | `--ignore-stereo` | Strip stereochemistry during canonicalization | Analyze stock termination rate/solvability without stereochemical constraints |
 | `score` | `--ignore-stereo` | Perform stereochemistry-agnostic matching | Calculate Top-K accuracy independent of stereochemistry |
 
 !!! note "For model developers"
 
     The `--ignore-stereo` flag is primarily useful for model development and diagnostic purposes. It allows you to determine whether prediction errors stem from stereochemical confusion or more fundamental retrosynthetic planning issues.
-    
+
     **Not recommended for evaluating production models** - stereochemistry is critical for experimental chemistry.
