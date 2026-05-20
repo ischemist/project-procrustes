@@ -3,18 +3,15 @@ from typing import Any
 
 import pytest
 
-from retrocast._warnings import RetroCastFutureWarning
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.exceptions import AdapterLogicError, BenchmarkCollectionError
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Route, TargetIdentity
-from retrocast.typing import SmilesStr
+from retrocast.typing import InchiKeyStr, SmilesStr
 from retrocast.workflow.adapt import (
-    adapt_benchmark_keyed_route_corpus,
     adapt_prediction,
     adapt_provider_output,
     adapt_route,
-    adapt_route_corpus,
     adapt_target_keyed_provider_output,
 )
 from retrocast.workflow.collect import collect_benchmark_predictions
@@ -81,13 +78,13 @@ def synthetic_benchmark() -> BenchmarkSet:
             "target_1": BenchmarkTarget(
                 id="target_1",
                 smiles=SmilesStr("CC"),
-                inchi_key=_synthetic_inchikey("CC"),
+                inchi_key=InchiKeyStr(_synthetic_inchikey("CC")),
                 acceptable_routes=[],
             ),
             "target_2": BenchmarkTarget(
                 id="target_2",
                 smiles=SmilesStr("CCC"),
-                inchi_key=_synthetic_inchikey("CCC"),
+                inchi_key=InchiKeyStr(_synthetic_inchikey("CCC")),
                 acceptable_routes=[],
             ),
         },
@@ -147,22 +144,6 @@ class TestAdaptProviderOutput:
         assert len(routes) == 2
         assert [prediction.route.target.smiles for prediction in routes] == ["CC", "CCC"]
 
-    def test_legacy_adapt_names_warn(self, synthetic_benchmark):
-        provider_output = [_make_simple_route("CC", "C").model_dump(mode="json")]
-        target_keyed_provider_output = {"target_1": provider_output}
-
-        with pytest.warns(RetroCastFutureWarning, match="adapt_route_corpus"):
-            routes = adapt_route_corpus(provider_output, RouteFirstSyntheticAdapter())
-        with pytest.warns(RetroCastFutureWarning, match="adapt_benchmark_keyed_route_corpus"):
-            keyed_routes = adapt_benchmark_keyed_route_corpus(
-                target_keyed_provider_output,
-                synthetic_benchmark,
-                RouteFirstSyntheticAdapter(),
-            )
-
-        assert len(routes) == 1
-        assert len(keyed_routes) == 1
-
 
 @pytest.mark.unit
 class TestCollectBenchmarkPredictions:
@@ -190,17 +171,16 @@ class TestCollectBenchmarkPredictions:
         assert collected.stats.unmatched_routes == 1
         assert collected.stats.final_unique_routes_saved == 0
 
-    def test_collect_benchmark_predictions_warns_for_legacy_report_policy(self, synthetic_benchmark):
+    def test_collect_benchmark_predictions_rejects_unknown_policy(self, synthetic_benchmark):
         unmatched_route = _make_simple_route("CCCC", "CC")
+        unknown_policy: Any = "report"
 
-        with pytest.warns(RetroCastFutureWarning, match="on_unmatched='ignore'"):
-            collected = collect_benchmark_predictions(
+        with pytest.raises(ValueError, match="on_unmatched"):
+            collect_benchmark_predictions(
                 [unmatched_route],
                 synthetic_benchmark,
-                on_unmatched="report",
+                on_unmatched=unknown_policy,
             )
-
-        assert collected.stats.unmatched_routes == 1
 
     def test_collect_benchmark_predictions_raises_on_ambiguous_smiles(self):
         ambiguous_benchmark = BenchmarkSet(
@@ -209,13 +189,13 @@ class TestCollectBenchmarkPredictions:
                 "a": BenchmarkTarget(
                     id="a",
                     smiles=SmilesStr("CC"),
-                    inchi_key=_synthetic_inchikey("CC"),
+                    inchi_key=InchiKeyStr(_synthetic_inchikey("CC")),
                     acceptable_routes=[],
                 ),
                 "b": BenchmarkTarget(
                     id="b",
                     smiles=SmilesStr("CC"),
-                    inchi_key=_synthetic_inchikey("CC"),
+                    inchi_key=InchiKeyStr(_synthetic_inchikey("CC")),
                     acceptable_routes=[],
                 ),
             },

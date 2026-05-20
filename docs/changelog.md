@@ -47,10 +47,9 @@ Scoring artifacts remain benchmark-keyed `dict[target_id, list[Route]]` so exist
 
 The v0.6.0 compatibility layer intentionally warns instead of removing the old names immediately. These surfaces are scheduled for removal in v0.9.0:
 
-- legacy adapter slugs such as `aizynth`, `dms`, `dreamretro`, and `ursa-llm`
-- legacy adapter class aliases such as `AizynthAdapter`, `DMSAdapter`, `DreamRetroAdapter`, and `UrsaLlmAdapter`
-- target-local adaptation helpers such as `adapt_single_route(...)`, `adapt_routes(...)`, `adapt_route_corpus(...)`, and `adapt_benchmark_keyed_route_corpus(...)`
-- collection policy aliases `skip` and `report`
+- legacy adapter slugs such as `aizynth`, `dms`, and `dreamretro`
+- legacy adapter class aliases such as `AizynthAdapter`, `DMSAdapter`, and `DreamRetroAdapter`
+- target-local adaptation helpers `adapt_single_route(...)` and `adapt_routes(...)`
 
 See the [deprecation schedule](developers/deprecations.md) for the canonical removal plan.
 

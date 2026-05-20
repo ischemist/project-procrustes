@@ -43,7 +43,6 @@ DEPRECATED_ADAPTER_SLUGS: dict[str, str] = {
     "aizynth": "aizynthfinder",
     "dms": "directmultistep",
     "dreamretro": "dreamretroer",
-    "ursa-llm": "ursa",
 }
 
 _DEPRECATED_ADAPTER_ALIASES: dict[str, type[BaseAdapter]] = {
@@ -54,7 +53,6 @@ _DEPRECATED_ADAPTER_ALIASES: dict[str, type[BaseAdapter]] = {
     "RetrochimeraAdapter": RetroChimeraAdapter,
     "SynLLaMaAdapter": SynLlamaAdapter,
     "SynLlaMaAdapter": SynLlamaAdapter,
-    "UrsaLlmAdapter": UrsaAdapter,
 }
 
 _DEPRECATED_ADAPTER_REPLACEMENTS = {
@@ -65,7 +63,6 @@ _DEPRECATED_ADAPTER_REPLACEMENTS = {
     "RetrochimeraAdapter": "RetroChimeraAdapter",
     "SynLLaMaAdapter": "SynLlamaAdapter",
     "SynLlaMaAdapter": "SynLlamaAdapter",
-    "UrsaLlmAdapter": "UrsaAdapter",
 }
 
 
@@ -208,7 +205,6 @@ __all__ = [
     "DreamRetroErAdapter",
     "DreamRetroAdapter",
     "UrsaAdapter",
-    "UrsaLlmAdapter",
     "MolBuilderAdapter",
     "MultiStepTTLAdapter",
     "TtlRetroAdapter",

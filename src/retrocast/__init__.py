@@ -14,11 +14,9 @@ from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.provenance import FileInfo, Manifest
 from retrocast.models.stats import ModelStatistics
 from retrocast.workflow.adapt import (
-    adapt_benchmark_keyed_route_corpus,
     adapt_prediction,
     adapt_provider_output,
     adapt_route,
-    adapt_route_corpus,
     adapt_target_keyed_provider_output,
     adapt_target_routes,
 )
@@ -44,8 +42,6 @@ __all__ = [
     "adapt_prediction",
     "adapt_provider_output",
     "adapt_target_keyed_provider_output",
-    "adapt_route_corpus",
-    "adapt_benchmark_keyed_route_corpus",
     "adapt_target_routes",
     "collect_benchmark_predictions",
     # Adapter functions
