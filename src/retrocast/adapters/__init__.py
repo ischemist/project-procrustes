@@ -1,20 +1,20 @@
 from typing import Any
 
 from retrocast._warnings import warn_deprecated
-from retrocast.adapters.aizynth_adapter import AizynthAdapter, AiZynthFinderAdapter
+from retrocast.adapters.aizynth_adapter import AiZynthFinderAdapter
 from retrocast.adapters.askcos_adapter import AskcosAdapter
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.dms_adapter import DirectMultiStepAdapter, DMSAdapter
-from retrocast.adapters.dreamretro_adapter import DreamRetroAdapter, DreamRetroErAdapter
+from retrocast.adapters.dms_adapter import DirectMultiStepAdapter
+from retrocast.adapters.dreamretro_adapter import DreamRetroErAdapter
 from retrocast.adapters.molbuilder_adapter import MolBuilderAdapter
-from retrocast.adapters.multistepttl_adapter import MultiStepTTLAdapter, TtlRetroAdapter
+from retrocast.adapters.multistepttl_adapter import MultiStepTTLAdapter
 from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
-from retrocast.adapters.retrochimera_adapter import RetroChimeraAdapter, RetrochimeraAdapter
+from retrocast.adapters.retrochimera_adapter import RetroChimeraAdapter
 from retrocast.adapters.retrostar_adapter import RetroStarAdapter
-from retrocast.adapters.synllama_adapter import SynLLaMaAdapter, SynLlaMaAdapter, SynLlamaAdapter
+from retrocast.adapters.synllama_adapter import SynLlamaAdapter
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
-from retrocast.adapters.ursa_llm_adapter import UrsaAdapter, UrsaLlmAdapter
+from retrocast.adapters.ursa_llm_adapter import UrsaAdapter
 from retrocast.exceptions import AdapterError, AdapterResolutionError, ChemError
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.workflow.adapt import adapt_target_routes
@@ -38,6 +38,42 @@ ADAPTER_TYPES: dict[str, type[BaseAdapter]] = {
 ADAPTER_MAP: dict[str, BaseAdapter] = {
     adapter_name: adapter_type() for adapter_name, adapter_type in ADAPTER_TYPES.items()
 }
+
+_DEPRECATED_ADAPTER_ALIASES: dict[str, type[BaseAdapter]] = {
+    "AizynthAdapter": AiZynthFinderAdapter,
+    "DMSAdapter": DirectMultiStepAdapter,
+    "DreamRetroAdapter": DreamRetroErAdapter,
+    "TtlRetroAdapter": MultiStepTTLAdapter,
+    "RetrochimeraAdapter": RetroChimeraAdapter,
+    "SynLLaMaAdapter": SynLlamaAdapter,
+    "SynLlaMaAdapter": SynLlamaAdapter,
+    "UrsaLlmAdapter": UrsaAdapter,
+}
+
+_DEPRECATED_ADAPTER_REPLACEMENTS = {
+    "AizynthAdapter": "AiZynthFinderAdapter",
+    "DMSAdapter": "DirectMultiStepAdapter",
+    "DreamRetroAdapter": "DreamRetroErAdapter",
+    "TtlRetroAdapter": "MultiStepTTLAdapter",
+    "RetrochimeraAdapter": "RetroChimeraAdapter",
+    "SynLLaMaAdapter": "SynLlamaAdapter",
+    "SynLlaMaAdapter": "SynLlamaAdapter",
+    "UrsaLlmAdapter": "UrsaAdapter",
+}
+
+
+def __getattr__(name: str) -> Any:
+    adapter_type = _DEPRECATED_ADAPTER_ALIASES.get(name)
+    if adapter_type is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    warn_deprecated(
+        old=f"{__name__}.{name}",
+        new=f"{__name__}.{_DEPRECATED_ADAPTER_REPLACEMENTS[name]}",
+        remove_in="0.7",
+        stacklevel=2,
+    )
+    globals()[name] = adapter_type
+    return adapter_type
 
 
 def get_adapter(adapter_name: str) -> BaseAdapter:

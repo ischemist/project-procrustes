@@ -1,5 +1,8 @@
+import importlib
+
 import pytest
 
+import retrocast.adapters as adapter_package
 from retrocast._warnings import RetroCastFutureWarning
 from retrocast.adapters import (
     ADAPTER_MAP,
@@ -66,6 +69,44 @@ def test_public_adapter_names_match_registry_slugs():
         "syntheseus": SyntheseusAdapter,
         "ursa-llm": UrsaAdapter,
     } == ADAPTER_TYPES
+
+
+@pytest.mark.parametrize(
+    ("old_name", "new_type"),
+    [
+        ("AizynthAdapter", AiZynthFinderAdapter),
+        ("DMSAdapter", DirectMultiStepAdapter),
+        ("DreamRetroAdapter", DreamRetroErAdapter),
+        ("TtlRetroAdapter", MultiStepTTLAdapter),
+        ("RetrochimeraAdapter", RetroChimeraAdapter),
+        ("SynLLaMaAdapter", SynLlamaAdapter),
+        ("SynLlaMaAdapter", SynLlamaAdapter),
+        ("UrsaLlmAdapter", UrsaAdapter),
+    ],
+)
+def test_deprecated_package_adapter_names_warn(old_name, new_type):
+    with pytest.warns(RetroCastFutureWarning, match=old_name):
+        assert getattr(adapter_package, old_name) is new_type
+
+
+@pytest.mark.parametrize(
+    ("module_name", "old_name", "new_type"),
+    [
+        ("retrocast.adapters.aizynth_adapter", "AizynthAdapter", AiZynthFinderAdapter),
+        ("retrocast.adapters.dms_adapter", "DMSAdapter", DirectMultiStepAdapter),
+        ("retrocast.adapters.dreamretro_adapter", "DreamRetroAdapter", DreamRetroErAdapter),
+        ("retrocast.adapters.multistepttl_adapter", "TtlRetroAdapter", MultiStepTTLAdapter),
+        ("retrocast.adapters.retrochimera_adapter", "RetrochimeraAdapter", RetroChimeraAdapter),
+        ("retrocast.adapters.synllama_adapter", "SynLLaMaAdapter", SynLlamaAdapter),
+        ("retrocast.adapters.synllama_adapter", "SynLlaMaAdapter", SynLlamaAdapter),
+        ("retrocast.adapters.ursa_llm_adapter", "UrsaLlmAdapter", UrsaAdapter),
+    ],
+)
+def test_deprecated_submodule_adapter_names_warn(module_name, old_name, new_type):
+    module = importlib.import_module(module_name)
+
+    with pytest.warns(RetroCastFutureWarning, match=old_name):
+        assert getattr(module, old_name) is new_type
 
 
 def test_adapt_single_route_uses_target_local_payload_contract():

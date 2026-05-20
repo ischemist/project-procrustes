@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, RootModel, ValidationError
 
+from retrocast._warnings import warn_deprecated
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.errors import adapter_cycle_error, adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
@@ -147,4 +148,20 @@ class DirectMultiStepAdapter(BaseAdapter):
         return max_child_length + 1
 
 
-DMSAdapter = DirectMultiStepAdapter
+_DEPRECATED_ADAPTER_ALIASES: dict[str, type[BaseAdapter]] = {
+    "DMSAdapter": DirectMultiStepAdapter,
+}
+
+
+def __getattr__(name: str) -> Any:
+    adapter_type = _DEPRECATED_ADAPTER_ALIASES.get(name)
+    if adapter_type is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    warn_deprecated(
+        old=f"{__name__}.{name}",
+        new=f"{__name__}.DirectMultiStepAdapter",
+        remove_in="0.7",
+        stacklevel=2,
+    )
+    globals()[name] = adapter_type
+    return adapter_type

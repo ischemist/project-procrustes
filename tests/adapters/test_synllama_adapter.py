@@ -1,6 +1,6 @@
 import pytest
 
-from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
+from retrocast.adapters.synllama_adapter import SynLlamaAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import TargetInput
@@ -11,7 +11,7 @@ from tests.adapters.test_base_adapter import BaseAdapterTest
 class TestSynLlamaAdapterUnit(BaseAdapterTest):
     @pytest.fixture
     def adapter_instance(self):
-        return SynLlaMaAdapter()
+        return SynLlamaAdapter()
 
     @pytest.fixture
     def raw_valid_route_data(self):
@@ -102,8 +102,8 @@ class TestSynLlamaAdapterContract:
     """Contract tests: verify the adapter produces valid Route objects with required fields populated."""
 
     @pytest.fixture(scope="class")
-    def adapter(self) -> SynLlaMaAdapter:
-        return SynLlaMaAdapter()
+    def adapter(self) -> SynLlamaAdapter:
+        return SynLlamaAdapter()
 
     @pytest.fixture(scope="class", params=["Conivaptan hydrochloride", "AGN-190205", "USPTO-165/190"])
     def routes(self, adapter, raw_synllama_data, request):
@@ -155,8 +155,8 @@ class TestSynLlamaAdapterRegression:
     """Regression tests: verify specific routes match expected structures and values."""
 
     @pytest.fixture(scope="class")
-    def adapter(self) -> SynLlaMaAdapter:
-        return SynLlaMaAdapter()
+    def adapter(self) -> SynLlamaAdapter:
+        return SynLlamaAdapter()
 
     @pytest.fixture(scope="class")
     def conivaptan_routes(self, adapter, raw_synllama_data):

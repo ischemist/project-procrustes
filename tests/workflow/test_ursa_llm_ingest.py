@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter
+from retrocast.adapters.ursa_llm_adapter import UrsaAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.io.blob import load_json_artifact
 from retrocast.models.benchmark import create_benchmark, create_benchmark_target
@@ -34,7 +34,7 @@ def test_ingest_ursa_llm_matches_benchmark_targets_by_canonical_smiles(tmp_path)
         model_name="ursa-llm",
         benchmark=benchmark,
         raw_data=raw_ursa_llm_data,
-        adapter=UrsaLlmAdapter(),
+        adapter=UrsaAdapter(),
         output_dir=tmp_path,
         provider_output_kind="provider_output",
     )

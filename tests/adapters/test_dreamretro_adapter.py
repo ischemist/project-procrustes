@@ -1,6 +1,6 @@
 import pytest
 
-from retrocast.adapters.dreamretro_adapter import DreamRetroAdapter
+from retrocast.adapters.dreamretro_adapter import DreamRetroErAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterLogicError
 from retrocast.models.chem import TargetInput
@@ -12,12 +12,12 @@ from tests.adapters.test_base_adapter import BaseAdapterTest
 # ============================================================================
 
 
-class TestDreamRetroAdapterUnit(BaseAdapterTest):
-    """Unit tests for DreamRetroAdapter - tests common adapter failure modes."""
+class TestDreamRetroErAdapterUnit(BaseAdapterTest):
+    """Unit tests for DreamRetroErAdapter - tests common adapter failure modes."""
 
     @pytest.fixture
     def adapter_instance(self):
-        return DreamRetroAdapter()
+        return DreamRetroErAdapter()
 
     @pytest.fixture
     def raw_valid_route_data(self):
@@ -70,10 +70,10 @@ class TestDreamRetroAdapterUnit(BaseAdapterTest):
 
 
 @pytest.mark.contract
-class TestDreamRetroAdapterContract:
+class TestDreamRetroErAdapterContract:
     """Contract tests - verify all routes meet schema requirements."""
 
-    adapter = DreamRetroAdapter()
+    adapter = DreamRetroErAdapter()
 
     @pytest.fixture(scope="class")
     def mirabegron_routes(self, raw_dreamretro_data):
@@ -167,10 +167,10 @@ class TestDreamRetroAdapterContract:
 
 
 @pytest.mark.regression
-class TestDreamRetroAdapterRegression:
+class TestDreamRetroErAdapterRegression:
     """Regression tests - verify specific routes match exact expected values."""
 
-    adapter = DreamRetroAdapter()
+    adapter = DreamRetroErAdapter()
 
     def test_mirabegron_single_step_route(self, raw_dreamretro_data):
         """Verify exact structure of Mirabegron single-step route."""

@@ -5,6 +5,7 @@ import re
 from collections.abc import Iterator
 from typing import Any
 
+from retrocast._warnings import warn_deprecated
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
 from retrocast.adapters.errors import adapter_route_transform_error, adapter_schema_error, adapter_target_mismatch
@@ -195,10 +196,25 @@ class UrsaAdapter(BaseAdapter):
         return precursor_map
 
 
-UrsaLlmAdapter = UrsaAdapter
+_DEPRECATED_ADAPTER_ALIASES: dict[str, type[BaseAdapter]] = {
+    "UrsaLlmAdapter": UrsaAdapter,
+}
+
+
+def __getattr__(name: str) -> Any:
+    adapter_type = _DEPRECATED_ADAPTER_ALIASES.get(name)
+    if adapter_type is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    warn_deprecated(
+        old=f"{__name__}.{name}",
+        new=f"{__name__}.UrsaAdapter",
+        remove_in="0.7",
+        stacklevel=2,
+    )
+    globals()[name] = adapter_type
+    return adapter_type
 
 
 __all__ = [
     "UrsaAdapter",
-    "UrsaLlmAdapter",
 ]

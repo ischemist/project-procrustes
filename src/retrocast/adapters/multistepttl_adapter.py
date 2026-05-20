@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, RootModel, ValidationError
 
+from retrocast._warnings import warn_deprecated
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.errors import (
     adapter_cycle_error,
@@ -168,4 +169,20 @@ class MultiStepTTLAdapter(BaseAdapter):
         )
 
 
-TtlRetroAdapter = MultiStepTTLAdapter
+_DEPRECATED_ADAPTER_ALIASES: dict[str, type[BaseAdapter]] = {
+    "TtlRetroAdapter": MultiStepTTLAdapter,
+}
+
+
+def __getattr__(name: str) -> Any:
+    adapter_type = _DEPRECATED_ADAPTER_ALIASES.get(name)
+    if adapter_type is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    warn_deprecated(
+        old=f"{__name__}.{name}",
+        new=f"{__name__}.MultiStepTTLAdapter",
+        remove_in="0.7",
+        stacklevel=2,
+    )
+    globals()[name] = adapter_type
+    return adapter_type

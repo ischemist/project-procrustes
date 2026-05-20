@@ -1,6 +1,6 @@
 import pytest
 
-from retrocast.adapters.multistepttl_adapter import TtlRetroAdapter
+from retrocast.adapters.multistepttl_adapter import MultiStepTTLAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import TargetInput
 from retrocast.utils.serializers import serialize_multistepttl_directory
@@ -10,10 +10,10 @@ from tests.adapters.test_base_adapter import BaseAdapterTest
 IBUPROFEN_SMILES = canonicalize_smiles("CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O")
 
 
-class TestTtlRetroAdapterUnit(BaseAdapterTest):
+class TestMultiStepTTLAdapterUnit(BaseAdapterTest):
     @pytest.fixture
     def adapter_instance(self):
-        return TtlRetroAdapter()
+        return MultiStepTTLAdapter()
 
     @pytest.fixture
     def raw_valid_route_data(self):
@@ -70,10 +70,10 @@ class TestTtlRetroAdapterUnit(BaseAdapterTest):
 
 
 @pytest.mark.integration
-class TestTtlRetroAdapterContract:
+class TestMultiStepTTLAdapterContract:
     """contract tests for ttlretro adapter verifying schema compliance."""
 
-    adapter = TtlRetroAdapter()
+    adapter = MultiStepTTLAdapter()
 
     @pytest.fixture(scope="class")
     def serialized_ibuprofen_data(self, multistepttl_ibuprofen_dir) -> list[dict]:
@@ -131,10 +131,10 @@ class TestTtlRetroAdapterContract:
 
 
 @pytest.mark.integration
-class TestTtlRetroAdapterRegression:
+class TestMultiStepTTLAdapterRegression:
     """regression tests for ttlretro adapter verifying specific values."""
 
-    adapter = TtlRetroAdapter()
+    adapter = MultiStepTTLAdapter()
 
     @pytest.fixture(scope="class")
     def serialized_ibuprofen_data(self, multistepttl_ibuprofen_dir) -> list[dict]:

@@ -4,7 +4,7 @@ from collections import defaultdict
 
 import pytest
 
-from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter
+from retrocast.adapters.ursa_llm_adapter import UrsaAdapter
 from retrocast.chem import canonicalize_smiles
 from retrocast.exceptions import AdapterSchemaError
 from retrocast.models.chem import Route, TargetInput
@@ -23,8 +23,8 @@ def _wrap_step(product_smiles: str, reactant_smiles: list[str]) -> str:
 
 class TestUrsaLlmAdapterUnit(BaseAdapterTest):
     @pytest.fixture
-    def adapter_instance(self) -> UrsaLlmAdapter:
-        return UrsaLlmAdapter()
+    def adapter_instance(self) -> UrsaAdapter:
+        return UrsaAdapter()
 
     @pytest.fixture
     def raw_valid_route_data(self) -> list[dict[str, str]]:
@@ -47,7 +47,7 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
     def mismatched_target_input(self) -> TargetInput:
         return TargetInput(id="acetone", smiles="CCC")
 
-    def test_parses_multi_step_route(self, adapter_instance: UrsaLlmAdapter) -> None:
+    def test_parses_multi_step_route(self, adapter_instance: UrsaAdapter) -> None:
         steps = _wrap_step("CC", ["C"]) + _wrap_step("CCC", ["CC", "C"])
         completion = f"<answer>{steps}</answer>"
         target_input = TargetInput(id="propane", smiles=canonicalize_smiles("CCC"))
@@ -66,7 +66,7 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
         assert intermediate.synthesis_step is not None
         assert {reactant.smiles for reactant in intermediate.synthesis_step.reactants} == {"C"}
 
-    def test_handles_sm_token_format(self, adapter_instance: UrsaLlmAdapter) -> None:
+    def test_handles_sm_token_format(self, adapter_instance: UrsaAdapter) -> None:
         completion = (
             "<synthesis_step>"
             "<product><smiles><sm_C><sm_C><sm_O></smiles></product>"
@@ -84,7 +84,7 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
         assert target.synthesis_step is not None
         assert {reactant.smiles for reactant in target.synthesis_step.reactants} == {"CO", "C"}
 
-    def test_strips_think_blocks(self, adapter_instance: UrsaLlmAdapter) -> None:
+    def test_strips_think_blocks(self, adapter_instance: UrsaAdapter) -> None:
         fake = _wrap_step("CCN", ["C", "N"])
         real = _wrap_step("CC(=O)C", ["CC(=O)O", "C"])
         completion = f"<think>{fake}</think>{real}"
@@ -99,7 +99,7 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
         leaves = {leaf.smiles for leaf in target.synthesis_step.reactants}
         assert leaves == {"CC(=O)O", "C"}
 
-    def test_skips_steps_without_product_or_reactants(self, adapter_instance: UrsaLlmAdapter) -> None:
+    def test_skips_steps_without_product_or_reactants(self, adapter_instance: UrsaAdapter) -> None:
         good = _wrap_step("CC(=O)C", ["CC(=O)O", "C"])
         no_reactants = "<synthesis_step><product><smiles>CCN</smiles></product></synthesis_step>"
         no_product = "<synthesis_step><reactant><smiles>C</smiles></reactant></synthesis_step>"
@@ -113,7 +113,7 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
 
     def test_iter_raw_entries_uses_source_target_metadata_without_benchmark_context(
         self,
-        adapter_instance: UrsaLlmAdapter,
+        adapter_instance: UrsaAdapter,
     ) -> None:
         completion = _wrap_step("c1ccccc1", ["C", "CC"])
         entries = list(
@@ -126,14 +126,14 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
 
     def test_iter_raw_entries_requires_source_target_metadata_without_expected_target(
         self,
-        adapter_instance: UrsaLlmAdapter,
+        adapter_instance: UrsaAdapter,
     ) -> None:
         with pytest.raises(AdapterSchemaError) as exc_info:
             list(adapter_instance.iter_raw_entries([{"completion": "route-1"}]))
 
         assert exc_info.value.code == "adapter.schema_invalid"
 
-    def test_yields_one_route_per_completion(self, adapter_instance: UrsaLlmAdapter) -> None:
+    def test_yields_one_route_per_completion(self, adapter_instance: UrsaAdapter) -> None:
         completion = _wrap_step("CC(=O)C", ["CC(=O)O", "C"])
         records = [{"completion": completion} for _ in range(5)]
         target_input = TargetInput(id="acetone", smiles=canonicalize_smiles("CC(C)=O"))
@@ -143,7 +143,7 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
         assert len(routes) == 5
         assert all(route.target.smiles == target_input.smiles for route in routes)
 
-    def test_completion_with_no_steps_is_skipped(self, adapter_instance: UrsaLlmAdapter, caplog) -> None:
+    def test_completion_with_no_steps_is_skipped(self, adapter_instance: UrsaAdapter, caplog) -> None:
         target_input = TargetInput(id="acetone", smiles=canonicalize_smiles("CC(C)=O"))
 
         routes = list(adapt_target_routes(adapter_instance, [{"completion": "no synthesis steps here"}], target_input))
@@ -151,7 +151,7 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
         assert routes == []
         assert "no synthesis steps" in caplog.text
 
-    def test_mixed_valid_and_invalid_completions(self, adapter_instance: UrsaLlmAdapter) -> None:
+    def test_mixed_valid_and_invalid_completions(self, adapter_instance: UrsaAdapter) -> None:
         good = _wrap_step("CC(=O)C", ["CC(=O)O", "C"])
         bad = _wrap_step("CCN", ["C", "N"])
         records = [
@@ -171,7 +171,7 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
 class TestUrsaLlmAdapterContract:
     @pytest.fixture(scope="class")
     def routes_by_target_smiles(self, raw_ursa_llm_data) -> dict[str, list[Route]]:
-        route_corpus = adapt_provider_output(raw_ursa_llm_data, UrsaLlmAdapter())
+        route_corpus = adapt_provider_output(raw_ursa_llm_data, UrsaAdapter())
         grouped_routes: dict[str, list[Route]] = defaultdict(list)
         for route in route_corpus:
             grouped_routes[route.target.smiles].append(route)

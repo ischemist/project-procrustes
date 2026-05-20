@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from retrocast.adapters.dms_adapter import DMSAdapter, DMSTree
+from retrocast.adapters.dms_adapter import DirectMultiStepAdapter, DMSTree
 from retrocast.chem import canonicalize_smiles
 from retrocast.models.chem import TargetInput
 from retrocast.workflow.adapt import adapt_target_routes
@@ -13,10 +13,10 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class TestDMSAdapterUnit(BaseAdapterTest):
+class TestDirectMultiStepAdapterUnit(BaseAdapterTest):
     @pytest.fixture
     def adapter_instance(self):
-        return DMSAdapter()
+        return DirectMultiStepAdapter()
 
     @pytest.fixture
     def raw_valid_route_data(self):
@@ -71,12 +71,12 @@ class TestDMSAdapterUnit(BaseAdapterTest):
 
 
 @pytest.mark.integration
-class TestDMSAdapterContract:
+class TestDirectMultiStepAdapterContract:
     """Contract tests: verify the adapter produces valid Route objects with required fields populated."""
 
     @pytest.fixture(scope="class")
-    def adapter(self) -> DMSAdapter:
-        return DMSAdapter()
+    def adapter(self) -> DirectMultiStepAdapter:
+        return DirectMultiStepAdapter()
 
     @pytest.fixture(scope="class")
     def routes(self, adapter, raw_dms_data):
@@ -120,12 +120,12 @@ class TestDMSAdapterContract:
 
 
 @pytest.mark.integration
-class TestDMSAdapterRegression:
+class TestDirectMultiStepAdapterRegression:
     """Regression tests: verify specific routes match expected structures and values."""
 
     @pytest.fixture(scope="class")
-    def adapter(self) -> DMSAdapter:
-        return DMSAdapter()
+    def adapter(self) -> DirectMultiStepAdapter:
+        return DirectMultiStepAdapter()
 
     def test_adapt_one_step_route(self, adapter, raw_dms_data):
         """Tests a simple, one-step route (aspirin)."""
