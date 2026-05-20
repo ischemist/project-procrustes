@@ -17,11 +17,9 @@ RetroCast uses warnings to keep pre-1.0 cleanup visible without forcing every do
 
 | removal | deprecated surface | replacement |
 | --- | --- | --- |
-| `0.9.0` | legacy adapter slugs such as `aizynth`, `dms`, `dreamretro`, and `ursa-llm` | canonical adapter slugs from `retrocast list-adapters`, such as `aizynthfinder`, `directmultistep`, `dreamretroer`, and `ursa` |
-| `0.9.0` | legacy adapter class aliases such as `AizynthAdapter`, `DMSAdapter`, `DreamRetroAdapter`, `TtlRetroAdapter`, `RetrochimeraAdapter`, `SynLLaMaAdapter`, `SynLlaMaAdapter`, and `UrsaLlmAdapter` | canonical adapter classes such as `AiZynthFinderAdapter`, `DirectMultiStepAdapter`, `DreamRetroErAdapter`, `MultiStepTTLAdapter`, `RetroChimeraAdapter`, `SynLlamaAdapter`, and `UrsaAdapter` |
+| `0.9.0` | legacy adapter slugs such as `aizynth`, `dms`, and `dreamretro` | canonical adapter slugs from `retrocast list-adapters`, such as `aizynthfinder`, `directmultistep`, and `dreamretroer` |
+| `0.9.0` | legacy adapter class aliases such as `AizynthAdapter`, `DMSAdapter`, `DreamRetroAdapter`, `TtlRetroAdapter`, `RetrochimeraAdapter`, `SynLLaMaAdapter`, and `SynLlaMaAdapter` | canonical adapter classes such as `AiZynthFinderAdapter`, `DirectMultiStepAdapter`, `DreamRetroErAdapter`, `MultiStepTTLAdapter`, `RetroChimeraAdapter`, and `SynLlamaAdapter` |
 | `0.9.0` | `adapt_single_route(...)` and `adapt_routes(...)` | `adapt_route(...)`, `adapt_provider_output(...)`, or `adapt_target_keyed_provider_output(...)`, depending on input shape |
-| `0.9.0` | `adapt_route_corpus(...)` and `adapt_benchmark_keyed_route_corpus(...)` | `adapt_provider_output(...)` and `adapt_target_keyed_provider_output(...)` |
-| `0.9.0` | collection policies `on_unknown_target="skip"`, `on_unknown_target="report"`, `on_ambiguous_target="skip"`, and `on_ambiguous_target="report"` | `on_unknown_target="ignore"` or `on_ambiguous_target="ignore"` |
 
 ## Migration Notes
 

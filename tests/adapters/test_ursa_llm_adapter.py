@@ -21,7 +21,7 @@ def _wrap_step(product_smiles: str, reactant_smiles: list[str]) -> str:
     return f"<synthesis_step><product><smiles>{product_smiles}</smiles></product>{reactants}</synthesis_step>"
 
 
-class TestUrsaLlmAdapterUnit(BaseAdapterTest):
+class TestUrsaAdapterUnit(BaseAdapterTest):
     @pytest.fixture
     def adapter_instance(self) -> UrsaAdapter:
         return UrsaAdapter()
@@ -168,7 +168,7 @@ class TestUrsaLlmAdapterUnit(BaseAdapterTest):
 
 
 @pytest.mark.contract
-class TestUrsaLlmAdapterContract:
+class TestUrsaAdapterContract:
     @pytest.fixture(scope="class")
     def routes_by_target_smiles(self, raw_ursa_llm_data) -> dict[str, list[Route]]:
         route_corpus = adapt_provider_output(raw_ursa_llm_data, UrsaAdapter())

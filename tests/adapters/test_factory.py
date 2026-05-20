@@ -59,7 +59,6 @@ def test_get_adapter_unknown_adapter_raises_exception():
         ("aizynth", "aizynthfinder"),
         ("dms", "directmultistep"),
         ("dreamretro", "dreamretroer"),
-        ("ursa-llm", "ursa"),
     ],
 )
 def test_get_adapter_warns_for_deprecated_slugs(old_slug, new_slug):
@@ -97,7 +96,6 @@ def test_public_adapter_names_match_registry_slugs():
         ("RetrochimeraAdapter", RetroChimeraAdapter),
         ("SynLLaMaAdapter", SynLlamaAdapter),
         ("SynLlaMaAdapter", SynLlamaAdapter),
-        ("UrsaLlmAdapter", UrsaAdapter),
     ],
 )
 def test_deprecated_package_adapter_names_warn(old_name, new_type):
@@ -115,7 +113,6 @@ def test_deprecated_package_adapter_names_warn(old_name, new_type):
         ("retrocast.adapters.retrochimera_adapter", "RetrochimeraAdapter", RetroChimeraAdapter),
         ("retrocast.adapters.synllama_adapter", "SynLLaMaAdapter", SynLlamaAdapter),
         ("retrocast.adapters.synllama_adapter", "SynLlaMaAdapter", SynLlamaAdapter),
-        ("retrocast.adapters.ursa_llm_adapter", "UrsaLlmAdapter", UrsaAdapter),
     ],
 )
 def test_deprecated_submodule_adapter_names_warn(module_name, old_name, new_type):

@@ -101,7 +101,7 @@ def raw_synllama_data(raw_data_factory) -> dict[str, Any]:
 @pytest.fixture(scope="session")
 def raw_ursa_llm_data(raw_data_factory) -> list[dict[str, Any]]:
     """loads the raw ursa llm prediction data from the test file."""
-    return load_json_artifact(TEST_DATA_DIR / "model-predictions/ursa-llm/completions.jsonl")
+    return load_json_artifact(TEST_DATA_DIR / "model-predictions/ursa/completions.jsonl")
 
 
 @pytest.fixture(scope="session")

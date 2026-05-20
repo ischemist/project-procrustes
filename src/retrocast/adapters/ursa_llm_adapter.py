@@ -5,7 +5,6 @@ import re
 from collections.abc import Iterator
 from typing import Any
 
-from retrocast._warnings import warn_deprecated
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.adapters.common import PrecursorMap, build_molecule_from_precursor_map
 from retrocast.adapters.errors import adapter_route_transform_error, adapter_schema_error, adapter_target_mismatch
@@ -61,7 +60,7 @@ def _extract_source_target_smiles(raw_record: Any) -> str | None:
 class UrsaAdapter(BaseAdapter):
     """Adapter for Ursa LLM completions containing `<synthesis_step>` XML blocks."""
 
-    adapter_key = "ursa-llm"
+    adapter_key = "ursa"
 
     def iter_raw_entries(
         self,
@@ -194,25 +193,6 @@ class UrsaAdapter(BaseAdapter):
             precursor_map[product_canon] = reactant_smiles
 
         return precursor_map
-
-
-_DEPRECATED_ADAPTER_ALIASES: dict[str, type[BaseAdapter]] = {
-    "UrsaLlmAdapter": UrsaAdapter,
-}
-
-
-def __getattr__(name: str) -> Any:
-    adapter_type = _DEPRECATED_ADAPTER_ALIASES.get(name)
-    if adapter_type is None:
-        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    warn_deprecated(
-        old=f"{__name__}.{name}",
-        new=f"{__name__}.UrsaAdapter",
-        remove_in="0.9",
-        stacklevel=2,
-    )
-    globals()[name] = adapter_type
-    return adapter_type
 
 
 __all__ = [

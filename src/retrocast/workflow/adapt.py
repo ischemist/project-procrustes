@@ -6,7 +6,6 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from retrocast._warnings import warn_deprecated
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.exceptions import AdapterError, ChemError, InputError
 from retrocast.models.benchmark import BenchmarkSet
@@ -274,45 +273,4 @@ def adapt_target_keyed_provider_output(
             stats=stats,
             progress_callback=progress_callback,
         )
-    )
-
-
-def adapt_route_corpus(
-    raw_data: Any,
-    adapter: BaseAdapter,
-    *,
-    ignore_stereo: bool = False,
-    stats: RunStatistics | None = None,
-) -> list[PredictedRoute]:
-    """Deprecated alias for adapt_provider_output."""
-    warn_deprecated(
-        old="adapt_route_corpus(...)",
-        new="adapt_provider_output(...)",
-        remove_in="0.9",
-        stacklevel=2,
-    )
-    return adapt_provider_output(raw_data, adapter, ignore_stereo=ignore_stereo, stats=stats)
-
-
-def adapt_benchmark_keyed_route_corpus(
-    raw_data: Mapping[Any, Any],
-    benchmark: BenchmarkSet,
-    adapter: BaseAdapter,
-    *,
-    ignore_stereo: bool = False,
-    stats: RunStatistics | None = None,
-) -> list[PredictedRoute]:
-    """Deprecated alias for adapt_target_keyed_provider_output."""
-    warn_deprecated(
-        old="adapt_benchmark_keyed_route_corpus(...)",
-        new="adapt_target_keyed_provider_output(...)",
-        remove_in="0.9",
-        stacklevel=2,
-    )
-    return adapt_target_keyed_provider_output(
-        raw_data,
-        benchmark,
-        adapter,
-        ignore_stereo=ignore_stereo,
-        stats=stats,
     )

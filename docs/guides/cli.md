@@ -462,7 +462,6 @@ Available adapters:
   - synplanner: SynPlanner (bipartite graph)
   - syntheseus: Syntheseus (bipartite graph)
   - ursa: URSA (<synthesis_step> XML blocks)
-      deprecated aliases: ursa-llm
 ```
 
 ### `info` - Show Model Details

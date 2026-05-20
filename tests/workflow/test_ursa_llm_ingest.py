@@ -15,13 +15,13 @@ RAW_TARGET_SMILES = {
     "Sildenafil": "CCCC1=NN(C2=C1N=C(NC2=O)C3=C(C=CC(=C3)S(=O)(=O)N4CCN(CC4)C)OCC)C",
     "Tivozanib": "COC1=C(OC)C=C2C(OC3=CC(Cl)=C(NC(=O)NC4=NOC(C)=C4)C=C3)=CC=NC2=C1",
 }
-RAW_RESULTS_PATH = Path(__file__).resolve().parents[1] / "testing_data/model-predictions/ursa-llm/completions.jsonl"
+RAW_RESULTS_PATH = Path(__file__).resolve().parents[1] / "testing_data/model-predictions/ursa/completions.jsonl"
 
 
 @pytest.mark.integration
 def test_ingest_ursa_llm_matches_benchmark_targets_by_canonical_smiles(tmp_path):
     benchmark = create_benchmark(
-        name="ursa-llm-fixture",
+        name="ursa-fixture",
         stock=set(),
         targets={
             target_id: create_benchmark_target(id=target_id, smiles=raw_smiles)
@@ -31,7 +31,7 @@ def test_ingest_ursa_llm_matches_benchmark_targets_by_canonical_smiles(tmp_path)
     raw_ursa_llm_data = load_json_artifact(RAW_RESULTS_PATH)
 
     processed_routes, save_path, stats = ingest_model_predictions(
-        model_name="ursa-llm",
+        model_name="ursa",
         benchmark=benchmark,
         raw_data=raw_ursa_llm_data,
         adapter=UrsaAdapter(),
@@ -39,7 +39,7 @@ def test_ingest_ursa_llm_matches_benchmark_targets_by_canonical_smiles(tmp_path)
         provider_output_kind="provider_output",
     )
 
-    assert save_path == Path(tmp_path) / benchmark.name / "ursa-llm" / "routes.json.gz"
+    assert save_path == Path(tmp_path) / benchmark.name / "ursa" / "routes.json.gz"
     assert stats.targets_with_at_least_one_route == set(RAW_TARGET_SMILES)
     assert stats.successful_routes_before_dedup >= len(RAW_TARGET_SMILES)
 

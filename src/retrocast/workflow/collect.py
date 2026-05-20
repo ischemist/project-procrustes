@@ -4,29 +4,19 @@ from collections import defaultdict
 from collections.abc import Iterable
 from typing import Literal
 
-from retrocast._warnings import warn_deprecated
 from retrocast.exceptions import BenchmarkCollectionError
 from retrocast.models.benchmark import BenchmarkSet
 from retrocast.models.chem import PredictedRoute, Route
 from retrocast.models.collections import BenchmarkCollectionStats, CollectedBenchmarkRoutes
 
-UnmatchedPolicy = Literal["ignore", "error", "skip", "report"]
-AmbiguousPolicy = Literal["ignore", "error", "skip", "report"]
+UnmatchedPolicy = Literal["ignore", "error"]
+AmbiguousPolicy = Literal["ignore", "error"]
 
 
 def _normalize_collection_policy(policy: str, *, name: str) -> Literal["ignore", "error"]:
     if policy == "error":
         return "error"
     if policy == "ignore":
-        return "ignore"
-    if policy in {"skip", "report"}:
-        warn_deprecated(
-            old=f"{name}={policy!r}",
-            new=f"{name}='ignore'",
-            remove_in="0.9",
-            note="'skip' and 'report' were aliases for the ignore behavior.",
-            stacklevel=3,
-        )
         return "ignore"
     raise ValueError(f"{name} must be 'ignore' or 'error'")
 
