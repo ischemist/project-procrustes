@@ -138,9 +138,11 @@ Use `adapt_target_keyed_provider_output(...)` when your planner writes a mapping
 
 !!! note "Route ordering"
 
-    `Route.rank` was removed from the canonical route schema.
-    Adaptation records source order on `PredictedRoute.rank`; scoring still
-    writes explicit ranks onto `ScoredRoute`.
+    ```text
+    Route.rank was removed from the canonical route schema.
+    Adaptation records source order on PredictedRoute.rank.
+    Scoring still writes explicit ranks onto ScoredRoute.
+    ```
 
 ## Available Adapters
 

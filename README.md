@@ -92,6 +92,14 @@ Have a raw output file from a model? Score it immediately.
 retrocast adapt \
     --input raw_predictions.json.gz \
     --adapter aizynthfinder \
+    --input-kind target-keyed-provider-output \
+    --benchmark data/1-benchmarks/definitions/ref-lin-600.json.gz \
+    --output route-corpus.jsonl.gz
+
+# Align predictions to benchmark-keyed routes
+retrocast collect \
+    --input route-corpus.jsonl.gz \
+    --benchmark data/1-benchmarks/definitions/ref-lin-600.json.gz \
     --output routes.json.gz
 
 # Score against a stock file

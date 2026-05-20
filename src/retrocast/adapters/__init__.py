@@ -183,9 +183,9 @@ def adapt_routes(
     adapter = get_adapter(adapter_name)
     routes = []
     for i, prediction in enumerate(adapt_target_routes(adapter, raw_routes, target)):
-        routes.append(prediction.route)
-        if max_routes and i + 1 >= max_routes:
+        if max_routes is not None and i >= max_routes:
             break
+        routes.append(prediction.route)
 
     return routes
 

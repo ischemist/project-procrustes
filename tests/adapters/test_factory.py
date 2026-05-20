@@ -175,6 +175,30 @@ def test_adapt_routes_warns_for_target_local_payload_contract():
     assert routes[0].target.smiles == "CC"
 
 
+def test_adapt_routes_respects_zero_max_routes():
+    target = TargetInput(id="target_1", smiles="CC")
+    raw_routes = [
+        {
+            "type": "mol",
+            "smiles": "CC",
+            "children": [
+                {
+                    "type": "reaction",
+                    "smiles": "",
+                    "children": [{"type": "mol", "smiles": "C", "children": [], "in_stock": True}],
+                    "metadata": {},
+                }
+            ],
+            "in_stock": False,
+        }
+    ]
+
+    with pytest.warns(RetroCastFutureWarning, match="adapt_routes"):
+        routes = adapt_routes(raw_routes, target, "aizynthfinder", max_routes=0)
+
+    assert routes == []
+
+
 @pytest.mark.parametrize("adapter_name, adapter_type", ADAPTER_TYPES.items())
 def test_all_adapters_in_map_are_valid(adapter_name, adapter_type):
     """

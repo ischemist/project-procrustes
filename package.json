@@ -1,7 +1,6 @@
 {
   "name": "retrocast-docs-tooling",
   "private": true,
-  "packageManager": "pnpm@11.1.2",
   "devDependencies": {
     "oxfmt": "^0.51.0"
   },

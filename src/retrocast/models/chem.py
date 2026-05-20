@@ -443,6 +443,14 @@ class PredictedRoute(BaseModel):
         return self.route.get_structural_signature(match_level=match_level)
 
     def get_content_hash(self) -> str:
+        """Return the route-chemistry hash, excluding prediction envelope metadata.
+
+        This delegates to `Route.get_content_hash()` and intentionally ignores
+        rank, score, confidence, source keys, and other prediction-level fields.
+        Corpus provenance hashing uses
+        `retrocast.io.provenance._calculate_predicted_route_content_hash()`
+        when envelope metadata must affect artifact identity.
+        """
         return self.route.get_content_hash()
 
     def get_reaction_signatures(self) -> set[ReactionSignature]:

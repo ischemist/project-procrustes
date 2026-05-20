@@ -25,7 +25,7 @@ The RetroCast CLI provides a unified interface for standardizing, scoring, and a
     or, optionally, if you want to create plots during analysis:
 
     ```bash
-    uv tool install "retrocast[viz]"
+    pip install "retrocast[viz]"
     ```
 
 === "pip"

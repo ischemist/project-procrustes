@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator, Mapping, Sized
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import Any
 
@@ -53,7 +53,7 @@ def estimate_raw_route_entries(
     benchmark_targets: Mapping[str, Any] | None = None,
 ) -> int | None:
     if input_kind in {"provider_output", "provider-output"}:
-        return len(raw_data) if isinstance(raw_data, Sized) else None
+        return _route_collection_len(raw_data)
 
     if not isinstance(raw_data, Mapping) or benchmark_targets is None:
         return None
@@ -67,10 +67,22 @@ def estimate_raw_route_entries(
         else:
             continue
 
-        if not isinstance(payload, Sized):
+        payload_count = _route_collection_len(payload)
+        if payload_count is None:
             return None
-        total += len(payload)
+        total += payload_count
     return total
+
+
+def _route_collection_len(payload: Any) -> int | None:
+    if hasattr(payload, "routes"):
+        routes = payload.routes
+        return len(routes) if isinstance(routes, Sequence) and not isinstance(routes, str | bytes | bytearray) else None
+
+    if isinstance(payload, Sequence) and not isinstance(payload, str | bytes | bytearray):
+        return len(payload)
+
+    return None
 
 
 @contextmanager
