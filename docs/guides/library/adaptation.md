@@ -37,14 +37,14 @@ Benchmark collection is separate from adaptation. It takes canonical predictions
 
 ```python title="Convert one raw route-like payload to one Route"
 from retrocast import adapt_route
-from retrocast.adapters import DMSAdapter
+from retrocast.adapters import DirectMultiStepAdapter
 
 raw_data = {
     "smiles": "CCO",
     "children": [{"smiles": "CC", "children": []}, {"smiles": "O", "children": []}],
 }
 
-adapter = DMSAdapter()
+adapter = DirectMultiStepAdapter()
 route = adapt_route(raw_data, adapter)
 
 if route:
@@ -59,9 +59,9 @@ Use `adapt_prediction(...)` when you explicitly want the prediction envelope for
 
 ```python title="Convert one raw prediction payload to one PredictedRoute"
 from retrocast import adapt_prediction
-from retrocast.adapters import DMSAdapter
+from retrocast.adapters import DirectMultiStepAdapter
 
-adapter = DMSAdapter()
+adapter = DirectMultiStepAdapter()
 prediction = adapt_prediction(raw_data, adapter, rank=1)
 
 if prediction:
@@ -77,9 +77,9 @@ Provider-output adaptation is a built-in RetroCast workflow. Users call `adapt_p
 
 ```python title="Convert raw provider output to predictions"
 from retrocast import adapt_provider_output
-from retrocast.adapters import AizynthAdapter
+from retrocast.adapters import AiZynthFinderAdapter
 
-adapter = AizynthAdapter()
+adapter = AiZynthFinderAdapter()
 
 # raw_provider_output can be one planner dump, service response, script output,
 # or any shape the selected adapter knows how to split into route entries.
@@ -98,9 +98,9 @@ from retrocast import (
     collect_benchmark_predictions,
     load_benchmark,
 )
-from retrocast.adapters import UrsaLlmAdapter
+from retrocast.adapters import UrsaAdapter
 
-adapter = UrsaLlmAdapter()
+adapter = UrsaAdapter()
 
 # Target-free adaptation: choose this when the provider output carries targets.
 predictions = adapt_provider_output(raw_provider_output, adapter)
@@ -116,10 +116,10 @@ For already target-keyed raw output, use the benchmark-aware adaptation path bef
 
 ```python title="Adapt target-keyed output then collect"
 from retrocast import adapt_target_keyed_provider_output, collect_benchmark_predictions, load_benchmark
-from retrocast.adapters import AizynthAdapter
+from retrocast.adapters import AiZynthFinderAdapter
 
 benchmark = load_benchmark("benchmark.json.gz")
-adapter = AizynthAdapter()
+adapter = AiZynthFinderAdapter()
 
 predictions = adapt_target_keyed_provider_output(raw_mapping, benchmark, adapter)
 

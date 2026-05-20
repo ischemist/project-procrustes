@@ -1,38 +1,38 @@
 from typing import Any
 
 from retrocast._warnings import warn_deprecated
-from retrocast.adapters.aizynth_adapter import AizynthAdapter
+from retrocast.adapters.aizynth_adapter import AizynthAdapter, AiZynthFinderAdapter
 from retrocast.adapters.askcos_adapter import AskcosAdapter
 from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.adapters.dms_adapter import DMSAdapter
-from retrocast.adapters.dreamretro_adapter import DreamRetroAdapter
+from retrocast.adapters.dms_adapter import DirectMultiStepAdapter, DMSAdapter
+from retrocast.adapters.dreamretro_adapter import DreamRetroAdapter, DreamRetroErAdapter
 from retrocast.adapters.molbuilder_adapter import MolBuilderAdapter
-from retrocast.adapters.multistepttl_adapter import TtlRetroAdapter
+from retrocast.adapters.multistepttl_adapter import MultiStepTTLAdapter, TtlRetroAdapter
 from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
-from retrocast.adapters.retrochimera_adapter import RetrochimeraAdapter
+from retrocast.adapters.retrochimera_adapter import RetroChimeraAdapter, RetrochimeraAdapter
 from retrocast.adapters.retrostar_adapter import RetroStarAdapter
-from retrocast.adapters.synllama_adapter import SynLlaMaAdapter
+from retrocast.adapters.synllama_adapter import SynLLaMaAdapter, SynLlaMaAdapter, SynLlamaAdapter
 from retrocast.adapters.synplanner_adapter import SynPlannerAdapter
 from retrocast.adapters.syntheseus_adapter import SyntheseusAdapter
-from retrocast.adapters.ursa_llm_adapter import UrsaLlmAdapter
+from retrocast.adapters.ursa_llm_adapter import UrsaAdapter, UrsaLlmAdapter
 from retrocast.exceptions import AdapterError, AdapterResolutionError, ChemError
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.workflow.adapt import adapt_target_routes
 
 ADAPTER_TYPES: dict[str, type[BaseAdapter]] = {
-    "aizynth": AizynthAdapter,
+    "aizynth": AiZynthFinderAdapter,
     "askcos": AskcosAdapter,
-    "dms": DMSAdapter,
-    "dreamretro": DreamRetroAdapter,
+    "dms": DirectMultiStepAdapter,
+    "dreamretro": DreamRetroErAdapter,
     "molbuilder": MolBuilderAdapter,
-    "multistepttl": TtlRetroAdapter,
+    "multistepttl": MultiStepTTLAdapter,
     "paroutes": PaRoutesAdapter,
-    "retrochimera": RetrochimeraAdapter,
+    "retrochimera": RetroChimeraAdapter,
     "retrostar": RetroStarAdapter,
     "synplanner": SynPlannerAdapter,
     "syntheseus": SyntheseusAdapter,
-    "synllama": SynLlaMaAdapter,
-    "ursa-llm": UrsaLlmAdapter,
+    "synllama": SynLlamaAdapter,
+    "ursa-llm": UrsaAdapter,
 }
 
 ADAPTER_MAP: dict[str, BaseAdapter] = {
@@ -129,17 +129,25 @@ __all__ = [
     "ADAPTER_MAP",
     "ADAPTER_TYPES",
     "BaseAdapter",
+    "AiZynthFinderAdapter",
     "AizynthAdapter",
     "AskcosAdapter",
+    "DirectMultiStepAdapter",
     "DMSAdapter",
+    "DreamRetroErAdapter",
     "DreamRetroAdapter",
+    "UrsaAdapter",
     "UrsaLlmAdapter",
     "MolBuilderAdapter",
+    "MultiStepTTLAdapter",
     "TtlRetroAdapter",
     "PaRoutesAdapter",
+    "RetroChimeraAdapter",
     "RetrochimeraAdapter",
     "RetroStarAdapter",
     "SynPlannerAdapter",
     "SyntheseusAdapter",
+    "SynLlamaAdapter",
+    "SynLLaMaAdapter",
     "SynLlaMaAdapter",
 ]

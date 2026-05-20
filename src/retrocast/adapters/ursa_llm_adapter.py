@@ -57,7 +57,7 @@ def _extract_source_target_smiles(raw_record: Any) -> str | None:
     return product_smiles
 
 
-class UrsaLlmAdapter(BaseAdapter):
+class UrsaAdapter(BaseAdapter):
     """Adapter for Ursa LLM completions containing `<synthesis_step>` XML blocks."""
 
     adapter_key = "ursa-llm"
@@ -195,6 +195,10 @@ class UrsaLlmAdapter(BaseAdapter):
         return precursor_map
 
 
+UrsaLlmAdapter = UrsaAdapter
+
+
 __all__ = [
+    "UrsaAdapter",
     "UrsaLlmAdapter",
 ]

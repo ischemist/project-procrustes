@@ -5,9 +5,12 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from rich.console import Console
+
 from retrocast.adapters import ADAPTER_MAP, get_adapter
 from retrocast.api import score_predictions
 from retrocast.cli.errors import log_expected_error
+from retrocast.cli.progress import create_cli_progress, estimate_raw_route_entries, quiet_info_logs
 from retrocast.exceptions import InputError, RetroCastException
 from retrocast.io.blob import load_json_artifact, save_json_gz
 from retrocast.io.data import load_benchmark, load_route_corpus, load_routes, save_route_corpus, save_routes
@@ -18,6 +21,15 @@ from retrocast.workflow.adapt import adapt_provider_output, adapt_target_keyed_p
 from retrocast.workflow.collect import collect_benchmark_predictions
 
 logger = logging.getLogger(__name__)
+console = Console()
+
+
+def _manifest_sidecar_path(output_path: Path) -> Path:
+    for suffix in (".jsonl.gz", ".json.gz", ".csv.gz", ".txt.gz"):
+        if output_path.name.endswith(suffix):
+            artifact_name = output_path.name.removesuffix(suffix)
+            return output_path.with_name(f"{artifact_name}.manifest.json")
+    return output_path.with_name(f"{output_path.stem}.manifest.json")
 
 
 def handle_list_adapters(args: Any) -> None:
@@ -279,9 +291,50 @@ def handle_adapt(args: Any) -> None:
             benchmark = load_benchmark(benchmark_path)
 
         input_kind = getattr(args, "input_kind", "provider-output")
+        show_progress = not getattr(args, "no_progress", False)
+        progress_total = estimate_raw_route_entries(
+            raw_data,
+            input_kind=input_kind,
+            benchmark_targets=benchmark.targets if benchmark is not None else None,
+        )
 
         stats = RunStatistics()
-        if input_kind == "target-keyed-provider-output":
+        if show_progress:
+            with create_cli_progress(console=console, unit="routes") as progress:
+                task = progress.add_task(f"Adapting {input_path.name}", total=progress_total)
+
+                def advance_progress() -> None:
+                    progress.advance(task)
+
+                with quiet_info_logs("retrocast.workflow.adapt"):
+                    if input_kind == "target-keyed-provider-output":
+                        if benchmark is None:
+                            raise InputError(
+                                "target-keyed provider output requires --benchmark so keys can be resolved",
+                                code="input.missing_benchmark",
+                                context={"input_kind": input_kind},
+                            )
+                        route_corpus = adapt_target_keyed_provider_output(
+                            raw_data,
+                            benchmark,
+                            adapter,
+                            stats=stats,
+                            progress_callback=advance_progress,
+                        )
+                    elif input_kind == "provider-output":
+                        route_corpus = adapt_provider_output(
+                            raw_data,
+                            adapter,
+                            stats=stats,
+                            progress_callback=advance_progress,
+                        )
+                    else:
+                        raise InputError(
+                            f"unknown input kind: {input_kind}",
+                            code="input.invalid_provider_output_kind",
+                            context={"input_kind": input_kind},
+                        )
+        elif input_kind == "target-keyed-provider-output":
             if benchmark is None:
                 raise InputError(
                     "target-keyed provider output requires --benchmark so keys can be resolved",
@@ -316,7 +369,7 @@ def handle_adapt(args: Any) -> None:
             output_path,
         )
 
-        manifest_path = output_path.with_name(output_path.name + ".manifest.json")
+        manifest_path = _manifest_sidecar_path(output_path)
         manifest = create_manifest(
             action="[cli]adapt",
             sources=[input_path] + ([benchmark_path] if benchmark_path is not None else []),
@@ -362,7 +415,7 @@ def handle_collect(args: Any) -> None:
             output_path,
         )
 
-        manifest_path = output_path.with_name(output_path.name + ".manifest.json")
+        manifest_path = _manifest_sidecar_path(output_path)
         manifest = create_manifest(
             action="[cli]collect",
             sources=[input_path, benchmark_path],

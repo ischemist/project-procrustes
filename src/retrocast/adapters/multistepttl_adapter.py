@@ -34,8 +34,8 @@ class TtlRouteList(RootModel[list[TtlRoute]]):
     root: list[TtlRoute]
 
 
-class TtlRetroAdapter(BaseAdapter):
-    """adapter for converting pre-processed ttlretro outputs to the route schema."""
+class MultiStepTTLAdapter(BaseAdapter):
+    """adapter for converting pre-processed multistepttl outputs to the route schema."""
 
     def iter_raw_entries(
         self,
@@ -166,3 +166,6 @@ class TtlRetroAdapter(BaseAdapter):
             synthesis_step=synthesis_step,
             metadata={},
         )
+
+
+TtlRetroAdapter = MultiStepTTLAdapter

@@ -26,7 +26,7 @@ class SynLlamaRouteList(RootModel[list[SynLlamaRouteInput]]):
     pass
 
 
-class SynLlaMaAdapter(BaseAdapter):
+class SynLlamaAdapter(BaseAdapter):
     """adapter for converting pre-processed synllama outputs to the Route schema."""
 
     def iter_raw_entries(
@@ -150,3 +150,7 @@ class SynLlaMaAdapter(BaseAdapter):
             reactant_start_idx = product_idx + 1
 
         return precursor_map
+
+
+SynLlaMaAdapter = SynLlamaAdapter
+SynLLaMaAdapter = SynLlamaAdapter

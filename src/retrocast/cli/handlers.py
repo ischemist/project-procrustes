@@ -7,11 +7,11 @@ from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
 from retrocast.adapters.resolve import resolve_adapter, resolve_raw_results_filename
 from retrocast.chem import InchiKeyLevel
 from retrocast.cli.errors import log_expected_error
+from retrocast.cli.progress import create_cli_progress, estimate_raw_route_entries, quiet_info_logs
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
 from retrocast.exceptions import AdapterResolutionError, InputError, RetroCastException, SecurityError
 from retrocast.io.blob import load_json_artifact, load_json_gz, save_json_gz
@@ -162,7 +162,14 @@ def _resolve_benchmarks(args: Any, paths: dict[str, Path]) -> list[str]:
 # --- INGESTION ---
 
 
-def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any) -> None:
+def _ingest_single(
+    model_name: str,
+    benchmark_name: str,
+    paths: dict,
+    args: Any,
+    *,
+    show_route_progress: bool = True,
+) -> None:
     """The core logic for ingestion with dynamic adapter resolution."""
     raw_dir = paths["raw"] / model_name / benchmark_name
 
@@ -223,25 +230,64 @@ def _ingest_single(model_name: str, benchmark_name: str, paths: dict, args: Any)
         benchmark = load_benchmark(paths["benchmarks"] / f"{benchmark_name}.json.gz")
 
         raw_data = load_json_artifact(raw_path)
-
-        processed_routes, out_path, stats = ingest.ingest_model_predictions(
-            model_name=model_name,
-            benchmark=benchmark,
-            raw_data=raw_data,
-            adapter=adapter,
-            output_dir=paths["processed"],
-            anonymize=args.anonymize,
-            sampling_strategy=strategy,
-            sample_k=k,
-            ignore_stereo=ignore_stereo,
-            provider_output_kind=input_kind,
+        progress_total = estimate_raw_route_entries(
+            raw_data,
+            input_kind=input_kind,
+            benchmark_targets=benchmark.targets,
         )
 
+        if show_route_progress:
+            with create_cli_progress(console=console, unit="routes") as progress:
+                task = progress.add_task(
+                    f"Ingesting {model_name}/{benchmark_name}",
+                    total=progress_total,
+                )
+
+                def advance_progress() -> None:
+                    progress.advance(task)
+
+                with quiet_info_logs("retrocast.workflow.ingest"):
+                    processed_routes, out_path, stats = ingest.ingest_model_predictions(
+                        model_name=model_name,
+                        benchmark=benchmark,
+                        raw_data=raw_data,
+                        adapter=adapter,
+                        output_dir=paths["processed"],
+                        anonymize=args.anonymize,
+                        sampling_strategy=strategy,
+                        sample_k=k,
+                        ignore_stereo=ignore_stereo,
+                        provider_output_kind=input_kind,
+                        progress_callback=advance_progress,
+                    )
+            logger.info(
+                "Ingestion complete. Adapted %s raw route entries. Adapted %s predicted routes. "
+                "Saved %s valid routes. Duplication factor: %sx",
+                stats.total_routes_in_raw_files,
+                stats.successful_routes_before_dedup,
+                stats.final_unique_routes_saved,
+                stats.duplication_factor,
+            )
+        else:
+            processed_routes, out_path, stats = ingest.ingest_model_predictions(
+                model_name=model_name,
+                benchmark=benchmark,
+                raw_data=raw_data,
+                adapter=adapter,
+                output_dir=paths["processed"],
+                anonymize=args.anonymize,
+                sampling_strategy=strategy,
+                sample_k=k,
+                ignore_stereo=ignore_stereo,
+                provider_output_kind=input_kind,
+            )
+
+        manifest_root = paths["raw"].parent.resolve()
         manifest = create_manifest(
             action="ingest",
             sources=[raw_path, paths["benchmarks"] / f"{benchmark_name}.json.gz"],
             outputs=[(out_path, processed_routes, "predictions")],
-            root_dir=paths["raw"].parent,  # The 'data/' directory
+            root_dir=manifest_root,
             parameters={
                 "model": model_name,
                 "benchmark": benchmark_name,
@@ -266,12 +312,25 @@ def handle_ingest(args: Any, config: dict[str, Any]) -> None:
     paths = _get_paths(config)
     models = _resolve_models(args, paths, stage="ingest")
     benchmarks = _resolve_benchmarks(args, paths)
+    total_jobs = len(models) * len(benchmarks)
+    show_progress = not getattr(args, "no_progress", False)
 
     logger.info(f"Queued ingestion: {len(models)} models x {len(benchmarks)} benchmarks.")
 
+    if show_progress and total_jobs > 1:
+        with create_cli_progress(console=console, unit="jobs") as progress:
+            task = progress.add_task("Ingesting model/dataset jobs", total=total_jobs)
+            with quiet_info_logs("retrocast"):
+                for model in models:
+                    for bench in benchmarks:
+                        _ingest_single(model, bench, paths, args, show_route_progress=False)
+                        progress.advance(task)
+        logger.info("Ingestion batch complete. Processed %s model/dataset jobs.", total_jobs)
+        return
+
     for model in models:
         for bench in benchmarks:
-            _ingest_single(model, bench, paths, args)
+            _ingest_single(model, bench, paths, args, show_route_progress=show_progress)
 
 
 # --- SCORING ---
@@ -354,7 +413,7 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
             action="score_model",
             sources=[bench_path, routes_path, stock_path],
             outputs=[(out_path, eval_results, "unknown")],
-            root_dir=paths["raw"].parent,  # The 'data/' directory
+            root_dir=paths["raw"].parent.resolve(),
             parameters={"model": model_name, "benchmark": benchmark_name, "stock": stock_name},
             statistics={
                 "n_targets": len(eval_results.results),
@@ -555,13 +614,7 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
 
     all_reports = []
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        console=console,
-    ) as progress:
+    with create_cli_progress(console=console, unit="manifests") as progress:
         task = progress.add_task("Verifying manifests...", total=len(manifest_paths))
 
         for manifest_path in manifest_paths:

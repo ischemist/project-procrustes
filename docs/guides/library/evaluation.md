@@ -54,12 +54,12 @@ Predictions must be keyed by benchmark target ID. Each route is evaluated by che
 
 ```python title="Adapt, collect, score"
 from retrocast import adapt_provider_output, collect_benchmark_predictions, load_benchmark
-from retrocast.adapters import AizynthAdapter
+from retrocast.adapters import AiZynthFinderAdapter
 from retrocast.api import load_stock_file, score_predictions
 
 benchmark = load_benchmark("benchmark.json.gz")
 stock = load_stock_file("stock.txt")
-adapter = AizynthAdapter()
+adapter = AiZynthFinderAdapter()
 
 predictions = adapt_provider_output(raw_provider_output, adapter)
 collected = collect_benchmark_predictions(predictions, benchmark)

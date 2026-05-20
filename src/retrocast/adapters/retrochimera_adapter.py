@@ -65,7 +65,7 @@ class RetrochimeraData(BaseModel):
     result: RetrochimeraResult
 
 
-class RetrochimeraAdapter(BaseAdapter):
+class RetroChimeraAdapter(BaseAdapter):
     """adapter for converting retrochimera-style outputs to the Route schema."""
 
     def iter_raw_entries(
@@ -181,3 +181,6 @@ class RetrochimeraAdapter(BaseAdapter):
             canon_reactants = [canonicalize_smiles(r, ignore_stereo=ignore_stereo) for r in reaction.reactants]
             precursor_map[canon_product] = canon_reactants
         return precursor_map
+
+
+RetrochimeraAdapter = RetroChimeraAdapter

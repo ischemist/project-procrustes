@@ -64,6 +64,11 @@ def main() -> None:
         "--benchmark",
         help="Benchmark definition for target validation; required with --input-kind target-keyed-provider-output.",
     )
+    adapt_parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable progress bars during adaptation",
+    )
 
     collect_parser = subparsers.add_parser(
         "collect", help="Collect a prediction route corpus into benchmark-keyed routes (No config needed)"
@@ -117,6 +122,11 @@ def main() -> None:
         "--ignore-stereo",
         action="store_true",
         help="Strip stereochemistry during SMILES canonicalization",
+    )
+    ingest_parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable progress bars during ingestion",
     )
 
     # --- SCORE ---

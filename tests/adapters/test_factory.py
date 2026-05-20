@@ -1,7 +1,26 @@
 import pytest
 
 from retrocast._warnings import RetroCastFutureWarning
-from retrocast.adapters import ADAPTER_MAP, ADAPTER_TYPES, adapt_routes, adapt_single_route, get_adapter
+from retrocast.adapters import (
+    ADAPTER_MAP,
+    ADAPTER_TYPES,
+    AiZynthFinderAdapter,
+    AskcosAdapter,
+    DirectMultiStepAdapter,
+    DreamRetroErAdapter,
+    MolBuilderAdapter,
+    MultiStepTTLAdapter,
+    PaRoutesAdapter,
+    RetroChimeraAdapter,
+    RetroStarAdapter,
+    SynLlamaAdapter,
+    SynPlannerAdapter,
+    SyntheseusAdapter,
+    UrsaAdapter,
+    adapt_routes,
+    adapt_single_route,
+    get_adapter,
+)
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.exceptions import RetroCastException
 from retrocast.models.chem import TargetInput
@@ -29,6 +48,24 @@ def test_get_adapter_unknown_adapter_raises_exception():
         get_adapter(unknown_name)
     assert exc_info.value.code == "adapter.unknown"
     assert exc_info.value.context["adapter"] == unknown_name
+
+
+def test_public_adapter_names_match_registry_slugs():
+    assert {
+        "aizynth": AiZynthFinderAdapter,
+        "askcos": AskcosAdapter,
+        "dms": DirectMultiStepAdapter,
+        "dreamretro": DreamRetroErAdapter,
+        "molbuilder": MolBuilderAdapter,
+        "multistepttl": MultiStepTTLAdapter,
+        "paroutes": PaRoutesAdapter,
+        "retrochimera": RetroChimeraAdapter,
+        "retrostar": RetroStarAdapter,
+        "synllama": SynLlamaAdapter,
+        "synplanner": SynPlannerAdapter,
+        "syntheseus": SyntheseusAdapter,
+        "ursa-llm": UrsaAdapter,
+    } == ADAPTER_TYPES
 
 
 def test_adapt_single_route_uses_target_local_payload_contract():

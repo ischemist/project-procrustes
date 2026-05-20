@@ -35,9 +35,9 @@ For one raw route-like payload:
 
 ```python
 from retrocast import adapt_route
-from retrocast.adapters import DMSAdapter
+from retrocast.adapters import DirectMultiStepAdapter
 
-adapter = DMSAdapter()
+adapter = DirectMultiStepAdapter()
 route = adapt_route(raw_route, adapter)
 ```
 
@@ -45,9 +45,9 @@ For one raw prediction payload where you want an envelope:
 
 ```python
 from retrocast import adapt_prediction
-from retrocast.adapters import DMSAdapter
+from retrocast.adapters import DirectMultiStepAdapter
 
-adapter = DMSAdapter()
+adapter = DirectMultiStepAdapter()
 prediction = adapt_prediction(raw_route, adapter, rank=1)
 ```
 
@@ -55,9 +55,9 @@ For one raw provider output containing one or many routes:
 
 ```python
 from retrocast import adapt_provider_output
-from retrocast.adapters import AizynthAdapter
+from retrocast.adapters import AiZynthFinderAdapter
 
-adapter = AizynthAdapter()
+adapter = AiZynthFinderAdapter()
 predictions = adapt_provider_output(raw_provider_output, adapter)
 ```
 
@@ -65,10 +65,10 @@ For raw output already keyed by target ID or target SMILES:
 
 ```python
 from retrocast import adapt_target_keyed_provider_output, load_benchmark
-from retrocast.adapters import AizynthAdapter
+from retrocast.adapters import AiZynthFinderAdapter
 
 benchmark = load_benchmark("benchmark.json.gz")
-adapter = AizynthAdapter()
+adapter = AiZynthFinderAdapter()
 predictions = adapt_target_keyed_provider_output(raw_mapping, benchmark, adapter)
 ```
 

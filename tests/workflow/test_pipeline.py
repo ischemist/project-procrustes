@@ -16,7 +16,8 @@ from retrocast.io.data import load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import InchiKeyStr, SmilesStr
-from retrocast.workflow.adapt import adapt_target_routes
+from retrocast.workflow.adapt import adapt_target_keyed_provider_output, adapt_target_routes
+from retrocast.workflow.collect import collect_benchmark_predictions
 from retrocast.workflow.ingest import ingest_model_predictions
 from retrocast.workflow.score import score_model
 from tests.helpers import _make_simple_route, _make_two_step_route, _synthetic_inchikey
@@ -285,6 +286,28 @@ class TestIngestModelPredictions:
         assert len(loaded["target_1"]) == 2
         assert len(loaded["target_2"]) == 1
         assert len(loaded["target_3"]) == 1
+
+    @pytest.mark.integration
+    def test_ingest_matches_adapt_then_collect_workflow(self, tmp_path, synthetic_benchmark, synthetic_predictions):
+        """ingest_model_predictions should be the workflow equivalent of adapt then collect."""
+        raw_data = {
+            target_id: [route.model_dump(mode="json") for route in routes]
+            for target_id, routes in synthetic_predictions.items()
+        }
+
+        route_corpus = adapt_target_keyed_provider_output(raw_data, synthetic_benchmark, SyntheticAdapter())
+        collected_routes = collect_benchmark_predictions(route_corpus, synthetic_benchmark)
+
+        ingested_routes, _, _ = ingest_model_predictions(
+            model_name="test-model",
+            benchmark=synthetic_benchmark,
+            raw_data=raw_data,
+            adapter=SyntheticAdapter(),
+            output_dir=tmp_path,
+            provider_output_kind="target_keyed_provider_output",
+        )
+
+        assert ingested_routes == collected_routes.routes_by_target
 
     @pytest.mark.integration
     def test_ingest_with_missing_targets(self, tmp_path, synthetic_benchmark):

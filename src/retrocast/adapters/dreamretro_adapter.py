@@ -21,8 +21,8 @@ class DreamRetroRoutePayload:
     metadata: dict[str, Any]
 
 
-class DreamRetroAdapter(BaseAdapter):
-    """adapter for converting dreamretro-style outputs to the route schema."""
+class DreamRetroErAdapter(BaseAdapter):
+    """adapter for converting dreamretroer-style outputs to the route schema."""
 
     def iter_raw_entries(
         self,
@@ -154,3 +154,6 @@ class DreamRetroAdapter(BaseAdapter):
         )
 
         return Route(target=molecule, metadata=metadata)
+
+
+DreamRetroAdapter = DreamRetroErAdapter

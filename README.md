@@ -109,27 +109,28 @@ For full-scale benchmarking, RetroCast enforces a structured data lifecycle: `In
 
 model-specific prediction runners were extracted from this repo and now live in [project-pandora](https://github.com/ischemist/project-pandora). use RetroCast here for standardization, scoring, and analysis; use pandora when you need the upstream model-runner scripts.
 
-**Initialize a project:**
+**Inspect project paths:**
 
 ```bash
-retrocast init
+retrocast config
 ```
 
-**Configure your model in `retrocast-config.yaml`:**
+Project mode reads raw model outputs from `data/retrocast/2-raw/<model>/<benchmark>/`. Pass the adapter on the command line, or put a `manifest.json` next to the raw results file:
 
-```yaml
-models:
-  dms-explorer:
-    adapter: dms
-    raw_results_filename: predictions.json
-    sampling: { strategy: top-k, k: 50 }
+```json
+{
+  "directives": {
+    "adapter": "dms",
+    "raw_results_filename": "predictions.json"
+  }
+}
 ```
 
 **Run the pipeline:**
 
 ```bash
 # 1. Ingest: Standardize raw outputs from data/2-raw/
-retrocast ingest --model dms-explorer --dataset ref-lin-600
+retrocast ingest --model dms-explorer --dataset ref-lin-600 --adapter dms
 
 # 2. Score: Evaluate against the benchmark's defined stock
 retrocast score --model dms-explorer --dataset ref-lin-600
@@ -173,7 +174,7 @@ RetroCast is also a library. You can use it to integrate standardization directl
 
 ```python
 from retrocast import adapt_route
-from retrocast.adapters import DMSAdapter
+from retrocast.adapters import DirectMultiStepAdapter
 
 # Your model's raw output (any supported format)
 raw_output = {
@@ -182,7 +183,7 @@ raw_output = {
 }
 
 # Cast to the canonical Route object
-adapter = DMSAdapter()
+adapter = DirectMultiStepAdapter()
 route = adapt_route(raw_output, adapter)
 
 if route is None:

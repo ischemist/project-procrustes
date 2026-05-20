@@ -35,6 +35,7 @@ def ingest_model_predictions(
     sample_k: int | None = None,
     ignore_stereo: bool = False,
     provider_output_kind: ProviderOutputKind = "target_keyed_provider_output",
+    progress_callback: Callable[[], None] | None = None,
 ) -> tuple[dict[str, list[Route]], Path, RunStatistics]:
     """
     Convert raw model outputs into benchmark-keyed routes.
@@ -74,6 +75,7 @@ def ingest_model_predictions(
             adapter,
             ignore_stereo=ignore_stereo,
             stats=stats,
+            progress_callback=progress_callback,
         )
     elif provider_output_kind == "provider_output":
         route_corpus = adapt_provider_output(
@@ -81,6 +83,7 @@ def ingest_model_predictions(
             adapter,
             ignore_stereo=ignore_stereo,
             stats=stats,
+            progress_callback=progress_callback,
         )
     else:
         raise InputError(

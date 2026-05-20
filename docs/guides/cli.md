@@ -108,12 +108,16 @@ retrocast adapt \
   --adapter aizynth \
   --input-kind provider-output \
   --output route-corpus.jsonl.gz \
-  --benchmark benchmark.json.gz
+  --benchmark benchmark.json.gz \
+  --no-progress
 ```
 
 1. See available adapters with `retrocast list-adapters`
 2. Use `target-keyed-provider-output` when the top-level raw object is keyed by target id or target smiles
 3. Optional for `provider-output`; required for `target-keyed-provider-output`
+4. Optional: Disable progress bars and use log output only
+
+By default, `adapt` shows route-level progress with count, elapsed time, ETA, and routes per second.
 
 **Supported adapters:** `aizynth`, `askcos`, `dms`, `dreamretro`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, `ursa-llm`
 
@@ -172,53 +176,36 @@ retrocast create-benchmark \
     - Cryptographic audit trail
     - Automated manifest tracking
 
-### `init` - Initialize Project
+### Project Setup
 
-Generate a default configuration file and directory structure:
+There is no project initializer command in the current CLI. Project mode uses the data directory reported by:
 
 ```bash
-retrocast init
+retrocast config
 ```
 
-**Creates:**
+Place raw outputs under:
 
-- `retrocast-config.yaml` - Model configuration
-- `data/` directory structure
-
-### Configuration
-
-Edit `retrocast-config.yaml` to register your models:
-
-```yaml title="retrocast-config.yaml"
-models:
-  dms-explorer: # (1)!
-    adapter: dms # (2)!
-    raw_results_filename: predictions.json # (3)!
-    sampling: # (4)!
-      strategy: top-k
-      k: 50
+```text
+<data-dir>/2-raw/<model>/<benchmark>/<raw-results-file>
 ```
 
-1. Model identifier (used in CLI commands)
-2. Adapter type (see `retrocast list-adapters`)
-3. Expected filename in `2-raw/<model>/<benchmark>/`
-4. Optional: Limit routes per target
+Project-mode `ingest` resolves the adapter in this order:
 
-??? example "Advanced configuration"
+1. `--adapter` passed on the command line
+2. `manifest.json` next to the raw file with `directives.adapter`
+3. error if neither is provided
 
-    ```yaml
-    models:
-      my-model:
-        adapter: aizynth
-        raw_results_filename: results.json.gz
-        sampling:
-          strategy: top-k
-          k: 100
-        # Custom metadata
-        metadata:
-          version: "2.0"
-          training_data: "USPTO-50k"
-    ```
+If the raw filename is not declared in `manifest.json`, ingest reads `results.json.gz`.
+
+```json title="data/retrocast/2-raw/my-model/mkt-cnv-160/manifest.json"
+{
+  "directives": {
+    "adapter": "aizynth",
+    "raw_results_filename": "results.json.gz"
+  }
+}
+```
 
 ### The Pipeline
 
@@ -245,11 +232,13 @@ retrocast ingest \
   --dataset paroutes-n1 \
   --input-kind target-keyed-provider-output \
   --anonymize \  # (1)!
-  --ignore-stereo  # (2)!
+  --ignore-stereo \  # (2)!
+  --no-progress  # (3)!
 ```
 
 1. Optional: Hashes the model name for blind review
 2. Optional: Strip stereochemistry during SMILES canonicalization
+3. Optional: Disable progress bars and use log output only
 
 **Input:** `<data-dir>/2-raw/<model>/<dataset>/<raw_results_filename>`  
 **Output:** `<data-dir>/3-processed/<model>/<dataset>/routes.json.gz`
@@ -261,6 +250,8 @@ retrocast ingest \
 - Collect canonical routes onto the benchmark by target smiles
 - Deduplicate routes within each benchmark target
 - Apply sampling strategy (if configured)
+
+For a single model/dataset job, `ingest` shows route-level progress with count, ETA, and routes per second. For `--all-models` or `--all-datasets`, it shows one global job-level progress bar instead of one route-level bar per job. Use `--no-progress` when logs are easier to capture.
 
 !!! warning "Stereochemistry-agnostic processing"
 
@@ -496,7 +487,6 @@ Model: dms-explorer
 | Command | Purpose | Input | Output |
 | :-- | :-- | :-- | :-- |
 | `config` | Show resolved paths | - | Configuration display |
-| `init` | Initialize project | - | `retrocast-config.yaml` |
 | `adapt` | Convert raw → standardized | Raw predictions | Prediction route corpus (`.jsonl.gz`) |
 | `score-file` | Evaluate routes | Routes + stock | Scored routes |
 | `create-benchmark` | Generate benchmark | SMILES list | Benchmark JSON |
@@ -504,9 +494,8 @@ Model: dms-explorer
 | `score` | Evaluate (project mode) | `3-processed/` | `4-scored/` |
 | `analyze` | Generate report | `4-scored/` | `5-results/` |
 | `verify` | Audit integrity | Manifest files | Validation report |
-| `list` | Show models | `retrocast-config.yaml` | Model list |
+| `list` | Show models discovered from raw manifests | `2-raw/` | Model list |
 | `list-adapters` | Show adapters | - | Adapter list |
-| `info` | Show model config | Model name | Config details |
 
 ### Advanced Options
 

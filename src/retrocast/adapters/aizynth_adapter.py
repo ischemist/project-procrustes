@@ -50,7 +50,7 @@ class AizynthRouteList(RootModel[list[AizynthMoleculeInput]]):
     pass
 
 
-class AizynthAdapter(BaseAdapter):
+class AiZynthFinderAdapter(BaseAdapter):
     """adapter for converting aizynthfinder-style outputs to the route schema."""
 
     def iter_raw_entries(
@@ -113,3 +113,6 @@ class AizynthAdapter(BaseAdapter):
                 route_metadata["state_score"] = state_score
 
         return Route(target=target_molecule, metadata=route_metadata)
+
+
+AizynthAdapter = AiZynthFinderAdapter

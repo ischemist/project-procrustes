@@ -27,7 +27,7 @@ class TestLibraryAPIWithRealData:
     def test_adapt_route_example(self):
         """Test Section 1.1: Adapting one route."""
         from retrocast import adapt_route
-        from retrocast.adapters import DMSAdapter
+        from retrocast.adapters import DirectMultiStepAdapter
 
         # 1. Provide raw data (simple DMS-style tree structure)
         raw_data = {
@@ -36,7 +36,7 @@ class TestLibraryAPIWithRealData:
         }
 
         # 2. Cast to Route
-        adapter = DMSAdapter()
+        adapter = DirectMultiStepAdapter()
         route = adapt_route(raw_data, adapter)
 
         # Validate the route was created successfully
@@ -51,7 +51,7 @@ class TestLibraryAPIWithRealData:
     def test_adapt_provider_output_batch_example(self):
         """Test adapting batch predictions with the v0.6 provider-output API."""
         from retrocast import adapt_provider_output, collect_benchmark_predictions
-        from retrocast.adapters import DMSAdapter
+        from retrocast.adapters import DirectMultiStepAdapter
         from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
         from retrocast.typing import InchiKeyStr, SmilesStr
 
@@ -65,7 +65,7 @@ class TestLibraryAPIWithRealData:
             {"smiles": "CC(C)O", "children": [{"smiles": "CC", "children": []}, {"smiles": "CO", "children": []}]},
         ]
 
-        adapter = DMSAdapter()
+        adapter = DirectMultiStepAdapter()
         predictions = adapt_provider_output(raw_provider_output, adapter)
         benchmark = BenchmarkSet(
             name="smoke-test",

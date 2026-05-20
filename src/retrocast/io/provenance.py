@@ -245,11 +245,13 @@ def create_manifest(
     }
 
     def _get_relative_path(p: Path) -> str:
+        resolved_root = root_dir.resolve()
+        resolved_path = p.resolve()
         try:
-            return str(p.relative_to(root_dir))
+            return str(resolved_path.relative_to(resolved_root))
         except ValueError:
-            logger.warning(f"Path {p} is not inside root {root_dir}. Storing absolute path.")
-            return str(p.resolve())
+            logger.warning(f"Path {resolved_path} is not inside root {resolved_root}. Storing absolute path.")
+            return str(resolved_path)
 
     source_infos = []
     for p in sources:

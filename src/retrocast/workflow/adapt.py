@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
 from pydantic import ValidationError
@@ -56,9 +56,12 @@ def _adapt_entry(
     stats: RunStatistics | None = None,
     rank: int | None = None,
     metadata: dict[str, Any] | None = None,
+    progress_callback: Callable[[], None] | None = None,
 ) -> PredictedRoute | None:
     if stats is not None:
         stats.total_routes_in_raw_files += 1
+    if progress_callback is not None:
+        progress_callback()
     target = expected_target or _target_hint_from_entry(entry)
     try:
         route = adapter.cast(
@@ -106,6 +109,7 @@ def _adapt_entries(
     expected_target: TargetIdentity | None = None,
     ignore_stereo: bool,
     stats: RunStatistics | None = None,
+    progress_callback: Callable[[], None] | None = None,
 ) -> Iterator[PredictedRoute]:
     for entry in entries:
         prediction = _adapt_entry(
@@ -114,6 +118,7 @@ def _adapt_entries(
             expected_target=expected_target,
             ignore_stereo=ignore_stereo,
             stats=stats,
+            progress_callback=progress_callback,
         )
         if prediction is None:
             continue
@@ -126,12 +131,14 @@ def iter_adapted_routes(
     *,
     ignore_stereo: bool,
     stats: RunStatistics | None = None,
+    progress_callback: Callable[[], None] | None = None,
 ) -> Iterator[PredictedRoute]:
     yield from _adapt_entries(
         adapter.iter_raw_entries(provider_output),
         adapter,
         ignore_stereo=ignore_stereo,
         stats=stats,
+        progress_callback=progress_callback,
     )
 
 
@@ -142,6 +149,7 @@ def iter_target_keyed_adapted_routes(
     *,
     ignore_stereo: bool,
     stats: RunStatistics | None = None,
+    progress_callback: Callable[[], None] | None = None,
 ) -> Iterator[PredictedRoute]:
     if not isinstance(target_keyed_provider_output, Mapping):
         raise InputError(
@@ -171,6 +179,7 @@ def iter_target_keyed_adapted_routes(
             expected_target=target,
             ignore_stereo=ignore_stereo,
             stats=stats,
+            progress_callback=progress_callback,
         )
 
 
@@ -199,9 +208,18 @@ def adapt_provider_output(
     *,
     ignore_stereo: bool = False,
     stats: RunStatistics | None = None,
+    progress_callback: Callable[[], None] | None = None,
 ) -> list[PredictedRoute]:
     """Materialize canonical predicted routes from one provider output."""
-    return list(iter_adapted_routes(provider_output, adapter, ignore_stereo=ignore_stereo, stats=stats))
+    return list(
+        iter_adapted_routes(
+            provider_output,
+            adapter,
+            ignore_stereo=ignore_stereo,
+            stats=stats,
+            progress_callback=progress_callback,
+        )
+    )
 
 
 def adapt_route(
@@ -244,6 +262,7 @@ def adapt_target_keyed_provider_output(
     *,
     ignore_stereo: bool = False,
     stats: RunStatistics | None = None,
+    progress_callback: Callable[[], None] | None = None,
 ) -> list[PredictedRoute]:
     """Materialize canonical predicted routes from target-keyed provider output."""
     return list(
@@ -253,6 +272,7 @@ def adapt_target_keyed_provider_output(
             adapter,
             ignore_stereo=ignore_stereo,
             stats=stats,
+            progress_callback=progress_callback,
         )
     )
 

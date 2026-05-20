@@ -155,7 +155,7 @@ Some models have unique structures that don't fit the above patterns (e.g., grap
 
 ### Flat Completion Corpora: Ursa LLM
 
-`UrsaLlmAdapter` is the reference example of a route-first adapter for flat raw artifacts. Its input is a completion corpus containing `<synthesis_step>` XML blocks, usually as `.jsonl` or `.jsonl.gz`, not a benchmark-keyed `results.json.gz` mapping.
+`UrsaAdapter` is the reference example of a route-first adapter for flat raw artifacts. Its input is a completion corpus containing `<synthesis_step>` XML blocks, usually as `.jsonl` or `.jsonl.gz`, not a benchmark-keyed `results.json.gz` mapping.
 
 - canonical adapter key: `ursa-llm`
 - raw artifact shape: list of records with `completion` text and `meta.product_smiles`
@@ -319,7 +319,7 @@ Once your adapter logic is written, you must register it so the CLI can find it.
     from retrocast.adapters.my_adapter import MyModelAdapter
 
     ADAPTER_TYPES = {
-        "aizynth": AizynthAdapter,
+        "aizynth": AiZynthFinderAdapter,
         # ...
         "my-model": MyModelAdapter, # (1)!
     }
