@@ -7,9 +7,10 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 0
     labels:
       - "scope/ci-cd"
+      - "type/security"
     groups:
       root-python-deps:
         patterns:
@@ -19,9 +20,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 0
     labels:
       - "scope/ci-cd"
+      - "type/security"
     groups:
       github-actions:
         patterns:
