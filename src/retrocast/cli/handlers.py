@@ -7,6 +7,7 @@ from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
+from rich.table import Table
 
 from retrocast.adapters.resolve import resolve_adapter, resolve_raw_results_filename
 from retrocast.chem import InchiKeyLevel
@@ -587,6 +588,36 @@ def _render_report(report: VerificationReport) -> None:
     console.print(Panel("\n".join(lines), title=title, border_style=color))
 
 
+def _render_issue_summary(reports: list[VerificationReport]) -> None:
+    """Print a compact actionable summary for batch verification."""
+    issue_rows = [
+        (report.manifest_path, issue)
+        for report in reports
+        for issue in report.issues
+        if issue.level in {"FAIL", "WARN"}
+    ]
+
+    if not issue_rows:
+        return
+
+    table = Table(title="issues found")
+    table.add_column("level", no_wrap=True)
+    table.add_column("manifest")
+    table.add_column("path")
+    table.add_column("message")
+
+    for manifest_path, issue in issue_rows:
+        level = "[red]fail[/red]" if issue.level == "FAIL" else "[yellow]warn[/yellow]"
+        table.add_row(
+            level,
+            str(manifest_path),
+            str(issue.path),
+            issue.message,
+        )
+
+    console.print(table)
+
+
 def handle_verify(args: Any, config: dict[str, Any]) -> None:
     """Verify data integrity and lineage."""
     data_dir = Path(config.get("data_dir", DEFAULT_DATA_DIR))
@@ -623,10 +654,11 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
                     manifest_path=manifest_path,
                     root_dir=data_dir,
                     deep=args.deep,
-                    lenient=not args.strict,
+                    lenient=not getattr(args, "strict", False),
                 )
                 all_reports.append(report)
-                _render_report(report)
+                if not args.all:
+                    _render_report(report)
             except RetroCastException as e:
                 console.print(f"[red]Failed to verify {manifest_path}: {e}[/]")
                 logger.error(f"Verification error for {manifest_path}: {e.code}", exc_info=True)
@@ -638,6 +670,9 @@ def handle_verify(args: Any, config: dict[str, Any]) -> None:
 
     # Summary
     console.print()
+    if args.all:
+        _render_issue_summary(all_reports)
+
     total = len(all_reports)
     valid_count = sum(1 for r in all_reports if r.is_valid)
     if valid_count == total:

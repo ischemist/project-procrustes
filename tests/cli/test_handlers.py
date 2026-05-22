@@ -550,6 +550,7 @@ class TestHandleVerify:
             target=None,
             all=True,
             deep=False,
+            strict=False,
         )
 
         # Should process all 3 manifests without error
@@ -562,11 +563,33 @@ class TestHandleVerify:
             target=None,
             all=True,
             deep=False,
+            strict=False,
         )
 
         handlers.handle_verify(args, config)
 
         assert "No manifests found" in caplog.text
+
+    def test_verify_all_prints_compact_issue_summary(self, setup_corrupted_manifest, capsys):
+        """Test --all prints one issue list instead of per-manifest detail panels."""
+        _manifest_path, root_dir = setup_corrupted_manifest
+
+        config = {"data_dir": str(root_dir)}
+        args = Namespace(
+            target=None,
+            all=True,
+            deep=False,
+            strict=False,
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            handlers.handle_verify(args, config)
+
+        output = capsys.readouterr().out
+        assert exc_info.value.code == 1
+        assert "issues found" in output
+        assert "HASH MISMATCH" in output
+        assert "Verification Report for" not in output
 
     def test_verify_with_deep_flag(self, setup_valid_manifest):
         """Test --deep flag is passed to verify_manifest."""
@@ -577,6 +600,7 @@ class TestHandleVerify:
             target=str(manifest_path),
             all=False,
             deep=True,
+            strict=False,
         )
 
         # Should complete successfully with deep=True
