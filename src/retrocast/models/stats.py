@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, model_validator
-
-from retrocast._warnings import DeprecatedFieldAccessMixin
+from pydantic import BaseModel
 
 
 class ReliabilityFlag(BaseModel):
@@ -33,24 +31,15 @@ class StratifiedMetric(BaseModel):
     by_group: dict[int | str, MetricResult]
 
 
-class ModelStatistics(DeprecatedFieldAccessMixin, BaseModel):
+class ModelStatistics(BaseModel):
     """Complete statistical dump for one model run."""
-
-    _deprecated_fields = {
-        "solvability": (
-            "ModelStatistics.solvability",
-            "ModelStatistics.stock_termination",
-            "Historical solvability means stock termination rate, not Solv-N validity.",
-        ),
-    }
 
     model_name: str
     benchmark: str
     stock: str
 
     # The metrics we care about
-    solvability: StratifiedMetric  # Legacy alias for stock_termination.
-    stock_termination: StratifiedMetric | None = None
+    stock_termination: StratifiedMetric
     tier_0_validity: StratifiedMetric | None = None
     solv_0: StratifiedMetric | None = None
     top_k_accuracy: dict[int, StratifiedMetric]  # k -> metric
@@ -60,12 +49,6 @@ class ModelStatistics(DeprecatedFieldAccessMixin, BaseModel):
     total_cpu_time: float | None = None
     mean_wall_time: float | None = None
     mean_cpu_time: float | None = None
-
-    @model_validator(mode="after")
-    def _fill_stock_termination_alias(self) -> ModelStatistics:
-        if self.stock_termination is None:
-            self.stock_termination = self.__dict__["solvability"]
-        return self
 
 
 class ModelComparison(BaseModel):

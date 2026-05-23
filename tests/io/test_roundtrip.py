@@ -59,7 +59,7 @@ from retrocast.io.provenance import (
 )
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Molecule, PredictedRoute, Route
-from retrocast.models.evaluation import EvaluationResults, ScoredRoute, TargetEvaluation
+from retrocast.models.evaluation import EvaluationResults, TargetEvaluation
 from tests.helpers import _synthetic_inchikey
 
 # =============================================================================
@@ -901,11 +901,9 @@ class TestBenchmarkResultsLoader:
 
     def _create_mock_evaluation(self, model_name: str, benchmark: str, stock: str) -> EvaluationResults:
         """Helper to create a minimal EvaluationResults object."""
-        scored_route = ScoredRoute(rank=1, is_solved=True, matches_acceptable=True)
         target_eval = TargetEvaluation(
             target_id="test-001",
-            routes=[scored_route],
-            is_solvable=True,
+            has_stock_terminated_route=True,
             acceptable_rank=1,
             stratification_length=3,
             stratification_is_convergent=False,

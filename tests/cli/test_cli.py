@@ -219,7 +219,7 @@ class TestCLIHandlerIntegration:
         with gzip.open(expected_file, "rt") as f:
             data = json.load(f)
             # t1 should be solvable because stock has "C" and route uses C as reactants
-            assert data["results"]["t1"]["is_solvable"] is True
+            assert data["results"]["t1"]["has_stock_terminated_route"] is True
 
     def test_analyze_flow(self, synthetic_config, synthetic_data):
         """Test handle_analyze -> creates report and plots."""

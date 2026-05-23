@@ -116,10 +116,10 @@ class TestLibraryAPIWithRealData:
         # Access granular results for first target
         first_target_id = target_ids[0]
         t1_eval = results.results[first_target_id]
-        assert hasattr(t1_eval, "is_solvable")
+        assert hasattr(t1_eval, "has_stock_terminated_route")
         assert hasattr(t1_eval, "acceptable_rank")
         # Verify the target we provided predictions for has routes
-        assert len(t1_eval.routes) > 0
+        assert len(t1_eval.candidates) > 0
 
     def test_compute_statistics_example(self):
         """Test Section 2.B: Compute Statistics"""

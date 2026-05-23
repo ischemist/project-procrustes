@@ -34,7 +34,6 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
         group_fn = _get_stratification_length
 
     # --- 2. Stock termination / Solv-0 ---
-    # Legacy `solvability` is retained as stock-termination rate for compatibility.
     stat_stock_termination = compute_metric_with_ci(
         targets,
         get_has_stock_terminated_route,
@@ -101,7 +100,6 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
         model_name=eval_results.model_name,
         benchmark=eval_results.benchmark_name,
         stock=eval_results.stock_name,
-        solvability=stat_stock_termination,
         stock_termination=stat_stock_termination,
         tier_0_validity=stat_tier_0_validity,
         solv_0=stat_solv_0,

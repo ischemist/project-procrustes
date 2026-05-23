@@ -154,9 +154,9 @@ mrr_solv_i[scope] = mean reciprocal raw rank of the first solv-i[scope] candidat
 If the paper-facing name `MRR-V_i` is used, it maps to `mrr_tier_i`, not to
 reference-route reconstruction.
 
-Ranking metrics require rank-preserving candidate artifacts. Route-only artifacts
-can still support `top_k[stock]`, but they cannot support honest raw-rank
-validity diagnostics.
+Ranking metrics require artifacts that preserve the model's ranked route stream.
+Route-only artifacts can still support `top_k[stock]`, but they cannot support
+honest diagnostics over rank slots that failed adaptation.
 
 ### Diagnostic Rates
 
@@ -175,7 +175,6 @@ Use Pydantic models at artifact and public-library boundaries.
 
 - `src/retrocast/models/chem.py`: canonical chemistry only. No validity fields.
 - `src/retrocast/models/validity.py`: validity and constraint result models.
-- `src/retrocast/models/candidates.py`: pre-score candidate records and candidate audit metadata.
 - `src/retrocast/models/evaluation.py`: scored candidates, target evaluation, and evaluation results.
 
 Validator internals may use dataclasses if that keeps local computation small,
@@ -183,10 +182,7 @@ but serialized artifacts should use Pydantic models.
 
 ## Boundary Models
 
-### Failure Records
-
-Candidate failures reuse RetroCast's typed error contract. A persisted failure is
-the serializable shape returned by `RetroCastException.to_dict()`.
+### Status Records
 
 ```python
 from typing import Any, Literal
@@ -194,15 +190,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-JsonValue = dict[str, Any] | list[Any] | str | int | float | bool | None
 CheckStatus = Literal["pass", "fail", "unknown", "not_evaluated"]
-
-
-class FailureRecord(BaseModel):
-    code: str
-    message: str
-    context: dict[str, JsonValue] = Field(default_factory=dict)
-    retryable: bool = False
 ```
 
 ### Scope Records
@@ -243,7 +231,7 @@ class CheckResult(BaseModel):
     code: str
     status: CheckStatus
     message: str | None = None
-    details: dict[str, JsonValue] = Field(default_factory=dict)
+    details: dict[str, Any] = Field(default_factory=dict)
 
 
 class TierResult(BaseModel):
@@ -279,74 +267,19 @@ solv_i[scope] = validity.tiers[i].status == "pass"
 
 Target/stat summaries may store computed Solv-i ranks and rates.
 
-### Candidate Records
-
-`CandidateRecord` is the pre-score unit. It represents one raw ranked model slot.
-
-```python
-class CandidateSource(BaseModel):
-    key: str | None = None
-    row_index: int | None = None
-    record_id: str | None = None
-
-
-class CandidateRecord(BaseModel):
-    rank: int
-    route: Route | None = None
-    adapter_failure: FailureRecord | None = None
-    source: CandidateSource = Field(default_factory=CandidateSource)
-```
-
-If the artifact is stored as `dict[target_id, list[CandidateRecord]]`, do not
-repeat `target_id` inside every candidate. If a streaming JSONL artifact is used,
-put `target_id` on the row envelope.
-
-Rejected and unassigned are different states:
-
-- Rejected: a raw slot could not be adapted to `Route`; it has `route=None` and `adapter_failure`.
-- Unassigned: RetroCast could not attach a raw slot to a benchmark target.
-
-### Candidate Audit Metadata
-
-Score should not infer whether failed slots were preserved. Ingest writes
-explicit metadata.
-
-```python
-class CandidateAuditMetadata(BaseModel):
-    candidate_audit_version: str
-    preserves_failed_candidates: bool
-    candidate_denominator: Literal["complete", "partial", "route_only"]
-    target_assignment: Literal["benchmark_target_key", "target_hint", "route_match", "unknown"]
-    n_raw_entries_seen: int
-    n_candidate_records_written: int
-    n_routes_adapted: int
-    n_adaptation_failures: int
-    n_unassigned_candidates: int
-    sampling_policy: str | None = None
-```
-
-Candidate-level validity metrics are reportable only when:
-
-```text
-preserves_failed_candidates == true
-candidate_denominator == "complete"
-n_unassigned_candidates == 0
-```
-
 ### Scored Candidates
 
 `ScoredCandidate` is the score-stage unit. It adds validity, constraint results,
-and benchmark-reference annotations to a pre-score candidate.
+and benchmark-reference annotations to a ranked route.
 
 ```python
 class ScoredCandidate(BaseModel):
     rank: int
-    route: Route | None = None
+    route: Route
     validity: RouteValidity
     constraint_results: dict[str, ConstraintResult] = Field(default_factory=dict)
     matches_acceptable: bool = False
     matched_acceptable_index: int | None = None
-    adapter_failure: FailureRecord | None = None
 ```
 
 Compact normal case:
@@ -394,14 +327,11 @@ class TargetEvaluation(BaseModel):
 candidate. `top_k_ranks["stock"]` is the effective acceptable-route rank after
 filtering to the `stock` scope.
 
-Legacy aliases remain loadable during migration:
+New Solv-N artifacts should use the new names directly:
 
-- `ScoredRoute.is_solved` means `constraint_results["stock"].status == "pass"`.
-- `TargetEvaluation.is_solvable` means at least one candidate passes the `stock` scope.
-- `ModelStatistics.solvability` means target-level stock-scope pass rate.
-
-These names should be deprecated through `src/retrocast/_warnings.py` where
-practical, without warning during artifact parsing.
+- `constraint_results["stock"].status == "pass"` means stock termination.
+- `TargetEvaluation.has_stock_terminated_route` means at least one candidate passes the `stock` scope.
+- `ModelStatistics.stock_termination` means target-level stock-scope pass rate.
 
 ### Evaluation Results
 
@@ -443,62 +373,15 @@ This mode does not support:
 
 - adaptation success rate as a candidate denominator
 - candidate tier-0 pass rate
-- raw-rank `mrr_tier_i`
-- raw-rank `mrr_solv_i[scope]`
-
-### Candidate Audit Mode
-
-Benchmark evaluation that reports candidate-level tier rates or raw-rank MRR
-validity metrics uses rank-preserving candidates.
-
-```bash
-retrocast ingest MODEL BENCHMARK --preserve-failed-candidates
-retrocast score MODEL BENCHMARK --metrics tier,solv,mrr,top-k
-```
-
-Score infers the required denominator from requested metrics:
-
-- if requested metrics need candidate denominators and candidate audit is missing or partial, fail with `InputError`.
-- if requested metrics can be computed from routes, route-only artifacts are allowed.
-
-Output:
-
-```text
-3-processed/<benchmark>/<model>/candidates.json.gz
-3-processed/<benchmark>/<model>/routes.json.gz
-3-processed/<benchmark>/<model>/manifest.json
-```
-
-`candidates.json.gz` preserves raw rank slots before deduplication. Duplicate
-model outputs still consume rank and should affect raw-rank diagnostics.
-
-`routes.json.gz` is a compatibility view containing successful canonical routes.
-It may be deduplicated and sampled, but those transformations must not mutate
-`candidates.json.gz` unless the manifest marks the denominator as partial.
-
-### Target Assignment
-
-Failed candidates are useful only if they can be assigned to a benchmark target.
-
-For target-keyed provider output, the enclosing target key supplies assignment.
-For provider-wide output:
-
-- successful routes can be assigned by canonical target SMILES, as today.
-- failed candidates need `target_hint_id`, `target_hint_smiles`, or equivalent source context.
-- failed candidates without target hints are unassigned and make candidate-level benchmark metrics partial.
-
-Adapter contract for candidate audit mode:
-
-- `iter_raw_entries()` should yield every rank slot the provider returned.
-- if an adapter cannot enumerate malformed slots, it marks the candidate denominator as partial.
+- raw-rank MRR over slots that failed adaptation
 
 ## Scoring Procedure
 
 For each candidate:
 
 1. Preserve the raw rank.
-2. If `route is None`, record adapter failure and mark tier/scope checks according to the requested checks.
-3. Evaluate scope constraints for valid routes.
+2. Evaluate Tier-i validity for the route.
+3. Evaluate scope constraints for the route.
 4. Evaluate enabled tier validators.
 5. Compute acceptable-route match independently from tier and Solv-i.
 
@@ -561,29 +444,20 @@ route standardization should not need the tier-1 dependency stack.
 
 ## Developer Experience
 
-The stored schema should have helper methods so users do not need to manually
-walk nested JSON.
-
-Route-level inspection:
+The stored schema should be inspectable without helper magic:
 
 ```python
-candidate.validity.passes_tier(0)
-candidate.validity.failed_reactions(tier=0)
-candidate.passes_scope("stock")
-candidate.passes_solv(tier=0, scope_id="stock")
+candidate.validity.tiers[0].status
+candidate.constraint_results["stock"].status
+target.tier_validity_ranks[0]
+target.solv_ranks["stock"][0]
 ```
 
-Target-level inspection:
+Reaction-level failures are explicit records:
 
 ```python
-target.first_tier_valid_candidate(tier=0)
-target.first_solv_candidate(tier=0, scope_id="stock")
-target.first_acceptable_candidate(scope_id="stock")
-```
-
-Reaction-level inspection:
-
-```python
-for reaction in candidate.validity.failed_reactions(tier=0):
-    print(reaction.reaction_index, reaction.failed_checks(tier=0))
+for reaction in candidate.validity.reactions:
+    failed = [check.code for check in reaction.tiers[0].checks if check.status == "fail"]
+    if failed:
+        print(reaction.reaction_index, failed)
 ```

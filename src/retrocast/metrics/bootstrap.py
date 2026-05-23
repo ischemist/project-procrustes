@@ -4,7 +4,6 @@ from typing import Any, TypeVar
 
 import numpy as np
 
-from retrocast._warnings import warn_deprecated
 from retrocast.models.evaluation import TargetEvaluation
 from retrocast.models.stats import MetricResult, ModelComparison, ReliabilityFlag, StratifiedMetric
 
@@ -107,17 +106,6 @@ def compute_metric_with_ci(
 
 
 # --- Extractor Helpers ---
-
-
-def get_is_solvable(t: TargetEvaluation) -> float:
-    warn_deprecated(
-        old="get_is_solvable",
-        new="get_has_stock_terminated_route",
-        remove_in="0.3.0",
-        note="Historical solvability means stock termination rate, not Solv-N validity.",
-        stacklevel=3,
-    )
-    return 1.0 if t.__dict__["is_solvable"] else 0.0
 
 
 def get_has_stock_terminated_route(t: TargetEvaluation) -> float:

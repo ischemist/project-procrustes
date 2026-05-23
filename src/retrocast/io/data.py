@@ -19,7 +19,6 @@ from retrocast.exceptions import (
 from retrocast.io.blob import iter_jsonl_gz, iter_lines_gz, load_json_gz, save_json_gz, save_jsonl_gz
 from retrocast.io.provenance import create_manifest
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
-from retrocast.models.candidates import CandidateAuditMetadata, CandidateRecordsArtifact, CandidateRecordsDict
 from retrocast.models.chem import PredictedRoute, Route, StockStatistics
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.stats import ModelStatistics
@@ -33,7 +32,6 @@ if TYPE_CHECKING:
 # Pre-define the adapter for performance and reuse
 RoutesDict = dict[str, list[Route]]
 _ROUTES_ADAPTER = TypeAdapter(RoutesDict)
-_CANDIDATES_ARTIFACT_ADAPTER = TypeAdapter(CandidateRecordsArtifact)
 _ROUTE_ADAPTER = TypeAdapter(Route)
 _PREDICTED_ROUTE_ADAPTER = TypeAdapter(PredictedRoute)
 
@@ -99,55 +97,6 @@ def load_routes(path: Path) -> RoutesDict:
         ) from e
     logger.debug(f"Loaded {sum(len(r) for r in routes.values())} routes for {len(routes)} targets.")
     return routes
-
-
-def save_candidate_records(
-    records: CandidateRecordsDict,
-    path: Path,
-    metadata: CandidateAuditMetadata,
-) -> None:
-    path = Path(path)
-    artifact = CandidateRecordsArtifact(
-        metadata=metadata,
-        records=records,
-    )
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with gzip.open(path, "wb") as f:
-            f.write(_CANDIDATES_ARTIFACT_ADAPTER.dump_json(artifact, indent=2))
-    except (OSError, TypeError, ValueError) as e:
-        raise ArtifactWriteError(
-            f"Failed to save candidate records to {path}: {e}",
-            code="io.write_failed",
-            context={"path": str(path), "artifact": "candidate_records"},
-        ) from e
-
-
-def load_candidate_records(path: Path) -> CandidateRecordsArtifact:
-    path = Path(path)
-    if not path.exists():
-        raise ArtifactNotFoundError(
-            f"Candidate records file not found: {path}",
-            code="io.not_found",
-            context={"path": str(path), "artifact": "candidate_records"},
-        )
-    try:
-        with gzip.open(path, "rb") as f:
-            json_bytes = f.read()
-    except OSError as e:
-        raise ArtifactDecodeError(
-            f"Failed to load candidate records from {path}: {e}",
-            code="io.decode_failed",
-            context={"path": str(path), "artifact": "candidate_records"},
-        ) from e
-    try:
-        return _CANDIDATES_ARTIFACT_ADAPTER.validate_json(json_bytes)
-    except ValidationError as e:
-        raise ArtifactFormatError(
-            f"Invalid candidate records JSON format in {path}: {e}",
-            code="io.invalid_artifact_shape",
-            context={"path": str(path), "artifact": "candidate_records"},
-        ) from e
 
 
 def load_benchmark(path: Path) -> BenchmarkSet:

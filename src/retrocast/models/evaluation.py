@@ -2,85 +2,34 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
-from retrocast._warnings import DeprecatedFieldAccessMixin, warn_deprecated
 from retrocast.models.chem import Route
-from retrocast.models.validity import ConstraintResult, FailureRecord, MetricScope, RouteValidity
+from retrocast.models.validity import ConstraintResult, MetricScope, RouteValidity
 
 
 class ScoredCandidate(BaseModel):
     rank: int
-    route: Route | None = None
+    route: Route
     validity: RouteValidity = Field(default_factory=RouteValidity)
     constraint_results: dict[str, ConstraintResult] = Field(default_factory=dict)
     matches_acceptable: bool = False
     matched_acceptable_index: int | None = None
-    adapter_failure: FailureRecord | None = None
-
-    @model_validator(mode="after")
-    def _require_route_or_failure(self) -> ScoredCandidate:
-        if self.route is None and self.adapter_failure is None:
-            raise ValueError("ScoredCandidate requires either route or adapter_failure.")
-        if self.route is not None and self.adapter_failure is not None:
-            raise ValueError("ScoredCandidate cannot contain both route and adapter_failure.")
-        return self
 
 
-class ScoredRoute(DeprecatedFieldAccessMixin, BaseModel):
-    """
-    Legacy route-level compatibility view.
-
-    New evaluation annotations live on ScoredCandidate.
-    """
-
-    _deprecated_fields = {
-        "is_solved": (
-            "ScoredRoute.is_solved",
-            'ScoredRoute.constraint_results["stock"]',
-            "Historical solved means stock termination, not Solv-N validity.",
-        ),
-    }
-
-    rank: int
-    is_solved: bool  # Legacy alias for stock termination in the stock scope.
-    is_stock_terminated: bool | None = None
-    matches_acceptable: bool  # Does this route match any acceptable route?
-    matched_acceptable_index: int | None = None  # Index of matched acceptable route (if any)
-
-    @model_validator(mode="after")
-    def _fill_validity_aliases(self) -> ScoredRoute:
-        if self.is_stock_terminated is None:
-            self.is_stock_terminated = self.__dict__["is_solved"]
-        return self
-
-
-class TargetEvaluation(DeprecatedFieldAccessMixin, BaseModel):
+class TargetEvaluation(BaseModel):
     """
     The result of evaluating one target against one stock.
     """
 
-    _deprecated_fields = {
-        "is_solvable": (
-            "TargetEvaluation.is_solvable",
-            "TargetEvaluation.has_stock_terminated_route",
-            "Historical solvability means stock termination rate, not Solv-N validity.",
-        ),
-    }
-
     target_id: str
 
     candidates: list[ScoredCandidate] = Field(default_factory=list)
-    legacy_routes: list[ScoredRoute] = Field(default_factory=list, alias="routes", exclude=True)
 
-    # Shortcuts for the lazy
-    is_solvable: bool = False  # Legacy alias: at least one route is stock-terminated.
-    has_stock_terminated_route: bool | None = None
+    has_stock_terminated_route: bool = False
     has_tier_0_valid_route: bool | None = None
     is_solv_0: bool | None = None
-    has_tier_1_valid_route: bool | None = None
-    is_solv_1: bool | None = None
-    acceptable_rank: int | None = None  # Rank of first solved acceptable match (None if not found)
+    acceptable_rank: int | None = None
     tier_validity_ranks: dict[int, int | None] = Field(default_factory=dict)
     solv_ranks: dict[str, dict[int, int | None]] = Field(default_factory=dict)
     top_k_ranks: dict[str, int | None] = Field(default_factory=dict)
@@ -92,40 +41,6 @@ class TargetEvaluation(DeprecatedFieldAccessMixin, BaseModel):
     # Runtime metrics for this target (in seconds)
     wall_time: float | None = None
     cpu_time: float | None = None
-
-    @model_validator(mode="after")
-    def _fill_target_validity_aliases(self) -> TargetEvaluation:
-        is_solvable = self.__dict__["is_solvable"]
-        if self.has_stock_terminated_route is None:
-            self.has_stock_terminated_route = is_solvable
-        elif "is_solvable" not in self.model_fields_set:
-            self.is_solvable = self.has_stock_terminated_route
-        elif is_solvable != self.has_stock_terminated_route:
-            raise ValueError("is_solvable and has_stock_terminated_route disagree.")
-        return self
-
-    @property
-    def routes(self) -> list[ScoredRoute]:
-        warn_deprecated(
-            old="TargetEvaluation.routes",
-            new="TargetEvaluation.candidates",
-            remove_in="0.3.0",
-            note="Routes is now a compatibility view over successful scored candidates. Entries no longer carry tier or Solv-N annotations.",
-            stacklevel=3,
-        )
-        if self.legacy_routes:
-            return self.legacy_routes
-        return [
-            ScoredRoute(
-                rank=candidate.rank,
-                is_solved=candidate.constraint_results.get("stock", ConstraintResult(status="unknown")).status
-                == "pass",
-                matches_acceptable=candidate.matches_acceptable,
-                matched_acceptable_index=candidate.matched_acceptable_index,
-            )
-            for candidate in self.candidates
-            if candidate.route is not None
-        ]
 
 
 class EvaluationResults(BaseModel):

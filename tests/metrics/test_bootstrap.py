@@ -31,10 +31,10 @@ from retrocast.models.evaluation import EvaluationResults, TargetEvaluation
 def target_evaluation_factory():
     """Factory to create TargetEvaluation objects with controlled properties."""
 
-    def _make(target_id: str, is_solvable: bool, acceptable_rank: int | None = None) -> TargetEvaluation:
+    def _make(target_id: str, has_stock_terminated_route: bool, acceptable_rank: int | None = None) -> TargetEvaluation:
         return TargetEvaluation(
             target_id=target_id,
-            is_solvable=is_solvable,
+            has_stock_terminated_route=has_stock_terminated_route,
             acceptable_rank=acceptable_rank,
             stratification_length=3,
             stratification_is_convergent=False,
@@ -52,8 +52,8 @@ def evaluation_results_factory(target_evaluation_factory):
         results = {}
         for i in range(n_targets):
             target_id = f"target_{i:04d}"
-            is_solvable = i < n_solved
-            results[target_id] = target_evaluation_factory(target_id, is_solvable)
+            has_stock_terminated_route = i < n_solved
+            results[target_id] = target_evaluation_factory(target_id, has_stock_terminated_route)
 
         return EvaluationResults(
             model_name=model_name,
@@ -247,7 +247,7 @@ class TestComputeMetricWithCI:
 
     def test_all_solvable(self, target_evaluation_factory):
         """100% solvability should give value=1.0."""
-        targets = [target_evaluation_factory(f"t{i}", is_solvable=True) for i in range(100)]
+        targets = [target_evaluation_factory(f"t{i}", has_stock_terminated_route=True) for i in range(100)]
 
         def get_solvable(t):
             return 1.0 if t.has_stock_terminated_route else 0.0
@@ -261,7 +261,7 @@ class TestComputeMetricWithCI:
 
     def test_none_solvable(self, target_evaluation_factory):
         """0% solvability should give value=0.0."""
-        targets = [target_evaluation_factory(f"t{i}", is_solvable=False) for i in range(100)]
+        targets = [target_evaluation_factory(f"t{i}", has_stock_terminated_route=False) for i in range(100)]
 
         def get_solvable(t):
             return 1.0 if t.has_stock_terminated_route else 0.0
@@ -274,7 +274,7 @@ class TestComputeMetricWithCI:
         """Stratification should produce separate results per group."""
         targets = []
         for i in range(50):
-            t = target_evaluation_factory(f"t{i}", is_solvable=i < 25)
+            t = target_evaluation_factory(f"t{i}", has_stock_terminated_route=i < 25)
             t.stratification_length = 3 if i < 30 else 5  # Two groups
             targets.append(t)
 
@@ -305,8 +305,8 @@ class TestComputePairedDifference:
 
     def test_identical_models_zero_difference(self, target_evaluation_factory):
         """Identical models should have zero difference and not be significant."""
-        targets_a = [target_evaluation_factory(f"t{i}", is_solvable=i < 50) for i in range(100)]
-        targets_b = [target_evaluation_factory(f"t{i}", is_solvable=i < 50) for i in range(100)]
+        targets_a = [target_evaluation_factory(f"t{i}", has_stock_terminated_route=i < 50) for i in range(100)]
+        targets_b = [target_evaluation_factory(f"t{i}", has_stock_terminated_route=i < 50) for i in range(100)]
 
         def get_solvable(t):
             return 1.0 if t.has_stock_terminated_route else 0.0
@@ -323,8 +323,8 @@ class TestComputePairedDifference:
     def test_better_model_positive_difference(self, target_evaluation_factory):
         """Model B better than A should have positive difference (B - A > 0)."""
         # A: 30% solvable, B: 70% solvable
-        targets_a = [target_evaluation_factory(f"t{i}", is_solvable=i < 30) for i in range(100)]
-        targets_b = [target_evaluation_factory(f"t{i}", is_solvable=i < 70) for i in range(100)]
+        targets_a = [target_evaluation_factory(f"t{i}", has_stock_terminated_route=i < 30) for i in range(100)]
+        targets_b = [target_evaluation_factory(f"t{i}", has_stock_terminated_route=i < 70) for i in range(100)]
 
         def get_solvable(t):
             return 1.0 if t.has_stock_terminated_route else 0.0
@@ -339,8 +339,8 @@ class TestComputePairedDifference:
 
     def test_no_common_targets_raises(self, target_evaluation_factory):
         """No overlapping target IDs should raise ValueError."""
-        targets_a = [target_evaluation_factory(f"a{i}", is_solvable=True) for i in range(10)]
-        targets_b = [target_evaluation_factory(f"b{i}", is_solvable=True) for i in range(10)]
+        targets_a = [target_evaluation_factory(f"a{i}", has_stock_terminated_route=True) for i in range(10)]
+        targets_b = [target_evaluation_factory(f"b{i}", has_stock_terminated_route=True) for i in range(10)]
 
         def get_solvable(t):
             return 1.0 if t.has_stock_terminated_route else 0.0
@@ -351,8 +351,8 @@ class TestComputePairedDifference:
     def test_partial_overlap_uses_common(self, target_evaluation_factory):
         """Partial overlap should use only common targets."""
         # A has targets 0-9, B has targets 5-14, common is 5-9
-        targets_a = [target_evaluation_factory(f"t{i}", is_solvable=True) for i in range(10)]
-        targets_b = [target_evaluation_factory(f"t{i}", is_solvable=True) for i in range(5, 15)]
+        targets_a = [target_evaluation_factory(f"t{i}", has_stock_terminated_route=True) for i in range(10)]
+        targets_b = [target_evaluation_factory(f"t{i}", has_stock_terminated_route=True) for i in range(5, 15)]
 
         def get_solvable(t):
             return 1.0 if t.has_stock_terminated_route else 0.0
@@ -376,7 +376,7 @@ class TestGetBootstrapDistribution:
 
     def test_returns_correct_shape(self, target_evaluation_factory):
         """Should return array of shape (n_boot,)."""
-        targets = [target_evaluation_factory(f"t{i}", is_solvable=i % 2 == 0) for i in range(50)]
+        targets = [target_evaluation_factory(f"t{i}", has_stock_terminated_route=i % 2 == 0) for i in range(50)]
 
         def get_solvable(t):
             return 1.0 if t.has_stock_terminated_route else 0.0
@@ -508,10 +508,10 @@ def _make_evaluation_results(model_name: str, n_targets: int, solvability_rate: 
     results = {}
     for i in range(n_targets):
         target_id = f"target_{i:04d}"
-        is_solvable = i < n_solved
+        has_stock_terminated_route = i < n_solved
         results[target_id] = TargetEvaluation(
             target_id=target_id,
-            is_solvable=is_solvable,
+            has_stock_terminated_route=has_stock_terminated_route,
             acceptable_rank=None,
             stratification_length=3,
             stratification_is_convergent=False,

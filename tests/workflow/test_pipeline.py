@@ -553,8 +553,10 @@ class TestScoreModel:
             model_name="test-model",
         )
 
-        assert eval_results.metadata["candidate_audit"]["candidate_denominator"] == "route_only"
-        assert eval_results.metadata["candidate_audit"]["preserves_failed_candidates"] is False
+        assert eval_results.metadata["scoring_denominator"] == {
+            "type": "route_only",
+            "n_routes_scored": 4,
+        }
 
         # target_1: CC <- C (solvable, leaf is C)
         t1 = eval_results.results["target_1"]
@@ -626,8 +628,9 @@ class TestScoreModel:
         assert scored_candidate.constraint_results["stock"].status == "pass"
         assert scored_candidate.validity.tiers[0].status == "fail"
         assert [check.code for check in scored_candidate.validity.tiers[0].checks] == ["tier0.invalid_reactant_smiles"]
-        assert scored_candidate.validity.reactions[0].is_tier_0_valid is False
-        assert scored_candidate.validity.reactions[0].tier_0_failure_codes == ["tier0.invalid_reactant_smiles"]
+        reaction_tier_0 = scored_candidate.validity.reactions[0].tiers[0]
+        assert reaction_tier_0.status == "fail"
+        assert [check.code for check in reaction_tier_0.checks] == ["tier0.invalid_reactant_smiles"]
 
     @pytest.mark.integration
     def test_score_gt_match_detection(self, synthetic_benchmark, synthetic_predictions, minimal_stock):

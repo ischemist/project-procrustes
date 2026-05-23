@@ -109,7 +109,7 @@ behavior. They should use raw model rank, not effective rank after filtering,
 because the point is to measure how much unusable material appears before the
 first valid or solvable candidate.
 
-## Why Candidate Records Exist
+## Why Route-Only Artifacts Limit MRR
 
 Route-only artifacts cannot honestly measure candidate-level Tier-0 behavior.
 
@@ -117,28 +117,16 @@ Adaptation canonicalizes and validates routes. Malformed sequence-model outputs
 can disappear before scoring. If failed rank slots are dropped, Tier-0 candidate
 validity and raw-rank MRR become inflated.
 
-Candidate records preserve the raw ranked candidate stream:
-
-- successful candidates keep a canonical `Route`
-- failed candidates keep `route=None` plus a typed failure record
-- raw rank remains intact
-
-This preserves denominator integrity for metrics that need it without forcing
-route-standardization users to work with failed candidates.
+The current route-only artifact is still the right v1: it is simple, useful, and
+matches the scoring path RetroCast actually implements. Candidate-denominator
+metrics should wait until RetroCast has a real persisted rank-slot artifact.
 
 ## Why Failed Candidates Are Not Empty Routes
 
-An empty `Route` would pretend RetroCast has chemistry where it only has a
-failed model emission. That would pollute route traversal, hashing, and
-deduplication semantics.
-
-The honest representation is a candidate with no route:
-
-```python
-CandidateRecord(route=None, adapter_failure=failure)
-```
-
-That keeps rank and failure information while preserving the meaning of `Route`.
+If RetroCast later stores failed rank slots, they should not be represented as
+empty routes. An empty `Route` would pretend RetroCast has chemistry where it
+only has a failed model emission. That would pollute route traversal, hashing,
+and deduplication semantics.
 
 ## Why Validity Is Not Stored On ReactionStep
 
@@ -161,14 +149,7 @@ Pydantic is the right boundary tool.
 Dataclasses remain appropriate for small internal validator values when they
 make computation clearer. Persisted records should be Pydantic.
 
-## Why Typed Failures And Check Results Differ
+## Why Validator Check Results Are Not Exceptions
 
-Candidate adaptation failures should reuse RetroCast's typed error contract:
-stable code, message, context, and retryability.
-
-Validator outcomes are different. A failed validator check is a measured result,
-not necessarily an exception. It should use a check record with a stable code and
-status.
-
-This separation lets RetroCast distinguish "the adapter could not construct a
-route" from "the constructed route failed a validity check."
+Validator outcomes are measured results, not necessarily exceptions. A failed
+validator check should use a check record with a stable code and status.

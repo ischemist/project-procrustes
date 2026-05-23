@@ -7,7 +7,7 @@ Tests probabilistic ranking and pairwise tournament using synthetic evaluation d
 import pytest
 
 from retrocast.metrics.ranking import compute_pairwise_tournament, compute_probabilistic_ranking
-from retrocast.models.evaluation import EvaluationResults, ScoredRoute, TargetEvaluation
+from retrocast.models.evaluation import EvaluationResults, TargetEvaluation
 from retrocast.models.stats import ModelComparison
 
 # =============================================================================
@@ -23,35 +23,12 @@ def _make_target_evaluation(
     is_convergent: bool = False,
 ) -> TargetEvaluation:
     """Create a synthetic TargetEvaluation with optional solved route."""
-    routes = []
-    if solvable:
-        # Add a solved route at acceptable_rank position
-        if acceptable_rank is None:
-            acceptable_rank = 1
-        # Add solved route at position acceptable_rank
-        for i in range(1, acceptable_rank + 1):
-            is_solved = i == acceptable_rank
-            routes.append(
-                ScoredRoute(
-                    rank=i,
-                    is_solved=is_solved,
-                    matches_acceptable=is_solved,
-                )
-            )
-        # Add more unsolved routes for realism
-        for i in range(acceptable_rank + 1, acceptable_rank + 4):
-            routes.append(
-                ScoredRoute(
-                    rank=i,
-                    is_solved=False,
-                    matches_acceptable=False,
-                )
-            )
+    if solvable and acceptable_rank is None:
+        acceptable_rank = 1
 
     return TargetEvaluation(
         target_id=target_id,
-        routes=routes,
-        is_solvable=solvable,
+        has_stock_terminated_route=solvable,
         acceptable_rank=acceptable_rank,
         stratification_length=route_length,
         stratification_is_convergent=is_convergent,
@@ -176,7 +153,7 @@ class TestComputeProbabilisticRanking:
             )
         }
 
-        # Simple metric: is_solvable as 0/1
+        # Simple metric: stock termination as 0/1
         def solvability(te: TargetEvaluation) -> float:
             return 1.0 if te.has_stock_terminated_route else 0.0
 

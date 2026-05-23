@@ -9,7 +9,6 @@ from retrocast.metrics.solvability import (
     is_route_solved,
 )
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
-from retrocast.models.candidates import CandidateAuditMetadata
 from retrocast.models.evaluation import EvaluationResults, ScoredCandidate, TargetEvaluation
 from retrocast.models.validity import (
     CheckResult,
@@ -214,7 +213,6 @@ def score_model(
         t_eval = TargetEvaluation(
             target_id=target_id,
             candidates=scored_candidates,
-            is_solvable=has_stock_terminated_route,
             has_stock_terminated_route=has_stock_terminated_route,
             has_tier_0_valid_route=has_tier_0_valid_route,
             is_solv_0=is_solv_0,
@@ -230,15 +228,9 @@ def score_model(
 
         eval_results.results[target_id] = t_eval
 
-    eval_results.metadata["candidate_audit"] = CandidateAuditMetadata(
-        preserves_failed_candidates=False,
-        candidate_denominator="route_only",
-        target_assignment="benchmark_target_key",
-        n_raw_entries_seen=n_saved_routes,
-        n_candidate_records_written=n_saved_routes,
-        n_routes_adapted=n_saved_routes,
-        n_adaptation_failures=0,
-        n_unassigned_candidates=0,
-    ).model_dump(mode="json")
+    eval_results.metadata["scoring_denominator"] = {
+        "type": "route_only",
+        "n_routes_scored": n_saved_routes,
+    }
 
     return eval_results
