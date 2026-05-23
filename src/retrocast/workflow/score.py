@@ -10,7 +10,7 @@ from retrocast.metrics.solvability import (
 )
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
 from retrocast.models.candidates import CandidateAuditMetadata
-from retrocast.models.evaluation import EvaluationResults, ScoredCandidate, ScoredRoute, TargetEvaluation
+from retrocast.models.evaluation import EvaluationResults, ScoredCandidate, TargetEvaluation
 from retrocast.models.validity import (
     CheckResult,
     ConstraintResult,
@@ -140,7 +140,6 @@ def score_model(
             route.get_structural_signature(match_level=match_level) for route in target.acceptable_routes
         ]
 
-        scored_routes = []
         scored_candidates = []
         acceptable_rank = None
         first_tier_0_rank = None
@@ -186,16 +185,6 @@ def score_model(
                     acceptable_rank = effective_rank_counter
                 effective_rank_counter += 1
 
-            # Store pre-computed flags for fast stats later
-            scored_routes.append(
-                ScoredRoute(
-                    rank=rank,
-                    is_solved=stock_terminated,
-                    is_stock_terminated=stock_terminated,
-                    matches_acceptable=matched_idx is not None,
-                    matched_acceptable_index=matched_idx,
-                )
-            )
             scored_candidates.append(
                 ScoredCandidate(
                     rank=rank,
@@ -208,7 +197,9 @@ def score_model(
             )
 
         # Summary for this target
-        has_stock_terminated_route = any(r.is_stock_terminated for r in scored_routes)
+        has_stock_terminated_route = any(
+            candidate.constraint_results["stock"].status == "pass" for candidate in scored_candidates
+        )
         has_tier_0_valid_route = first_tier_0_rank is not None
         is_solv_0 = first_solv_0_rank is not None
 
@@ -221,7 +212,6 @@ def score_model(
 
         t_eval = TargetEvaluation(
             target_id=target_id,
-            routes=scored_routes,
             candidates=scored_candidates,
             is_solvable=has_stock_terminated_route,
             has_stock_terminated_route=has_stock_terminated_route,

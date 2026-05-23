@@ -559,8 +559,8 @@ class TestScoreModel:
         # target_1: CC <- C (solvable, leaf is C)
         t1 = eval_results.results["target_1"]
         assert t1.has_stock_terminated_route is True
-        assert t1.routes[0].is_stock_terminated is True  # First route uses C
-        assert t1.routes[1].is_stock_terminated is False  # Second route uses O
+        assert t1.candidates[0].constraint_results["stock"].status == "pass"  # First route uses C
+        assert t1.candidates[1].constraint_results["stock"].status == "fail"  # Second route uses O
 
         # target_2: CCC <- CC <- C (solvable, leaf is C)
         t2 = eval_results.results["target_2"]
@@ -571,7 +571,6 @@ class TestScoreModel:
         assert t3.has_stock_terminated_route is False
         assert t3.has_tier_0_valid_route is True
         assert t3.is_solv_0 is False
-        assert t3.routes[0].is_stock_terminated is False
         assert t3.candidates[0].validity.tiers[0].status == "pass"
         assert t3.candidates[0].constraint_results["stock"].status == "fail"
 
@@ -588,7 +587,7 @@ class TestScoreModel:
 
         # target_1: Both routes solvable (C and O in stock)
         t1 = eval_results.results["target_1"]
-        assert all(r.is_stock_terminated for r in t1.routes)
+        assert all(candidate.constraint_results["stock"].status == "pass" for candidate in t1.candidates)
 
         # target_3: Now solvable (CC is in stock)
         t3 = eval_results.results["target_3"]
@@ -624,7 +623,6 @@ class TestScoreModel:
         assert t1.has_stock_terminated_route is True
         assert t1.has_tier_0_valid_route is False
         assert t1.is_solv_0 is False
-        assert t1.routes[0].is_stock_terminated is True
         assert scored_candidate.constraint_results["stock"].status == "pass"
         assert scored_candidate.validity.tiers[0].status == "fail"
         assert [check.code for check in scored_candidate.validity.tiers[0].checks] == ["tier0.invalid_reactant_smiles"]
@@ -644,18 +642,18 @@ class TestScoreModel:
 
         # target_1: First route matches acceptable
         t1 = eval_results.results["target_1"]
-        assert t1.routes[0].matches_acceptable is True
-        assert t1.routes[1].matches_acceptable is False
+        assert t1.candidates[0].matches_acceptable is True
+        assert t1.candidates[1].matches_acceptable is False
         assert t1.acceptable_rank == 1  # First solved route is acceptable match
 
         # target_2: Route matches acceptable
         t2 = eval_results.results["target_2"]
-        assert t2.routes[0].matches_acceptable is True
+        assert t2.candidates[0].matches_acceptable is True
         assert t2.acceptable_rank == 1
 
         # target_3: No acceptable routes defined
         t3 = eval_results.results["target_3"]
-        assert t3.routes[0].matches_acceptable is False
+        assert t3.candidates[0].matches_acceptable is False
         assert t3.acceptable_rank is None
 
     @pytest.mark.integration
@@ -679,7 +677,7 @@ class TestScoreModel:
             t = eval_results.results[target_id]
             assert t.has_stock_terminated_route is False
             assert t.acceptable_rank is None
-            assert len(t.routes) == 0
+            assert len(t.candidates) == 0
 
     @pytest.mark.integration
     def test_score_missing_predictions_use_empty(self, synthetic_benchmark, minimal_stock):

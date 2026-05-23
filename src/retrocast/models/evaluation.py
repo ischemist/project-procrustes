@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
-from retrocast._warnings import DeprecatedFieldAccessMixin
+from retrocast._warnings import DeprecatedFieldAccessMixin, warn_deprecated
 from retrocast.models.chem import Route
 from retrocast.models.validity import ConstraintResult, FailureRecord, MetricScope, RouteValidity
 
@@ -70,10 +70,8 @@ class TargetEvaluation(DeprecatedFieldAccessMixin, BaseModel):
 
     target_id: str
 
-    # We store ALL scored routes, sorted by rank.
-    # This allows O(1) slicing for top-k during stats.
-    routes: list[ScoredRoute] = Field(default_factory=list)
     candidates: list[ScoredCandidate] = Field(default_factory=list)
+    legacy_routes: list[ScoredRoute] = Field(default_factory=list, alias="routes", exclude=True)
 
     # Shortcuts for the lazy
     is_solvable: bool = False  # Legacy alias: at least one route is stock-terminated.
@@ -105,6 +103,29 @@ class TargetEvaluation(DeprecatedFieldAccessMixin, BaseModel):
         elif is_solvable != self.has_stock_terminated_route:
             raise ValueError("is_solvable and has_stock_terminated_route disagree.")
         return self
+
+    @property
+    def routes(self) -> list[ScoredRoute]:
+        warn_deprecated(
+            old="TargetEvaluation.routes",
+            new="TargetEvaluation.candidates",
+            remove_in="0.3.0",
+            note="Routes is now a compatibility view over successful scored candidates. Entries no longer carry tier or Solv-N annotations.",
+            stacklevel=3,
+        )
+        if self.legacy_routes:
+            return self.legacy_routes
+        return [
+            ScoredRoute(
+                rank=candidate.rank,
+                is_solved=candidate.constraint_results.get("stock", ConstraintResult(status="unknown")).status
+                == "pass",
+                matches_acceptable=candidate.matches_acceptable,
+                matched_acceptable_index=candidate.matched_acceptable_index,
+            )
+            for candidate in self.candidates
+            if candidate.route is not None
+        ]
 
 
 class EvaluationResults(BaseModel):
