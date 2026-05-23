@@ -12,6 +12,7 @@ from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
 from retrocast.models.candidates import CandidateRecord, CandidateRecordsDict
 from retrocast.models.evaluation import EvaluationResults, ScoredCandidate, TargetEvaluation
 from retrocast.models.validity import (
+    IMPLEMENTED_VALIDITY_TIERS,
     CheckResult,
     ConstraintResult,
     MetricScope,
@@ -70,7 +71,7 @@ def _score_route_candidate(
     acceptable_sigs: list[str],
     stock_inchikeys: set[InchiKeyStr],
     match_level: InchiKeyLevel,
-) -> tuple[ScoredCandidate, bool, bool, bool, int | None]:
+) -> tuple[ScoredCandidate, dict[int, bool], dict[str, bool], int | None]:
     if candidate.route is None:
         failure = candidate.adapter_failure
         check = CheckResult(
@@ -86,33 +87,33 @@ def _score_route_candidate(
                 validity=RouteValidity(tiers={0: TierResult(tier=0, status="fail", checks=[check])}),
                 constraint_results={"stock": ConstraintResult(status="not_evaluated")},
             ),
-            False,
-            False,
-            False,
+            {tier: False for tier in IMPLEMENTED_VALIDITY_TIERS},
+            {"stock": False},
             None,
         )
 
     route = candidate.route
     stock_terminated = is_route_solved(route, stock_inchikeys, match_level=match_level)
-    tier_0_failure_codes = get_route_tier_failure_codes(route, 0)
-    tier_0_valid = not tier_0_failure_codes
-    solv_0 = stock_terminated and tier_0_valid
-    route_tier_0_result = _make_tier_result(0, tier_0_failure_codes)
-    reaction_validity = []
+    route_tiers = {
+        tier: _make_tier_result(tier, get_route_tier_failure_codes(route, tier))
+        for tier in sorted(IMPLEMENTED_VALIDITY_TIERS)
+    }
+    tier_passes = {tier: result.status == "pass" for tier, result in route_tiers.items()}
+    reactions_by_index: dict[int, ReactionValidity] = {}
     for reaction_index, reaction in enumerate(route.iter_reactions(), start=1):
-        reaction_tier_0_failure_codes = get_reaction_tier_failure_codes(reaction, 0)
-        reaction_tier_0_result = _make_tier_result(0, reaction_tier_0_failure_codes)
-        reaction_validity.append(
-            ReactionValidity(
-                reaction_index=reaction_index,
-                product_smiles=reaction.product.smiles,
-                product_inchikey=reaction.product.inchikey,
-                reactant_smiles=[reactant.smiles for reactant in reaction.step.reactants],
-                reactant_inchikeys=[reactant.inchikey for reactant in reaction.step.reactants],
-                tiers={0: reaction_tier_0_result},
-            )
+        reaction_tiers = {
+            tier: _make_tier_result(tier, get_reaction_tier_failure_codes(reaction, tier))
+            for tier in sorted(IMPLEMENTED_VALIDITY_TIERS)
+        }
+        reactions_by_index[reaction_index] = ReactionValidity(
+            reaction_index=reaction_index,
+            product_smiles=reaction.product.smiles,
+            product_inchikey=reaction.product.inchikey,
+            reactant_smiles=[reactant.smiles for reactant in reaction.step.reactants],
+            reactant_inchikeys=[reactant.inchikey for reactant in reaction.step.reactants],
+            tiers=reaction_tiers,
         )
-    route_validity = RouteValidity(tiers={0: route_tier_0_result}, reactions=reaction_validity)
+    route_validity = RouteValidity(tiers=route_tiers, reactions=list(reactions_by_index.values()))
     constraint_results = {
         "stock": _make_stock_constraint_result(_get_missing_stock_leaves(route, stock_inchikeys, match_level))
     }
@@ -126,9 +127,8 @@ def _score_route_candidate(
             matches_acceptable=matched_idx is not None,
             matched_acceptable_index=matched_idx,
         ),
-        stock_terminated,
-        tier_0_valid,
-        solv_0,
+        tier_passes,
+        {"stock": stock_terminated},
         matched_idx,
     )
 
@@ -241,24 +241,25 @@ def score_candidate_records(
 
         scored_candidates = []
         acceptable_rank = None
-        first_tier_0_rank = None
-        first_solv_0_rank = None
+        tier_validity_ranks = {tier: None for tier in sorted(IMPLEMENTED_VALIDITY_TIERS)}
+        solv_ranks = {"stock": {tier: None for tier in sorted(IMPLEMENTED_VALIDITY_TIERS)}}
         # Counter for the "Effective Rank" (only increments on solvable routes)
         effective_rank_counter = 1
 
         for candidate in target_candidates:
-            scored_candidate, stock_terminated, tier_0_valid, solv_0, matched_idx = _score_route_candidate(
+            scored_candidate, tier_passes, scope_passes, matched_idx = _score_route_candidate(
                 candidate,
                 acceptable_sigs=acceptable_sigs,
                 stock_inchikeys=stock_inchikeys,
                 match_level=match_level,
             )
-            if tier_0_valid and first_tier_0_rank is None:
-                first_tier_0_rank = candidate.rank
-            if solv_0 and first_solv_0_rank is None:
-                first_solv_0_rank = candidate.rank
+            for tier, passed in tier_passes.items():
+                if passed and tier_validity_ranks[tier] is None:
+                    tier_validity_ranks[tier] = candidate.rank
+                if passed and scope_passes["stock"] and solv_ranks["stock"][tier] is None:
+                    solv_ranks["stock"][tier] = candidate.rank
 
-            if stock_terminated:
+            if scope_passes["stock"]:
                 if matched_idx is not None and acceptable_rank is None:
                     acceptable_rank = effective_rank_counter
                 effective_rank_counter += 1
@@ -269,8 +270,8 @@ def score_candidate_records(
         has_stock_terminated_route = any(
             candidate.constraint_results["stock"].status == "pass" for candidate in scored_candidates
         )
-        has_tier_0_valid_route = first_tier_0_rank is not None
-        is_solv_0 = first_solv_0_rank is not None
+        has_tier_0_valid_route = tier_validity_ranks.get(0) is not None
+        is_solv_0 = solv_ranks["stock"].get(0) is not None
 
         # Always stratify by primary acceptable route (benchmark ground truth)
         source_route = target.primary_route
@@ -286,8 +287,8 @@ def score_candidate_records(
             has_tier_0_valid_route=has_tier_0_valid_route,
             is_solv_0=is_solv_0,
             acceptable_rank=acceptable_rank,
-            tier_validity_ranks={0: first_tier_0_rank},
-            solv_ranks={"stock": {0: first_solv_0_rank}},
+            tier_validity_ranks=tier_validity_ranks,
+            solv_ranks=solv_ranks,
             top_k_ranks={"stock": acceptable_rank},
             stratification_length=source_route.length if source_route else None,
             stratification_is_convergent=source_route.has_convergent_reaction if source_route else None,

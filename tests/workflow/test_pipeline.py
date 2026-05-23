@@ -660,22 +660,17 @@ class TestScoreModel:
     @pytest.mark.integration
     def test_score_solv_0_requires_stock_termination_and_tier_0_validity(self, synthetic_benchmark):
         """Test solv-0 is stock-gated but tier-0 validity remains inspectable."""
-        invalid_leaf = Molecule(
-            smiles=SmilesStr("C("),
-            inchikey=InchiKeyStr(_synthetic_inchikey("invalid_leaf")),
-            synthesis_step=None,
-        )
         target = Molecule(
             smiles=SmilesStr("CC"),
             inchikey=InchiKeyStr(_synthetic_inchikey("CC")),
-            synthesis_step=ReactionStep(reactants=[invalid_leaf]),
+            synthesis_step=ReactionStep(reactants=[]),
         )
         route = Route(target=target)
 
         eval_results = score_model(
             benchmark=synthetic_benchmark,
             predictions={"target_1": [route]},
-            stock={invalid_leaf.inchikey},
+            stock=set(),
             stock_name="synthetic-stock",
             model_name="test-model",
         )
@@ -688,10 +683,10 @@ class TestScoreModel:
         assert t1.is_solv_0 is False
         assert scored_candidate.constraint_results["stock"].status == "pass"
         assert scored_candidate.validity.tiers[0].status == "fail"
-        assert [check.code for check in scored_candidate.validity.tiers[0].checks] == ["tier0.invalid_reactant_smiles"]
+        assert [check.code for check in scored_candidate.validity.tiers[0].checks] == ["tier0.empty_reactants"]
         reaction_tier_0 = scored_candidate.validity.reactions[0].tiers[0]
         assert reaction_tier_0.status == "fail"
-        assert [check.code for check in reaction_tier_0.checks] == ["tier0.invalid_reactant_smiles"]
+        assert [check.code for check in reaction_tier_0.checks] == ["tier0.empty_reactants"]
 
     @pytest.mark.integration
     def test_score_gt_match_detection(self, synthetic_benchmark, synthetic_predictions, minimal_stock):
