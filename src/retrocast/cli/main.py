@@ -52,7 +52,7 @@ def main() -> None:
         "adapt", help="Convert a raw route artifact into a prediction route corpus (No config needed)"
     )
     adapt_parser.add_argument("--input", required=True, help="Path to raw predictions (.json.gz)")
-    adapt_parser.add_argument("--output", required=True, help="Path to save route corpus (.jsonl.gz)")
+    adapt_parser.add_argument("--output", required=True, help="Path to save the adapted artifact")
     adapt_parser.add_argument(
         "--adapter",
         required=True,
@@ -72,6 +72,11 @@ def main() -> None:
         "--no-progress",
         action="store_true",
         help="Disable progress bars during adaptation",
+    )
+    adapt_parser.add_argument(
+        "--preserve-failed-candidates",
+        action="store_true",
+        help="Write candidate records with failed raw rank slots preserved.",
     )
 
     collect_parser = subparsers.add_parser(
@@ -126,11 +131,6 @@ def main() -> None:
         "--ignore-stereo",
         action="store_true",
         help="Strip stereochemistry during SMILES canonicalization",
-    )
-    ingest_parser.add_argument(
-        "--preserve-failed-candidates",
-        action="store_true",
-        help="Write candidates.json.gz with failed raw rank slots preserved for candidate-denominator metrics.",
     )
     ingest_parser.add_argument(
         "--no-progress",

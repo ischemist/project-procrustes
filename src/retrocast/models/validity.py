@@ -9,6 +9,7 @@ from retrocast.typing import InchiKeyStr, SmilesStr
 
 CheckStatus = Literal["pass", "fail", "unknown", "not_evaluated"]
 ValidityTier: TypeAlias = int
+ScopeId: TypeAlias = Literal["stock"]
 SUPPORTED_VALIDITY_TIERS = frozenset({0, 1, 2, 3})
 IMPLEMENTED_VALIDITY_TIERS = frozenset({0})
 
@@ -45,10 +46,16 @@ class ReactionValidity(BaseModel):
     reactant_inchikeys: list[InchiKeyStr] = Field(default_factory=list)
     tiers: dict[int, TierResult] = Field(default_factory=dict)
 
+    def satisfies_validity(self, tier: ValidityTier = 0) -> bool:
+        return self.tiers.get(tier, TierResult(tier=tier, status="unknown")).status == "pass"
+
 
 class RouteValidity(BaseModel):
     tiers: dict[int, TierResult] = Field(default_factory=dict)
     reactions: list[ReactionValidity] = Field(default_factory=list)
+
+    def satisfies_validity(self, tier: ValidityTier = 0) -> bool:
+        return self.tiers.get(tier, TierResult(tier=tier, status="unknown")).status == "pass"
 
 
 class StockTerminationConstraint(BaseModel):

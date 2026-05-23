@@ -123,8 +123,10 @@ Candidate records preserve the raw ranked candidate stream:
 - failed candidates keep `route=None` plus a typed failure record
 - raw rank remains intact
 
-Route-only artifacts remain the default because they are simple and useful.
-Candidate records are opt-in for benchmarks that need denominator integrity.
+Route-only artifacts remain the default for standalone adaptation and flat
+provider output because they are simple and useful. Project ingest writes
+candidate records by default for target-keyed raw output because benchmark
+scoring needs denominator integrity.
 
 ## Why Failed Candidates Are Not Empty Routes
 

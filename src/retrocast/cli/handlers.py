@@ -259,7 +259,7 @@ def _ingest_single(
                         sample_k=k,
                         ignore_stereo=ignore_stereo,
                         provider_output_kind=input_kind,
-                        preserve_failed_candidates=getattr(args, "preserve_failed_candidates", False),
+                        preserve_failed_candidates=None,
                         progress_callback=advance_progress,
                     )
             logger.info(
@@ -282,7 +282,7 @@ def _ingest_single(
                 sample_k=k,
                 ignore_stereo=ignore_stereo,
                 provider_output_kind=input_kind,
-                preserve_failed_candidates=getattr(args, "preserve_failed_candidates", False),
+                preserve_failed_candidates=None,
             )
 
         manifest_root = paths["raw"].parent.resolve()

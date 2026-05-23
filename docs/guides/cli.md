@@ -141,13 +141,14 @@ retrocast score-file \
   --benchmark benchmark.json.gz \
   --routes routes.json.gz \
   --stock stock_smiles.txt \ # (1)!
-  --output scores.json.gz \
+  --output evaluation.json.gz \
   --model-name "My-Experiment"
 ```
 
 1. Text file with one canonical SMILES per line
 
-**Output:** JSON file with boolean flags (`is_solved`, `matches_ground_truth`, etc.)
+**Output:** `EvaluationResults` JSON with scored candidates, Tier-0 validity,
+stock constraint results, Solv-0[STR] ranks, and benchmark reconstruction ranks.
 
 ### `create-benchmark` - Generate Benchmarks
 
@@ -224,7 +225,10 @@ All paths are relative to your data directory (default: `data/retrocast/`).
 
 ### `ingest` - Adapt and Collect Routes
 
-Transforms raw model outputs into benchmark-keyed routes by running adaptation and collection as one command. In v0.6, this command remains as the project-mode convenience wrapper around the two lower-level operations: `adapt` followed by `collect`.
+Transforms raw model outputs into benchmark-keyed routes by running adaptation
+and collection as one command. For target-keyed provider output, it also writes
+candidate records so failed raw rank slots are preserved for Tier-0 and MRR
+metrics.
 
 ```bash
 retrocast ingest \
@@ -241,7 +245,11 @@ retrocast ingest \
 3. Optional: Disable progress bars and use log output only
 
 **Input:** `<data-dir>/2-raw/<model>/<dataset>/<raw_results_filename>`  
-**Output:** `<data-dir>/3-processed/<model>/<dataset>/routes.json.gz`
+**Output:** `<data-dir>/3-processed/<dataset>/<model>/routes.json.gz`
+
+For target-keyed provider output, ingest also writes:
+
+`<data-dir>/3-processed/<dataset>/<model>/candidates.json.gz`
 
 **Operations:**
 
@@ -259,9 +267,12 @@ For a single model/dataset job, `ingest` shows route-level progress with count, 
 
     **Not recommended for production evaluation** - stereochemistry is critical for experimental chemistry.
 
-### `score` - Evaluate Routes
+### `score` - Evaluate Candidates
 
-Evaluates processed routes against benchmark stock.
+Evaluates processed routes or candidate records against benchmark stock. If
+`3-processed/<dataset>/<model>/candidates.json.gz` exists, scoring uses it so
+failed raw rank slots count in Tier-0 and raw-rank MRR. Otherwise it falls back
+to `routes.json.gz`.
 
 ```bash
 retrocast score \
@@ -274,15 +285,18 @@ retrocast score \
 1. Optional: Override default benchmark stock
 2. Optional: Perform stereochemistry-agnostic matching by dropping stereochemistry from InChIKeys
 
-**Input:** `<data-dir>/3-processed/<model>/<dataset>/routes.json.gz`  
-**Output:** `<data-dir>/4-scored/<model>/<dataset>/<stock>/scores.json.gz`
+**Input:** `<data-dir>/3-processed/<dataset>/<model>/candidates.json.gz` or `routes.json.gz`  
+**Output:** `<data-dir>/4-scored/<dataset>/<model>/<stock>/evaluation.json.gz`
 
 **Annotations added:**
 
-- `is_solved` - All leaves in stock
-- `matches_ground_truth` - Route matches reference (with optional stereochemistry-agnostic matching via `--ignore-stereo`)
-- `length` - Number of steps
-- `is_convergent` - Contains convergent reactions
+- `candidates[].validity.tiers[0]` - Tier-0 route validity
+- `candidates[].validity.reactions[].tiers[0]` - reaction-level Tier-0 failures
+- `candidates[].satisfies_validity(tier=0)` - fluent Tier-0 validity check
+- `candidates[].satisfies_solv(tier=0, scope="stock")` - fluent Solv-0[STR] check
+- `first_valid_rank(tier=0)` - raw rank of the first Tier-0-valid candidate
+- `first_solv_rank(tier=0, scope="stock")` - raw rank of the first Solv-0[STR] candidate
+- `reconstruction_rank(scope="stock")` - effective benchmark-reference rank after stock filtering
 
 !!! warning "Stereochemistry-agnostic evaluation"
 
@@ -307,18 +321,19 @@ retrocast analyze \
 1. Generates interactive HTML visualizations
 2. Customizes K values (default: 1, 3, 5, 10, 20, 50, 100)
 
-**Input:** `<data-dir>/4-scored/<model>/<dataset>/<stock>/scores.json.gz`  
-**Output:** `<data-dir>/5-results/<dataset>/<model>/`
+**Input:** `<data-dir>/4-scored/<dataset>/<model>/<stock>/evaluation.json.gz`  
+**Output:** `<data-dir>/5-results/<dataset>/<model>/<stock>/`
 
 - `report.md` - Statistical summary
 - `*.html` - Interactive plots (if `--make-plots`)
 
 **Metrics computed:**
 
-- Overall Solvability with 95% CI (bootstrap)
-- Top-K accuracy (K ∈ {1, 3, 5, 10, ...})
+- Tier-0 validity with 95% CI (bootstrap)
+- Solv-0[STR] with 95% CI (Tier-0 validity plus stock termination)
+- MRR Tier-0 and MRR Solv-0[STR] over raw candidate ranks
+- Top-K benchmark route reconstruction (K ∈ {1, 3, 5, 10, ...})
 - Stratified performance by route length
-- Ground truth match rate
 
 ---
 
@@ -510,7 +525,7 @@ Both `ingest` and `score` commands support the `--ignore-stereo` flag for stereo
 
 | Command | Flag | Purpose | Use Case |
 | :-- | :-- | :-- | :-- |
-| `ingest` | `--ignore-stereo` | Strip stereochemistry during canonicalization | Analyze stock termination rate/solvability without stereochemical constraints |
+| `ingest` | `--ignore-stereo` | Strip stereochemistry during canonicalization | Analyze Tier-0 and Solv-0[STR] without stereochemical constraints |
 | `score` | `--ignore-stereo` | Perform stereochemistry-agnostic matching | Calculate Top-K accuracy independent of stereochemistry |
 
 !!! note "For model developers"

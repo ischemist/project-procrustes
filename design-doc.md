@@ -158,15 +158,12 @@ Ranking metrics require artifacts that preserve the model's ranked route stream.
 Route-only artifacts can still support `top_k[stock]`, but they cannot support
 honest diagnostics over rank slots that failed adaptation.
 
-### Diagnostic Rates
+### Diagnostics
 
-Diagnostics are useful but should not be confused with target success:
+Diagnostics should explain failures without becoming headline success metrics:
 
-- `adaptation_success_rate`
-- `candidate_tier_i_pass_rate`
-- `candidate_constraint_pass_rate[scope]`
-- `saved_route_tier_i_pass_rate`
 - failure counts by stable code
+- candidate audit counts
 - per-reaction failure localization
 
 ## Model Ownership
@@ -408,14 +405,20 @@ This mode does not support:
 
 ### Candidate-Preserving Mode
 
-Candidate-preserving ingest records every target-local raw rank slot, including
-adapter failures.
+Candidate-preserving adaptation records every target-local raw rank slot,
+including adapter failures. `ingest` enables this by default because it is the
+benchmarking wrapper; standalone `adapt` keeps route-only output unless the flag
+is explicit.
 
 ```bash
-retrocast ingest MODEL BENCHMARK --preserve-failed-candidates
+retrocast adapt --input raw.json.gz --output candidates.json.gz \
+  --input-kind target-keyed-provider-output --benchmark benchmark.json.gz \
+  --preserve-failed-candidates
+
+retrocast ingest --model MODEL --dataset BENCHMARK
 ```
 
-Output:
+Project ingest output:
 
 ```text
 3-processed/<benchmark>/<model>/routes.json.gz
@@ -426,8 +429,9 @@ Output:
 `routes.json.gz` remains the canonical route-only artifact. `candidates.json.gz`
 is the candidate-denominator artifact used when scoring needs failed rank slots.
 
-Candidate-preserving ingest currently requires target-keyed provider output so
-failed slots can be assigned to benchmark targets explicitly.
+Candidate-preserving adaptation currently requires target-keyed provider output so
+failed slots can be assigned to benchmark targets explicitly. Flat provider
+output remains route-only until an adapter exposes target-local candidate slots.
 
 ## Scoring Procedure
 
@@ -461,11 +465,8 @@ Headline statistics:
 
 Diagnostics:
 
-- `adaptation_success_rate`
-- `candidate_tier_i_pass_rate`
-- `candidate_constraint_pass_rate[scope]`
-- `saved_route_tier_i_pass_rate`
 - failure counts by code
+- candidate audit counts
 - per-reaction failure records
 
 ## Validator Architecture

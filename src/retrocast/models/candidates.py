@@ -40,8 +40,6 @@ class CandidateAuditMetadata(BaseModel):
     n_candidate_records_written: int
     n_routes_adapted: int
     n_adaptation_failures: int
-    n_unassigned_candidates: int = 0
-    sampling_policy: str | None = None
 
 
 class CandidateRecordsArtifact(BaseModel):

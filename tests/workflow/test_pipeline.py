@@ -15,10 +15,14 @@ from retrocast.exceptions import AdapterSchemaError, ChemRuntimeError, InputErro
 from retrocast.io.data import load_candidate_records, load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.candidates import CandidateRecord
-from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
+from retrocast.models.chem import Molecule, ReactionStep, Route, RunStatistics, TargetIdentity
 from retrocast.models.validity import FailureRecord
 from retrocast.typing import InchiKeyStr, SmilesStr
-from retrocast.workflow.adapt import adapt_target_keyed_provider_output, adapt_target_routes
+from retrocast.workflow.adapt import (
+    adapt_target_keyed_candidate_records,
+    adapt_target_keyed_provider_output,
+    adapt_target_routes,
+)
 from retrocast.workflow.analyze import compute_model_statistics
 from retrocast.workflow.collect import collect_benchmark_predictions
 from retrocast.workflow.ingest import ingest_model_predictions
@@ -282,6 +286,7 @@ class TestIngestModelPredictions:
         # Check file was created
         assert save_path.exists()
         assert save_path.name == "routes.json.gz"
+        assert save_path.with_name("candidates.json.gz").exists()
 
         # Verify saved data can be loaded
         loaded = load_routes(save_path)
@@ -300,6 +305,30 @@ class TestIngestModelPredictions:
 
         route_corpus = adapt_target_keyed_provider_output(raw_data, synthetic_benchmark, SyntheticAdapter())
         collected_routes = collect_benchmark_predictions(route_corpus, synthetic_benchmark)
+
+        ingested_routes, _, _ = ingest_model_predictions(
+            model_name="test-model",
+            benchmark=synthetic_benchmark,
+            raw_data=raw_data,
+            adapter=SyntheticAdapter(),
+            output_dir=tmp_path,
+            provider_output_kind="target_keyed_provider_output",
+        )
+
+        assert ingested_routes == collected_routes.routes_by_target
+
+    @pytest.mark.integration
+    def test_ingest_default_matches_candidate_preserving_adapt_then_collect(
+        self, tmp_path, synthetic_benchmark, synthetic_predictions
+    ):
+        raw_data = {
+            target_id: [route.model_dump(mode="json") for route in routes]
+            for target_id, routes in synthetic_predictions.items()
+        }
+
+        stats = RunStatistics()
+        adapted = adapt_target_keyed_candidate_records(raw_data, synthetic_benchmark, SyntheticAdapter(), stats=stats)
+        collected_routes = collect_benchmark_predictions(adapted.routes, synthetic_benchmark)
 
         ingested_routes, _, _ = ingest_model_predictions(
             model_name="test-model",
@@ -476,7 +505,7 @@ class TestIngestModelPredictions:
         assert "Ingestion failures by code: {'adapter.schema_invalid': 2}" in caplog.text
 
     @pytest.mark.integration
-    def test_ingest_can_preserve_failed_candidate_slots(self, tmp_path, synthetic_benchmark):
+    def test_ingest_preserves_failed_candidate_slots_by_default(self, tmp_path, synthetic_benchmark):
         adapter = FailingAdapter()
         raw_data = {
             "target_1": [{"bad": "payload"}],
@@ -489,7 +518,6 @@ class TestIngestModelPredictions:
             raw_data=raw_data,
             adapter=adapter,
             output_dir=tmp_path,
-            preserve_failed_candidates=True,
         )
 
         artifact = load_candidate_records(save_path.with_name("candidates.json.gz"))
@@ -503,6 +531,7 @@ class TestIngestModelPredictions:
         assert artifact.records["target_1"][0].adapter_failure is not None
         assert artifact.records["target_1"][0].adapter_failure.code == "adapter.schema_invalid"
 
+    @pytest.mark.integration
     @pytest.mark.integration
     def test_ingest_records_chem_failures_per_target(self, tmp_path, synthetic_benchmark):
         adapter = ChemFailingAdapter()
@@ -630,6 +659,15 @@ class TestScoreRoutes:
         assert t1.candidates[0].constraint_results["stock"].status == "not_evaluated"
         assert t1.tier_validity_ranks[0] == 2
         assert t1.solv_ranks["stock"][0] == 2
+        assert t1.candidates[0].satisfies_validity(tier=0) is False
+        assert t1.candidates[0].satisfies_constraints(scope="stock") is False
+        assert t1.candidates[0].satisfies_solv(tier=0, scope="stock") is False
+        assert t1.candidates[1].satisfies_validity(tier=0) is True
+        assert t1.candidates[1].satisfies_constraints(scope="stock") is True
+        assert t1.candidates[1].satisfies_solv(tier=0, scope="stock") is True
+        assert t1.first_valid_rank(tier=0) == 2
+        assert t1.first_solv_rank(tier=0, scope="stock") == 2
+        assert t1.reconstruction_rank(scope="stock") == 1
 
         stats = compute_model_statistics(eval_results, n_boot=100, seed=42)
         assert stats.mrr_tier_0 is not None
@@ -683,8 +721,13 @@ class TestScoreRoutes:
         assert t1.is_solv_0 is False
         assert scored_candidate.constraint_results["stock"].status == "pass"
         assert scored_candidate.validity.tiers[0].status == "fail"
+        assert scored_candidate.satisfies_validity(tier=0) is False
+        assert scored_candidate.satisfies_constraints(scope="stock") is True
+        assert scored_candidate.satisfies_solv(tier=0, scope="stock") is False
         assert [check.code for check in scored_candidate.validity.tiers[0].checks] == ["tier0.empty_reactants"]
-        reaction_tier_0 = scored_candidate.validity.reactions[0].tiers[0]
+        reaction_validity = scored_candidate.validity.reactions[0]
+        assert reaction_validity.satisfies_validity(tier=0) is False
+        reaction_tier_0 = reaction_validity.tiers[0]
         assert reaction_tier_0.status == "fail"
         assert [check.code for check in reaction_tier_0.checks] == ["tier0.empty_reactants"]
 

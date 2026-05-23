@@ -69,7 +69,7 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
         stat_solv_0 = compute_metric_with_ci(
             targets,
             get_is_solv_0,
-            "Solv-0",
+            "Solv-0[STR]",
             group_by=group_fn,
             n_boot=n_boot,
             seed=seed,
@@ -77,7 +77,7 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
         stat_mrr_solv_0 = compute_metric_with_ci(
             targets,
             get_reciprocal_solv_rank("stock", 0),
-            "MRR Solv-0",
+            "MRR Solv-0[STR]",
             group_by=group_fn,
             n_boot=n_boot,
             seed=seed,

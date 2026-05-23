@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field, model_validator
 
 from retrocast.models.chem import Route
-from retrocast.models.validity import ConstraintResult, FailureRecord, MetricScope, RouteValidity
+from retrocast.models.validity import ConstraintResult, FailureRecord, MetricScope, RouteValidity, ScopeId, ValidityTier
 
 
 class ScoredCandidate(BaseModel):
@@ -24,6 +24,16 @@ class ScoredCandidate(BaseModel):
         if self.route is not None and self.adapter_failure is not None:
             raise ValueError("ScoredCandidate cannot contain both route and adapter_failure.")
         return self
+
+    def satisfies_validity(self, tier: ValidityTier = 0) -> bool:
+        return self.validity.satisfies_validity(tier=tier)
+
+    def satisfies_constraints(self, scope: ScopeId = "stock") -> bool:
+        constraint_result = self.constraint_results.get(scope)
+        return constraint_result is not None and constraint_result.status == "pass"
+
+    def satisfies_solv(self, tier: ValidityTier = 0, scope: ScopeId = "stock") -> bool:
+        return self.satisfies_validity(tier=tier) and self.satisfies_constraints(scope=scope)
 
 
 class TargetEvaluation(BaseModel):
@@ -50,6 +60,15 @@ class TargetEvaluation(BaseModel):
     # Runtime metrics for this target (in seconds)
     wall_time: float | None = None
     cpu_time: float | None = None
+
+    def first_valid_rank(self, tier: ValidityTier = 0) -> int | None:
+        return self.tier_validity_ranks.get(tier)
+
+    def first_solv_rank(self, tier: ValidityTier = 0, scope: ScopeId = "stock") -> int | None:
+        return self.solv_ranks.get(scope, {}).get(tier)
+
+    def reconstruction_rank(self, scope: ScopeId = "stock") -> int | None:
+        return self.top_k_ranks.get(scope)
 
 
 class EvaluationResults(BaseModel):
