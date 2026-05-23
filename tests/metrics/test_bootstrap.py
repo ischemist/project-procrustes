@@ -250,7 +250,7 @@ class TestComputeMetricWithCI:
         targets = [target_evaluation_factory(f"t{i}", is_solvable=True) for i in range(100)]
 
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         result = compute_metric_with_ci(targets, get_solvable, "solvability", n_boot=1000, seed=42)
 
@@ -264,7 +264,7 @@ class TestComputeMetricWithCI:
         targets = [target_evaluation_factory(f"t{i}", is_solvable=False) for i in range(100)]
 
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         result = compute_metric_with_ci(targets, get_solvable, "solvability", n_boot=1000, seed=42)
 
@@ -279,7 +279,7 @@ class TestComputeMetricWithCI:
             targets.append(t)
 
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         def group_by_length(t):
             return t.stratification_length
@@ -309,7 +309,7 @@ class TestComputePairedDifference:
         targets_b = [target_evaluation_factory(f"t{i}", is_solvable=i < 50) for i in range(100)]
 
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         result = compute_paired_difference(
             targets_a, targets_b, get_solvable, "model_a", "model_b", "solvability", n_boot=1000, seed=42
@@ -327,7 +327,7 @@ class TestComputePairedDifference:
         targets_b = [target_evaluation_factory(f"t{i}", is_solvable=i < 70) for i in range(100)]
 
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         result = compute_paired_difference(
             targets_a, targets_b, get_solvable, "model_a", "model_b", "solvability", n_boot=1000, seed=42
@@ -343,7 +343,7 @@ class TestComputePairedDifference:
         targets_b = [target_evaluation_factory(f"b{i}", is_solvable=True) for i in range(10)]
 
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         with pytest.raises(ValueError, match="No common targets"):
             compute_paired_difference(targets_a, targets_b, get_solvable, "model_a", "model_b", "solvability")
@@ -355,7 +355,7 @@ class TestComputePairedDifference:
         targets_b = [target_evaluation_factory(f"t{i}", is_solvable=True) for i in range(5, 15)]
 
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         result = compute_paired_difference(
             targets_a, targets_b, get_solvable, "model_a", "model_b", "solvability", n_boot=100, seed=42
@@ -379,7 +379,7 @@ class TestGetBootstrapDistribution:
         targets = [target_evaluation_factory(f"t{i}", is_solvable=i % 2 == 0) for i in range(50)]
 
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         dist = get_bootstrap_distribution(targets, get_solvable, n_boot=5000, seed=42)
 
@@ -389,7 +389,7 @@ class TestGetBootstrapDistribution:
         """Empty target list should return zeros."""
 
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         dist = get_bootstrap_distribution([], get_solvable, n_boot=100, seed=42)
 
@@ -415,7 +415,7 @@ class TestProbabilisticRanking:
         }
 
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         results = compute_probabilistic_ranking(model_results, get_solvable, n_boot=1000, seed=42)
 
@@ -432,7 +432,7 @@ class TestProbabilisticRanking:
         }
 
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         results = compute_probabilistic_ranking(model_results, get_solvable, n_boot=1000, seed=42)
 
@@ -448,7 +448,7 @@ class TestProbabilisticRanking:
         }
 
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         results = compute_probabilistic_ranking(model_results, get_solvable, n_boot=1000, seed=42)
 
@@ -469,7 +469,7 @@ class TestProbabilisticRanking:
         # models get identical bootstrap distributions. Instead, test that
         # both models exist in results and total expected ranks sum correctly.
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         results = compute_probabilistic_ranking(model_results, get_solvable, n_boot=1000, seed=42)
 
@@ -487,7 +487,7 @@ class TestProbabilisticRanking:
         }
 
         def get_solvable(t):
-            return 1.0 if t.is_solvable else 0.0
+            return 1.0 if t.has_stock_terminated_route else 0.0
 
         results = compute_probabilistic_ranking(model_results, get_solvable, n_boot=1000, seed=42)
 
@@ -541,7 +541,7 @@ def test_rank_probs_always_sum_to_one(solvability_rates):
         model_results[f"model_{i}"] = _make_evaluation_results(f"model_{i}", 50, rate)
 
     def get_solvable(t):
-        return 1.0 if t.is_solvable else 0.0
+        return 1.0 if t.has_stock_terminated_route else 0.0
 
     results = compute_probabilistic_ranking(model_results, get_solvable, n_boot=500, seed=42)
 
@@ -566,7 +566,7 @@ def test_expected_ranks_sum_correctly(solvability_rates):
         model_results[f"model_{i}"] = _make_evaluation_results(f"model_{i}", 50, rate)
 
     def get_solvable(t):
-        return 1.0 if t.is_solvable else 0.0
+        return 1.0 if t.has_stock_terminated_route else 0.0
 
     results = compute_probabilistic_ranking(model_results, get_solvable, n_boot=500, seed=42)
 

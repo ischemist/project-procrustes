@@ -14,7 +14,7 @@ from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.exceptions import AdapterSchemaError, ChemRuntimeError, InputError, UnsupportedAdapterFeatureError
 from retrocast.io.data import load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
-from retrocast.models.chem import Route, TargetIdentity
+from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
 from retrocast.typing import InchiKeyStr, SmilesStr
 from retrocast.workflow.adapt import adapt_target_keyed_provider_output, adapt_target_routes
 from retrocast.workflow.collect import collect_benchmark_predictions
@@ -553,19 +553,28 @@ class TestScoreModel:
             model_name="test-model",
         )
 
+        assert eval_results.metadata["candidate_audit"]["candidate_denominator"] == "route_only"
+        assert eval_results.metadata["candidate_audit"]["preserves_failed_candidates"] is False
+
         # target_1: CC <- C (solvable, leaf is C)
         t1 = eval_results.results["target_1"]
-        assert t1.is_solvable is True
-        assert t1.routes[0].is_solved is True  # First route uses C
-        assert t1.routes[1].is_solved is False  # Second route uses O
+        assert t1.has_stock_terminated_route is True
+        assert t1.routes[0].is_stock_terminated is True  # First route uses C
+        assert t1.routes[1].is_stock_terminated is False  # Second route uses O
 
         # target_2: CCC <- CC <- C (solvable, leaf is C)
         t2 = eval_results.results["target_2"]
-        assert t2.is_solvable is True
+        assert t2.has_stock_terminated_route is True
 
         # target_3: CCCC <- CCC <- CC (not solvable, leaf is CC not in stock)
         t3 = eval_results.results["target_3"]
-        assert t3.is_solvable is False
+        assert t3.has_stock_terminated_route is False
+        assert t3.has_stock_terminated_route is False
+        assert t3.has_tier_0_valid_route is True
+        assert t3.is_solv_0 is False
+        assert t3.routes[0].is_stock_terminated is False
+        assert t3.routes[0].is_tier_0_valid is True
+        assert t3.routes[0].is_solv_0 is False
 
     @pytest.mark.integration
     def test_score_solvability_with_extended_stock(self, synthetic_benchmark, synthetic_predictions, extended_stock):
@@ -580,11 +589,49 @@ class TestScoreModel:
 
         # target_1: Both routes solvable (C and O in stock)
         t1 = eval_results.results["target_1"]
-        assert all(r.is_solved for r in t1.routes)
+        assert all(r.is_stock_terminated for r in t1.routes)
 
         # target_3: Now solvable (CC is in stock)
         t3 = eval_results.results["target_3"]
-        assert t3.is_solvable is True
+        assert t3.has_stock_terminated_route is True
+        assert t3.is_solv_0 is True
+
+    @pytest.mark.integration
+    def test_score_solv_0_requires_stock_termination_and_tier_0_validity(self, synthetic_benchmark):
+        """Test solv-0 is stock-gated but tier-0 validity remains inspectable."""
+        invalid_leaf = Molecule(
+            smiles=SmilesStr("C("),
+            inchikey=InchiKeyStr(_synthetic_inchikey("invalid_leaf")),
+            synthesis_step=None,
+        )
+        target = Molecule(
+            smiles=SmilesStr("CC"),
+            inchikey=InchiKeyStr(_synthetic_inchikey("CC")),
+            synthesis_step=ReactionStep(reactants=[invalid_leaf]),
+        )
+        route = Route(target=target)
+
+        eval_results = score_model(
+            benchmark=synthetic_benchmark,
+            predictions={"target_1": [route]},
+            stock={invalid_leaf.inchikey},
+            stock_name="synthetic-stock",
+            model_name="test-model",
+        )
+
+        t1 = eval_results.results["target_1"]
+        scored_route = t1.routes[0]
+
+        assert t1.has_stock_terminated_route is True
+        assert t1.has_tier_0_valid_route is False
+        assert t1.is_solv_0 is False
+        assert scored_route.is_stock_terminated is True
+        assert scored_route.is_stock_terminated is True
+        assert scored_route.is_tier_0_valid is False
+        assert scored_route.is_solv_0 is False
+        assert scored_route.tier_0_failure_codes == ["tier0.invalid_reactant_smiles"]
+        assert scored_route.reaction_validity[0].is_tier_0_valid is False
+        assert scored_route.reaction_validity[0].tier_0_failure_codes == ["tier0.invalid_reactant_smiles"]
 
     @pytest.mark.integration
     def test_score_gt_match_detection(self, synthetic_benchmark, synthetic_predictions, minimal_stock):
@@ -632,7 +679,7 @@ class TestScoreModel:
 
         for target_id in ["target_1", "target_2", "target_3"]:
             t = eval_results.results[target_id]
-            assert t.is_solvable is False
+            assert t.has_stock_terminated_route is False
             assert t.acceptable_rank is None
             assert len(t.routes) == 0
 
@@ -652,9 +699,9 @@ class TestScoreModel:
             model_name="partial-model",
         )
 
-        assert eval_results.results["target_1"].is_solvable is True
-        assert eval_results.results["target_2"].is_solvable is False
-        assert eval_results.results["target_3"].is_solvable is False
+        assert eval_results.results["target_1"].has_stock_terminated_route is True
+        assert eval_results.results["target_2"].has_stock_terminated_route is False
+        assert eval_results.results["target_3"].has_stock_terminated_route is False
 
     @pytest.mark.integration
     def test_score_preserves_metadata(self, synthetic_benchmark, synthetic_predictions, minimal_stock):
@@ -726,9 +773,9 @@ class TestFullPipeline:
         assert len(eval_results.results) == 3
 
         # Check specific results
-        assert eval_results.results["target_1"].is_solvable is True
-        assert eval_results.results["target_2"].is_solvable is True
-        assert eval_results.results["target_3"].is_solvable is False
+        assert eval_results.results["target_1"].has_stock_terminated_route is True
+        assert eval_results.results["target_2"].has_stock_terminated_route is True
+        assert eval_results.results["target_3"].has_stock_terminated_route is False
 
     @pytest.mark.integration
     def test_pipeline_with_deduplication(self, tmp_path, synthetic_benchmark):
@@ -789,8 +836,8 @@ class TestFullPipeline:
             results[model_name] = eval_result
 
         # model-a uses C (in stock), model-b uses O (not in stock)
-        assert results["model-a"].results["target_1"].is_solvable is True
-        assert results["model-b"].results["target_1"].is_solvable is False
+        assert results["model-a"].results["target_1"].has_stock_terminated_route is True
+        assert results["model-b"].results["target_1"].has_stock_terminated_route is False
 
 
 # =============================================================================

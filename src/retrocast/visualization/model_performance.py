@@ -56,11 +56,12 @@ def plot_single_model_diagnostics(stats: ModelStatistics) -> go.Figure:
     Includes Solvability, Top-1, Top-5, Top-10.
     """
     fig = go.Figure()
+    stock_termination = stats.stock_termination or stats.__dict__["solvability"]
 
     # 1. Solvability (The Baseline)
     fig.add_trace(
         _create_metric_trace(
-            stats.solvability,
+            stock_termination,
             name="Solvability",
             color="#b892ff",  # Strong Blue
         )
@@ -108,7 +109,8 @@ def plot_multi_model_comparison(
     all_depths = set()
     for m in models_stats:
         if metric_type == "Solvability":
-            all_depths.update(m.solvability.by_group.keys())
+            stock_termination = m.stock_termination or m.__dict__["solvability"]
+            all_depths.update(stock_termination.by_group.keys())
         else:
             if k in m.top_k_accuracy:
                 all_depths.update(m.top_k_accuracy[k].by_group.keys())
@@ -144,7 +146,7 @@ def plot_multi_model_comparison(
 
     for i, model in enumerate(models_stats):
         if metric_type == "Solvability":
-            metric_obj = model.solvability
+            metric_obj = model.stock_termination or model.__dict__["solvability"]
             label = "Solvability"
         else:
             metric_obj = model.top_k_accuracy.get(k)
@@ -275,7 +277,8 @@ def plot_overall_comparison(models_stats: list[ModelStatistics]) -> go.Figure:
             # Fetch the data object
             res = None
             if key == "solvability":
-                res = model.solvability.overall
+                stock_termination = model.stock_termination or model.__dict__["solvability"]
+                res = stock_termination.overall
             elif key.startswith("top-"):
                 k = int(key.split("-")[1])
                 if k in model.top_k_accuracy:

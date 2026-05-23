@@ -418,7 +418,9 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
             parameters={"model": model_name, "benchmark": benchmark_name, "stock": stock_name},
             statistics={
                 "n_targets": len(eval_results.results),
-                "n_solvable": sum(1 for r in eval_results.results.values() if r.is_solvable),
+                "n_stock_terminated": sum(1 for r in eval_results.results.values() if r.has_stock_terminated_route),
+                "n_solv_0": sum(1 for r in eval_results.results.values() if r.is_solv_0),
+                "n_solvable": sum(1 for r in eval_results.results.values() if r.has_stock_terminated_route),
             },
         )
 

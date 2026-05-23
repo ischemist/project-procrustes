@@ -3,12 +3,64 @@ import logging
 from retrocast.chem import InchiKeyLevel, reduce_inchikey
 from retrocast.io.data import RoutesDict
 from retrocast.metrics.similarity import find_acceptable_match
-from retrocast.metrics.solvability import is_route_solved
+from retrocast.metrics.solvability import (
+    get_reaction_tier_0_failure_codes,
+    get_route_tier_0_failure_codes,
+    is_route_solved,
+)
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
-from retrocast.models.evaluation import EvaluationResults, ScoredRoute, TargetEvaluation
+from retrocast.models.candidates import CandidateAuditMetadata
+from retrocast.models.evaluation import EvaluationResults, ScoredCandidate, ScoredRoute, TargetEvaluation
+from retrocast.models.validity import (
+    CheckResult,
+    ConstraintResult,
+    MetricScope,
+    ReactionValidity,
+    RouteValidity,
+    StockTerminationConstraint,
+    TierResult,
+)
 from retrocast.typing import InchiKeyStr
 
 logger = logging.getLogger(__name__)
+
+
+def _make_tier_result(tier: int, failure_codes: list[str]) -> TierResult:
+    if not failure_codes:
+        return TierResult(tier=tier, status="pass")
+    return TierResult(
+        tier=tier,
+        status="fail",
+        checks=[CheckResult(code=code, status="fail") for code in failure_codes],
+    )
+
+
+def _get_missing_stock_leaves(
+    route,
+    stock: set[InchiKeyStr],
+    match_level: InchiKeyLevel,
+) -> list[InchiKeyStr]:
+    missing = []
+    for leaf in route.leaves:
+        key = leaf.inchikey if match_level == InchiKeyLevel.FULL else reduce_inchikey(leaf.inchikey, match_level)
+        if key not in stock:
+            missing.append(leaf.inchikey)
+    return sorted(set(missing))
+
+
+def _make_stock_constraint_result(missing_leaves: list[InchiKeyStr]) -> ConstraintResult:
+    if not missing_leaves:
+        return ConstraintResult(status="pass")
+    return ConstraintResult(
+        status="fail",
+        checks=[
+            CheckResult(
+                code="constraint.stock_termination.missing_leaf",
+                status="fail",
+                details={"missing_leaf_inchikeys": missing_leaves},
+            )
+        ],
+    )
 
 
 def score_model(
@@ -53,11 +105,22 @@ def score_model(
     # Check if benchmark has any acceptable routes
     has_acceptable_routes = any(len(target.acceptable_routes) > 0 for target in benchmark.targets.values())
 
+    stock_scope = MetricScope(
+        id="stock",
+        constraints=[
+            StockTerminationConstraint(
+                stock_name=stock_name,
+                match_level=match_level.value,
+            )
+        ],
+    )
+
     eval_results = EvaluationResults(
         model_name=model_name,
         benchmark_name=benchmark.name,
         stock_name=stock_name,
         has_acceptable_routes=has_acceptable_routes,
+        metric_scopes=[stock_scope],
     )
 
     # Pre-normalize stock if using a non-default match level
@@ -67,8 +130,10 @@ def score_model(
         stock_inchikeys = stock
 
     # Iterate Targets (The Denominator)
+    n_saved_routes = 0
     for target_id, target in benchmark.targets.items():
         predicted_routes = predictions.get(target_id, [])
+        n_saved_routes += len(predicted_routes)
 
         # Pre-compute acceptable route signatures
         acceptable_sigs = [
@@ -76,18 +141,47 @@ def score_model(
         ]
 
         scored_routes = []
+        scored_candidates = []
         acceptable_rank = None
+        first_tier_0_rank = None
+        first_solv_0_rank = None
         # Counter for the "Effective Rank" (only increments on solvable routes)
         effective_rank_counter = 1
 
         for rank, route in enumerate(predicted_routes, start=1):
-            # 1. Metric: Solvability
-            solved = is_route_solved(route, stock_inchikeys, match_level=match_level)
+            # 1. Metric: stock termination and tier-0 validity.
+            stock_terminated = is_route_solved(route, stock_inchikeys, match_level=match_level)
+            tier_0_failure_codes = get_route_tier_0_failure_codes(route)
+            tier_0_valid = not tier_0_failure_codes
+            solv_0 = stock_terminated and tier_0_valid
+            if tier_0_valid and first_tier_0_rank is None:
+                first_tier_0_rank = rank
+            if solv_0 and first_solv_0_rank is None:
+                first_solv_0_rank = rank
+            route_tier_0_result = _make_tier_result(0, tier_0_failure_codes)
+            reaction_validity = []
+            for reaction_index, reaction in enumerate(route.iter_reactions(), start=1):
+                reaction_tier_0_failure_codes = get_reaction_tier_0_failure_codes(reaction)
+                reaction_tier_0_result = _make_tier_result(0, reaction_tier_0_failure_codes)
+                reaction_validity.append(
+                    ReactionValidity(
+                        reaction_index=reaction_index,
+                        product_smiles=reaction.product.smiles,
+                        product_inchikey=reaction.product.inchikey,
+                        reactant_smiles=[reactant.smiles for reactant in reaction.step.reactants],
+                        reactant_inchikeys=[reactant.inchikey for reactant in reaction.step.reactants],
+                        tiers={0: reaction_tier_0_result},
+                    )
+                )
+            route_validity = RouteValidity(tiers={0: route_tier_0_result}, reactions=reaction_validity)
+            constraint_results = {
+                "stock": _make_stock_constraint_result(_get_missing_stock_leaves(route, stock_inchikeys, match_level))
+            }
 
             # 2. Metric: Acceptability (matches any acceptable route?)
             matched_idx = find_acceptable_match(route, acceptable_sigs, match_level=match_level)
 
-            if solved:
+            if stock_terminated:
                 if matched_idx is not None and acceptable_rank is None:
                     acceptable_rank = effective_rank_counter
                 effective_rank_counter += 1
@@ -96,14 +190,33 @@ def score_model(
             scored_routes.append(
                 ScoredRoute(
                     rank=rank,
-                    is_solved=solved,
+                    validity=route_validity,
+                    constraint_results=constraint_results,
+                    is_solved=stock_terminated,
+                    is_stock_terminated=stock_terminated,
+                    is_tier_0_valid=tier_0_valid,
+                    is_solv_0=solv_0,
+                    tier_0_failure_codes=tier_0_failure_codes,
+                    reaction_validity=reaction_validity,
+                    matches_acceptable=matched_idx is not None,
+                    matched_acceptable_index=matched_idx,
+                )
+            )
+            scored_candidates.append(
+                ScoredCandidate(
+                    rank=rank,
+                    route=route,
+                    validity=route_validity,
+                    constraint_results=constraint_results,
                     matches_acceptable=matched_idx is not None,
                     matched_acceptable_index=matched_idx,
                 )
             )
 
         # Summary for this target
-        is_solvable = any(r.is_solved for r in scored_routes)
+        has_stock_terminated_route = any(r.is_stock_terminated for r in scored_routes)
+        has_tier_0_valid_route = any(r.is_tier_0_valid for r in scored_routes)
+        is_solv_0 = any(r.is_solv_0 for r in scored_routes)
 
         # Always stratify by primary acceptable route (benchmark ground truth)
         source_route = target.primary_route
@@ -115,8 +228,15 @@ def score_model(
         t_eval = TargetEvaluation(
             target_id=target_id,
             routes=scored_routes,
-            is_solvable=is_solvable,
+            candidates=scored_candidates,
+            is_solvable=has_stock_terminated_route,
+            has_stock_terminated_route=has_stock_terminated_route,
+            has_tier_0_valid_route=has_tier_0_valid_route,
+            is_solv_0=is_solv_0,
             acceptable_rank=acceptable_rank,
+            tier_validity_ranks={0: first_tier_0_rank},
+            solv_ranks={"stock": {0: first_solv_0_rank}},
+            top_k_ranks={"stock": acceptable_rank},
             stratification_length=source_route.length if source_route else None,
             stratification_is_convergent=source_route.has_convergent_reaction if source_route else None,
             wall_time=wall_time,
@@ -124,5 +244,16 @@ def score_model(
         )
 
         eval_results.results[target_id] = t_eval
+
+    eval_results.metadata["candidate_audit"] = CandidateAuditMetadata(
+        preserves_failed_candidates=False,
+        candidate_denominator="route_only",
+        target_assignment="benchmark_target_key",
+        n_raw_entries_seen=n_saved_routes,
+        n_candidate_records_written=n_saved_routes,
+        n_routes_adapted=n_saved_routes,
+        n_adaptation_failures=0,
+        n_unassigned_candidates=0,
+    ).model_dump(mode="json")
 
     return eval_results

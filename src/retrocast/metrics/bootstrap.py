@@ -4,6 +4,7 @@ from typing import Any, TypeVar
 
 import numpy as np
 
+from retrocast._warnings import warn_deprecated
 from retrocast.models.evaluation import TargetEvaluation
 from retrocast.models.stats import MetricResult, ModelComparison, ReliabilityFlag, StratifiedMetric
 
@@ -109,12 +110,39 @@ def compute_metric_with_ci(
 
 
 def get_is_solvable(t: TargetEvaluation) -> float:
-    return 1.0 if t.is_solvable else 0.0
+    warn_deprecated(
+        old="get_is_solvable",
+        new="get_has_stock_terminated_route",
+        remove_in="0.3.0",
+        note="Historical solvability means stock termination rate, not Solv-N validity.",
+        stacklevel=3,
+    )
+    return 1.0 if t.__dict__["is_solvable"] else 0.0
+
+
+def get_has_stock_terminated_route(t: TargetEvaluation) -> float:
+    return 1.0 if t.has_stock_terminated_route else 0.0
+
+
+def get_has_tier_0_valid_route(t: TargetEvaluation) -> float:
+    return 1.0 if t.has_tier_0_valid_route else 0.0
+
+
+def get_is_solv_0(t: TargetEvaluation) -> float:
+    return 1.0 if t.is_solv_0 else 0.0
+
+
+def get_solv_i(scope_id: str, tier: int) -> Callable[[TargetEvaluation], float]:
+    def _get_solv_i(t: TargetEvaluation) -> float:
+        return 1.0 if t.solv_ranks.get(scope_id, {}).get(tier) is not None else 0.0
+
+    return _get_solv_i
 
 
 def make_get_top_k(k: int) -> Callable[[TargetEvaluation], float]:
     def _get_top_k(t: TargetEvaluation) -> float:
-        return 1.0 if (t.acceptable_rank is not None and t.acceptable_rank <= k) else 0.0
+        rank = t.top_k_ranks.get("stock", t.acceptable_rank)
+        return 1.0 if (rank is not None and rank <= k) else 0.0
 
     return _get_top_k
 

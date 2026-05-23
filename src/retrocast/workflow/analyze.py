@@ -1,6 +1,12 @@
 import logging
 
-from retrocast.metrics.bootstrap import compute_metric_with_ci, get_is_solvable, make_get_top_k
+from retrocast.metrics.bootstrap import (
+    compute_metric_with_ci,
+    get_has_stock_terminated_route,
+    get_has_tier_0_valid_route,
+    get_is_solv_0,
+    make_get_top_k,
+)
 from retrocast.models.evaluation import EvaluationResults, TargetEvaluation
 from retrocast.models.stats import ModelStatistics, StratifiedMetric
 
@@ -27,11 +33,36 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
 
         group_fn = _get_stratification_length
 
-    # --- 2. Solvability ---
-    # This is always calculable as long as we have a stock.
-    stat_solvability = compute_metric_with_ci(
-        targets, get_is_solvable, "Solvability", group_by=group_fn, n_boot=n_boot, seed=seed
+    # --- 2. Stock termination / Solv-0 ---
+    # Legacy `solvability` is retained as stock-termination rate for compatibility.
+    stat_stock_termination = compute_metric_with_ci(
+        targets,
+        get_has_stock_terminated_route,
+        "Stock-Termination Rate",
+        group_by=group_fn,
+        n_boot=n_boot,
+        seed=seed,
     )
+    stat_tier_0_validity = None
+    stat_solv_0 = None
+    if any(t.has_tier_0_valid_route is not None for t in targets):
+        stat_tier_0_validity = compute_metric_with_ci(
+            targets,
+            get_has_tier_0_valid_route,
+            "Tier-0 Validity",
+            group_by=group_fn,
+            n_boot=n_boot,
+            seed=seed,
+        )
+    if any(t.is_solv_0 is not None for t in targets):
+        stat_solv_0 = compute_metric_with_ci(
+            targets,
+            get_is_solv_0,
+            "Solv-0",
+            group_by=group_fn,
+            n_boot=n_boot,
+            seed=seed,
+        )
 
     # --- 3. Top-K Accuracy ---
     # Only calculate this if the benchmark actually has acceptable routes.
@@ -70,7 +101,10 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
         model_name=eval_results.model_name,
         benchmark=eval_results.benchmark_name,
         stock=eval_results.stock_name,
-        solvability=stat_solvability,
+        solvability=stat_stock_termination,
+        stock_termination=stat_stock_termination,
+        tier_0_validity=stat_tier_0_validity,
+        solv_0=stat_solv_0,
         top_k_accuracy=stat_topk,
         total_wall_time=total_wall_time,
         total_cpu_time=total_cpu_time,

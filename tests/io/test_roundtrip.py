@@ -936,7 +936,7 @@ class TestBenchmarkResultsLoader:
         assert len(loaded) == 1
         assert loaded[0].model_name == "model-a"
         assert loaded[0].benchmark == "pharma"
-        assert loaded[0].solvability.overall.value == 0.75
+        assert loaded[0].stock_termination.overall.value == 0.75
 
     def test_load_statistics_multiple_models(self, tmp_path, synthetic_statistics_factory):
         """Should load statistics for multiple models."""

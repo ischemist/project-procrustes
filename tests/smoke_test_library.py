@@ -145,15 +145,15 @@ class TestLibraryAPIWithRealData:
         stats = compute_model_statistics(results, n_boot=100, seed=42)
 
         # Access aggregated metrics
-        solvability = stats.solvability.overall
+        solvability = stats.stock_termination.overall
         assert solvability is not None
         assert 0.0 <= solvability.value <= 1.0
         assert hasattr(solvability, "ci_lower")
         assert hasattr(solvability, "ci_upper")
 
         # Access stratified metrics (e.g., by route length)
-        assert hasattr(stats.solvability, "by_group")
-        assert len(stats.solvability.by_group) > 0
+        assert hasattr(stats.stock_termination, "by_group")
+        assert len(stats.stock_termination.by_group) > 0
 
     def test_adapter_map_reference_example(self):
         """Test Reference: Available Adapters"""

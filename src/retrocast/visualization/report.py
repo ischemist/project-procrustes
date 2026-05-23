@@ -174,7 +174,8 @@ def create_single_model_summary_table(stats: ModelStatistics, visible_k: list[in
     if visible_k is None:
         visible_k = [1, 5, 10, 50]
 
-    _add("Solvability", stats.solvability.overall)
+    stock_termination = stats.stock_termination or stats.__dict__["solvability"]
+    _add("Solvability", stock_termination.overall)
 
     # Add Top-K
     for k in sorted(stats.top_k_accuracy.keys()):
@@ -300,7 +301,7 @@ def generate_markdown_report(stats: ModelStatistics, visible_k: list[int] | None
     sections.extend(
         [
             "## Solvability",
-            format_metric_table(stats.solvability),
+            format_metric_table(stats.stock_termination or stats.__dict__["solvability"]),
             "",
         ]
     )
