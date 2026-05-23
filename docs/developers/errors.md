@@ -75,6 +75,7 @@ except (AdapterError, ChemError) as exc:
 | `io.*` | `DataIOError` | `io.not_found`, `io.decode_failed`, `io.invalid_artifact_shape`, `io.unsupported_format`, `io.write_failed` | Artifact read, decode, shape, format, or write failure |
 | `serialization.*` | `RetroCastSerializationError` | `serialization.syntheseus_failed` | Conversion to external route formats failed |
 | `workflow.*` | `WorkflowError` | `workflow.error` | Orchestration failed at a workflow boundary |
+| `validity.*` | `InputError`, `UnsupportedValidityTierError` | `validity.unknown_tier`, `validity.unsupported_tier` | Requested validity tier is unknown or has no implemented validator |
 
 ## Adapter Policy
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeAlias
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -8,6 +8,9 @@ from retrocast.exceptions import RetroCastException
 from retrocast.typing import InchiKeyStr, SmilesStr
 
 CheckStatus = Literal["pass", "fail", "unknown", "not_evaluated"]
+ValidityTier: TypeAlias = int
+SUPPORTED_VALIDITY_TIERS = frozenset({0, 1, 2, 3})
+IMPLEMENTED_VALIDITY_TIERS = frozenset({0})
 
 
 class FailureRecord(BaseModel):
@@ -29,7 +32,7 @@ class CheckResult(BaseModel):
 
 
 class TierResult(BaseModel):
-    tier: int
+    tier: ValidityTier
     status: CheckStatus
     checks: list[CheckResult] = Field(default_factory=list)
 

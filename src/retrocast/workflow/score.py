@@ -4,8 +4,8 @@ from retrocast.chem import InchiKeyLevel, reduce_inchikey
 from retrocast.io.data import RoutesDict
 from retrocast.metrics.similarity import find_acceptable_match
 from retrocast.metrics.solvability import (
-    get_reaction_tier_0_failure_codes,
-    get_route_tier_0_failure_codes,
+    get_reaction_tier_failure_codes,
+    get_route_tier_failure_codes,
     is_route_solved,
 )
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
@@ -19,13 +19,14 @@ from retrocast.models.validity import (
     RouteValidity,
     StockTerminationConstraint,
     TierResult,
+    ValidityTier,
 )
 from retrocast.typing import InchiKeyStr
 
 logger = logging.getLogger(__name__)
 
 
-def _make_tier_result(tier: int, failure_codes: list[str]) -> TierResult:
+def _make_tier_result(tier: ValidityTier, failure_codes: list[str]) -> TierResult:
     if not failure_codes:
         return TierResult(tier=tier, status="pass")
     return TierResult(
@@ -150,7 +151,7 @@ def score_model(
         for rank, route in enumerate(predicted_routes, start=1):
             # 1. Metric: stock termination and tier-0 validity.
             stock_terminated = is_route_solved(route, stock_inchikeys, match_level=match_level)
-            tier_0_failure_codes = get_route_tier_0_failure_codes(route)
+            tier_0_failure_codes = get_route_tier_failure_codes(route, 0)
             tier_0_valid = not tier_0_failure_codes
             solv_0 = stock_terminated and tier_0_valid
             if tier_0_valid and first_tier_0_rank is None:
@@ -160,7 +161,7 @@ def score_model(
             route_tier_0_result = _make_tier_result(0, tier_0_failure_codes)
             reaction_validity = []
             for reaction_index, reaction in enumerate(route.iter_reactions(), start=1):
-                reaction_tier_0_failure_codes = get_reaction_tier_0_failure_codes(reaction)
+                reaction_tier_0_failure_codes = get_reaction_tier_failure_codes(reaction, 0)
                 reaction_tier_0_result = _make_tier_result(0, reaction_tier_0_failure_codes)
                 reaction_validity.append(
                     ReactionValidity(

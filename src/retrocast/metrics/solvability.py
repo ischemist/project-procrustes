@@ -3,8 +3,9 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 from retrocast.chem import InchiKeyLevel, canonicalize_smiles, reduce_inchikey
-from retrocast.exceptions import RetroCastException
+from retrocast.exceptions import InputError, RetroCastException, UnsupportedValidityTierError
 from retrocast.models.chem import Molecule, Route, RouteReaction
+from retrocast.models.validity import IMPLEMENTED_VALIDITY_TIERS, SUPPORTED_VALIDITY_TIERS, ValidityTier
 from retrocast.typing import InchiKeyStr
 
 TIER0_EMPTY_REACTANTS = "tier0.empty_reactants"
@@ -72,8 +73,25 @@ def is_molecule_tier_0_valid(molecule: Molecule) -> bool:
     return True
 
 
-def get_reaction_tier_0_failure_codes(reaction: RouteReaction) -> list[str]:
-    """Return tier-0 syntax failure codes for one route reaction."""
+def _ensure_implemented_tier(tier: ValidityTier) -> None:
+    if tier not in SUPPORTED_VALIDITY_TIERS:
+        raise InputError(
+            f"Unknown validity tier: {tier}.",
+            code="validity.unknown_tier",
+            context={"tier": tier, "supported_tiers": sorted(SUPPORTED_VALIDITY_TIERS)},
+        )
+    if tier in IMPLEMENTED_VALIDITY_TIERS:
+        return
+    raise UnsupportedValidityTierError(
+        f"Tier-{tier} validity is not implemented.",
+        context={"tier": tier, "implemented_tiers": sorted(IMPLEMENTED_VALIDITY_TIERS)},
+    )
+
+
+def get_reaction_tier_failure_codes(reaction: RouteReaction, tier: ValidityTier) -> list[str]:
+    """Return stable failure codes for one route reaction at the requested validity tier."""
+    _ensure_implemented_tier(tier)
+
     codes: list[str] = []
     if not reaction.step.reactants:
         codes.append(TIER0_EMPTY_REACTANTS)
@@ -84,8 +102,10 @@ def get_reaction_tier_0_failure_codes(reaction: RouteReaction) -> list[str]:
     return sorted(set(codes))
 
 
-def get_route_tier_0_failure_codes(route: Route) -> list[str]:
-    """Return route-level tier-0 syntax failure codes."""
+def get_route_tier_failure_codes(route: Route, tier: ValidityTier) -> list[str]:
+    """Return stable failure codes for a route at the requested validity tier."""
+    _ensure_implemented_tier(tier)
+
     reactions = route.get_reactions()
     if not reactions:
         if is_molecule_tier_0_valid(route.target):
@@ -94,10 +114,10 @@ def get_route_tier_0_failure_codes(route: Route) -> list[str]:
 
     codes: list[str] = []
     for reaction in reactions:
-        codes.extend(get_reaction_tier_0_failure_codes(reaction))
+        codes.extend(get_reaction_tier_failure_codes(reaction, tier))
     return sorted(set(codes))
 
 
-def is_route_tier_0_valid(route: Route) -> bool:
-    """Return whether every molecule/reaction record in the route is syntactically valid."""
-    return not get_route_tier_0_failure_codes(route)
+def is_route_tier_valid(route: Route, tier: ValidityTier) -> bool:
+    """Return whether a route passes the requested validity tier."""
+    return not get_route_tier_failure_codes(route, tier)

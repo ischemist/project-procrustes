@@ -65,6 +65,12 @@ class WorkflowError(RetroCastException):
     default_code = "workflow.error"
 
 
+class UnsupportedValidityTierError(WorkflowError, NotImplementedError):
+    """Raised when a requested validity tier has no implemented validator."""
+
+    default_code = "validity.unsupported_tier"
+
+
 class BenchmarkCollectionError(WorkflowError):
     """Raised when benchmark collection cannot classify or place canonical routes."""
 
