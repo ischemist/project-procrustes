@@ -109,7 +109,7 @@ behavior. They should use raw model rank, not effective rank after filtering,
 because the point is to measure how much unusable material appears before the
 first valid or solvable candidate.
 
-## Why Route-Only Artifacts Limit MRR
+## Why Candidate Records Exist
 
 Route-only artifacts cannot honestly measure candidate-level Tier-0 behavior.
 
@@ -117,16 +117,20 @@ Adaptation canonicalizes and validates routes. Malformed sequence-model outputs
 can disappear before scoring. If failed rank slots are dropped, Tier-0 candidate
 validity and raw-rank MRR become inflated.
 
-The current route-only artifact is still the right v1: it is simple, useful, and
-matches the scoring path RetroCast actually implements. Candidate-denominator
-metrics should wait until RetroCast has a real persisted rank-slot artifact.
+Candidate records preserve the raw ranked candidate stream:
+
+- successful candidates keep a canonical `Route`
+- failed candidates keep `route=None` plus a typed failure record
+- raw rank remains intact
+
+Route-only artifacts remain the default because they are simple and useful.
+Candidate records are opt-in for benchmarks that need denominator integrity.
 
 ## Why Failed Candidates Are Not Empty Routes
 
-If RetroCast later stores failed rank slots, they should not be represented as
-empty routes. An empty `Route` would pretend RetroCast has chemistry where it
-only has a failed model emission. That would pollute route traversal, hashing,
-and deduplication semantics.
+Failed rank slots are not represented as empty routes. An empty `Route` would
+pretend RetroCast has chemistry where it only has a failed model emission. That
+would pollute route traversal, hashing, and deduplication semantics.
 
 ## Why Validity Is Not Stored On ReactionStep
 

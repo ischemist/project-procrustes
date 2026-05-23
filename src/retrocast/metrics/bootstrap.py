@@ -127,6 +127,22 @@ def get_solv_i(scope_id: str, tier: int) -> Callable[[TargetEvaluation], float]:
     return _get_solv_i
 
 
+def get_reciprocal_tier_rank(tier: int) -> Callable[[TargetEvaluation], float]:
+    def _get_reciprocal_tier_rank(t: TargetEvaluation) -> float:
+        rank = t.tier_validity_ranks.get(tier)
+        return 0.0 if rank is None else 1.0 / rank
+
+    return _get_reciprocal_tier_rank
+
+
+def get_reciprocal_solv_rank(scope_id: str, tier: int) -> Callable[[TargetEvaluation], float]:
+    def _get_reciprocal_solv_rank(t: TargetEvaluation) -> float:
+        rank = t.solv_ranks.get(scope_id, {}).get(tier)
+        return 0.0 if rank is None else 1.0 / rank
+
+    return _get_reciprocal_solv_rank
+
+
 def make_get_top_k(k: int) -> Callable[[TargetEvaluation], float]:
     def _get_top_k(t: TargetEvaluation) -> float:
         rank = t.top_k_ranks.get("stock", t.acceptable_rank)

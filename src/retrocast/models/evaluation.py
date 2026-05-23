@@ -2,19 +2,28 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from retrocast.models.chem import Route
-from retrocast.models.validity import ConstraintResult, MetricScope, RouteValidity
+from retrocast.models.validity import ConstraintResult, FailureRecord, MetricScope, RouteValidity
 
 
 class ScoredCandidate(BaseModel):
     rank: int
-    route: Route
+    route: Route | None = None
     validity: RouteValidity = Field(default_factory=RouteValidity)
     constraint_results: dict[str, ConstraintResult] = Field(default_factory=dict)
     matches_acceptable: bool = False
     matched_acceptable_index: int | None = None
+    adapter_failure: FailureRecord | None = None
+
+    @model_validator(mode="after")
+    def _require_route_or_failure(self) -> ScoredCandidate:
+        if self.route is None and self.adapter_failure is None:
+            raise ValueError("ScoredCandidate requires route or adapter_failure.")
+        if self.route is not None and self.adapter_failure is not None:
+            raise ValueError("ScoredCandidate cannot contain both route and adapter_failure.")
+        return self
 
 
 class TargetEvaluation(BaseModel):

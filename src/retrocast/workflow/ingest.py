@@ -1,15 +1,19 @@
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Literal
 
+from pydantic import ValidationError
+
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.curation.sampling import sample_k_by_length, sample_random_k, sample_top_k
-from retrocast.exceptions import InputError
-from retrocast.io.data import save_routes
+from retrocast.exceptions import AdapterError, ChemError, InputError
+from retrocast.io.data import save_candidate_records, save_routes
 from retrocast.io.provenance import generate_model_hash
 from retrocast.models.benchmark import BenchmarkSet
+from retrocast.models.candidates import CandidateAuditMetadata, CandidateRecord, CandidateRecordsDict, CandidateSource
 from retrocast.models.chem import Route, RunStatistics
+from retrocast.models.validity import FailureRecord
 from retrocast.workflow.adapt import adapt_provider_output, adapt_target_keyed_provider_output
 from retrocast.workflow.collect import collect_benchmark_predictions
 
@@ -35,6 +39,7 @@ def ingest_model_predictions(
     sample_k: int | None = None,
     ignore_stereo: bool = False,
     provider_output_kind: ProviderOutputKind = "target_keyed_provider_output",
+    preserve_failed_candidates: bool = False,
     progress_callback: Callable[[], None] | None = None,
 ) -> tuple[dict[str, list[Route]], Path, RunStatistics]:
     """
@@ -68,7 +73,24 @@ def ingest_model_predictions(
         logger.info(f"Applying sampling: {sampling_strategy} (k={sample_k})")
 
     stats = RunStatistics()
-    if provider_output_kind == "target_keyed_provider_output":
+    candidate_records: CandidateRecordsDict | None = None
+    candidate_metadata: CandidateAuditMetadata | None = None
+    if preserve_failed_candidates:
+        if provider_output_kind != "target_keyed_provider_output":
+            raise InputError(
+                "Candidate-preserving ingest currently requires target-keyed provider output.",
+                code="input.candidate_preservation_requires_target_keyed_output",
+                context={"provider_output_kind": provider_output_kind},
+            )
+        route_corpus, candidate_records, candidate_metadata = _adapt_target_keyed_candidate_records(
+            raw_data,
+            benchmark,
+            adapter,
+            ignore_stereo=ignore_stereo,
+            stats=stats,
+            progress_callback=progress_callback,
+        )
+    elif provider_output_kind == "target_keyed_provider_output":
         route_corpus = adapt_target_keyed_provider_output(
             raw_data,
             benchmark,
@@ -121,6 +143,8 @@ def ingest_model_predictions(
     save_file = save_path_dir / "routes.json.gz"
 
     save_routes(processed_routes, save_file)
+    if candidate_records is not None and candidate_metadata is not None:
+        save_candidate_records(candidate_records, save_path_dir / "candidates.json.gz", candidate_metadata)
 
     logger.info(
         f"Ingestion complete. Adapted {stats.total_routes_in_raw_files} raw route entries. "
@@ -140,3 +164,79 @@ def ingest_model_predictions(
         logger.info("Ingestion failures by code: %s", dict(sorted(stats.failures_by_code.items())))
 
     return processed_routes, save_file, stats
+
+
+def _adapt_target_keyed_candidate_records(
+    raw_data: Any,
+    benchmark: BenchmarkSet,
+    adapter: BaseAdapter,
+    *,
+    ignore_stereo: bool,
+    stats: RunStatistics,
+    progress_callback: Callable[[], None] | None,
+) -> tuple[list[Route], CandidateRecordsDict, CandidateAuditMetadata]:
+    if not isinstance(raw_data, Mapping):
+        raise InputError(
+            "Target-keyed provider output must be a mapping keyed by target id or target smiles.",
+            code="input.invalid_target_keyed_provider_output",
+            context={"actual_type": type(raw_data).__name__},
+        )
+
+    route_corpus: list[Route] = []
+    records: CandidateRecordsDict = {target_id: [] for target_id in benchmark.targets}
+    for target_id, target in benchmark.targets.items():
+        matched_key = target_id if target_id in raw_data else target.smiles if target.smiles in raw_data else None
+        if matched_key is None:
+            continue
+
+        for rank, entry in enumerate(
+            adapter.iter_raw_entries(raw_data[matched_key], source_key=str(matched_key)), start=1
+        ):
+            stats.total_routes_in_raw_files += 1
+            if progress_callback is not None:
+                progress_callback()
+            source = CandidateSource(
+                key=entry.source_key,
+                row_index=entry.source_row_index,
+                record_id=entry.source_record_id,
+            )
+            try:
+                route = adapter.cast(entry.payload, ignore_stereo=ignore_stereo, expected_target=target)
+            except (AdapterError, ChemError) as exc:
+                stats.record_failure(exc.code, target_id=target_id)
+                records[target_id].append(
+                    CandidateRecord(
+                        rank=rank,
+                        adapter_failure=FailureRecord.from_exception(exc),
+                        source=source,
+                    )
+                )
+                continue
+            except ValidationError as exc:
+                stats.record_failure("adapter.schema_invalid", target_id=target_id)
+                records[target_id].append(
+                    CandidateRecord(
+                        rank=rank,
+                        adapter_failure=FailureRecord(
+                            code="adapter.schema_invalid",
+                            message=str(exc),
+                        ),
+                        source=source,
+                    )
+                )
+                continue
+
+            stats.successful_routes_before_dedup += 1
+            route_corpus.append(route)
+            records[target_id].append(CandidateRecord(rank=rank, route=route, source=source))
+
+    n_records = sum(len(target_records) for target_records in records.values())
+    metadata = CandidateAuditMetadata(
+        preserves_failed_candidates=True,
+        candidate_denominator="complete",
+        n_raw_entries_seen=stats.total_routes_in_raw_files,
+        n_candidate_records_written=n_records,
+        n_routes_adapted=stats.successful_routes_before_dedup,
+        n_adaptation_failures=stats.routes_failed_transformation,
+    )
+    return route_corpus, records, metadata

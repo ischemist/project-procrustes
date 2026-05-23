@@ -4,12 +4,24 @@ from typing import Annotated, Any, Literal, TypeAlias
 
 from pydantic import BaseModel, Field, model_validator
 
+from retrocast.exceptions import RetroCastException
 from retrocast.typing import InchiKeyStr, SmilesStr
 
 CheckStatus = Literal["pass", "fail", "unknown", "not_evaluated"]
 ValidityTier: TypeAlias = int
 SUPPORTED_VALIDITY_TIERS = frozenset({0, 1, 2, 3})
 IMPLEMENTED_VALIDITY_TIERS = frozenset({0})
+
+
+class FailureRecord(BaseModel):
+    code: str
+    message: str
+    context: dict[str, Any] = Field(default_factory=dict)
+    retryable: bool = False
+
+    @classmethod
+    def from_exception(cls, error: RetroCastException) -> FailureRecord:
+        return cls.model_validate(error.to_dict())
 
 
 class CheckResult(BaseModel):

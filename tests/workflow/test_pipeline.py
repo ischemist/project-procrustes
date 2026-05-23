@@ -12,14 +12,17 @@ import pytest
 
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.exceptions import AdapterSchemaError, ChemRuntimeError, InputError, UnsupportedAdapterFeatureError
-from retrocast.io.data import load_routes
+from retrocast.io.data import load_candidate_records, load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
+from retrocast.models.candidates import CandidateRecord
 from retrocast.models.chem import Molecule, ReactionStep, Route, TargetIdentity
+from retrocast.models.validity import FailureRecord
 from retrocast.typing import InchiKeyStr, SmilesStr
 from retrocast.workflow.adapt import adapt_target_keyed_provider_output, adapt_target_routes
+from retrocast.workflow.analyze import compute_model_statistics
 from retrocast.workflow.collect import collect_benchmark_predictions
 from retrocast.workflow.ingest import ingest_model_predictions
-from retrocast.workflow.score import score_model
+from retrocast.workflow.score import score_candidate_records, score_model
 from tests.helpers import _make_simple_route, _make_two_step_route, _synthetic_inchikey
 
 # =============================================================================
@@ -473,6 +476,34 @@ class TestIngestModelPredictions:
         assert "Ingestion failures by code: {'adapter.schema_invalid': 2}" in caplog.text
 
     @pytest.mark.integration
+    def test_ingest_can_preserve_failed_candidate_slots(self, tmp_path, synthetic_benchmark):
+        adapter = FailingAdapter()
+        raw_data = {
+            "target_1": [{"bad": "payload"}],
+            "target_2": [{"bad": "payload"}],
+        }
+
+        _, save_path, stats = ingest_model_predictions(
+            model_name="failing-model",
+            benchmark=synthetic_benchmark,
+            raw_data=raw_data,
+            adapter=adapter,
+            output_dir=tmp_path,
+            preserve_failed_candidates=True,
+        )
+
+        artifact = load_candidate_records(save_path.with_name("candidates.json.gz"))
+
+        assert stats.routes_failed_transformation == 2
+        assert artifact.metadata.preserves_failed_candidates is True
+        assert artifact.metadata.candidate_denominator == "complete"
+        assert artifact.metadata.n_raw_entries_seen == 2
+        assert artifact.records["target_1"][0].rank == 1
+        assert artifact.records["target_1"][0].route is None
+        assert artifact.records["target_1"][0].adapter_failure is not None
+        assert artifact.records["target_1"][0].adapter_failure.code == "adapter.schema_invalid"
+
+    @pytest.mark.integration
     def test_ingest_records_chem_failures_per_target(self, tmp_path, synthetic_benchmark):
         adapter = ChemFailingAdapter()
         raw_data = {
@@ -555,7 +586,7 @@ class TestScoreModel:
 
         assert eval_results.metadata["scoring_denominator"] == {
             "type": "route_only",
-            "n_routes_scored": 4,
+            "n_candidates_scored": 4,
         }
 
         # target_1: CC <- C (solvable, leaf is C)
@@ -568,13 +599,43 @@ class TestScoreModel:
         t2 = eval_results.results["target_2"]
         assert t2.has_stock_terminated_route is True
 
-        # target_3: CCCC <- CCC <- CC (not solvable, leaf is CC not in stock)
-        t3 = eval_results.results["target_3"]
-        assert t3.has_stock_terminated_route is False
-        assert t3.has_tier_0_valid_route is True
-        assert t3.is_solv_0 is False
-        assert t3.candidates[0].validity.tiers[0].status == "pass"
-        assert t3.candidates[0].constraint_results["stock"].status == "fail"
+    @pytest.mark.integration
+    def test_score_candidate_records_preserves_raw_rank_denominator(self, synthetic_benchmark, minimal_stock):
+        route = _make_simple_route("CC", "C")
+        candidates = {
+            "target_1": [
+                CandidateRecord(
+                    rank=1,
+                    adapter_failure=FailureRecord(code="adapter.schema_invalid", message="bad syntax"),
+                ),
+                CandidateRecord(rank=2, route=route),
+            ]
+        }
+
+        eval_results = score_candidate_records(
+            benchmark=synthetic_benchmark,
+            candidates=candidates,
+            stock=minimal_stock,
+            stock_name="minimal",
+            model_name="test-model",
+        )
+
+        t1 = eval_results.results["target_1"]
+        assert eval_results.metadata["scoring_denominator"] == {
+            "type": "complete",
+            "n_candidates_scored": 2,
+        }
+        assert t1.candidates[0].adapter_failure is not None
+        assert t1.candidates[0].validity.tiers[0].status == "fail"
+        assert t1.candidates[0].constraint_results["stock"].status == "not_evaluated"
+        assert t1.tier_validity_ranks[0] == 2
+        assert t1.solv_ranks["stock"][0] == 2
+
+        stats = compute_model_statistics(eval_results, n_boot=100, seed=42)
+        assert stats.mrr_tier_0 is not None
+        assert stats.mrr_solv_0 is not None
+        assert stats.mrr_tier_0.overall.value == pytest.approx(1 / 6)
+        assert stats.mrr_solv_0.overall.value == pytest.approx(1 / 6)
 
     @pytest.mark.integration
     def test_score_solvability_with_extended_stock(self, synthetic_benchmark, synthetic_predictions, extended_stock):

@@ -42,6 +42,8 @@ class ModelStatistics(BaseModel):
     stock_termination: StratifiedMetric
     tier_0_validity: StratifiedMetric | None = None
     solv_0: StratifiedMetric | None = None
+    mrr_tier_0: StratifiedMetric | None = None
+    mrr_solv_0: StratifiedMetric | None = None
     top_k_accuracy: dict[int, StratifiedMetric]  # k -> metric
 
     # Aggregate runtime metrics (in seconds)

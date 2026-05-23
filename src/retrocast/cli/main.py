@@ -128,6 +128,11 @@ def main() -> None:
         help="Strip stereochemistry during SMILES canonicalization",
     )
     ingest_parser.add_argument(
+        "--preserve-failed-candidates",
+        action="store_true",
+        help="Write candidates.json.gz with failed raw rank slots preserved for candidate-denominator metrics.",
+    )
+    ingest_parser.add_argument(
         "--no-progress",
         action="store_true",
         help="Disable progress bars during ingestion",

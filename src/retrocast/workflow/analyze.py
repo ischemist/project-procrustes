@@ -5,6 +5,8 @@ from retrocast.metrics.bootstrap import (
     get_has_stock_terminated_route,
     get_has_tier_0_valid_route,
     get_is_solv_0,
+    get_reciprocal_solv_rank,
+    get_reciprocal_tier_rank,
     make_get_top_k,
 )
 from retrocast.models.evaluation import EvaluationResults, TargetEvaluation
@@ -44,6 +46,8 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
     )
     stat_tier_0_validity = None
     stat_solv_0 = None
+    stat_mrr_tier_0 = None
+    stat_mrr_solv_0 = None
     if any(t.has_tier_0_valid_route is not None for t in targets):
         stat_tier_0_validity = compute_metric_with_ci(
             targets,
@@ -53,11 +57,27 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
             n_boot=n_boot,
             seed=seed,
         )
+        stat_mrr_tier_0 = compute_metric_with_ci(
+            targets,
+            get_reciprocal_tier_rank(0),
+            "MRR Tier-0",
+            group_by=group_fn,
+            n_boot=n_boot,
+            seed=seed,
+        )
     if any(t.is_solv_0 is not None for t in targets):
         stat_solv_0 = compute_metric_with_ci(
             targets,
             get_is_solv_0,
             "Solv-0",
+            group_by=group_fn,
+            n_boot=n_boot,
+            seed=seed,
+        )
+        stat_mrr_solv_0 = compute_metric_with_ci(
+            targets,
+            get_reciprocal_solv_rank("stock", 0),
+            "MRR Solv-0",
             group_by=group_fn,
             n_boot=n_boot,
             seed=seed,
@@ -103,6 +123,8 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
         stock_termination=stat_stock_termination,
         tier_0_validity=stat_tier_0_validity,
         solv_0=stat_solv_0,
+        mrr_tier_0=stat_mrr_tier_0,
+        mrr_solv_0=stat_mrr_solv_0,
         top_k_accuracy=stat_topk,
         total_wall_time=total_wall_time,
         total_cpu_time=total_cpu_time,

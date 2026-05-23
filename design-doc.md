@@ -175,6 +175,7 @@ Use Pydantic models at artifact and public-library boundaries.
 
 - `src/retrocast/models/chem.py`: canonical chemistry only. No validity fields.
 - `src/retrocast/models/validity.py`: validity and constraint result models.
+- `src/retrocast/models/candidates.py`: pre-score candidate records and candidate audit metadata.
 - `src/retrocast/models/evaluation.py`: scored candidates, target evaluation, and evaluation results.
 
 Validator internals may use dataclasses if that keeps local computation small,
@@ -191,6 +192,13 @@ from pydantic import BaseModel, Field
 
 
 CheckStatus = Literal["pass", "fail", "unknown", "not_evaluated"]
+
+
+class FailureRecord(BaseModel):
+    code: str
+    message: str
+    context: dict[str, Any] = Field(default_factory=dict)
+    retryable: bool = False
 ```
 
 ### Scope Records
@@ -267,19 +275,42 @@ solv_i[scope] = validity.tiers[i].status == "pass"
 
 Target/stat summaries may store computed Solv-i ranks and rates.
 
+### Candidate Records
+
+`CandidateRecord` is the pre-score unit. It preserves one raw target-local rank
+slot when candidate-preserving ingest is enabled.
+
+```python
+class CandidateSource(BaseModel):
+    key: str | None = None
+    row_index: int | None = None
+    record_id: str | None = None
+
+
+class CandidateRecord(BaseModel):
+    rank: int
+    route: Route | None = None
+    adapter_failure: FailureRecord | None = None
+    source: CandidateSource = Field(default_factory=CandidateSource)
+```
+
+Exactly one of `route` or `adapter_failure` must be present.
+
 ### Scored Candidates
 
 `ScoredCandidate` is the score-stage unit. It adds validity, constraint results,
-and benchmark-reference annotations to a ranked route.
+and benchmark-reference annotations to a ranked candidate. A candidate may have
+no route only when candidate-preserving ingest recorded an adapter failure.
 
 ```python
 class ScoredCandidate(BaseModel):
     rank: int
-    route: Route
+    route: Route | None = None
     validity: RouteValidity
     constraint_results: dict[str, ConstraintResult] = Field(default_factory=dict)
     matches_acceptable: bool = False
     matched_acceptable_index: int | None = None
+    adapter_failure: FailureRecord | None = None
 ```
 
 Compact normal case:
@@ -375,15 +406,39 @@ This mode does not support:
 - candidate tier-0 pass rate
 - raw-rank MRR over slots that failed adaptation
 
+### Candidate-Preserving Mode
+
+Candidate-preserving ingest records every target-local raw rank slot, including
+adapter failures.
+
+```bash
+retrocast ingest MODEL BENCHMARK --preserve-failed-candidates
+```
+
+Output:
+
+```text
+3-processed/<benchmark>/<model>/routes.json.gz
+3-processed/<benchmark>/<model>/candidates.json.gz
+3-processed/<benchmark>/<model>/manifest.json
+```
+
+`routes.json.gz` remains the canonical route-only artifact. `candidates.json.gz`
+is the candidate-denominator artifact used when scoring needs failed rank slots.
+
+Candidate-preserving ingest currently requires target-keyed provider output so
+failed slots can be assigned to benchmark targets explicitly.
+
 ## Scoring Procedure
 
 For each candidate:
 
 1. Preserve the raw rank.
-2. Evaluate Tier-i validity for the route.
-3. Evaluate scope constraints for the route.
-4. Evaluate enabled tier validators.
-5. Compute acceptable-route match independently from tier and Solv-i.
+2. If the candidate has an adapter failure, record a failed Tier-0 result and do not evaluate scope constraints.
+3. Evaluate Tier-i validity for route candidates.
+4. Evaluate scope constraints for route candidates.
+5. Evaluate enabled tier validators.
+6. Compute acceptable-route match independently from tier and Solv-i.
 
 For each target:
 
