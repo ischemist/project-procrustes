@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from retrocast._warnings import DeprecatedFieldAccessMixin
 from retrocast.models.chem import Route
-from retrocast.models.validity import ConstraintResult, FailureRecord, MetricScope, ReactionValidity, RouteValidity
+from retrocast.models.validity import ConstraintResult, FailureRecord, MetricScope, RouteValidity
 
 
 class ScoredCandidate(BaseModel):
@@ -29,8 +29,9 @@ class ScoredCandidate(BaseModel):
 
 class ScoredRoute(DeprecatedFieldAccessMixin, BaseModel):
     """
-    A single predicted route, stripped of chemistry, enriched with metrics.
-    This is the 'atom' of statistical analysis.
+    Legacy route-level compatibility view.
+
+    New evaluation annotations live on ScoredCandidate.
     """
 
     _deprecated_fields = {
@@ -42,17 +43,8 @@ class ScoredRoute(DeprecatedFieldAccessMixin, BaseModel):
     }
 
     rank: int
-    validity: RouteValidity = Field(default_factory=RouteValidity)
-    constraint_results: dict[str, ConstraintResult] = Field(default_factory=dict)
     is_solved: bool  # Legacy alias for stock termination in the stock scope.
     is_stock_terminated: bool | None = None
-    is_tier_0_valid: bool | None = None
-    is_solv_0: bool | None = None
-    is_tier_1_valid: bool | None = None
-    is_solv_1: bool | None = None
-    tier_0_failure_codes: list[str] = Field(default_factory=list)
-    tier_1_failure_codes: list[str] = Field(default_factory=list)
-    reaction_validity: list[ReactionValidity] = Field(default_factory=list)
     matches_acceptable: bool  # Does this route match any acceptable route?
     matched_acceptable_index: int | None = None  # Index of matched acceptable route (if any)
 
@@ -60,12 +52,6 @@ class ScoredRoute(DeprecatedFieldAccessMixin, BaseModel):
     def _fill_validity_aliases(self) -> ScoredRoute:
         if self.is_stock_terminated is None:
             self.is_stock_terminated = self.__dict__["is_solved"]
-        if not self.reaction_validity:
-            self.reaction_validity = self.validity.reactions
-        if self.is_solv_0 is None and self.is_tier_0_valid is not None:
-            self.is_solv_0 = self.is_stock_terminated and self.is_tier_0_valid
-        if self.is_solv_1 is None and self.is_tier_1_valid is not None:
-            self.is_solv_1 = self.is_stock_terminated and self.is_tier_1_valid
         return self
 
 

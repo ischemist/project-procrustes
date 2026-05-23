@@ -190,14 +190,8 @@ def score_model(
             scored_routes.append(
                 ScoredRoute(
                     rank=rank,
-                    validity=route_validity,
-                    constraint_results=constraint_results,
                     is_solved=stock_terminated,
                     is_stock_terminated=stock_terminated,
-                    is_tier_0_valid=tier_0_valid,
-                    is_solv_0=solv_0,
-                    tier_0_failure_codes=tier_0_failure_codes,
-                    reaction_validity=reaction_validity,
                     matches_acceptable=matched_idx is not None,
                     matched_acceptable_index=matched_idx,
                 )
@@ -215,8 +209,8 @@ def score_model(
 
         # Summary for this target
         has_stock_terminated_route = any(r.is_stock_terminated for r in scored_routes)
-        has_tier_0_valid_route = any(r.is_tier_0_valid for r in scored_routes)
-        is_solv_0 = any(r.is_solv_0 for r in scored_routes)
+        has_tier_0_valid_route = first_tier_0_rank is not None
+        is_solv_0 = first_solv_0_rank is not None
 
         # Always stratify by primary acceptable route (benchmark ground truth)
         source_route = target.primary_route

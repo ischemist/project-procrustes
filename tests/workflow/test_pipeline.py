@@ -569,12 +569,11 @@ class TestScoreModel:
         # target_3: CCCC <- CCC <- CC (not solvable, leaf is CC not in stock)
         t3 = eval_results.results["target_3"]
         assert t3.has_stock_terminated_route is False
-        assert t3.has_stock_terminated_route is False
         assert t3.has_tier_0_valid_route is True
         assert t3.is_solv_0 is False
         assert t3.routes[0].is_stock_terminated is False
-        assert t3.routes[0].is_tier_0_valid is True
-        assert t3.routes[0].is_solv_0 is False
+        assert t3.candidates[0].validity.tiers[0].status == "pass"
+        assert t3.candidates[0].constraint_results["stock"].status == "fail"
 
     @pytest.mark.integration
     def test_score_solvability_with_extended_stock(self, synthetic_benchmark, synthetic_predictions, extended_stock):
@@ -620,18 +619,17 @@ class TestScoreModel:
         )
 
         t1 = eval_results.results["target_1"]
-        scored_route = t1.routes[0]
+        scored_candidate = t1.candidates[0]
 
         assert t1.has_stock_terminated_route is True
         assert t1.has_tier_0_valid_route is False
         assert t1.is_solv_0 is False
-        assert scored_route.is_stock_terminated is True
-        assert scored_route.is_stock_terminated is True
-        assert scored_route.is_tier_0_valid is False
-        assert scored_route.is_solv_0 is False
-        assert scored_route.tier_0_failure_codes == ["tier0.invalid_reactant_smiles"]
-        assert scored_route.reaction_validity[0].is_tier_0_valid is False
-        assert scored_route.reaction_validity[0].tier_0_failure_codes == ["tier0.invalid_reactant_smiles"]
+        assert t1.routes[0].is_stock_terminated is True
+        assert scored_candidate.constraint_results["stock"].status == "pass"
+        assert scored_candidate.validity.tiers[0].status == "fail"
+        assert [check.code for check in scored_candidate.validity.tiers[0].checks] == ["tier0.invalid_reactant_smiles"]
+        assert scored_candidate.validity.reactions[0].is_tier_0_valid is False
+        assert scored_candidate.validity.reactions[0].tier_0_failure_codes == ["tier0.invalid_reactant_smiles"]
 
     @pytest.mark.integration
     def test_score_gt_match_detection(self, synthetic_benchmark, synthetic_predictions, minimal_stock):
