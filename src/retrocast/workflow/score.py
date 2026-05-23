@@ -140,7 +140,7 @@ def _records_from_routes(predictions: RoutesDict) -> CandidateRecordsDict:
     }
 
 
-def score_model(
+def score_routes(
     benchmark: BenchmarkSet,
     predictions: RoutesDict,
     stock: set[InchiKeyStr],
@@ -150,29 +150,10 @@ def score_model(
     match_level: InchiKeyLevel = InchiKeyLevel.FULL,
 ) -> EvaluationResults:
     """
-    Scores model predictions against a benchmark.
+    Score benchmark-keyed route predictions.
 
-    This function evaluates each predicted route for:
-    1. Solvability: Are all starting materials in stock?
-    2. Acceptability: Does the route match any acceptable route?
-
-    Stratification is based on the matched acceptable route if found,
-    otherwise falls back to the primary acceptable route (benchmark ground truth).
-
-    Args:
-        benchmark: The benchmark set with acceptable routes
-        predictions: Model predictions (target_id -> list of routes)
-        stock: Set of available stock InChIKeys
-        stock_name: Name of the stock set
-        model_name: Name of the model being evaluated
-        execution_stats: Optional runtime statistics for predictions
-        match_level: Level of InChI key matching specificity:
-            - None or FULL: Exact matching (default)
-            - NO_STEREO: Ignore stereochemistry
-            - CONNECTIVITY: Match on molecular skeleton only
-
-    Returns:
-        Evaluation results with per-target scoring and matched route metadata
+    Route-only artifacts contain successful adapted routes, so they are first
+    lifted into candidate records with contiguous ranks.
     """
     return score_candidate_records(
         benchmark=benchmark,

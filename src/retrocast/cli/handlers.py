@@ -413,7 +413,7 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
                 denominator_type=candidate_artifact.metadata.candidate_denominator,
             )
         else:
-            eval_results = score.score_model(
+            eval_results = score.score_routes(
                 benchmark=benchmark,
                 predictions=predictions or {},
                 stock=stock_set,
@@ -432,7 +432,7 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
 
         # Manifest
         manifest = create_manifest(
-            action="score_model",
+            action="score_candidate_records" if candidate_artifact is not None else "score_routes",
             sources=[bench_path, candidates_path if candidate_artifact is not None else routes_path, stock_path],
             outputs=[(out_path, eval_results, "unknown")],
             root_dir=paths["raw"].parent.resolve(),

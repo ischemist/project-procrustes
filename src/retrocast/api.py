@@ -112,7 +112,7 @@ def score_predictions(
         stock_set = stock
         name = stock_name or "custom-stock"
 
-    return score_workflow.score_model(
+    return score_workflow.score_routes(
         benchmark=benchmark,
         predictions=predictions,
         stock=stock_set,

@@ -22,7 +22,7 @@ from retrocast.workflow.adapt import adapt_target_keyed_provider_output, adapt_t
 from retrocast.workflow.analyze import compute_model_statistics
 from retrocast.workflow.collect import collect_benchmark_predictions
 from retrocast.workflow.ingest import ingest_model_predictions
-from retrocast.workflow.score import score_candidate_records, score_model
+from retrocast.workflow.score import score_candidate_records, score_routes
 from tests.helpers import _make_simple_route, _make_two_step_route, _synthetic_inchikey
 
 # =============================================================================
@@ -554,13 +554,13 @@ class TestIngestModelPredictions:
 # =============================================================================
 
 
-class TestScoreModel:
-    """Tests for the score_model workflow."""
+class TestScoreRoutes:
+    """Tests for the score_routes workflow."""
 
     @pytest.mark.integration
     def test_score_basic_flow(self, synthetic_benchmark, synthetic_predictions, minimal_stock):
         """Test basic scoring produces correct evaluation results."""
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=synthetic_predictions,
             stock=minimal_stock,
@@ -576,7 +576,7 @@ class TestScoreModel:
     @pytest.mark.integration
     def test_score_solvability_with_minimal_stock(self, synthetic_benchmark, synthetic_predictions, minimal_stock):
         """Test solvability scoring with minimal stock (only C)."""
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=synthetic_predictions,
             stock=minimal_stock,
@@ -640,7 +640,7 @@ class TestScoreModel:
     @pytest.mark.integration
     def test_score_solvability_with_extended_stock(self, synthetic_benchmark, synthetic_predictions, extended_stock):
         """Test solvability with extended stock makes more routes solvable."""
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=synthetic_predictions,
             stock=extended_stock,
@@ -667,7 +667,7 @@ class TestScoreModel:
         )
         route = Route(target=target)
 
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions={"target_1": [route]},
             stock=set(),
@@ -691,7 +691,7 @@ class TestScoreModel:
     @pytest.mark.integration
     def test_score_gt_match_detection(self, synthetic_benchmark, synthetic_predictions, minimal_stock):
         """Test ground truth match detection."""
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=synthetic_predictions,
             stock=minimal_stock,
@@ -724,7 +724,7 @@ class TestScoreModel:
             "target_3": [],
         }
 
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=empty_predictions,
             stock=minimal_stock,
@@ -746,7 +746,7 @@ class TestScoreModel:
             # target_2 and target_3 missing
         }
 
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=partial_predictions,
             stock=minimal_stock,
@@ -761,7 +761,7 @@ class TestScoreModel:
     @pytest.mark.integration
     def test_score_preserves_metadata(self, synthetic_benchmark, synthetic_predictions, minimal_stock):
         """Test that route metadata (length, convergence) is preserved."""
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=synthetic_predictions,
             stock=minimal_stock,
@@ -815,7 +815,7 @@ class TestFullPipeline:
         loaded_routes = load_routes(save_path)
 
         # Step 3: Score
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=loaded_routes,
             stock=minimal_stock,
@@ -881,7 +881,7 @@ class TestFullPipeline:
             )
 
             loaded = load_routes(save_path)
-            eval_result = score_model(
+            eval_result = score_routes(
                 benchmark=synthetic_benchmark,
                 predictions=loaded,
                 stock=minimal_stock,
