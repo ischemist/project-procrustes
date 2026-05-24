@@ -18,6 +18,7 @@ from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
 # Type alias for a reaction signature: (frozenset of reactant InchiKeys, product InchiKey)
 ReactionSignature = tuple[frozenset[str], str]
 PREDICTION_METADATA_KEYS = frozenset({"score", "confidence", "state_score", "state score", "scores"})
+ROUTE_ROOT_PATH = "_"
 
 
 def _get_retrocast_version() -> str:
@@ -108,6 +109,15 @@ class RouteReaction(BaseModel):
 
     product: Molecule
     step: ReactionStep
+    path: str = ROUTE_ROOT_PATH
+
+    @property
+    def product_id(self) -> str:
+        return f"rc:m:{self.path}"
+
+    @property
+    def reaction_id(self) -> str:
+        return f"rc:r:{self.path}"
 
     @property
     def signature(self) -> ReactionSignature:
@@ -229,18 +239,30 @@ class Route(BaseModel):
     def iter_reactions(self) -> Iterator[RouteReaction]:
         """Yield reaction/product pairs in deterministic root-first depth-first order."""
 
-        def _visit(node: Molecule) -> Iterator[RouteReaction]:
+        def _child_path(parent_path: str, child_index: int) -> str:
+            if parent_path == ROUTE_ROOT_PATH:
+                return str(child_index)
+            return f"{parent_path}.{child_index}"
+
+        def _visit(node: Molecule, path: str) -> Iterator[RouteReaction]:
             if node.synthesis_step is None:
                 return
-            yield RouteReaction(product=node, step=node.synthesis_step)
-            for reactant in node.synthesis_step.reactants:
-                yield from _visit(reactant)
+            yield RouteReaction(product=node, step=node.synthesis_step, path=path)
+            for child_index, reactant in enumerate(node.synthesis_step.reactants):
+                yield from _visit(reactant, _child_path(path, child_index))
 
-        yield from _visit(self.target)
+        yield from _visit(self.target, ROUTE_ROOT_PATH)
 
     def get_reactions(self) -> list[RouteReaction]:
         """Return reaction/product pairs in deterministic root-first depth-first order."""
         return list(self.iter_reactions())
+
+    def get_reaction_by_id(self, reaction_id: str) -> RouteReaction:
+        """Return the route reaction with the given route-local reaction id."""
+        for reaction in self.iter_reactions():
+            if reaction.reaction_id == reaction_id:
+                return reaction
+        raise KeyError(reaction_id)
 
     def _build_route_signature(
         self,

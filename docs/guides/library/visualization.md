@@ -33,25 +33,26 @@ fig = plot_comparison(
 fig.show()
 ```
 
-Metric types currently include legacy visualization labels such as
-`"Solvability"` and `"Top-K"`. The legacy `"Solvability"` plot label predates
-the Solv-N migration and corresponds to stock termination. Prefer the tabular
-report for explicit `Tier-0` and `Solv-0[STR]` labels.
+Metric types currently include legacy visualization labels such as `"Solvability"` and `"Top-K"`. The legacy `"Solvability"` plot label predates the Solv-N migration and corresponds to stock termination. Prefer the tabular report for explicit `Tier-0` and `Solv-0[STR]` labels.
 
 ## Custom Plots
 
 ```python title="Access raw data for custom plots"
 import plotly.graph_objects as go
 
-lengths = sorted(stats.solv_0.by_group.keys())
-values = [stats.solv_0.by_group[length].value for length in lengths]
-ci_lower = [stats.solv_0.by_group[length].ci_lower for length in lengths]
-ci_upper = [stats.solv_0.by_group[length].ci_upper for length in lengths]
+def depth_value(depth):
+    return int(str(depth).removeprefix("depth "))
+
+
+depths = sorted(stats.solv_0.by_group.keys(), key=depth_value)
+values = [stats.solv_0.by_group[depth].value for depth in depths]
+ci_lower = [stats.solv_0.by_group[depth].ci_lower for depth in depths]
+ci_upper = [stats.solv_0.by_group[depth].ci_upper for depth in depths]
 
 fig = go.Figure()
 fig.add_trace(
     go.Scatter(
-        x=lengths,
+        x=depths,
         y=values,
         error_y={
             "type": "data",

@@ -151,7 +151,7 @@ class TestLibraryAPIWithRealData:
         assert hasattr(solvability, "ci_lower")
         assert hasattr(solvability, "ci_upper")
 
-        # Access stratified metrics (e.g., by route length)
+        # Access stratified metrics (e.g., by route depth)
         assert hasattr(stats.stock_termination, "by_group")
         assert len(stats.stock_termination.by_group) > 0
 

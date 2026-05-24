@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from retrocast.models.stats import ModelStatistics, StratifiedMetric
+from retrocast.visualization.depth import depth_group_sort_key, depth_group_value
 from retrocast.visualization.theme import get_metric_color, get_model_color
 
 
@@ -72,7 +73,7 @@ class StabilityData:
 def stats_to_diagnostic_series(stats: ModelStatistics) -> list[PlotSeries]:
     """
     Converts a single model's stats into series for a diagnostic plot.
-    X-axis: Route Length
+    X-axis: Route Depth
     Series: Solvability, Top-1, Top-5, Top-10
     """
     series_list = []
@@ -80,14 +81,14 @@ def stats_to_diagnostic_series(stats: ModelStatistics) -> list[PlotSeries]:
 
     # 1. Solvability
     series_list.append(
-        _create_length_series(stock_termination, name="Solvability", color=get_metric_color("solvability"), mode="bar")
+        _create_depth_series(stock_termination, name="Solvability", color=get_metric_color("solvability"), mode="bar")
     )
 
     # 2. Top-K Accuracies
     for k in sorted(stats.top_k_accuracy.keys()):
         if k in [1, 2, 3, 4, 5, 10, 20, 50]:
             series_list.append(
-                _create_length_series(
+                _create_depth_series(
                     stats.top_k_accuracy[k], name=f"Top-{k}", color=get_metric_color("top", k), mode="bar"
                 )
             )
@@ -98,7 +99,7 @@ def stats_to_diagnostic_series(stats: ModelStatistics) -> list[PlotSeries]:
 def stats_to_comparison_series(models_stats: list[ModelStatistics], metric_type: str, k: int = 1) -> list[PlotSeries]:
     """
     Converts multiple models into series for a direct comparison on a specific metric.
-    X-axis: Route Length
+    X-axis: Route Depth
     Series: One per Model
     """
     series_list = []
@@ -112,7 +113,7 @@ def stats_to_comparison_series(models_stats: list[ModelStatistics], metric_type:
 
         if metric_obj:
             series_list.append(
-                _create_length_series(
+                _create_depth_series(
                     metric_obj, name=stats.model_name, color=get_model_color(stats.model_name), mode="scatter"
                 )
             )
@@ -263,22 +264,14 @@ def stats_to_stability_data(results_map: dict[str, dict[str, Any]], metric_key: 
     )
 
 
-# --- Internal Helper ---
-
-
-def _route_length_key(key: int | str) -> int:
-    return int(key)
-
-
-def _create_length_series(metric_obj: StratifiedMetric, name: str, color: str, mode: str) -> PlotSeries:
-    """Helper to extract stratified data by route length into a PlotSeries."""
-    # FIX: Cast keys to int before sorting to handle "10" vs "2" correctly.
-    sorted_keys = sorted(metric_obj.by_group.keys(), key=_route_length_key)
+def _create_depth_series(metric_obj: StratifiedMetric, name: str, color: str, mode: str) -> PlotSeries:
+    """Helper to extract stratified data by route depth into a PlotSeries."""
+    sorted_keys = sorted(metric_obj.by_group.keys(), key=depth_group_sort_key)
 
     x_vals, y_vals, y_up, y_low, custom = [], [], [], [], []
     for k in sorted_keys:
         res = metric_obj.by_group[k]
-        x_vals.append(int(k))  # Ensure x is numeric for jittering
+        x_vals.append(depth_group_value(k))
         y_vals.append(res.value * 100)
         y_up.append((res.ci_upper - res.value) * 100)
         y_low.append((res.value - res.ci_lower) * 100)

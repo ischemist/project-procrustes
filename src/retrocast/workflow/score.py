@@ -101,17 +101,19 @@ def _score_route_candidate(
         for tier in sorted(IMPLEMENTED_VALIDITY_TIERS)
     }
     tier_passes = {tier: result.status == "pass" for tier, result in route_tiers.items()}
-    reactions_by_index: dict[int, ReactionValidity] = {}
-    for reaction_index, reaction in enumerate(route.iter_reactions(), start=1):
+    reaction_validity: list[ReactionValidity] = []
+    for reaction in route.iter_reactions():
         reaction_tiers = {
             tier: _make_tier_result(tier, get_reaction_tier_failure_codes(reaction, tier))
             for tier in sorted(IMPLEMENTED_VALIDITY_TIERS)
         }
-        reactions_by_index[reaction_index] = ReactionValidity(
-            reaction_index=reaction_index,
-            tiers=reaction_tiers,
+        reaction_validity.append(
+            ReactionValidity(
+                reaction_id=reaction.reaction_id,
+                tiers=reaction_tiers,
+            )
         )
-    route_validity = RouteValidity(tiers=route_tiers, reactions=list(reactions_by_index.values()))
+    route_validity = RouteValidity(tiers=route_tiers, reactions=reaction_validity)
     constraint_results = {
         "stock": _make_stock_constraint_result(_get_missing_stock_leaves(route, stock_inchikeys, match_level))
     }

@@ -90,7 +90,7 @@ class TierResult(BaseModel):
 
 
 class ReactionValidity(BaseModel):
-    reaction_index: int
+    reaction_id: str
     tiers: dict[int, TierResult] = Field(default_factory=dict)
 
     @model_validator(mode="before")
@@ -109,7 +109,7 @@ class ReactionValidity(BaseModel):
     @model_serializer(mode="plain")
     def to_artifact_dict(self) -> dict[str, Any]:
         return {
-            "reaction_index": self.reaction_index,
+            "reaction_id": self.reaction_id,
             "validity": _serialize_tiers(self.tiers),
         }
 

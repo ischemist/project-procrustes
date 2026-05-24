@@ -35,33 +35,22 @@ for k in [1, 5, 10]:
     topk = stats.top_k_accuracy[k].overall
     print(f"Top-{k}: {topk.value:.1%} [{topk.ci_lower:.1%}, {topk.ci_upper:.1%}]")
 
-print("\nStratified by length:")
-for length, metric in stats.solv_0.by_group.items():
-    print(f"  Length {length}: {metric.value:.1%} [{metric.ci_lower:.1%}, {metric.ci_upper:.1%}]")
+print("\nStratified by depth:")
+for depth, metric in stats.solv_0.by_group.items():
+    print(f"  {depth}: {metric.value:.1%} [{metric.ci_lower:.1%}, {metric.ci_upper:.1%}]")
 ```
 
-Typical metrics include Tier-0 validity, Solv-0[STR], raw-rank MRR diagnostics,
-Top-K benchmark route reconstruction, and stratified performance by route length.
+Typical metrics include Tier-0 validity, Solv-0\[STR\], raw-rank MRR diagnostics, Top-K benchmark route reconstruction, and stratified performance by route depth.
 
 ## Metric Semantics
 
-`stats.tier_0_validity` is the fraction of targets with at least one Tier-0-valid
-candidate. It does not require stock termination.
+`stats.tier_0_validity` is the fraction of targets with at least one Tier-0-valid candidate. It does not require stock termination.
 
-`stats.solv_0` is the fraction of targets with at least one `Solv-0[STR]`
-candidate. In the stock scope, this means Tier-0 validity plus stock
-termination.
+`stats.solv_0` is the fraction of targets with at least one `Solv-0[STR]` candidate. In the stock scope, this means Tier-0 validity plus stock termination.
 
-`stats.mrr_tier_0` and `stats.mrr_solv_0` are rank diagnostics. A target
-contributes `1 / rank` for the first matching candidate and `0` if there is no
-matching candidate. Example: `MRR Solv-0[STR] = 0.900` means the first
-Solv-0[STR] candidate is usually near rank 1, but this is not a reconstruction
-accuracy.
+`stats.mrr_tier_0` and `stats.mrr_solv_0` are rank diagnostics. A target contributes `1 / rank` for the first matching candidate and `0` if there is no matching candidate. Example: `MRR Solv-0[STR] = 0.900` means the first Solv-0\[STR\] candidate is usually near rank 1, but this is not a reconstruction accuracy.
 
-`stats.top_k_accuracy[k]` is benchmark route reconstruction after stock-scope
-filtering. It asks whether one of the first `k` stock-terminated candidates
-matches an acceptable benchmark route. This is a conservative proxy, not a
-Solv-N metric.
+`stats.top_k_accuracy[k]` is benchmark route reconstruction after stock-scope filtering. It asks whether one of the first `k` stock-terminated candidates matches an acceptable benchmark route. This is a conservative proxy, not a Solv-N metric.
 
 ## Reliability Flags
 
@@ -99,9 +88,9 @@ print(stats.mean_cpu_time)
     Top-5: 38.2% [35.1%, 41.4%]
     Top-10: 42.7% [39.5%, 45.9%]
 
-    Stratified by length:
-      Length 2: 65.2% [58.3%, 72.1%]
-      Length 3: 52.8% [47.2%, 58.4%]
-      Length 4: 38.1% [32.5%, 43.8%]
-      Length 5: 24.3% [19.1%, 29.6%]
+    Stratified by depth:
+      depth 2: 65.2% [58.3%, 72.1%]
+      depth 3: 52.8% [47.2%, 58.4%]
+      depth 4: 38.1% [32.5%, 43.8%]
+      depth 5: 24.3% [19.1%, 29.6%]
     ```

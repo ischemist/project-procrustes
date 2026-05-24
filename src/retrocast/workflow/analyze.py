@@ -29,8 +29,10 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
     group_fn = None
     if has_lengths:
 
-        def _get_stratification_length(t: TargetEvaluation) -> int | None:
-            return t.stratification_length
+        def _get_stratification_length(t: TargetEvaluation) -> str | None:
+            if t.stratification_length is None:
+                return None
+            return f"depth {t.stratification_length}"
 
         group_fn = _get_stratification_length
 
