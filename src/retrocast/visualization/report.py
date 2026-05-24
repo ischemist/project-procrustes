@@ -366,7 +366,7 @@ def generate_markdown_report(stats: ModelStatistics, visible_k: list[int] | None
 
     for k in available_k:
         if k in visible_k:
-            if all(existing not in sections for existing in ["## Benchmark-Reference Proxy"]):
+            if "## Benchmark Route Reconstruction" not in sections:
                 sections.extend(["## Benchmark Route Reconstruction", ""])
             sections.append(f"### Top-{k} Accuracy")
             sections.append(format_metric_table(stats.top_k_accuracy[k]))

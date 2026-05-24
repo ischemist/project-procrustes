@@ -9,7 +9,7 @@ from retrocast.typing import InchiKeyStr, SmilesStr
 
 CheckStatus = Literal["pass", "fail", "unknown", "not_evaluated"]
 ValidityTier: TypeAlias = int
-ScopeId: TypeAlias = Literal["stock"]
+ScopeId: TypeAlias = str
 SUPPORTED_VALIDITY_TIERS = frozenset({0, 1, 2, 3})
 IMPLEMENTED_VALIDITY_TIERS = frozenset({0})
 

@@ -10,6 +10,7 @@ from retrocast.metrics.solvability import (
 )
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
 from retrocast.models.candidates import CandidateRecord, CandidateRecordsDict
+from retrocast.models.chem import Route
 from retrocast.models.evaluation import EvaluationResults, ScoredCandidate, TargetEvaluation, tier_rank_key
 from retrocast.models.validity import (
     IMPLEMENTED_VALIDITY_TIERS,
@@ -39,7 +40,7 @@ def _make_tier_result(tier: ValidityTier, failure_codes: list[str]) -> TierResul
 
 
 def _get_missing_stock_leaves(
-    route,
+    route: Route,
     stock: set[InchiKeyStr],
     match_level: InchiKeyLevel,
 ) -> list[InchiKeyStr]:
@@ -174,6 +175,14 @@ def score_candidate_records(
     match_level: InchiKeyLevel = InchiKeyLevel.FULL,
     denominator_type: str = "complete",
 ) -> EvaluationResults:
+    """
+    Score candidate records against a benchmark and stock.
+
+    Candidate records preserve the planner's original target-local ranks,
+    including slots that failed adaptation. `denominator_type` is written to
+    metadata so downstream analysis can distinguish complete candidate
+    denominators from route-only artifacts.
+    """
     logger.info(f"Scoring {model_name} on {benchmark.name}...")
 
     if execution_stats:

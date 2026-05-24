@@ -70,7 +70,7 @@ def get_route_tier_failure_codes(route: Route, tier: ValidityTier) -> list[str]:
     """Return stable failure codes for a route at the requested validity tier."""
     _ensure_implemented_tier(tier)
 
-    reactions = route.get_reactions()
+    reactions = list(route.iter_reactions())
     if not reactions:
         return []
 

@@ -63,7 +63,7 @@ def test_markdown_report_includes_solv_n_sections() -> None:
         solv_0=_metric("solv_0", 0.25),
         mrr_tier_0=_metric("mrr_tier_0", 1 / 3),
         mrr_solv_0=_metric("mrr_solv_0", 1 / 6),
-        top_k_accuracy={1: _metric("top_1", 1.0)},
+        top_k_accuracy={1: _metric("top_1", 1.0), 5: _metric("top_5", 1.0)},
     )
 
     report = generate_markdown_report(stats)
@@ -76,7 +76,9 @@ def test_markdown_report_includes_solv_n_sections() -> None:
     assert "### MRR Tier-0" in report
     assert "### MRR Solv-0[STR]" in report
     assert "## Benchmark Route Reconstruction" in report
+    assert report.count("## Benchmark Route Reconstruction") == 1
     assert "### Top-1 Accuracy" in report
+    assert "### Top-5 Accuracy" in report
     assert "**Overall**: 0.333" in report
 
 
