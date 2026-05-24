@@ -76,6 +76,7 @@ from retrocast.workflow import score as score_workflow
 from retrocast.workflow.adapt import adapt_prediction as adapt_prediction
 from retrocast.workflow.adapt import adapt_provider_output as adapt_provider_output
 from retrocast.workflow.adapt import adapt_route as adapt_route
+from retrocast.workflow.adapt import adapt_target_keyed_candidate_records as adapt_target_keyed_candidate_records
 from retrocast.workflow.adapt import adapt_target_keyed_provider_output as adapt_target_keyed_provider_output
 from retrocast.workflow.adapt import adapt_target_routes as adapt_target_routes
 from retrocast.workflow.collect import collect_benchmark_predictions as collect_benchmark_predictions
@@ -112,7 +113,7 @@ def score_predictions(
         stock_set = stock
         name = stock_name or "custom-stock"
 
-    return score_workflow.score_model(
+    return score_workflow.score_routes(
         benchmark=benchmark,
         predictions=predictions,
         stock=stock_set,

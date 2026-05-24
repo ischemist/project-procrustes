@@ -116,10 +116,10 @@ class TestLibraryAPIWithRealData:
         # Access granular results for first target
         first_target_id = target_ids[0]
         t1_eval = results.results[first_target_id]
-        assert hasattr(t1_eval, "is_solvable")
-        assert hasattr(t1_eval, "acceptable_rank")
+        assert hasattr(t1_eval, "has_stock_terminated_route")
+        assert hasattr(t1_eval, "first_reconstruction_ranks")
         # Verify the target we provided predictions for has routes
-        assert len(t1_eval.routes) > 0
+        assert len(t1_eval.candidates) > 0
 
     def test_compute_statistics_example(self):
         """Test Section 2.B: Compute Statistics"""
@@ -145,15 +145,15 @@ class TestLibraryAPIWithRealData:
         stats = compute_model_statistics(results, n_boot=100, seed=42)
 
         # Access aggregated metrics
-        solvability = stats.solvability.overall
+        solvability = stats.stock_termination.overall
         assert solvability is not None
         assert 0.0 <= solvability.value <= 1.0
         assert hasattr(solvability, "ci_lower")
         assert hasattr(solvability, "ci_upper")
 
         # Access stratified metrics (e.g., by route length)
-        assert hasattr(stats.solvability, "by_group")
-        assert len(stats.solvability.by_group) > 0
+        assert hasattr(stats.stock_termination, "by_group")
+        assert len(stats.stock_termination.by_group) > 0
 
     def test_adapter_map_reference_example(self):
         """Test Reference: Available Adapters"""

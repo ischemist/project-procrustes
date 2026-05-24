@@ -76,10 +76,11 @@ def stats_to_diagnostic_series(stats: ModelStatistics) -> list[PlotSeries]:
     Series: Solvability, Top-1, Top-5, Top-10
     """
     series_list = []
+    stock_termination = stats.stock_termination
 
     # 1. Solvability
     series_list.append(
-        _create_length_series(stats.solvability, name="Solvability", color=get_metric_color("solvability"), mode="bar")
+        _create_length_series(stock_termination, name="Solvability", color=get_metric_color("solvability"), mode="bar")
     )
 
     # 2. Top-K Accuracies
@@ -105,7 +106,7 @@ def stats_to_comparison_series(models_stats: list[ModelStatistics], metric_type:
     for stats in models_stats:
         metric_obj = None
         if metric_type == "Solvability":
-            metric_obj = stats.solvability
+            metric_obj = stats.stock_termination
         elif metric_type == "Top-K":
             metric_obj = stats.top_k_accuracy.get(k)
 
@@ -139,11 +140,12 @@ def stats_to_overall_series(
     series_list = []
 
     for stats in models_stats:
+        stock_termination = stats.stock_termination
         x_vals, y_vals, y_up, y_low, custom = [], [], [], [], []
         for i, config in enumerate(metrics_config):
             res = None
             if config["key"] == "solvability":
-                res = stats.solvability.overall
+                res = stock_termination.overall
             elif config["key"].startswith("top-"):
                 k = int(config["key"].split("-")[1])
                 if k in stats.top_k_accuracy:
@@ -195,8 +197,9 @@ def stats_to_heatmap_matrix(models_stats: list[ModelStatistics]) -> SplitHeatmap
     top_k_z, top_k_text = [], []
 
     for stats in models_stats:  # Outer loop for rows (models)
+        stock_termination = stats.stock_termination
         # Solvability Panel
-        solv_val = stats.solvability.overall.value
+        solv_val = stock_termination.overall.value
         solv_z.append([solv_val * 100])
         solv_text.append([f"{solv_val:.1%}"])
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import ValidationError
@@ -9,9 +10,18 @@ from pydantic import ValidationError
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.exceptions import AdapterError, ChemError, InputError
 from retrocast.models.benchmark import BenchmarkSet
+from retrocast.models.candidates import CandidateAuditMetadata, CandidateRecord, CandidateRecordsDict, CandidateSource
 from retrocast.models.chem import PredictedRoute, Route, RunStatistics, TargetIdentity, TargetInput
+from retrocast.models.validity import FailureRecord
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class AdaptedCandidateRecords:
+    routes: list[PredictedRoute]
+    records: CandidateRecordsDict
+    metadata: CandidateAuditMetadata
 
 
 def _target_hint_from_entry(entry: RawRouteEntry) -> TargetIdentity | None:
@@ -274,3 +284,82 @@ def adapt_target_keyed_provider_output(
             progress_callback=progress_callback,
         )
     )
+
+
+def adapt_target_keyed_candidate_records(
+    target_keyed_provider_output: Mapping[Any, Any],
+    benchmark: BenchmarkSet,
+    adapter: BaseAdapter,
+    *,
+    ignore_stereo: bool = False,
+    stats: RunStatistics | None = None,
+    progress_callback: Callable[[], None] | None = None,
+) -> AdaptedCandidateRecords:
+    """Adapt target-keyed provider output while preserving failed rank slots."""
+    if not isinstance(target_keyed_provider_output, Mapping):
+        raise InputError(
+            "Target-keyed provider output must be a mapping keyed by target id or target smiles.",
+            code="input.invalid_target_keyed_provider_output",
+            context={"actual_type": type(target_keyed_provider_output).__name__},
+        )
+
+    run_stats = stats or RunStatistics()
+    routes: list[PredictedRoute] = []
+    records: CandidateRecordsDict = {target_id: [] for target_id in benchmark.targets}
+
+    for target_id, target in benchmark.targets.items():
+        matched_key = target_id if target_id in target_keyed_provider_output else None
+        if matched_key is None and target.smiles in target_keyed_provider_output:
+            matched_key = target.smiles
+        if matched_key is None:
+            continue
+
+        entries = adapter.iter_raw_entries(target_keyed_provider_output[matched_key], source_key=str(matched_key))
+        for rank, entry in enumerate(entries, start=1):
+            run_stats.total_routes_in_raw_files += 1
+            if progress_callback is not None:
+                progress_callback()
+
+            source = CandidateSource(
+                key=entry.source_key,
+                row_index=entry.source_row_index,
+                record_id=entry.source_record_id,
+            )
+            try:
+                route = adapter.cast(entry.payload, ignore_stereo=ignore_stereo, expected_target=target)
+            except ValidationError as exc:
+                run_stats.record_failure("adapter.schema_invalid", target_id=target_id)
+                records[target_id].append(
+                    CandidateRecord(
+                        rank=rank,
+                        adapter_failure=FailureRecord(code="adapter.schema_invalid", message=str(exc)),
+                        source=source,
+                    )
+                )
+                continue
+            except (AdapterError, ChemError) as exc:
+                run_stats.record_failure(exc.code, target_id=target_id)
+                records[target_id].append(
+                    CandidateRecord(rank=rank, adapter_failure=FailureRecord.from_exception(exc), source=source)
+                )
+                continue
+
+            run_stats.successful_routes_before_dedup += 1
+            prediction = PredictedRoute.from_route(
+                route,
+                rank=rank,
+                metadata=_prediction_metadata_from_entry(entry),
+            )
+            routes.append(prediction)
+            records[target_id].append(CandidateRecord(rank=rank, route=route, source=source))
+
+    n_records = sum(len(target_records) for target_records in records.values())
+    metadata = CandidateAuditMetadata(
+        preserves_failed_candidates=True,
+        candidate_denominator="complete",
+        n_raw_entries_seen=run_stats.total_routes_in_raw_files,
+        n_candidate_records_written=n_records,
+        n_routes_adapted=run_stats.successful_routes_before_dedup,
+        n_adaptation_failures=run_stats.routes_failed_transformation,
+    )
+    return AdaptedCandidateRecords(routes=routes, records=records, metadata=metadata)

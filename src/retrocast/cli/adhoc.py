@@ -13,11 +13,22 @@ from retrocast.cli.errors import log_expected_error
 from retrocast.cli.progress import create_cli_progress, estimate_raw_route_entries, quiet_info_logs
 from retrocast.exceptions import InputError, RetroCastException
 from retrocast.io.blob import load_json_artifact, save_json_gz
-from retrocast.io.data import load_benchmark, load_route_corpus, load_routes, save_route_corpus, save_routes
-from retrocast.io.provenance import create_manifest
+from retrocast.io.data import (
+    load_benchmark,
+    load_route_corpus,
+    load_routes,
+    save_candidate_records,
+    save_route_corpus,
+    save_routes,
+)
+from retrocast.io.provenance import ManifestOutput, create_manifest
 from retrocast.models.benchmark import create_benchmark, create_benchmark_target
 from retrocast.models.chem import RunStatistics
-from retrocast.workflow.adapt import adapt_provider_output, adapt_target_keyed_provider_output
+from retrocast.workflow.adapt import (
+    adapt_provider_output,
+    adapt_target_keyed_candidate_records,
+    adapt_target_keyed_provider_output,
+)
 from retrocast.workflow.collect import collect_benchmark_predictions
 
 logger = logging.getLogger(__name__)
@@ -295,6 +306,8 @@ def handle_adapt(args: Any) -> None:
             benchmark = load_benchmark(benchmark_path)
 
         input_kind = getattr(args, "input_kind", "provider-output")
+        preserve_failed_candidates = getattr(args, "preserve_failed_candidates", False)
+        adapted_candidates = None
         show_progress = not getattr(args, "no_progress", False)
         progress_total = estimate_raw_route_entries(
             raw_data,
@@ -318,14 +331,32 @@ def handle_adapt(args: Any) -> None:
                                 code="input.missing_benchmark",
                                 context={"input_kind": input_kind},
                             )
-                        route_corpus = adapt_target_keyed_provider_output(
-                            raw_data,
-                            benchmark,
-                            adapter,
-                            stats=stats,
-                            progress_callback=advance_progress,
-                        )
+                        if preserve_failed_candidates:
+                            adapted_candidates = adapt_target_keyed_candidate_records(
+                                raw_data,
+                                benchmark,
+                                adapter,
+                                stats=stats,
+                                progress_callback=advance_progress,
+                            )
+                            route_corpus = adapted_candidates.routes
+                        else:
+                            adapted_candidates = None
+                            route_corpus = adapt_target_keyed_provider_output(
+                                raw_data,
+                                benchmark,
+                                adapter,
+                                stats=stats,
+                                progress_callback=advance_progress,
+                            )
                     elif input_kind == "provider-output":
+                        if preserve_failed_candidates:
+                            raise InputError(
+                                "--preserve-failed-candidates requires --input-kind target-keyed-provider-output",
+                                code="input.candidate_preservation_requires_target_keyed_output",
+                                context={"input_kind": input_kind},
+                            )
+                        adapted_candidates = None
                         route_corpus = adapt_provider_output(
                             raw_data,
                             adapter,
@@ -345,13 +376,30 @@ def handle_adapt(args: Any) -> None:
                     code="input.missing_benchmark",
                     context={"input_kind": input_kind},
                 )
-            route_corpus = adapt_target_keyed_provider_output(
-                raw_data,
-                benchmark,
-                adapter,
-                stats=stats,
-            )
+            if preserve_failed_candidates:
+                adapted_candidates = adapt_target_keyed_candidate_records(
+                    raw_data,
+                    benchmark,
+                    adapter,
+                    stats=stats,
+                )
+                route_corpus = adapted_candidates.routes
+            else:
+                adapted_candidates = None
+                route_corpus = adapt_target_keyed_provider_output(
+                    raw_data,
+                    benchmark,
+                    adapter,
+                    stats=stats,
+                )
         elif input_kind == "provider-output":
+            if preserve_failed_candidates:
+                raise InputError(
+                    "--preserve-failed-candidates requires --input-kind target-keyed-provider-output",
+                    code="input.candidate_preservation_requires_target_keyed_output",
+                    context={"input_kind": input_kind},
+                )
+            adapted_candidates = None
             route_corpus = adapt_provider_output(
                 raw_data,
                 adapter,
@@ -365,21 +413,45 @@ def handle_adapt(args: Any) -> None:
             )
         stats.final_unique_routes_saved = len(route_corpus)
 
-        save_route_corpus(route_corpus, output_path)
-        logger.info(
-            "Adapted %s predicted routes from %s raw route entries. Saved route corpus to %s",
-            len(route_corpus),
-            stats.total_routes_in_raw_files,
-            output_path,
-        )
-
         manifest_path = _manifest_sidecar_path(output_path)
+        if preserve_failed_candidates:
+            if adapted_candidates is None:
+                raise InputError(
+                    "Candidate-preserving adaptation did not produce candidate records.",
+                    code="input.candidate_preservation_missing_records",
+                    context={"input_kind": input_kind},
+                )
+            save_candidate_records(adapted_candidates.records, output_path, adapted_candidates.metadata)
+            manifest_outputs: list[ManifestOutput] = [
+                ("candidate_records", output_path, adapted_candidates.records, "unknown")
+            ]
+            logger.info(
+                "Adapted %s predicted routes from %s raw route entries. Saved candidate records to %s",
+                len(route_corpus),
+                stats.total_routes_in_raw_files,
+                output_path,
+            )
+        else:
+            save_route_corpus(route_corpus, output_path)
+            manifest_outputs: list[ManifestOutput] = [("route_corpus", output_path, route_corpus, "route_corpus")]
+            logger.info(
+                "Adapted %s predicted routes from %s raw route entries. Saved route corpus to %s",
+                len(route_corpus),
+                stats.total_routes_in_raw_files,
+                output_path,
+            )
+
         manifest = create_manifest(
             action="[cli]adapt",
             sources=[input_path] + ([benchmark_path] if benchmark_path is not None else []),
-            outputs=[("route_corpus", output_path, route_corpus, "route_corpus")],
+            outputs=manifest_outputs,
             root_dir=output_path.parent,
-            parameters={"adapter": adapter_name, "benchmark_provided": bool(args.benchmark), "input_kind": input_kind},
+            parameters={
+                "adapter": adapter_name,
+                "benchmark_provided": bool(args.benchmark),
+                "input_kind": input_kind,
+                "preserve_failed_candidates": preserve_failed_candidates,
+            },
             statistics=stats.to_manifest_dict(),
         )
         with open(manifest_path, "w") as f:

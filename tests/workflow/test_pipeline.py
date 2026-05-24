@@ -12,14 +12,21 @@ import pytest
 
 from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
 from retrocast.exceptions import AdapterSchemaError, ChemRuntimeError, InputError, UnsupportedAdapterFeatureError
-from retrocast.io.data import load_routes
+from retrocast.io.data import load_candidate_records, load_routes
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
-from retrocast.models.chem import Route, TargetIdentity
+from retrocast.models.candidates import CandidateRecord
+from retrocast.models.chem import Molecule, ReactionStep, Route, RunStatistics, TargetIdentity
+from retrocast.models.validity import FailureRecord
 from retrocast.typing import InchiKeyStr, SmilesStr
-from retrocast.workflow.adapt import adapt_target_keyed_provider_output, adapt_target_routes
+from retrocast.workflow.adapt import (
+    adapt_target_keyed_candidate_records,
+    adapt_target_keyed_provider_output,
+    adapt_target_routes,
+)
+from retrocast.workflow.analyze import compute_model_statistics
 from retrocast.workflow.collect import collect_benchmark_predictions
 from retrocast.workflow.ingest import ingest_model_predictions
-from retrocast.workflow.score import score_model
+from retrocast.workflow.score import score_candidate_records, score_routes
 from tests.helpers import _make_simple_route, _make_two_step_route, _synthetic_inchikey
 
 # =============================================================================
@@ -279,6 +286,7 @@ class TestIngestModelPredictions:
         # Check file was created
         assert save_path.exists()
         assert save_path.name == "routes.json.gz"
+        assert save_path.with_name("candidates.json.gz").exists()
 
         # Verify saved data can be loaded
         loaded = load_routes(save_path)
@@ -297,6 +305,30 @@ class TestIngestModelPredictions:
 
         route_corpus = adapt_target_keyed_provider_output(raw_data, synthetic_benchmark, SyntheticAdapter())
         collected_routes = collect_benchmark_predictions(route_corpus, synthetic_benchmark)
+
+        ingested_routes, _, _ = ingest_model_predictions(
+            model_name="test-model",
+            benchmark=synthetic_benchmark,
+            raw_data=raw_data,
+            adapter=SyntheticAdapter(),
+            output_dir=tmp_path,
+            provider_output_kind="target_keyed_provider_output",
+        )
+
+        assert ingested_routes == collected_routes.routes_by_target
+
+    @pytest.mark.integration
+    def test_ingest_default_matches_candidate_preserving_adapt_then_collect(
+        self, tmp_path, synthetic_benchmark, synthetic_predictions
+    ):
+        raw_data = {
+            target_id: [route.model_dump(mode="json") for route in routes]
+            for target_id, routes in synthetic_predictions.items()
+        }
+
+        stats = RunStatistics()
+        adapted = adapt_target_keyed_candidate_records(raw_data, synthetic_benchmark, SyntheticAdapter(), stats=stats)
+        collected_routes = collect_benchmark_predictions(adapted.routes, synthetic_benchmark)
 
         ingested_routes, _, _ = ingest_model_predictions(
             model_name="test-model",
@@ -473,6 +505,34 @@ class TestIngestModelPredictions:
         assert "Ingestion failures by code: {'adapter.schema_invalid': 2}" in caplog.text
 
     @pytest.mark.integration
+    def test_ingest_preserves_failed_candidate_slots_by_default(self, tmp_path, synthetic_benchmark):
+        adapter = FailingAdapter()
+        raw_data = {
+            "target_1": [{"bad": "payload"}],
+            "target_2": [{"bad": "payload"}],
+        }
+
+        _, save_path, stats = ingest_model_predictions(
+            model_name="failing-model",
+            benchmark=synthetic_benchmark,
+            raw_data=raw_data,
+            adapter=adapter,
+            output_dir=tmp_path,
+        )
+
+        artifact = load_candidate_records(save_path.with_name("candidates.json.gz"))
+
+        assert stats.routes_failed_transformation == 2
+        assert artifact.metadata.preserves_failed_candidates is True
+        assert artifact.metadata.candidate_denominator == "complete"
+        assert artifact.metadata.n_raw_entries_seen == 2
+        assert artifact.records["target_1"][0].rank == 1
+        assert artifact.records["target_1"][0].route is None
+        assert artifact.records["target_1"][0].adapter_failure is not None
+        assert artifact.records["target_1"][0].adapter_failure.code == "adapter.schema_invalid"
+
+    @pytest.mark.integration
+    @pytest.mark.integration
     def test_ingest_records_chem_failures_per_target(self, tmp_path, synthetic_benchmark):
         adapter = ChemFailingAdapter()
         raw_data = {
@@ -523,13 +583,13 @@ class TestIngestModelPredictions:
 # =============================================================================
 
 
-class TestScoreModel:
-    """Tests for the score_model workflow."""
+class TestScoreRoutes:
+    """Tests for the score_routes workflow."""
 
     @pytest.mark.integration
     def test_score_basic_flow(self, synthetic_benchmark, synthetic_predictions, minimal_stock):
         """Test basic scoring produces correct evaluation results."""
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=synthetic_predictions,
             stock=minimal_stock,
@@ -545,7 +605,7 @@ class TestScoreModel:
     @pytest.mark.integration
     def test_score_solvability_with_minimal_stock(self, synthetic_benchmark, synthetic_predictions, minimal_stock):
         """Test solvability scoring with minimal stock (only C)."""
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=synthetic_predictions,
             stock=minimal_stock,
@@ -553,24 +613,72 @@ class TestScoreModel:
             model_name="test-model",
         )
 
+        assert eval_results.metadata["scoring_denominator"] == {
+            "type": "route_only",
+            "n_candidates_scored": 4,
+        }
+
         # target_1: CC <- C (solvable, leaf is C)
         t1 = eval_results.results["target_1"]
-        assert t1.is_solvable is True
-        assert t1.routes[0].is_solved is True  # First route uses C
-        assert t1.routes[1].is_solved is False  # Second route uses O
+        assert t1.has_stock_terminated_route is True
+        assert t1.candidates[0].constraint_results["stock"].status == "pass"  # First route uses C
+        assert t1.candidates[1].constraint_results["stock"].status == "fail"  # Second route uses O
 
         # target_2: CCC <- CC <- C (solvable, leaf is C)
         t2 = eval_results.results["target_2"]
-        assert t2.is_solvable is True
+        assert t2.has_stock_terminated_route is True
 
-        # target_3: CCCC <- CCC <- CC (not solvable, leaf is CC not in stock)
-        t3 = eval_results.results["target_3"]
-        assert t3.is_solvable is False
+    @pytest.mark.integration
+    def test_score_candidate_records_preserves_raw_rank_denominator(self, synthetic_benchmark, minimal_stock):
+        route = _make_simple_route("CC", "C")
+        candidates = {
+            "target_1": [
+                CandidateRecord(
+                    rank=1,
+                    adapter_failure=FailureRecord(code="adapter.schema_invalid", message="bad syntax"),
+                ),
+                CandidateRecord(rank=2, route=route),
+            ]
+        }
+
+        eval_results = score_candidate_records(
+            benchmark=synthetic_benchmark,
+            candidates=candidates,
+            stock=minimal_stock,
+            stock_name="minimal",
+            model_name="test-model",
+        )
+
+        t1 = eval_results.results["target_1"]
+        assert eval_results.metadata["scoring_denominator"] == {
+            "type": "complete",
+            "n_candidates_scored": 2,
+        }
+        assert t1.candidates[0].adapter_failure is not None
+        assert t1.candidates[0].validity.tiers[0].status == "fail"
+        assert t1.candidates[0].constraint_results["stock"].status == "not_evaluated"
+        assert t1.first_valid_ranks["tier 0"] == 2
+        assert t1.first_solv_ranks["stock"]["tier 0"] == 2
+        assert t1.candidates[0].satisfies_validity(tier=0) is False
+        assert t1.candidates[0].satisfies_constraints(scope="stock") is False
+        assert t1.candidates[0].satisfies_solv(tier=0, scope="stock") is False
+        assert t1.candidates[1].satisfies_validity(tier=0) is True
+        assert t1.candidates[1].satisfies_constraints(scope="stock") is True
+        assert t1.candidates[1].satisfies_solv(tier=0, scope="stock") is True
+        assert t1.first_valid_rank(tier=0) == 2
+        assert t1.first_solv_rank(tier=0, scope="stock") == 2
+        assert t1.reconstruction_rank(scope="stock") == 1
+
+        stats = compute_model_statistics(eval_results, n_boot=100, seed=42)
+        assert stats.mrr_tier_0 is not None
+        assert stats.mrr_solv_0 is not None
+        assert stats.mrr_tier_0.overall.value == pytest.approx(1 / 6)
+        assert stats.mrr_solv_0.overall.value == pytest.approx(1 / 6)
 
     @pytest.mark.integration
     def test_score_solvability_with_extended_stock(self, synthetic_benchmark, synthetic_predictions, extended_stock):
         """Test solvability with extended stock makes more routes solvable."""
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=synthetic_predictions,
             stock=extended_stock,
@@ -580,16 +688,77 @@ class TestScoreModel:
 
         # target_1: Both routes solvable (C and O in stock)
         t1 = eval_results.results["target_1"]
-        assert all(r.is_solved for r in t1.routes)
+        assert all(candidate.constraint_results["stock"].status == "pass" for candidate in t1.candidates)
 
         # target_3: Now solvable (CC is in stock)
         t3 = eval_results.results["target_3"]
-        assert t3.is_solvable is True
+        assert t3.has_stock_terminated_route is True
+        assert t3.first_solv_rank(tier=0, scope="stock") is not None
+
+    @pytest.mark.integration
+    def test_score_solv_0_requires_stock_termination_and_tier_0_validity(self, synthetic_benchmark):
+        """Test solv-0 is stock-gated but tier-0 validity remains inspectable."""
+        target = Molecule(
+            smiles=SmilesStr("CC"),
+            inchikey=InchiKeyStr(_synthetic_inchikey("CC")),
+            synthesis_step=ReactionStep(reactants=[]),
+        )
+        route = Route(target=target)
+
+        eval_results = score_routes(
+            benchmark=synthetic_benchmark,
+            predictions={"target_1": [route]},
+            stock=set(),
+            stock_name="synthetic-stock",
+            model_name="test-model",
+        )
+
+        t1 = eval_results.results["target_1"]
+        scored_candidate = t1.candidates[0]
+
+        assert t1.has_stock_terminated_route is True
+        assert t1.first_valid_rank(tier=0) is None
+        assert t1.first_solv_rank(tier=0, scope="stock") is None
+        assert scored_candidate.constraint_results["stock"].status == "pass"
+        assert scored_candidate.validity.tiers[0].status == "fail"
+        assert scored_candidate.validity.model_dump(mode="json", exclude_none=True)["tier 0"] == {
+            "status": "fail",
+            "checks": [{"code": "tier0.empty_reactants"}],
+        }
+        assert scored_candidate.satisfies_validity(tier=0) is False
+        assert scored_candidate.satisfies_constraints(scope="stock") is True
+        assert scored_candidate.satisfies_solv(tier=0, scope="stock") is False
+        assert [check.code for check in scored_candidate.validity.tiers[0].checks] == ["tier0.empty_reactants"]
+        reaction_validity = scored_candidate.validity.reactions[0]
+        assert reaction_validity.satisfies_validity(tier=0) is False
+        reaction_validity_json = reaction_validity.model_dump(mode="json", exclude_none=True)
+        assert reaction_validity_json == {
+            "reaction_index": 1,
+            "validity": {
+                "tier 0": {
+                    "status": "fail",
+                    "checks": [{"code": "tier0.empty_reactants"}],
+                }
+            },
+        }
+        reaction_tier_0 = reaction_validity.tiers[0]
+        assert reaction_tier_0.status == "fail"
+        assert [check.code for check in reaction_tier_0.checks] == ["tier0.empty_reactants"]
+
+        stats = compute_model_statistics(eval_results, n_boot=100, seed=42)
+        assert stats.tier_0_validity is not None
+        assert stats.solv_0 is not None
+        assert stats.mrr_tier_0 is not None
+        assert stats.mrr_solv_0 is not None
+        assert stats.tier_0_validity.overall.value == 0.0
+        assert stats.solv_0.overall.value == 0.0
+        assert stats.mrr_tier_0.overall.value == 0.0
+        assert stats.mrr_solv_0.overall.value == 0.0
 
     @pytest.mark.integration
     def test_score_gt_match_detection(self, synthetic_benchmark, synthetic_predictions, minimal_stock):
         """Test ground truth match detection."""
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=synthetic_predictions,
             stock=minimal_stock,
@@ -599,19 +768,19 @@ class TestScoreModel:
 
         # target_1: First route matches acceptable
         t1 = eval_results.results["target_1"]
-        assert t1.routes[0].matches_acceptable is True
-        assert t1.routes[1].matches_acceptable is False
-        assert t1.acceptable_rank == 1  # First solved route is acceptable match
+        assert t1.candidates[0].matches_acceptable is True
+        assert t1.candidates[1].matches_acceptable is False
+        assert t1.reconstruction_rank(scope="stock") == 1  # First stock-eligible route is acceptable match
 
         # target_2: Route matches acceptable
         t2 = eval_results.results["target_2"]
-        assert t2.routes[0].matches_acceptable is True
-        assert t2.acceptable_rank == 1
+        assert t2.candidates[0].matches_acceptable is True
+        assert t2.reconstruction_rank(scope="stock") == 1
 
         # target_3: No acceptable routes defined
         t3 = eval_results.results["target_3"]
-        assert t3.routes[0].matches_acceptable is False
-        assert t3.acceptable_rank is None
+        assert t3.candidates[0].matches_acceptable is False
+        assert t3.reconstruction_rank(scope="stock") is None
 
     @pytest.mark.integration
     def test_score_empty_predictions(self, synthetic_benchmark, minimal_stock):
@@ -622,7 +791,7 @@ class TestScoreModel:
             "target_3": [],
         }
 
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=empty_predictions,
             stock=minimal_stock,
@@ -632,9 +801,9 @@ class TestScoreModel:
 
         for target_id in ["target_1", "target_2", "target_3"]:
             t = eval_results.results[target_id]
-            assert t.is_solvable is False
-            assert t.acceptable_rank is None
-            assert len(t.routes) == 0
+            assert t.has_stock_terminated_route is False
+            assert t.reconstruction_rank(scope="stock") is None
+            assert len(t.candidates) == 0
 
     @pytest.mark.integration
     def test_score_missing_predictions_use_empty(self, synthetic_benchmark, minimal_stock):
@@ -644,7 +813,7 @@ class TestScoreModel:
             # target_2 and target_3 missing
         }
 
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=partial_predictions,
             stock=minimal_stock,
@@ -652,14 +821,14 @@ class TestScoreModel:
             model_name="partial-model",
         )
 
-        assert eval_results.results["target_1"].is_solvable is True
-        assert eval_results.results["target_2"].is_solvable is False
-        assert eval_results.results["target_3"].is_solvable is False
+        assert eval_results.results["target_1"].has_stock_terminated_route is True
+        assert eval_results.results["target_2"].has_stock_terminated_route is False
+        assert eval_results.results["target_3"].has_stock_terminated_route is False
 
     @pytest.mark.integration
     def test_score_preserves_metadata(self, synthetic_benchmark, synthetic_predictions, minimal_stock):
         """Test that route metadata (length, convergence) is preserved."""
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=synthetic_predictions,
             stock=minimal_stock,
@@ -713,7 +882,7 @@ class TestFullPipeline:
         loaded_routes = load_routes(save_path)
 
         # Step 3: Score
-        eval_results = score_model(
+        eval_results = score_routes(
             benchmark=synthetic_benchmark,
             predictions=loaded_routes,
             stock=minimal_stock,
@@ -726,9 +895,9 @@ class TestFullPipeline:
         assert len(eval_results.results) == 3
 
         # Check specific results
-        assert eval_results.results["target_1"].is_solvable is True
-        assert eval_results.results["target_2"].is_solvable is True
-        assert eval_results.results["target_3"].is_solvable is False
+        assert eval_results.results["target_1"].has_stock_terminated_route is True
+        assert eval_results.results["target_2"].has_stock_terminated_route is True
+        assert eval_results.results["target_3"].has_stock_terminated_route is False
 
     @pytest.mark.integration
     def test_pipeline_with_deduplication(self, tmp_path, synthetic_benchmark):
@@ -779,7 +948,7 @@ class TestFullPipeline:
             )
 
             loaded = load_routes(save_path)
-            eval_result = score_model(
+            eval_result = score_routes(
                 benchmark=synthetic_benchmark,
                 predictions=loaded,
                 stock=minimal_stock,
@@ -789,8 +958,8 @@ class TestFullPipeline:
             results[model_name] = eval_result
 
         # model-a uses C (in stock), model-b uses O (not in stock)
-        assert results["model-a"].results["target_1"].is_solvable is True
-        assert results["model-b"].results["target_1"].is_solvable is False
+        assert results["model-a"].results["target_1"].has_stock_terminated_route is True
+        assert results["model-b"].results["target_1"].has_stock_terminated_route is False
 
 
 # =============================================================================

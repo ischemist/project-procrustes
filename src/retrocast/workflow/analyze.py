@@ -1,6 +1,13 @@
 import logging
 
-from retrocast.metrics.bootstrap import compute_metric_with_ci, get_is_solvable, make_get_top_k
+from retrocast.metrics.bootstrap import (
+    compute_metric_with_ci,
+    get_has_stock_terminated_route,
+    get_reciprocal_solv_rank,
+    get_reciprocal_tier_rank,
+    get_solv_i,
+    make_get_top_k,
+)
 from retrocast.models.evaluation import EvaluationResults, TargetEvaluation
 from retrocast.models.stats import ModelStatistics, StratifiedMetric
 
@@ -27,11 +34,53 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
 
         group_fn = _get_stratification_length
 
-    # --- 2. Solvability ---
-    # This is always calculable as long as we have a stock.
-    stat_solvability = compute_metric_with_ci(
-        targets, get_is_solvable, "Solvability", group_by=group_fn, n_boot=n_boot, seed=seed
+    # --- 2. Stock termination / Solv-0 ---
+    stat_stock_termination = compute_metric_with_ci(
+        targets,
+        get_has_stock_terminated_route,
+        "Stock-Termination Rate",
+        group_by=group_fn,
+        n_boot=n_boot,
+        seed=seed,
     )
+    stat_tier_0_validity = None
+    stat_solv_0 = None
+    stat_mrr_tier_0 = None
+    stat_mrr_solv_0 = None
+    if any("tier 0" in t.first_valid_ranks for t in targets):
+        stat_tier_0_validity = compute_metric_with_ci(
+            targets,
+            lambda target: 1.0 if target.first_valid_rank(tier=0) is not None else 0.0,
+            "Tier-0 Validity",
+            group_by=group_fn,
+            n_boot=n_boot,
+            seed=seed,
+        )
+        stat_mrr_tier_0 = compute_metric_with_ci(
+            targets,
+            get_reciprocal_tier_rank(0),
+            "MRR Tier-0",
+            group_by=group_fn,
+            n_boot=n_boot,
+            seed=seed,
+        )
+    if any("tier 0" in t.first_solv_ranks.get("stock", {}) for t in targets):
+        stat_solv_0 = compute_metric_with_ci(
+            targets,
+            get_solv_i("stock", 0),
+            "Solv-0[STR]",
+            group_by=group_fn,
+            n_boot=n_boot,
+            seed=seed,
+        )
+        stat_mrr_solv_0 = compute_metric_with_ci(
+            targets,
+            get_reciprocal_solv_rank("stock", 0),
+            "MRR Solv-0[STR]",
+            group_by=group_fn,
+            n_boot=n_boot,
+            seed=seed,
+        )
 
     # --- 3. Top-K Accuracy ---
     # Only calculate this if the benchmark actually has acceptable routes.
@@ -70,7 +119,11 @@ def compute_model_statistics(eval_results: EvaluationResults, n_boot: int = 1000
         model_name=eval_results.model_name,
         benchmark=eval_results.benchmark_name,
         stock=eval_results.stock_name,
-        solvability=stat_solvability,
+        stock_termination=stat_stock_termination,
+        tier_0_validity=stat_tier_0_validity,
+        solv_0=stat_solv_0,
+        mrr_tier_0=stat_mrr_tier_0,
+        mrr_solv_0=stat_mrr_solv_0,
         top_k_accuracy=stat_topk,
         total_wall_time=total_wall_time,
         total_cpu_time=total_cpu_time,

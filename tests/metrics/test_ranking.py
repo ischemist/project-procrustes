@@ -7,7 +7,7 @@ Tests probabilistic ranking and pairwise tournament using synthetic evaluation d
 import pytest
 
 from retrocast.metrics.ranking import compute_pairwise_tournament, compute_probabilistic_ranking
-from retrocast.models.evaluation import EvaluationResults, ScoredRoute, TargetEvaluation
+from retrocast.models.evaluation import EvaluationResults, TargetEvaluation
 from retrocast.models.stats import ModelComparison
 
 # =============================================================================
@@ -23,36 +23,13 @@ def _make_target_evaluation(
     is_convergent: bool = False,
 ) -> TargetEvaluation:
     """Create a synthetic TargetEvaluation with optional solved route."""
-    routes = []
-    if solvable:
-        # Add a solved route at acceptable_rank position
-        if acceptable_rank is None:
-            acceptable_rank = 1
-        # Add solved route at position acceptable_rank
-        for i in range(1, acceptable_rank + 1):
-            is_solved = i == acceptable_rank
-            routes.append(
-                ScoredRoute(
-                    rank=i,
-                    is_solved=is_solved,
-                    matches_acceptable=is_solved,
-                )
-            )
-        # Add more unsolved routes for realism
-        for i in range(acceptable_rank + 1, acceptable_rank + 4):
-            routes.append(
-                ScoredRoute(
-                    rank=i,
-                    is_solved=False,
-                    matches_acceptable=False,
-                )
-            )
+    if solvable and acceptable_rank is None:
+        acceptable_rank = 1
 
     return TargetEvaluation(
         target_id=target_id,
-        routes=routes,
-        is_solvable=solvable,
-        acceptable_rank=acceptable_rank,
+        has_stock_terminated_route=solvable,
+        first_reconstruction_ranks={"stock": acceptable_rank},
         stratification_length=route_length,
         stratification_is_convergent=is_convergent,
     )
@@ -176,9 +153,9 @@ class TestComputeProbabilisticRanking:
             )
         }
 
-        # Simple metric: is_solvable as 0/1
+        # Simple metric: stock termination as 0/1
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         ranking = compute_probabilistic_ranking(results, solvability, n_boot=100, seed=42)
 
@@ -191,7 +168,7 @@ class TestComputeProbabilisticRanking:
         """Three models should be ranked by solvability rate."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         ranking = compute_probabilistic_ranking(three_models_perfect_data, solvability, n_boot=1000, seed=42)
 
@@ -211,7 +188,7 @@ class TestComputeProbabilisticRanking:
         """For each model, rank probabilities should sum to ~1.0."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         ranking = compute_probabilistic_ranking(three_models_perfect_data, solvability, n_boot=100, seed=42)
 
@@ -223,7 +200,7 @@ class TestComputeProbabilisticRanking:
         """All rank probabilities should be in [0, 1]."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         ranking = compute_probabilistic_ranking(three_models_perfect_data, solvability, n_boot=100, seed=42)
 
@@ -236,7 +213,7 @@ class TestComputeProbabilisticRanking:
         """Expected rank should be mean of rank probabilities."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         ranking = compute_probabilistic_ranking(three_models_perfect_data, solvability, n_boot=100, seed=42)
 
@@ -248,7 +225,7 @@ class TestComputeProbabilisticRanking:
         """Results should be deterministic with same seed."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         ranking1 = compute_probabilistic_ranking(three_models_perfect_data, solvability, n_boot=100, seed=42)
         ranking2 = compute_probabilistic_ranking(three_models_perfect_data, solvability, n_boot=100, seed=42)
@@ -262,7 +239,7 @@ class TestComputeProbabilisticRanking:
         """Different seeds may produce different results (but with clear winners, may be stable)."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         ranking1 = compute_probabilistic_ranking(three_models_perfect_data, solvability, n_boot=100, seed=1)
         ranking2 = compute_probabilistic_ranking(three_models_perfect_data, solvability, n_boot=100, seed=2)
@@ -277,9 +254,10 @@ class TestComputeProbabilisticRanking:
 
         def acceptable_rank_metric(te: TargetEvaluation) -> float:
             # Convert to metric where lower is better (like rank position)
-            if te.acceptable_rank is None:
+            rank = te.reconstruction_rank(scope="stock")
+            if rank is None:
                 return 0.0  # Worst possible (no solution)
-            return 1.0 / te.acceptable_rank  # Reciprocal so higher is better for boot dist
+            return 1.0 / rank  # Reciprocal so higher is better for boot dist
 
         ranking = compute_probabilistic_ranking(three_models_perfect_data, acceptable_rank_metric, n_boot=100, seed=42)
 
@@ -300,7 +278,7 @@ class TestComputePairwiseTournament:
         """Two models with identical results should have ~0 difference."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         comparisons = compute_pairwise_tournament(two_models_identical, solvability, "solvability", n_boot=100)
 
@@ -315,7 +293,7 @@ class TestComputePairwiseTournament:
         """With N models, should have N*(N-1) comparisons (directed)."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         comparisons = compute_pairwise_tournament(three_models_perfect_data, solvability, "solvability", n_boot=50)
 
@@ -327,7 +305,7 @@ class TestComputePairwiseTournament:
         """If A vs B has diff=d, B vs A should have diff=-d."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         comparisons = compute_pairwise_tournament(three_models_perfect_data, solvability, "solvability", n_boot=100)
 
@@ -348,7 +326,7 @@ class TestComputePairwiseTournament:
         """Each comparison should have all required fields."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         comparisons = compute_pairwise_tournament(three_models_perfect_data, solvability, "solvability", n_boot=50)
 
@@ -368,7 +346,7 @@ class TestComputePairwiseTournament:
         """CI lower should be <= mean <= CI upper."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         comparisons = compute_pairwise_tournament(three_models_perfect_data, solvability, "solvability", n_boot=100)
 
@@ -379,7 +357,7 @@ class TestComputePairwiseTournament:
         """Should be able to rank models based on tournament results."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         comparisons = compute_pairwise_tournament(three_models_perfect_data, solvability, "solvability", n_boot=50)
 
@@ -389,7 +367,7 @@ class TestComputePairwiseTournament:
         """Comparisons of identical models should not be significant."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         comparisons = compute_pairwise_tournament(two_models_identical, solvability, "solvability", n_boot=200)
 
@@ -409,7 +387,7 @@ class TestRankingIntegration:
         """Test full workflow: ranking then pairwise comparison."""
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         # Step 1: Get probabilistic ranking
         ranking = compute_probabilistic_ranking(three_models_perfect_data, solvability, n_boot=100, seed=42)
@@ -453,7 +431,7 @@ class TestRankingIntegration:
         }
 
         def solvability(te: TargetEvaluation) -> float:
-            return 1.0 if te.is_solvable else 0.0
+            return 1.0 if te.has_stock_terminated_route else 0.0
 
         ranking = compute_probabilistic_ranking(models, solvability, n_boot=100, seed=42)
 

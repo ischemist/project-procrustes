@@ -113,7 +113,7 @@ class TestHandleScoreFile:
         results = EvaluationResults.model_validate(data)
         assert results.model_name == "test-model"
         assert "test-1" in results.results
-        assert results.results["test-1"].is_solvable is True
+        assert results.results["test-1"].has_stock_terminated_route is True
 
     def test_handle_score_file_solvable_with_stock(self, test_files):
         """Test that route is solvable when leaf is in stock."""
@@ -132,7 +132,7 @@ class TestHandleScoreFile:
 
         data = load_json_gz(test_files["output"])
         results = EvaluationResults.model_validate(data)
-        assert results.results["test-1"].is_solvable is True
+        assert results.results["test-1"].has_stock_terminated_route is True
 
     def test_handle_score_file_unsolvable(self, tmp_path):
         """Test scoring with route that uses non-stock molecule."""
@@ -180,7 +180,7 @@ class TestHandleScoreFile:
 
         data = load_json_gz(output_path)
         results = EvaluationResults.model_validate(data)
-        assert results.results["test-1"].is_solvable is False
+        assert results.results["test-1"].has_stock_terminated_route is False
 
     def test_handle_score_file_missing_benchmark(self, test_files):
         """Test handler exits with missing benchmark."""

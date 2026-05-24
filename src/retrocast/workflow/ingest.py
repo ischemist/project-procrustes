@@ -6,11 +6,16 @@ from typing import Any, Literal
 from retrocast.adapters.base_adapter import BaseAdapter
 from retrocast.curation.sampling import sample_k_by_length, sample_random_k, sample_top_k
 from retrocast.exceptions import InputError
-from retrocast.io.data import save_routes
+from retrocast.io.data import save_candidate_records, save_routes
 from retrocast.io.provenance import generate_model_hash
 from retrocast.models.benchmark import BenchmarkSet
+from retrocast.models.candidates import CandidateAuditMetadata, CandidateRecordsDict
 from retrocast.models.chem import Route, RunStatistics
-from retrocast.workflow.adapt import adapt_provider_output, adapt_target_keyed_provider_output
+from retrocast.workflow.adapt import (
+    adapt_provider_output,
+    adapt_target_keyed_candidate_records,
+    adapt_target_keyed_provider_output,
+)
 from retrocast.workflow.collect import collect_benchmark_predictions
 
 logger = logging.getLogger(__name__)
@@ -35,6 +40,7 @@ def ingest_model_predictions(
     sample_k: int | None = None,
     ignore_stereo: bool = False,
     provider_output_kind: ProviderOutputKind = "target_keyed_provider_output",
+    preserve_failed_candidates: bool | None = None,
     progress_callback: Callable[[], None] | None = None,
 ) -> tuple[dict[str, list[Route]], Path, RunStatistics]:
     """
@@ -68,7 +74,29 @@ def ingest_model_predictions(
         logger.info(f"Applying sampling: {sampling_strategy} (k={sample_k})")
 
     stats = RunStatistics()
-    if provider_output_kind == "target_keyed_provider_output":
+    candidate_records: CandidateRecordsDict | None = None
+    candidate_metadata: CandidateAuditMetadata | None = None
+    if preserve_failed_candidates is None:
+        preserve_failed_candidates = provider_output_kind == "target_keyed_provider_output"
+    if preserve_failed_candidates:
+        if provider_output_kind != "target_keyed_provider_output":
+            raise InputError(
+                "Candidate-preserving ingest currently requires target-keyed provider output.",
+                code="input.candidate_preservation_requires_target_keyed_output",
+                context={"provider_output_kind": provider_output_kind},
+            )
+        adapted_candidates = adapt_target_keyed_candidate_records(
+            raw_data,
+            benchmark,
+            adapter,
+            ignore_stereo=ignore_stereo,
+            stats=stats,
+            progress_callback=progress_callback,
+        )
+        route_corpus = adapted_candidates.routes
+        candidate_records = adapted_candidates.records
+        candidate_metadata = adapted_candidates.metadata
+    elif provider_output_kind == "target_keyed_provider_output":
         route_corpus = adapt_target_keyed_provider_output(
             raw_data,
             benchmark,
@@ -121,6 +149,8 @@ def ingest_model_predictions(
     save_file = save_path_dir / "routes.json.gz"
 
     save_routes(processed_routes, save_file)
+    if candidate_records is not None and candidate_metadata is not None:
+        save_candidate_records(candidate_records, save_path_dir / "candidates.json.gz", candidate_metadata)
 
     logger.info(
         f"Ingestion complete. Adapted {stats.total_routes_in_raw_files} raw route entries. "

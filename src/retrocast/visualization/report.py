@@ -6,7 +6,27 @@ This module handles the formatting of results into text tables (Markdown/Rich).
 
 from rich.table import Table
 
-from retrocast.models.stats import ModelComparison, ModelStatistics, StratifiedMetric
+from retrocast.models.stats import MetricResult, ModelComparison, ModelStatistics, StratifiedMetric
+
+
+def _metric_value(res: MetricResult, *, percent: bool) -> str:
+    return f"{res.value:.1%}" if percent else f"{res.value:.3f}"
+
+
+def _metric_ci(res: MetricResult, *, percent: bool) -> str:
+    if percent:
+        return f"[{res.ci_lower:.1%}, {res.ci_upper:.1%}]"
+    return f"[{res.ci_lower:.3f}, {res.ci_upper:.3f}]"
+
+
+def _format_duration(seconds: float) -> str:
+    if seconds < 60:
+        return f"{seconds:.2f} s"
+    if seconds < 3600:
+        minutes = seconds / 60
+        return f"{minutes:.1f} min"
+    hours = seconds / 3600
+    return f"{hours:.1f} h"
 
 
 def create_paired_comparison_table(
@@ -152,33 +172,53 @@ def create_single_model_summary_table(stats: ModelStatistics, visible_k: list[in
     table = Table(
         title=f"Analysis Results: [bold cyan]{stats.model_name}[/]", header_style="bold magenta", show_lines=False
     )
-    table.add_column("Metric", style="bold")
+    table.add_column("Metric", style="bold", min_width=32)
     table.add_column("Value", justify="right")
     table.add_column("95% CI", justify="center")
     table.add_column("N", justify="right")
-    table.add_column("Reliability", justify="center")
+    table.add_column("Reliability", justify="center", min_width=10)
 
     # Helper to add rows
-    def _add(name: str, res):
+    def _add(name: str, res: MetricResult, *, percent: bool = True) -> None:
         color = "green" if res.reliability.code == "OK" else "yellow"
-        rel_icon = "✅" if res.reliability.code == "OK" else f"⚠️ {res.reliability.code}"
+        reliability_labels = {
+            "OK": "Ok",
+            "LOW_N": "Low N",
+            "EXTREME_P": "Extreme P",
+        }
+        reliability = reliability_labels[res.reliability.code]
 
         table.add_row(
             name,
-            f"[{color}]{res.value:.1%}[/]",
-            f"[{color}][{res.ci_lower:.1%}, {res.ci_upper:.1%}][/]",
+            f"[{color}]{_metric_value(res, percent=percent)}[/]",
+            f"[{color}]{_metric_ci(res, percent=percent)}[/]",
             str(res.n_samples),
-            rel_icon,
+            reliability,
         )
 
     if visible_k is None:
         visible_k = [1, 5, 10, 50]
 
-    _add("Solvability", stats.solvability.overall)
+    table.add_row("[dim]Solv-N hierarchy[/]", "", "", "", "")
+    if stats.tier_0_validity is not None:
+        _add("Tier-0 Validity", stats.tier_0_validity.overall)
+    if stats.solv_0 is not None:
+        _add("Solv-0[STR]", stats.solv_0.overall)
 
-    # Add Top-K
-    for k in sorted(stats.top_k_accuracy.keys()):
-        if k in visible_k:
+    has_rank_metrics = stats.mrr_tier_0 is not None or stats.mrr_solv_0 is not None
+    if has_rank_metrics:
+        table.add_section()
+        table.add_row("[dim]Rank within Solv-N hierarchy[/]", "", "", "", "")
+        if stats.mrr_tier_0 is not None:
+            _add("MRR Tier-0", stats.mrr_tier_0.overall, percent=False)
+        if stats.mrr_solv_0 is not None:
+            _add("MRR Solv-0[STR]", stats.mrr_solv_0.overall, percent=False)
+
+    visible_top_k = [k for k in sorted(stats.top_k_accuracy.keys()) if k in visible_k]
+    if visible_top_k:
+        table.add_section()
+        table.add_row("[dim]Benchmark route reconstruction[/]", "", "", "", "")
+        for k in visible_top_k:
             _add(f"Top-{k}", stats.top_k_accuracy[k].overall)
 
     # Add runtime metrics if available
@@ -188,7 +228,7 @@ def create_single_model_summary_table(stats: ModelStatistics, visible_k: list[in
         if stats.total_wall_time is not None:
             table.add_row(
                 "Total Wall Time",
-                f"[cyan]{stats.total_wall_time:.2f}s[/]",
+                f"[cyan]{_format_duration(stats.total_wall_time)}[/]",
                 "",
                 "",
                 "",
@@ -196,7 +236,7 @@ def create_single_model_summary_table(stats: ModelStatistics, visible_k: list[in
             if stats.mean_wall_time is not None:
                 table.add_row(
                     "Mean Wall Time",
-                    f"[cyan]{stats.mean_wall_time:.2f}s[/]",
+                    f"[cyan]{_format_duration(stats.mean_wall_time)}[/]",
                     "",
                     "",
                     "",
@@ -205,7 +245,7 @@ def create_single_model_summary_table(stats: ModelStatistics, visible_k: list[in
         if stats.total_cpu_time is not None:
             table.add_row(
                 "Total CPU Time",
-                f"[cyan]{stats.total_cpu_time:.2f}s[/]",
+                f"[cyan]{_format_duration(stats.total_cpu_time)}[/]",
                 "",
                 "",
                 "",
@@ -213,7 +253,7 @@ def create_single_model_summary_table(stats: ModelStatistics, visible_k: list[in
             if stats.mean_cpu_time is not None:
                 table.add_row(
                     "Mean CPU Time",
-                    f"[cyan]{stats.mean_cpu_time:.2f}s[/]",
+                    f"[cyan]{_format_duration(stats.mean_cpu_time)}[/]",
                     "",
                     "",
                     "",
@@ -222,7 +262,7 @@ def create_single_model_summary_table(stats: ModelStatistics, visible_k: list[in
     return table
 
 
-def format_metric_table(stats: StratifiedMetric) -> str:
+def format_metric_table(stats: StratifiedMetric, *, percent: bool = True) -> str:
     """Markdown table generator with reliability flags."""
     lines = []
 
@@ -231,8 +271,10 @@ def format_metric_table(stats: StratifiedMetric) -> str:
     if stats.overall.reliability.code != "OK":
         flag_icon = f" ⚠️ {stats.overall.reliability.code}"
 
-    lines.append(f"**Overall**: {stats.overall.value:.1%} (N={stats.overall.n_samples}){flag_icon}")
-    lines.append(f"CI: [{stats.overall.ci_lower:.1%}, {stats.overall.ci_upper:.1%}]")
+    lines.append(
+        f"**Overall**: {_metric_value(stats.overall, percent=percent)} (N={stats.overall.n_samples}){flag_icon}"
+    )
+    lines.append(f"CI: {_metric_ci(stats.overall, percent=percent)}")
 
     if stats.overall.reliability.code != "OK":
         lines.append(f"*{stats.overall.reliability.message}*")
@@ -250,8 +292,8 @@ def format_metric_table(stats: StratifiedMetric) -> str:
 
     for key in sorted_keys:
         res = stats.by_group[key]
-        ci = f"[{res.ci_lower:.1%}, {res.ci_upper:.1%}]"
-        val = f"{res.value:.1%}"
+        ci = _metric_ci(res, percent=percent)
+        val = _metric_value(res, percent=percent)
 
         # Determine flag
         flag = ""
@@ -288,28 +330,45 @@ def generate_markdown_report(stats: ModelStatistics, visible_k: list[int] | None
         sections.append("## Runtime Metrics")
         sections.append("")
         if stats.total_wall_time is not None:
-            sections.append(f"- **Total Wall Time**: {stats.total_wall_time:.2f}s")
+            sections.append(f"- **Total Wall Time**: {_format_duration(stats.total_wall_time)}")
             if stats.mean_wall_time is not None:
-                sections.append(f"- **Mean Wall Time**: {stats.mean_wall_time:.2f}s per target")
+                sections.append(f"- **Mean Wall Time**: {_format_duration(stats.mean_wall_time)} per target")
         if stats.total_cpu_time is not None:
-            sections.append(f"- **Total CPU Time**: {stats.total_cpu_time:.2f}s")
+            sections.append(f"- **Total CPU Time**: {_format_duration(stats.total_cpu_time)}")
             if stats.mean_cpu_time is not None:
-                sections.append(f"- **Mean CPU Time**: {stats.mean_cpu_time:.2f}s per target")
+                sections.append(f"- **Mean CPU Time**: {_format_duration(stats.mean_cpu_time)} per target")
         sections.append("")
 
-    sections.extend(
-        [
-            "## Solvability",
-            format_metric_table(stats.solvability),
-            "",
-        ]
-    )
+    if stats.tier_0_validity is not None:
+        sections.extend(
+            ["## Solv-N Hierarchy", "", "### Tier-0 Validity", format_metric_table(stats.tier_0_validity), ""]
+        )
+    if stats.solv_0 is not None:
+        if stats.tier_0_validity is None:
+            sections.extend(["## Solv-N Hierarchy", ""])
+        sections.extend(["### Solv-0[STR]", format_metric_table(stats.solv_0), ""])
+    if stats.mrr_tier_0 is not None:
+        sections.extend(
+            [
+                "## Rank Within Solv-N Hierarchy",
+                "",
+                "### MRR Tier-0",
+                format_metric_table(stats.mrr_tier_0, percent=False),
+                "",
+            ]
+        )
+    if stats.mrr_solv_0 is not None:
+        if stats.mrr_tier_0 is None:
+            sections.extend(["## Rank Within Solv-N Hierarchy", ""])
+        sections.extend(["### MRR Solv-0[STR]", format_metric_table(stats.mrr_solv_0, percent=False), ""])
 
     available_k = sorted(stats.top_k_accuracy.keys())
 
     for k in available_k:
         if k in visible_k:
-            sections.append(f"## Top-{k} Accuracy")
+            if "## Benchmark Route Reconstruction" not in sections:
+                sections.extend(["## Benchmark Route Reconstruction", ""])
+            sections.append(f"### Top-{k} Accuracy")
             sections.append(format_metric_table(stats.top_k_accuracy[k]))
             sections.append("")
 

@@ -6,6 +6,7 @@ import numpy as np
 
 from retrocast.models.evaluation import TargetEvaluation
 from retrocast.models.stats import MetricResult, ModelComparison, ReliabilityFlag, StratifiedMetric
+from retrocast.models.validity import ScopeId
 
 T = TypeVar("T")
 
@@ -108,13 +109,37 @@ def compute_metric_with_ci(
 # --- Extractor Helpers ---
 
 
-def get_is_solvable(t: TargetEvaluation) -> float:
-    return 1.0 if t.is_solvable else 0.0
+def get_has_stock_terminated_route(t: TargetEvaluation) -> float:
+    return 1.0 if t.has_stock_terminated_route else 0.0
+
+
+def get_solv_i(scope_id: ScopeId, tier: int) -> Callable[[TargetEvaluation], float]:
+    def _get_solv_i(t: TargetEvaluation) -> float:
+        return 1.0 if t.first_solv_rank(tier=tier, scope=scope_id) is not None else 0.0
+
+    return _get_solv_i
+
+
+def get_reciprocal_tier_rank(tier: int) -> Callable[[TargetEvaluation], float]:
+    def _get_reciprocal_tier_rank(t: TargetEvaluation) -> float:
+        rank = t.first_valid_rank(tier=tier)
+        return 0.0 if rank is None else 1.0 / rank
+
+    return _get_reciprocal_tier_rank
+
+
+def get_reciprocal_solv_rank(scope_id: ScopeId, tier: int) -> Callable[[TargetEvaluation], float]:
+    def _get_reciprocal_solv_rank(t: TargetEvaluation) -> float:
+        rank = t.first_solv_rank(tier=tier, scope=scope_id)
+        return 0.0 if rank is None else 1.0 / rank
+
+    return _get_reciprocal_solv_rank
 
 
 def make_get_top_k(k: int) -> Callable[[TargetEvaluation], float]:
     def _get_top_k(t: TargetEvaluation) -> float:
-        return 1.0 if (t.acceptable_rank is not None and t.acceptable_rank <= k) else 0.0
+        rank = t.reconstruction_rank(scope="stock")
+        return 1.0 if (rank is not None and rank <= k) else 0.0
 
     return _get_top_k
 

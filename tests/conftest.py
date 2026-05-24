@@ -240,7 +240,7 @@ def synthetic_statistics_factory():
         stock:      Stored as ModelStatistics.stock      (default: "n5-stock")
 
     Returns:
-        A minimal but fully valid ModelStatistics object with solvability=0.75.
+        A minimal but fully valid ModelStatistics object with stock_termination=0.75.
 
     Examples:
         stats = synthetic_statistics_factory()
@@ -262,7 +262,7 @@ def synthetic_statistics_factory():
             reliability=reliability,
         )
         stratified_metric = StratifiedMetric(
-            metric_name="solvability",
+            metric_name="stock_termination",
             overall=metric_result,
             by_group={},
         )
@@ -270,7 +270,7 @@ def synthetic_statistics_factory():
             model_name=model_name,
             benchmark=benchmark,
             stock=stock,
-            solvability=stratified_metric,
+            stock_termination=stratified_metric,
             top_k_accuracy={},
         )
 

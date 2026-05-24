@@ -33,17 +33,20 @@ fig = plot_comparison(
 fig.show()
 ```
 
-Metric types include `"Solvability"`, `"Top-K"`, and `"GT-Rank"`.
+Metric types currently include legacy visualization labels such as
+`"Solvability"` and `"Top-K"`. The legacy `"Solvability"` plot label predates
+the Solv-N migration and corresponds to stock termination. Prefer the tabular
+report for explicit `Tier-0` and `Solv-0[STR]` labels.
 
 ## Custom Plots
 
 ```python title="Access raw data for custom plots"
 import plotly.graph_objects as go
 
-lengths = sorted(stats.solvability.by_group.keys())
-values = [stats.solvability.by_group[length].value for length in lengths]
-ci_lower = [stats.solvability.by_group[length].ci_lower for length in lengths]
-ci_upper = [stats.solvability.by_group[length].ci_upper for length in lengths]
+lengths = sorted(stats.solv_0.by_group.keys())
+values = [stats.solv_0.by_group[length].value for length in lengths]
+ci_lower = [stats.solv_0.by_group[length].ci_lower for length in lengths]
+ci_upper = [stats.solv_0.by_group[length].ci_upper for length in lengths]
 
 fig = go.Figure()
 fig.add_trace(
@@ -57,7 +60,7 @@ fig.add_trace(
             "arrayminus": [value - lower for value, lower in zip(values, ci_lower, strict=True)],
         },
         mode="lines+markers",
-        name="Solvability",
+        name="Solv-0[STR]",
     )
 )
 fig.show()

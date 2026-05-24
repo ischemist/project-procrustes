@@ -19,7 +19,7 @@ from retrocast.adapters.retrostar_adapter import RetroStarAdapter
 from retrocast.cli.adhoc import handle_adapt, handle_collect, handle_create_benchmark
 from retrocast.exceptions import ChemRuntimeError
 from retrocast.io.blob import load_json_gz, save_json_gz
-from retrocast.io.data import load_route_corpus, save_route_corpus
+from retrocast.io.data import load_candidate_records, load_route_corpus, save_route_corpus
 from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
 from retrocast.models.chem import Route, TargetIdentity
 from retrocast.typing import SmilesStr
@@ -495,6 +495,42 @@ class TestHandleAdapt:
         route_corpus = load_route_corpus(output_path)
         assert len(route_corpus) == 1
         assert route_corpus[0].target.smiles == "CC"
+
+    def test_adapt_can_preserve_failed_candidate_slots(self, tmp_path, monkeypatch):
+        input_path = tmp_path / "raw.json.gz"
+        output_path = tmp_path / "route-corpus.jsonl.gz"
+        benchmark_path = tmp_path / "benchmark.json.gz"
+        save_json_gz({"target_1": [{"bad": "payload"}]}, input_path)
+        monkeypatch.setattr("retrocast.cli.adhoc.get_adapter", lambda name: ChemFailingAdapter())
+
+        benchmark = BenchmarkSet(
+            name="candidate-adapt-test",
+            targets={
+                "target_1": BenchmarkTarget(
+                    id="target_1",
+                    smiles=SmilesStr("CC"),
+                    inchi_key=_synthetic_inchikey("CC"),
+                    acceptable_routes=[],
+                )
+            },
+        )
+        save_json_gz(benchmark.model_dump(mode="json"), benchmark_path)
+
+        args = Namespace(
+            input=str(input_path),
+            output=str(output_path),
+            adapter="synthetic",
+            benchmark=str(benchmark_path),
+            input_kind="target-keyed-provider-output",
+            preserve_failed_candidates=True,
+            no_progress=True,
+        )
+
+        handle_adapt(args)
+
+        candidates = load_candidate_records(output_path)
+        assert candidates.metadata.preserves_failed_candidates is True
+        assert candidates.records["target_1"][0].adapter_failure is not None
 
     def test_collect_builds_benchmark_keyed_routes(self, tmp_path):
         input_path = tmp_path / "route-corpus.jsonl.gz"

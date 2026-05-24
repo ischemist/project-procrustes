@@ -12,11 +12,13 @@ icon: lucide/book-open-text
 | `adapt_prediction(raw, adapter)` | Adapt one raw prediction payload | `PredictedRoute \| None` |
 | `adapt_provider_output(raw, adapter)` | Adapt one raw provider output | `list[PredictedRoute]` |
 | `adapt_target_keyed_provider_output(raw, benchmark, adapter)` | Adapt target-keyed raw output with benchmark key validation | `list[PredictedRoute]` |
+| `adapt_target_keyed_candidate_records(raw, benchmark, adapter)` | Adapt target-keyed raw output while preserving failed rank slots | `AdaptedCandidateRecords` |
 | `adapt_routes(raw, target, adapter)` | Deprecated in v0.6; use provider-output workflows | `list[Route]` |
 | `adapt_single_route(raw, target, adapter)` | Deprecated in v0.6; use `adapt_route(raw, adapter)` | `Route \| None` |
 | `collect_benchmark_predictions(predictions, benchmark)` | Collect predictions onto benchmark targets | `CollectedBenchmarkRoutes` |
 | `deduplicate_routes(routes)` | Remove duplicate routes | `list[Route]` |
-| `score_predictions(model_name, benchmark, predictions, stock)` | Evaluate routes | `ScoredResults` |
+| `score_predictions(benchmark, predictions, stock, model_name)` | Evaluate benchmark-keyed routes | `EvaluationResults` |
+| `score_candidate_records(benchmark, candidates, stock, stock_name, model_name)` | Evaluate candidate records with failed rank slots | `EvaluationResults` |
 | `compute_model_statistics(results, n_boot)` | Bootstrap statistics | `ModelStatistics` |
 | `load_benchmark(path)` | Load benchmark definition | `Benchmark` |
 | `load_stock_file(path)` | Load stock molecules | `set[str]` |

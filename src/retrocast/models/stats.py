@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Literal
 
 from pydantic import BaseModel
@@ -37,7 +39,11 @@ class ModelStatistics(BaseModel):
     stock: str
 
     # The metrics we care about
-    solvability: StratifiedMetric
+    stock_termination: StratifiedMetric
+    tier_0_validity: StratifiedMetric | None = None
+    solv_0: StratifiedMetric | None = None
+    mrr_tier_0: StratifiedMetric | None = None
+    mrr_solv_0: StratifiedMetric | None = None
     top_k_accuracy: dict[int, StratifiedMetric]  # k -> metric
 
     # Aggregate runtime metrics (in seconds)

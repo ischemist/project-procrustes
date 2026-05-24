@@ -16,8 +16,8 @@ from retrocast.cli.progress import create_cli_progress, estimate_raw_route_entri
 from retrocast.curation.sampling import SAMPLING_STRATEGIES
 from retrocast.exceptions import AdapterResolutionError, InputError, RetroCastException, SecurityError
 from retrocast.io.blob import load_json_artifact, load_json_gz, save_json_gz
-from retrocast.io.data import load_benchmark, load_execution_stats, load_routes, load_stock_file
-from retrocast.io.provenance import create_manifest
+from retrocast.io.data import load_benchmark, load_candidate_records, load_execution_stats, load_routes, load_stock_file
+from retrocast.io.provenance import ManifestOutput, create_manifest
 from retrocast.models.evaluation import EvaluationResults
 from retrocast.models.provenance import VerificationReport
 from retrocast.paths import (
@@ -259,6 +259,7 @@ def _ingest_single(
                         sample_k=k,
                         ignore_stereo=ignore_stereo,
                         provider_output_kind=input_kind,
+                        preserve_failed_candidates=None,
                         progress_callback=advance_progress,
                     )
             logger.info(
@@ -281,13 +282,19 @@ def _ingest_single(
                 sample_k=k,
                 ignore_stereo=ignore_stereo,
                 provider_output_kind=input_kind,
+                preserve_failed_candidates=None,
             )
 
         manifest_root = paths["raw"].parent.resolve()
+        manifest_outputs: list[ManifestOutput] = [(out_path, processed_routes, "predictions")]
+        candidates_path = out_path.with_name("candidates.json.gz")
+        if candidates_path.exists():
+            candidate_artifact = load_candidate_records(candidates_path)
+            manifest_outputs.append((candidates_path, candidate_artifact, "unknown"))
         manifest = create_manifest(
             action="ingest",
             sources=[raw_path, paths["benchmarks"] / f"{benchmark_name}.json.gz"],
-            outputs=[(out_path, processed_routes, "predictions")],
+            outputs=manifest_outputs,
             root_dir=manifest_root,
             parameters={
                 "model": model_name,
@@ -340,6 +347,7 @@ def handle_ingest(args: Any, config: dict[str, Any]) -> None:
 def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) -> None:
     bench_path = paths["benchmarks"] / f"{benchmark_name}.json.gz"
     routes_path = paths["processed"] / benchmark_name / model_name / "routes.json.gz"
+    candidates_path = paths["processed"] / benchmark_name / model_name / "candidates.json.gz"
 
     # Security: Ensure paths are within bounds
     try:
@@ -371,7 +379,8 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
             return
 
         stock_set = load_stock_file(stock_path, return_as="inchikey")
-        predictions = load_routes(routes_path)
+        candidate_artifact = load_candidate_records(candidates_path) if candidates_path.exists() else None
+        predictions = None if candidate_artifact is not None else load_routes(routes_path)
 
         # Load execution stats if available
         execution_stats = None
@@ -392,15 +401,27 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
             except Exception as e:
                 logger.warning(f"Failed to load execution stats from {exec_stats_path}: {e}")
 
-        eval_results = score.score_model(
-            benchmark=benchmark,
-            predictions=predictions,
-            stock=stock_set,
-            stock_name=stock_name,
-            model_name=model_name,
-            execution_stats=execution_stats,
-            match_level=match_level,
-        )
+        if candidate_artifact is not None:
+            eval_results = score.score_candidate_records(
+                benchmark=benchmark,
+                candidates=candidate_artifact.records,
+                stock=stock_set,
+                stock_name=stock_name,
+                model_name=model_name,
+                execution_stats=execution_stats,
+                match_level=match_level,
+                denominator_type=candidate_artifact.metadata.candidate_denominator,
+            )
+        else:
+            eval_results = score.score_routes(
+                benchmark=benchmark,
+                predictions=predictions or {},
+                stock=stock_set,
+                stock_name=stock_name,
+                model_name=model_name,
+                execution_stats=execution_stats,
+                match_level=match_level,
+            )
 
         # Save Output: data/4-scored/{benchmark}/{model}/{stock}/evaluation.json.gz
         output_dir = paths["scored"] / benchmark_name / model_name / stock_name
@@ -411,14 +432,17 @@ def _score_single(model_name: str, benchmark_name: str, paths: dict, args: Any) 
 
         # Manifest
         manifest = create_manifest(
-            action="score_model",
-            sources=[bench_path, routes_path, stock_path],
+            action="score_candidate_records" if candidate_artifact is not None else "score_routes",
+            sources=[bench_path, candidates_path if candidate_artifact is not None else routes_path, stock_path],
             outputs=[(out_path, eval_results, "unknown")],
             root_dir=paths["raw"].parent.resolve(),
             parameters={"model": model_name, "benchmark": benchmark_name, "stock": stock_name},
             statistics={
                 "n_targets": len(eval_results.results),
-                "n_solvable": sum(1 for r in eval_results.results.values() if r.is_solvable),
+                "n_stock_terminated": sum(1 for r in eval_results.results.values() if r.has_stock_terminated_route),
+                "n_solv_0": sum(
+                    1 for r in eval_results.results.values() if r.first_solv_rank(tier=0, scope="stock") is not None
+                ),
             },
         )
 
