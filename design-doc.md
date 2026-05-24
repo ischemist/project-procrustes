@@ -252,9 +252,6 @@ class ConstraintResult(BaseModel):
 
 class ReactionValidity(BaseModel):
     reaction_index: int
-    reaction_signature: tuple[frozenset[str], str] | None = None
-    product_inchikey: str | None = None
-    reactant_inchikeys: list[str] = Field(default_factory=list)
     tiers: dict[int, TierResult] = Field(default_factory=dict)
 
 
@@ -263,10 +260,35 @@ class RouteValidity(BaseModel):
     reactions: list[ReactionValidity] = Field(default_factory=list)
 ```
 
+`ScoredCandidate.route` is the source of chemistry. Validity annotations should
+not duplicate product/reactant SMILES or InChIKeys; `reaction_index` points back
+to `list(route.iter_reactions())`.
+
+Artifacts use readable tier labels and omit empty checks:
+
+```json
+"validity": {
+  "tier 0": {
+    "status": "pass"
+  },
+  "reactions": [
+    {
+      "reaction_index": 1,
+      "validity": {
+        "tier 0": {
+          "status": "fail",
+          "checks": [{"code": "tier0.empty_reactants"}]
+        }
+      }
+    }
+  ]
+}
+```
+
 Do not persist per-candidate `solv` by default. It is derived:
 
 ```text
-solv_i[scope] = validity.tiers[i].status == "pass"
+solv_i[scope] = validity["tier i"].status == "pass"
                 and constraint_results[scope].status == "pass"
 ```
 
@@ -343,17 +365,17 @@ class TargetEvaluation(BaseModel):
     target_id: str
     candidates: list[ScoredCandidate] = Field(default_factory=list)
 
-    tier_validity_ranks: dict[int, int | None] = Field(default_factory=dict)
-    solv_ranks: dict[str, dict[int, int | None]] = Field(default_factory=dict)
-    top_k_ranks: dict[str, int | None] = Field(default_factory=dict)
+    first_valid_ranks: dict[str, int | None] = Field(default_factory=dict)
+    first_solv_ranks: dict[str, dict[str, int | None]] = Field(default_factory=dict)
+    first_reconstruction_ranks: dict[str, int | None] = Field(default_factory=dict)
 
     wall_time: float | None = None
     cpu_time: float | None = None
 ```
 
-`solv_ranks["stock"][1]` is the raw rank of the first `solv_1[stock]`
-candidate. `top_k_ranks["stock"]` is the effective acceptable-route rank after
-filtering to the `stock` scope.
+`first_solv_ranks["stock"]["tier 1"]` is the raw rank of the first
+`solv_1[stock]` candidate. `first_reconstruction_ranks["stock"]` is the
+effective acceptable-route rank after filtering to the `stock` scope.
 
 New Solv-N artifacts should use the new names directly:
 
@@ -446,9 +468,9 @@ For each candidate:
 
 For each target:
 
-1. Compute `tier_validity_ranks[i]` from raw ranks.
-2. Compute `solv_ranks[scope_id][i]` from raw ranks.
-3. Compute `top_k_ranks[scope_id]` using effective rank after filtering by that scope.
+1. Compute `first_valid_ranks["tier i"]` from raw ranks.
+2. Compute `first_solv_ranks[scope_id]["tier i"]` from raw ranks.
+3. Compute `first_reconstruction_ranks[scope_id]` using effective rank after filtering by that scope.
 
 Do not compute default acceptable-route Top-K after Tier-i or Solv-i filtering.
 That can exist as a diagnostic only if it is named explicitly.
@@ -505,8 +527,8 @@ The stored schema should be inspectable without helper magic:
 ```python
 candidate.validity.tiers[0].status
 candidate.constraint_results["stock"].status
-target.tier_validity_ranks[0]
-target.solv_ranks["stock"][0]
+target.first_valid_ranks["tier 0"]
+target.first_solv_ranks["stock"]["tier 0"]
 ```
 
 Reaction-level failures are explicit records:

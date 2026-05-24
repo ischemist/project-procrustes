@@ -657,8 +657,8 @@ class TestScoreRoutes:
         assert t1.candidates[0].adapter_failure is not None
         assert t1.candidates[0].validity.tiers[0].status == "fail"
         assert t1.candidates[0].constraint_results["stock"].status == "not_evaluated"
-        assert t1.tier_validity_ranks[0] == 2
-        assert t1.solv_ranks["stock"][0] == 2
+        assert t1.first_valid_ranks["tier 0"] == 2
+        assert t1.first_solv_ranks["stock"]["tier 0"] == 2
         assert t1.candidates[0].satisfies_validity(tier=0) is False
         assert t1.candidates[0].satisfies_constraints(scope="stock") is False
         assert t1.candidates[0].satisfies_solv(tier=0, scope="stock") is False
@@ -693,7 +693,7 @@ class TestScoreRoutes:
         # target_3: Now solvable (CC is in stock)
         t3 = eval_results.results["target_3"]
         assert t3.has_stock_terminated_route is True
-        assert t3.is_solv_0 is True
+        assert t3.first_solv_rank(tier=0, scope="stock") is not None
 
     @pytest.mark.integration
     def test_score_solv_0_requires_stock_termination_and_tier_0_validity(self, synthetic_benchmark):
@@ -717,19 +717,43 @@ class TestScoreRoutes:
         scored_candidate = t1.candidates[0]
 
         assert t1.has_stock_terminated_route is True
-        assert t1.has_tier_0_valid_route is False
-        assert t1.is_solv_0 is False
+        assert t1.first_valid_rank(tier=0) is None
+        assert t1.first_solv_rank(tier=0, scope="stock") is None
         assert scored_candidate.constraint_results["stock"].status == "pass"
         assert scored_candidate.validity.tiers[0].status == "fail"
+        assert scored_candidate.validity.model_dump(mode="json", exclude_none=True)["tier 0"] == {
+            "status": "fail",
+            "checks": [{"code": "tier0.empty_reactants"}],
+        }
         assert scored_candidate.satisfies_validity(tier=0) is False
         assert scored_candidate.satisfies_constraints(scope="stock") is True
         assert scored_candidate.satisfies_solv(tier=0, scope="stock") is False
         assert [check.code for check in scored_candidate.validity.tiers[0].checks] == ["tier0.empty_reactants"]
         reaction_validity = scored_candidate.validity.reactions[0]
         assert reaction_validity.satisfies_validity(tier=0) is False
+        reaction_validity_json = reaction_validity.model_dump(mode="json", exclude_none=True)
+        assert reaction_validity_json == {
+            "reaction_index": 1,
+            "validity": {
+                "tier 0": {
+                    "status": "fail",
+                    "checks": [{"code": "tier0.empty_reactants"}],
+                }
+            },
+        }
         reaction_tier_0 = reaction_validity.tiers[0]
         assert reaction_tier_0.status == "fail"
         assert [check.code for check in reaction_tier_0.checks] == ["tier0.empty_reactants"]
+
+        stats = compute_model_statistics(eval_results, n_boot=100, seed=42)
+        assert stats.tier_0_validity is not None
+        assert stats.solv_0 is not None
+        assert stats.mrr_tier_0 is not None
+        assert stats.mrr_solv_0 is not None
+        assert stats.tier_0_validity.overall.value == 0.0
+        assert stats.solv_0.overall.value == 0.0
+        assert stats.mrr_tier_0.overall.value == 0.0
+        assert stats.mrr_solv_0.overall.value == 0.0
 
     @pytest.mark.integration
     def test_score_gt_match_detection(self, synthetic_benchmark, synthetic_predictions, minimal_stock):
@@ -746,17 +770,17 @@ class TestScoreRoutes:
         t1 = eval_results.results["target_1"]
         assert t1.candidates[0].matches_acceptable is True
         assert t1.candidates[1].matches_acceptable is False
-        assert t1.acceptable_rank == 1  # First solved route is acceptable match
+        assert t1.reconstruction_rank(scope="stock") == 1  # First stock-eligible route is acceptable match
 
         # target_2: Route matches acceptable
         t2 = eval_results.results["target_2"]
         assert t2.candidates[0].matches_acceptable is True
-        assert t2.acceptable_rank == 1
+        assert t2.reconstruction_rank(scope="stock") == 1
 
         # target_3: No acceptable routes defined
         t3 = eval_results.results["target_3"]
         assert t3.candidates[0].matches_acceptable is False
-        assert t3.acceptable_rank is None
+        assert t3.reconstruction_rank(scope="stock") is None
 
     @pytest.mark.integration
     def test_score_empty_predictions(self, synthetic_benchmark, minimal_stock):
@@ -778,7 +802,7 @@ class TestScoreRoutes:
         for target_id in ["target_1", "target_2", "target_3"]:
             t = eval_results.results[target_id]
             assert t.has_stock_terminated_route is False
-            assert t.acceptable_rank is None
+            assert t.reconstruction_rank(scope="stock") is None
             assert len(t.candidates) == 0
 
     @pytest.mark.integration

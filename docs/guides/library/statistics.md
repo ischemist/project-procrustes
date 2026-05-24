@@ -6,6 +6,12 @@ icon: lucide/chart-no-axes-combined
 
 RetroCast uses bootstrap resampling to calculate confidence intervals for scored model results.
 
+Statistics are grouped into three concepts:
+
+- **Solv-N hierarchy:** route validity and scoped solvability.
+- **Rank within Solv-N:** mean reciprocal raw rank of the first valid or solvable route.
+- **Benchmark route reconstruction:** conservative Top-K proxy against benchmark acceptable routes.
+
 ## Compute Statistics
 
 ```python title="Generate statistical summary"
@@ -36,6 +42,52 @@ for length, metric in stats.solv_0.by_group.items():
 
 Typical metrics include Tier-0 validity, Solv-0[STR], raw-rank MRR diagnostics,
 Top-K benchmark route reconstruction, and stratified performance by route length.
+
+## Metric Semantics
+
+`stats.tier_0_validity` is the fraction of targets with at least one Tier-0-valid
+candidate. It does not require stock termination.
+
+`stats.solv_0` is the fraction of targets with at least one `Solv-0[STR]`
+candidate. In the stock scope, this means Tier-0 validity plus stock
+termination.
+
+`stats.mrr_tier_0` and `stats.mrr_solv_0` are rank diagnostics. A target
+contributes `1 / rank` for the first matching candidate and `0` if there is no
+matching candidate. Example: `MRR Solv-0[STR] = 0.900` means the first
+Solv-0[STR] candidate is usually near rank 1, but this is not a reconstruction
+accuracy.
+
+`stats.top_k_accuracy[k]` is benchmark route reconstruction after stock-scope
+filtering. It asks whether one of the first `k` stock-terminated candidates
+matches an acceptable benchmark route. This is a conservative proxy, not a
+Solv-N metric.
+
+## Reliability Flags
+
+Each metric has a reliability flag:
+
+```python title="Inspect reliability"
+metric = stats.solv_0.overall
+print(metric.n_samples)
+print(metric.reliability.code)
+print(metric.reliability.message)
+```
+
+- `OK`: no obvious sample-size or boundary warning.
+- `LOW_N`: fewer than 30 targets.
+- `EXTREME_P`: the estimate is near 0 or 1, so bootstrap intervals may collapse.
+
+## Runtime
+
+Runtime fields are stored in seconds:
+
+```python title="Runtime summaries"
+print(stats.total_wall_time)
+print(stats.mean_wall_time)
+print(stats.total_cpu_time)
+print(stats.mean_cpu_time)
+```
 
 ??? example "Example output"
 

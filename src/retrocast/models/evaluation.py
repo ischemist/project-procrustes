@@ -8,6 +8,10 @@ from retrocast.models.chem import Route
 from retrocast.models.validity import ConstraintResult, FailureRecord, MetricScope, RouteValidity, ScopeId, ValidityTier
 
 
+def tier_rank_key(tier: ValidityTier) -> str:
+    return f"tier {tier}"
+
+
 class ScoredCandidate(BaseModel):
     rank: int
     route: Route | None = None
@@ -46,12 +50,9 @@ class TargetEvaluation(BaseModel):
     candidates: list[ScoredCandidate] = Field(default_factory=list)
 
     has_stock_terminated_route: bool = False
-    has_tier_0_valid_route: bool | None = None
-    is_solv_0: bool | None = None
-    acceptable_rank: int | None = None
-    tier_validity_ranks: dict[int, int | None] = Field(default_factory=dict)
-    solv_ranks: dict[str, dict[int, int | None]] = Field(default_factory=dict)
-    top_k_ranks: dict[str, int | None] = Field(default_factory=dict)
+    first_valid_ranks: dict[str, int | None] = Field(default_factory=dict)
+    first_solv_ranks: dict[ScopeId, dict[str, int | None]] = Field(default_factory=dict)
+    first_reconstruction_ranks: dict[ScopeId, int | None] = Field(default_factory=dict)
 
     # Properties used for stratification (route length, convergence)
     stratification_length: int | None = None
@@ -62,13 +63,13 @@ class TargetEvaluation(BaseModel):
     cpu_time: float | None = None
 
     def first_valid_rank(self, tier: ValidityTier = 0) -> int | None:
-        return self.tier_validity_ranks.get(tier)
+        return self.first_valid_ranks.get(tier_rank_key(tier))
 
     def first_solv_rank(self, tier: ValidityTier = 0, scope: ScopeId = "stock") -> int | None:
-        return self.solv_ranks.get(scope, {}).get(tier)
+        return self.first_solv_ranks.get(scope, {}).get(tier_rank_key(tier))
 
     def reconstruction_rank(self, scope: ScopeId = "stock") -> int | None:
-        return self.top_k_ranks.get(scope)
+        return self.first_reconstruction_ranks.get(scope)
 
 
 class EvaluationResults(BaseModel):

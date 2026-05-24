@@ -11,6 +11,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field, computed_field
 
+from retrocast._version import __version__
 from retrocast.chem import InchiKeyLevel, reduce_inchikey
 from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
 
@@ -21,12 +22,7 @@ PREDICTION_METADATA_KEYS = frozenset({"score", "confidence", "state_score", "sta
 
 def _get_retrocast_version() -> str:
     """Get the current retrocast version for provenance tracking."""
-    from importlib.metadata import PackageNotFoundError, version
-
-    try:
-        return version("retrocast")
-    except PackageNotFoundError:
-        return "0.0.0.dev0+unknown"
+    return __version__
 
 
 def _normalize_signature_value(value: Any) -> Any:
@@ -360,10 +356,7 @@ class Route(BaseModel):
         including all chemistry and attached annotations.
         """
 
-        # Exclude computed fields to ensure deterministic serialization
-        # (sets like 'leaves' have non-deterministic iteration order across processes)
-        # Also exclude content_hash and signature to avoid circular recursion
-        route_dict = self.model_dump(mode="json", exclude={"leaves", "length", "content_hash", "signature"})
+        route_dict = self.model_dump(mode="json", exclude_computed_fields=True)
         route_json = json.dumps(route_dict, sort_keys=True)
         return hashlib.sha256(route_json.encode()).hexdigest()
 

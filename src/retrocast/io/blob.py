@@ -84,7 +84,7 @@ def save_json_gz(data: Any, path: Path) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(data, BaseModel):
-            json_obj = data.model_dump(mode="json")
+            json_obj = data.model_dump(mode="json", exclude_none=True, exclude_computed_fields=True)
         else:
             json_obj = data
         json_str = json.dumps(json_obj, indent=2)
@@ -109,7 +109,7 @@ def save_jsonl_gz(rows: Iterable[Any], path: Path) -> int:
         with open(path, "wb") as raw_f, gzip.GzipFile(filename="", mode="wb", fileobj=raw_f, mtime=0) as gz_f:
             for row in rows:
                 if isinstance(row, BaseModel):
-                    json_obj = row.model_dump(mode="json")
+                    json_obj = row.model_dump(mode="json", exclude_none=True, exclude_computed_fields=True)
                 else:
                     json_obj = row
                 payload = json.dumps(json_obj, sort_keys=True, separators=(",", ":"))

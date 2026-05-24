@@ -29,7 +29,7 @@ def _make_target_evaluation(
     return TargetEvaluation(
         target_id=target_id,
         has_stock_terminated_route=solvable,
-        acceptable_rank=acceptable_rank,
+        first_reconstruction_ranks={"stock": acceptable_rank},
         stratification_length=route_length,
         stratification_is_convergent=is_convergent,
     )
@@ -254,9 +254,10 @@ class TestComputeProbabilisticRanking:
 
         def acceptable_rank_metric(te: TargetEvaluation) -> float:
             # Convert to metric where lower is better (like rank position)
-            if te.acceptable_rank is None:
+            rank = te.reconstruction_rank(scope="stock")
+            if rank is None:
                 return 0.0  # Worst possible (no solution)
-            return 1.0 / te.acceptable_rank  # Reciprocal so higher is better for boot dist
+            return 1.0 / rank  # Reciprocal so higher is better for boot dist
 
         ranking = compute_probabilistic_ranking(three_models_perfect_data, acceptable_rank_metric, n_boot=100, seed=42)
 

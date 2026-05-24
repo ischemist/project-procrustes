@@ -10,7 +10,7 @@ from retrocast.metrics.solvability import (
 )
 from retrocast.models.benchmark import BenchmarkSet, ExecutionStats
 from retrocast.models.candidates import CandidateRecord, CandidateRecordsDict
-from retrocast.models.evaluation import EvaluationResults, ScoredCandidate, TargetEvaluation
+from retrocast.models.evaluation import EvaluationResults, ScoredCandidate, TargetEvaluation, tier_rank_key
 from retrocast.models.validity import (
     IMPLEMENTED_VALIDITY_TIERS,
     CheckResult,
@@ -18,6 +18,7 @@ from retrocast.models.validity import (
     MetricScope,
     ReactionValidity,
     RouteValidity,
+    ScopeId,
     StockTerminationConstraint,
     TierResult,
     ValidityTier,
@@ -107,10 +108,6 @@ def _score_route_candidate(
         }
         reactions_by_index[reaction_index] = ReactionValidity(
             reaction_index=reaction_index,
-            product_smiles=reaction.product.smiles,
-            product_inchikey=reaction.product.inchikey,
-            reactant_smiles=[reactant.smiles for reactant in reaction.step.reactants],
-            reactant_inchikeys=[reactant.inchikey for reactant in reaction.step.reactants],
             tiers=reaction_tiers,
         )
     route_validity = RouteValidity(tiers=route_tiers, reactions=list(reactions_by_index.values()))
@@ -221,9 +218,13 @@ def score_candidate_records(
         ]
 
         scored_candidates = []
-        acceptable_rank = None
-        tier_validity_ranks = {tier: None for tier in sorted(IMPLEMENTED_VALIDITY_TIERS)}
-        solv_ranks = {"stock": {tier: None for tier in sorted(IMPLEMENTED_VALIDITY_TIERS)}}
+        first_reconstruction_rank = None
+        first_valid_ranks: dict[str, int | None] = {
+            tier_rank_key(tier): None for tier in sorted(IMPLEMENTED_VALIDITY_TIERS)
+        }
+        first_solv_ranks: dict[ScopeId, dict[str, int | None]] = {
+            "stock": {tier_rank_key(tier): None for tier in sorted(IMPLEMENTED_VALIDITY_TIERS)}
+        }
         # Counter for the "Effective Rank" (only increments on solvable routes)
         effective_rank_counter = 1
 
@@ -235,14 +236,15 @@ def score_candidate_records(
                 match_level=match_level,
             )
             for tier, passed in tier_passes.items():
-                if passed and tier_validity_ranks[tier] is None:
-                    tier_validity_ranks[tier] = candidate.rank
-                if passed and scope_passes["stock"] and solv_ranks["stock"][tier] is None:
-                    solv_ranks["stock"][tier] = candidate.rank
+                tier_key = tier_rank_key(tier)
+                if passed and first_valid_ranks[tier_key] is None:
+                    first_valid_ranks[tier_key] = candidate.rank
+                if passed and scope_passes["stock"] and first_solv_ranks["stock"][tier_key] is None:
+                    first_solv_ranks["stock"][tier_key] = candidate.rank
 
             if scope_passes["stock"]:
-                if matched_idx is not None and acceptable_rank is None:
-                    acceptable_rank = effective_rank_counter
+                if matched_idx is not None and first_reconstruction_rank is None:
+                    first_reconstruction_rank = effective_rank_counter
                 effective_rank_counter += 1
 
             scored_candidates.append(scored_candidate)
@@ -251,9 +253,6 @@ def score_candidate_records(
         has_stock_terminated_route = any(
             candidate.constraint_results["stock"].status == "pass" for candidate in scored_candidates
         )
-        has_tier_0_valid_route = tier_validity_ranks.get(0) is not None
-        is_solv_0 = solv_ranks["stock"].get(0) is not None
-
         # Always stratify by primary acceptable route (benchmark ground truth)
         source_route = target.primary_route
 
@@ -265,12 +264,9 @@ def score_candidate_records(
             target_id=target_id,
             candidates=scored_candidates,
             has_stock_terminated_route=has_stock_terminated_route,
-            has_tier_0_valid_route=has_tier_0_valid_route,
-            is_solv_0=is_solv_0,
-            acceptable_rank=acceptable_rank,
-            tier_validity_ranks=tier_validity_ranks,
-            solv_ranks=solv_ranks,
-            top_k_ranks={"stock": acceptable_rank},
+            first_valid_ranks=first_valid_ranks,
+            first_solv_ranks=first_solv_ranks,
+            first_reconstruction_ranks={"stock": first_reconstruction_rank},
             stratification_length=source_route.length if source_route else None,
             stratification_is_convergent=source_route.has_convergent_reaction if source_route else None,
             wall_time=wall_time,

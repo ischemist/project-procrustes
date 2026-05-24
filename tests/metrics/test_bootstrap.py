@@ -35,7 +35,7 @@ def target_evaluation_factory():
         return TargetEvaluation(
             target_id=target_id,
             has_stock_terminated_route=has_stock_terminated_route,
-            acceptable_rank=acceptable_rank,
+            first_reconstruction_ranks={"stock": acceptable_rank},
             stratification_length=3,
             stratification_is_convergent=False,
         )
@@ -512,7 +512,7 @@ def _make_evaluation_results(model_name: str, n_targets: int, solvability_rate: 
         results[target_id] = TargetEvaluation(
             target_id=target_id,
             has_stock_terminated_route=has_stock_terminated_route,
-            acceptable_rank=None,
+            first_reconstruction_ranks={"stock": None},
             stratification_length=3,
             stratification_is_convergent=False,
         )

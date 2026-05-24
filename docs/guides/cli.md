@@ -290,8 +290,8 @@ retrocast score \
 
 **Annotations added:**
 
-- `candidates[].validity.tiers[0]` - Tier-0 route validity
-- `candidates[].validity.reactions[].tiers[0]` - reaction-level Tier-0 failures
+- `candidates[].validity["tier 0"]` - Tier-0 route validity in the stored artifact
+- `candidates[].validity.reactions[].validity["tier 0"]` - reaction-level Tier-0 failures in the stored artifact
 - `candidates[].satisfies_validity(tier=0)` - fluent Tier-0 validity check
 - `candidates[].satisfies_solv(tier=0, scope="stock")` - fluent Solv-0[STR] check
 - `first_valid_rank(tier=0)` - raw rank of the first Tier-0-valid candidate

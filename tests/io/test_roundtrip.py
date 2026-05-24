@@ -17,6 +17,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from retrocast import __version__
 from retrocast.curation.training import (
     RawRouteSource,
     TrainingReactionRecord,
@@ -584,6 +585,26 @@ class TestRouteRoundtrip:
         assert loaded_route.target.smiles == route.target.smiles
         assert loaded_route.length == route.length
 
+    def test_saved_route_artifact_excludes_computed_fields_and_nulls(self, tmp_path, synthetic_route_factory):
+        route = synthetic_route_factory("linear", depth=1)
+        path = tmp_path / "routes.json.gz"
+
+        save_routes({"target_1": [route]}, path)
+        raw_route = load_json_gz(path)["target_1"][0]
+        target = raw_route["target"]
+        step = target["synthesis_step"]
+        leaf = step["reactants"][0]
+
+        assert raw_route["retrocast_version"] == __version__
+        assert "length" not in raw_route
+        assert "leaves" not in raw_route
+        assert "content_hash" not in raw_route
+        assert "signature" not in raw_route
+        assert "is_leaf" not in target
+        assert "is_convergent" not in step
+        assert "is_leaf" not in leaf
+        assert "synthesis_step" not in leaf
+
     def test_empty_routes_dict(self, tmp_path):
         """Empty routes dictionary should roundtrip."""
         routes = {}
@@ -904,7 +925,7 @@ class TestBenchmarkResultsLoader:
         target_eval = TargetEvaluation(
             target_id="test-001",
             has_stock_terminated_route=True,
-            acceptable_rank=1,
+            first_reconstruction_ranks={"stock": 1},
             stratification_length=3,
             stratification_is_convergent=False,
         )

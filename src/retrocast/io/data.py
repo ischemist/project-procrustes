@@ -51,7 +51,7 @@ def save_routes(routes: RoutesDict, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         # dump_json returns bytes, so we use "wb"
-        json_bytes = _ROUTES_ADAPTER.dump_json(routes, indent=2)
+        json_bytes = _ROUTES_ADAPTER.dump_json(routes, indent=2, exclude_none=True, exclude_computed_fields=True)
         with gzip.open(path, "wb") as f:
             f.write(json_bytes)
     except (OSError, TypeError, ValueError) as e:
@@ -111,7 +111,14 @@ def save_candidate_records(
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with gzip.open(path, "wb") as f:
-            f.write(_CANDIDATES_ARTIFACT_ADAPTER.dump_json(artifact, indent=2))
+            f.write(
+                _CANDIDATES_ARTIFACT_ADAPTER.dump_json(
+                    artifact,
+                    indent=2,
+                    exclude_none=True,
+                    exclude_computed_fields=True,
+                )
+            )
     except (OSError, TypeError, ValueError) as e:
         raise ArtifactWriteError(
             f"Failed to save candidate records to {path}: {e}",
@@ -196,7 +203,17 @@ def save_route_corpus(routes: Iterable[Route | PredictedRoute], path: Path) -> i
     """Save a canonical prediction route corpus to a JSONL artifact."""
     path = Path(path)
     try:
-        return save_jsonl_gz((_ensure_predicted_route(route).model_dump(mode="json") for route in routes), path)
+        return save_jsonl_gz(
+            (
+                _ensure_predicted_route(route).model_dump(
+                    mode="json",
+                    exclude_none=True,
+                    exclude_computed_fields=True,
+                )
+                for route in routes
+            ),
+            path,
+        )
     except (OSError, TypeError, ValueError) as e:
         raise ArtifactWriteError(
             f"Failed to save route corpus to {path}: {e}",
