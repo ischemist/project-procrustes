@@ -672,6 +672,7 @@ class TestScoreRoutes:
         stats = compute_model_statistics(eval_results, n_boot=100, seed=42)
         assert stats.mrr_tier_0 is not None
         assert stats.mrr_solv_0 is not None
+        assert "depth 1" in stats.stock_termination.by_group
         assert stats.mrr_tier_0.overall.value == pytest.approx(1 / 6)
         assert stats.mrr_solv_0.overall.value == pytest.approx(1 / 6)
 
@@ -733,7 +734,7 @@ class TestScoreRoutes:
         assert reaction_validity.satisfies_validity(tier=0) is False
         reaction_validity_json = reaction_validity.model_dump(mode="json", exclude_none=True)
         assert reaction_validity_json == {
-            "reaction_index": 1,
+            "reaction_id": "rc:r:_",
             "validity": {
                 "tier 0": {
                     "status": "fail",

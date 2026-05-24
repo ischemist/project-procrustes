@@ -102,6 +102,33 @@ class TestRoute:
             (frozenset(["VNWKTOKETHGBQD-UHFFFAOYSA-N"]), "OKKJLVBELUTLKV-UHFFFAOYSA-N"),
         ]
 
+    def test_reaction_ids_are_route_local_paths(self):
+        leaf_a = Molecule(smiles=SmilesStr("C"), inchikey=InchiKeyStr("A"))
+        leaf_b = Molecule(smiles=SmilesStr("CC"), inchikey=InchiKeyStr("B"))
+        leaf_c = Molecule(smiles=SmilesStr("CCC"), inchikey=InchiKeyStr("C"))
+        left = Molecule(
+            smiles=SmilesStr("CCCC"),
+            inchikey=InchiKeyStr("LEFT"),
+            synthesis_step=ReactionStep(reactants=[leaf_a, leaf_b]),
+        )
+        right = Molecule(
+            smiles=SmilesStr("CCCCC"),
+            inchikey=InchiKeyStr("RIGHT"),
+            synthesis_step=ReactionStep(reactants=[leaf_c]),
+        )
+        target = Molecule(
+            smiles=SmilesStr("CCCCCC"),
+            inchikey=InchiKeyStr("TARGET"),
+            synthesis_step=ReactionStep(reactants=[left, right]),
+        )
+        route = Route(target=target)
+
+        reactions = list(route.iter_reactions())
+
+        assert [reaction.reaction_id for reaction in reactions] == ["rc:r:_", "rc:r:0", "rc:r:1"]
+        assert [reaction.product_id for reaction in reactions] == ["rc:m:_", "rc:m:0", "rc:m:1"]
+        assert route.get_reaction_by_id("rc:r:0").product.inchikey == "LEFT"
+
     def test_depth_branched_route(self):
         """Test depth calculation for branched route (should return max depth)."""
         # Left branch: depth 2

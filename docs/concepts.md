@@ -131,6 +131,13 @@ We deem the bipartite structure, explicitly separating `Molecule` and `ReactionS
 - **Molecule properties** (e.g., "is purchasable", molecular weight) belong to the `Molecule` node
 - **Reaction properties** (e.g., template scores, probability, patent IDs) belong to the `ReactionStep` node
 
+### Route-Local Node IDs
+
+Evaluation sidecars refer back to route reactions with deterministic route-local
+path ids such as `rc:r:_` and `rc:r:1.0`. These ids are not chemical identities;
+they are addresses inside one serialized `Route`. See [Route Node IDs](developers/route-node-ids.md)
+for the grammar and examples.
+
 ### Interchange Format
 
 !!! info "You don't need to change your model"

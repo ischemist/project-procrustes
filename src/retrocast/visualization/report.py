@@ -7,6 +7,7 @@ This module handles the formatting of results into text tables (Markdown/Rich).
 from rich.table import Table
 
 from retrocast.models.stats import MetricResult, ModelComparison, ModelStatistics, StratifiedMetric
+from retrocast.visualization.depth import depth_group_sort_key
 
 
 def _metric_value(res: MetricResult, *, percent: bool) -> str:
@@ -288,7 +289,7 @@ def format_metric_table(stats: StratifiedMetric, *, percent: bool = True) -> str
     lines.append("| Group | N | Value | 95% CI | Flags |")
     lines.append("|-------|---|-------|--------|-------|")
 
-    sorted_keys = sorted(stats.by_group.keys())
+    sorted_keys = sorted(stats.by_group.keys(), key=depth_group_sort_key)
 
     for key in sorted_keys:
         res = stats.by_group[key]

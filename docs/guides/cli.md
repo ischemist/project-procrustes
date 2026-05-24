@@ -148,7 +148,7 @@ retrocast score-file \
 1. Text file with one canonical SMILES per line
 
 **Output:** `EvaluationResults` JSON with scored candidates, Tier-0 validity,
-stock constraint results, Solv-0[STR] ranks, and benchmark reconstruction ranks.
+stock constraint results, Solv-0\[STR\] ranks, and benchmark reconstruction ranks.
 
 ### `create-benchmark` - Generate Benchmarks
 
@@ -291,11 +291,12 @@ retrocast score \
 **Annotations added:**
 
 - `candidates[].validity["tier 0"]` - Tier-0 route validity in the stored artifact
+- `candidates[].validity.reactions[].reaction_id` - route-local reaction path id, e.g. `rc:r:0.1`
 - `candidates[].validity.reactions[].validity["tier 0"]` - reaction-level Tier-0 failures in the stored artifact
 - `candidates[].satisfies_validity(tier=0)` - fluent Tier-0 validity check
-- `candidates[].satisfies_solv(tier=0, scope="stock")` - fluent Solv-0[STR] check
+- `candidates[].satisfies_solv(tier=0, scope="stock")` - fluent Solv-0\[STR\] check
 - `first_valid_rank(tier=0)` - raw rank of the first Tier-0-valid candidate
-- `first_solv_rank(tier=0, scope="stock")` - raw rank of the first Solv-0[STR] candidate
+- `first_solv_rank(tier=0, scope="stock")` - raw rank of the first Solv-0\[STR\] candidate
 - `reconstruction_rank(scope="stock")` - effective benchmark-reference rank after stock filtering
 
 !!! warning "Stereochemistry-agnostic evaluation"
@@ -330,10 +331,10 @@ retrocast analyze \
 **Metrics computed:**
 
 - Tier-0 validity with 95% CI (bootstrap)
-- Solv-0[STR] with 95% CI (Tier-0 validity plus stock termination)
-- MRR Tier-0 and MRR Solv-0[STR] over raw candidate ranks
+- Solv-0\[STR\] with 95% CI (Tier-0 validity plus stock termination)
+- MRR Tier-0 and MRR Solv-0\[STR\] over raw candidate ranks
 - Top-K benchmark route reconstruction (K ∈ {1, 3, 5, 10, ...})
-- Stratified performance by route length
+- Stratified performance by route depth
 
 ---
 
@@ -525,7 +526,7 @@ Both `ingest` and `score` commands support the `--ignore-stereo` flag for stereo
 
 | Command | Flag | Purpose | Use Case |
 | :-- | :-- | :-- | :-- |
-| `ingest` | `--ignore-stereo` | Strip stereochemistry during canonicalization | Analyze Tier-0 and Solv-0[STR] without stereochemical constraints |
+| `ingest` | `--ignore-stereo` | Strip stereochemistry during canonicalization | Analyze Tier-0 and Solv-0\[STR\] without stereochemical constraints |
 | `score` | `--ignore-stereo` | Perform stereochemistry-agnostic matching | Calculate Top-K accuracy independent of stereochemistry |
 
 !!! note "For model developers"

@@ -18,32 +18,42 @@ CC-BY &copy; 2025-2026 isChemist Group
 """
 # Read more: https://zensical.org/docs/setup/navigation/
 nav = [
-  { "Home" = "index.md" },
-  { "Quick Start" = "quick-start.md" },
-  { "Concepts" = "concepts.md" },
-  { "Changelog" = "changelog.md" },
+  { "Overview" = [
+    "index.md",
+    "quick-start.md",
+    "concepts.md",
+    "changelog.md",
+  ] },
   { "Guides" = [
-    "guides/cli.md",
+    { "Workflows" = [
+      "guides/cli.md",
+      "guides/workflows.md",
+    ] },
     { "Python Library" = [
       "guides/library/index.md",
       "guides/library/adaptation.md",
       "guides/library/evaluation.md",
       "guides/library/statistics.md",
       "guides/library/visualization.md",
-      "guides/library/reference.md"
+      "guides/library/reference.md",
     ] },
-    "guides/benchmarks.md",
-    "guides/workflows.md",
-    "guides/training-sets.md"
+    { "Benchmarks and Data" = [
+      "guides/benchmarks.md",
+      "guides/training-sets.md",
+    ] },
   ] },
-  { "Rationale" = [
-    "rationale/training-set-releases.md"
+  { "Engineering" = [
+    { "Rationale" = [
+      "rationale/solv-n-evaluation.md",
+      "rationale/training-set-releases.md",
+    ] },
+    { "Developers" = [
+      "developers/adapters.md",
+      "developers/route-node-ids.md",
+      "developers/errors.md",
+      "developers/deprecations.md",
+    ] },
   ] },
-  { "Developers" = [
-    "developers/adapters.md",
-    "developers/errors.md",
-    "developers/deprecations.md"
-  ] }
 ]
 # With the "extra_css" option you can add your own CSS styling to customize
 # your Zensical project according to your needs. You can add any number of
@@ -152,7 +162,7 @@ features = [
   # Turn on this feature to expand all collapsible sections in the
   # navigation sidebar by default.
   # https://zensical.org/docs/setup/navigation/#navigation-expansion
-  # "navigation.expand",
+  "navigation.expand",
   # This feature turns on navigation elements in the footer that allow the
   # user to navigate to a next or previous page.
   # https://zensical.org/docs/setup/footer/#navigation
@@ -189,11 +199,11 @@ features = [
   # When tabs are enabled, top-level sections are rendered in a menu layer
   # below the header for viewports above 1220px, but remain as-is on mobile.
   # https://zensical.org/docs/setup/navigation/#navigation-tabs
-  # "navigation.tabs",
+  "navigation.tabs",
   # When sticky tabs are enabled, navigation tabs will lock below the header
   # and always remain visible when scrolling down.
   # https://zensical.org/docs/setup/navigation/#sticky-navigation-tabs
-  # "navigation.tabs.sticky",
+  "navigation.tabs.sticky",
   # A back-to-top button can be shown when the user, after scrolling down,
   # starts to scroll up again.
   # https://zensical.org/docs/setup/navigation/#back-to-top-button

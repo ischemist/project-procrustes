@@ -100,15 +100,14 @@ for candidate in target_eval.candidates:
     if candidate.route is None:
         continue
 
-    reactions = list(candidate.route.iter_reactions())
     for annotation in candidate.validity.reactions:
         if annotation.satisfies_validity(tier=0):
             continue
 
-        route_reaction = reactions[annotation.reaction_index - 1]
+        route_reaction = candidate.route.get_reaction_by_id(annotation.reaction_id)
         failure_codes = [check.code for check in annotation.tiers[0].checks]
         print(
-            annotation.reaction_index,
+            annotation.reaction_id,
             route_reaction.product.smiles,
             failure_codes,
         )
@@ -117,7 +116,7 @@ for candidate in target_eval.candidates:
 ## Stored Shape
 
 `evaluation.json.gz` stores chemistry once, on the route. Validity annotations
-point back to reactions by index.
+point back to reactions by route-local path id.
 
 ```json title="Candidate validity artifact"
 {
@@ -127,7 +126,7 @@ point back to reactions by index.
     },
     "reactions": [
       {
-        "reaction_index": 1,
+        "reaction_id": "rc:r:_",
         "validity": {
           "tier 0": {
             "status": "fail",
@@ -142,6 +141,18 @@ point back to reactions by index.
 
 Passing tiers omit `checks`. Failing checks may include `message` and `details`
 when the evaluator has useful context.
+
+Reaction ids are route-local path ids:
+
+```text
+rc:r:_    reaction producing the target molecule
+rc:r:0    reaction producing the first reactant of the target reaction
+rc:r:0.1  reaction producing the second reactant under rc:r:0
+```
+
+The matching molecule id uses the same path with `m` instead of `r`, e.g.
+`rc:m:0.1`. See [Route Node IDs](../../developers/route-node-ids.md) for the
+full grammar.
 
 ## Target-Level Ranks
 

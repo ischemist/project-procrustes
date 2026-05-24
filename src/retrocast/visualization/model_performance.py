@@ -2,6 +2,7 @@ import plotly.graph_objects as go
 from ischemist.plotly import Styler
 
 from retrocast.models.stats import ModelComparison, ModelStatistics, RankResult, StratifiedMetric
+from retrocast.visualization.depth import depth_group_label, depth_group_sort_key, depth_group_value
 
 
 def _create_metric_trace(metric: StratifiedMetric, name: str, color: str) -> go.Bar:
@@ -10,9 +11,9 @@ def _create_metric_trace(metric: StratifiedMetric, name: str, color: str) -> go.
     """
     # Extract sorted data
     # Sort by depth (assuming keys are ints or sortable)
-    sorted_keys = sorted(metric.by_group.keys())
+    sorted_keys = sorted(metric.by_group.keys(), key=depth_group_sort_key)
 
-    x_vals = [f"Length {k}" for k in sorted_keys]
+    x_vals = [str(k) for k in sorted_keys]
     y_vals = [metric.by_group[k].value * 100 for k in sorted_keys]  # Convert to %
 
     # Error bars
@@ -89,7 +90,7 @@ def plot_single_model_diagnostics(stats: ModelStatistics) -> go.Figure:
     fig.update_layout(
         title=full_title,
         yaxis=dict(range=[0, 100]),
-        xaxis=dict(title="Route Length"),
+        xaxis=dict(title="Route Depth"),
         barmode="group",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         width=1000,
@@ -115,7 +116,7 @@ def plot_multi_model_comparison(
             if k in m.top_k_accuracy:
                 all_depths.update(m.top_k_accuracy[k].by_group.keys())
 
-    sorted_depths = sorted(list(all_depths))  # e.g. [2, 3, 4, 5, 6]
+    sorted_depths = sorted({depth_group_value(depth) for depth in all_depths})
 
     colors = [
         "#1f77b4",
@@ -160,13 +161,13 @@ def plot_multi_model_comparison(
         y_lower = []
         hover_texts = []
 
+        metric_by_depth = {depth_group_value(depth): result for depth, result in metric_obj.by_group.items()}
         for depth in sorted_depths:
-            if depth in metric_obj.by_group:
-                res = metric_obj.by_group[depth]
-
+            res = metric_by_depth.get(depth)
+            if res is not None:
                 # Apply Jitter
                 # X = Integer Depth + Model Offset
-                x_pos = int(depth) + offsets[i]
+                x_pos = depth + offsets[i]
 
                 x_vals.append(x_pos)
                 y_vals.append(res.value * 100)
@@ -175,7 +176,7 @@ def plot_multi_model_comparison(
 
                 hover_texts.append(
                     f"<b>{model.model_name}</b><br>"
-                    f"Depth {depth}<br>"
+                    f"{depth_group_label(depth)}<br>"
                     f"{label}: {res.value:.1%}<br>"
                     f"CI: [{res.ci_lower:.1%}, {res.ci_upper:.1%}]<br>"
                     f"N={res.n_samples}"
@@ -211,7 +212,7 @@ def plot_multi_model_comparison(
             # Force X-axis to show integer ticks for Depths
             tickmode="array",
             tickvals=sorted_depths,
-            ticktext=[f"Depth {d}" for d in sorted_depths],
+            ticktext=[depth_group_label(depth) for depth in sorted_depths],
         ),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
