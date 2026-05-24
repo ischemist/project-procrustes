@@ -4,9 +4,7 @@ icon: lucide/clipboard-check
 
 # Evaluation
 
-Evaluation scores benchmark-keyed routes or candidate records against a stock
-file. Route chemistry stays unchanged; scoring writes evaluation annotations
-into `ScoredCandidate` records.
+Evaluation scores benchmark-keyed routes or candidate records against a stock file. Route chemistry stays unchanged; scoring writes evaluation annotations into `ScoredCandidate` records.
 
 ## Tracking Runtime
 
@@ -54,16 +52,13 @@ for target_id, evaluation in results.results.items():
         print(f"  rank {candidate.rank}: tier-0={tier_0}, solv-0[str]={solv_0}")
 ```
 
-Predictions must be keyed by benchmark target ID. Each route is evaluated for
-Tier-0 validity, stock termination, and benchmark-reference matching.
+Predictions must be keyed by benchmark target ID. Each route is evaluated for Tier-0 validity, stock termination, and benchmark-reference matching.
 
-`Solv-0[STR]` means Tier-0 validity plus the default stock-termination scope.
-It is not the same as benchmark route reconstruction.
+`Solv-0[STR]` means Tier-0 validity plus the default stock-termination scope. It is not the same as benchmark route reconstruction.
 
 ## Inspect Scored Candidates
 
-The Python API keeps typed tier dictionaries, while saved artifacts use readable
-labels such as `"tier 0"`.
+The Python API keeps typed tier dictionaries, while saved artifacts use readable labels such as `"tier 0"`.
 
 ```python title="Route-level validity and Solv-N"
 target_eval = results.results["target-001"]
@@ -78,8 +73,7 @@ tier_0 = candidate.validity.tiers[0]
 print(tier_0.status)
 ```
 
-Failed adaptation slots are still candidates. They have no route, but they keep
-their raw rank and carry a typed failure record:
+Failed adaptation slots are still candidates. They have no route, but they keep their raw rank and carry a typed failure record:
 
 ```python title="Handle failed candidates"
 for candidate in target_eval.candidates:
@@ -92,8 +86,7 @@ for candidate in target_eval.candidates:
 
 ## Reaction-Level Failures
 
-Tier validity is route-level only when every reaction passes that tier. Reaction
-annotations show where a route failed.
+Tier validity is route-level only when every reaction passes that tier. Reaction annotations show where a route failed.
 
 ```python title="Find failing reactions"
 for candidate in target_eval.candidates:
@@ -115,8 +108,7 @@ for candidate in target_eval.candidates:
 
 ## Stored Shape
 
-`evaluation.json.gz` stores chemistry once, on the route. Validity annotations
-point back to reactions by route-local path id.
+`evaluation.json.gz` stores chemistry once, on the route. Validity annotations point back to reactions by route-local path id.
 
 ```json title="Candidate validity artifact"
 {
@@ -130,7 +122,7 @@ point back to reactions by route-local path id.
         "validity": {
           "tier 0": {
             "status": "fail",
-            "checks": [{"code": "tier0.empty_reactants"}]
+            "checks": [{ "code": "tier0.empty_reactants" }]
           }
         }
       }
@@ -139,8 +131,7 @@ point back to reactions by route-local path id.
 }
 ```
 
-Passing tiers omit `checks`. Failing checks may include `message` and `details`
-when the evaluator has useful context.
+Passing tiers omit `checks`. Failing checks may include `message` and `details` when the evaluator has useful context.
 
 Reaction ids are route-local path ids:
 
@@ -150,9 +141,7 @@ rc:r:0    reaction producing the first reactant of the target reaction
 rc:r:0.1  reaction producing the second reactant under rc:r:0
 ```
 
-The matching molecule id uses the same path with `m` instead of `r`, e.g.
-`rc:m:0.1`. See [Route Node IDs](../../developers/route-node-ids.md) for the
-full grammar.
+The matching molecule id uses the same path with `m` instead of `r`, e.g. `rc:m:0.1`. See [Route Node IDs](../../developers/route-node-ids.md) for the full grammar.
 
 ## Target-Level Ranks
 
@@ -165,10 +154,8 @@ print(target_eval.reconstruction_rank(scope="stock"))
 ```
 
 - `first_valid_rank(tier=0)` is the raw rank of the first Tier-0-valid route.
-- `first_solv_rank(tier=0, scope="stock")` is the raw rank of the first route
-  that is Tier-0-valid and stock-terminated.
-- `reconstruction_rank(scope="stock")` is the effective benchmark-reference
-  rank after filtering to the stock scope.
+- `first_solv_rank(tier=0, scope="stock")` is the raw rank of the first route that is Tier-0-valid and stock-terminated.
+- `reconstruction_rank(scope="stock")` is the effective benchmark-reference rank after filtering to the stock scope.
 
 ## Complete Evaluation Sketch
 
@@ -194,8 +181,7 @@ results = score_predictions(
 
 ## Candidate-Preserving Scoring
 
-When you need raw-rank diagnostics over failed adaptation slots, preserve
-candidates before scoring:
+When you need raw-rank diagnostics over failed adaptation slots, preserve candidates before scoring:
 
 ```python title="Preserve failed candidates"
 from retrocast.workflow.adapt import adapt_target_keyed_candidate_records
@@ -212,6 +198,4 @@ results = score_candidate_records(
 )
 ```
 
-Failed candidates have `route=None`, `adapter_failure` set, and a failed Tier-0
-result after scoring. This is what keeps `MRR Tier-0` and `MRR Solv-0[STR]`
-honest for sequence-style planners.
+Failed candidates have `route=None`, `adapter_failure` set, and a failed Tier-0 result after scoring. This is what keeps `MRR Tier-0` and `MRR Solv-0[STR]` honest for sequence-style planners.

@@ -4,9 +4,7 @@ icon: lucide/git-branch
 
 # Route Node IDs
 
-RetroCast uses deterministic route-local ids when evaluation annotations need to
-point back into a `Route`. These ids are not chemical identities; they are
-addresses inside one serialized route tree.
+RetroCast uses deterministic route-local ids when evaluation annotations need to point back into a `Route`. These ids are not chemical identities; they are addresses inside one serialized route tree.
 
 ## Example Route
 
@@ -42,10 +40,7 @@ The same route as a trimmed `Route` tree, with ids shown as annotations:
           "id": "rc:m:0",
           "synthesis_step": {
             "id": "rc:r:0",
-            "reactants": [
-              {"id": "rc:m:0.0"},
-              {"id": "rc:m:0.1"}
-            ]
+            "reactants": [{ "id": "rc:m:0.0" }, { "id": "rc:m:0.1" }]
           }
         },
         {
@@ -57,14 +52,14 @@ The same route as a trimmed `Route` tree, with ids shown as annotations:
                 "id": "rc:m:1.0",
                 "synthesis_step": {
                   "id": "rc:r:1.0",
-                  "reactants": [{"id": "rc:m:1.0.0"}]
+                  "reactants": [{ "id": "rc:m:1.0.0" }]
                 }
               },
-              {"id": "rc:m:1.1"}
+              { "id": "rc:m:1.1" }
             ]
           }
         },
-        {"id": "rc:m:2"}
+        { "id": "rc:m:2" }
       ]
     }
   }
@@ -88,8 +83,7 @@ Semantics:
 - `rc:r:0` is the reaction producing `rc:m:0`, when that molecule is not a leaf.
 - `rc:m:0.1` is the second reactant molecule under `rc:r:0`.
 
-The reaction id is always the product molecule path with `rc:r:` instead of
-`rc:m:`. Child indices follow the route's canonical reactant list order.
+The reaction id is always the product molecule path with `rc:r:` instead of `rc:m:`. Child indices follow the route's canonical reactant list order.
 
 ## Library Access
 
@@ -106,7 +100,7 @@ Evaluation annotations use these ids:
 {
   "reaction_id": "rc:r:1.0",
   "validity": {
-    "tier 0": {"status": "pass"}
+    "tier 0": { "status": "pass" }
   }
 }
 ```

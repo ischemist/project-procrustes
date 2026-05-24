@@ -33,10 +33,7 @@ fig = plot_comparison(
 fig.show()
 ```
 
-Metric types currently include legacy visualization labels such as
-`"Solvability"` and `"Top-K"`. The legacy `"Solvability"` plot label predates
-the Solv-N migration and corresponds to stock termination. Prefer the tabular
-report for explicit `Tier-0` and `Solv-0[STR]` labels.
+Metric types currently include legacy visualization labels such as `"Solvability"` and `"Top-K"`. The legacy `"Solvability"` plot label predates the Solv-N migration and corresponds to stock termination. Prefer the tabular report for explicit `Tier-0` and `Solv-0[STR]` labels.
 
 ## Custom Plots
 

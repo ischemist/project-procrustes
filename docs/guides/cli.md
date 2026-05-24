@@ -147,8 +147,7 @@ retrocast score-file \
 
 1. Text file with one canonical SMILES per line
 
-**Output:** `EvaluationResults` JSON with scored candidates, Tier-0 validity,
-stock constraint results, Solv-0\[STR\] ranks, and benchmark reconstruction ranks.
+**Output:** `EvaluationResults` JSON with scored candidates, Tier-0 validity, stock constraint results, Solv-0\[STR\] ranks, and benchmark reconstruction ranks.
 
 ### `create-benchmark` - Generate Benchmarks
 
@@ -225,10 +224,7 @@ All paths are relative to your data directory (default: `data/retrocast/`).
 
 ### `ingest` - Adapt and Collect Routes
 
-Transforms raw model outputs into benchmark-keyed routes by running adaptation
-and collection as one command. For target-keyed provider output, it also writes
-candidate records so failed raw rank slots are preserved for Tier-0 and MRR
-metrics.
+Transforms raw model outputs into benchmark-keyed routes by running adaptation and collection as one command. For target-keyed provider output, it also writes candidate records so failed raw rank slots are preserved for Tier-0 and MRR metrics.
 
 ```bash
 retrocast ingest \
@@ -269,10 +265,7 @@ For a single model/dataset job, `ingest` shows route-level progress with count, 
 
 ### `score` - Evaluate Candidates
 
-Evaluates processed routes or candidate records against benchmark stock. If
-`3-processed/<dataset>/<model>/candidates.json.gz` exists, scoring uses it so
-failed raw rank slots count in Tier-0 and raw-rank MRR. Otherwise it falls back
-to `routes.json.gz`.
+Evaluates processed routes or candidate records against benchmark stock. If `3-processed/<dataset>/<model>/candidates.json.gz` exists, scoring uses it so failed raw rank slots count in Tier-0 and raw-rank MRR. Otherwise it falls back to `routes.json.gz`.
 
 ```bash
 retrocast score \
