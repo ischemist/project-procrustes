@@ -61,17 +61,18 @@ Identical molecules in different positions (e.g. same building block used in two
 
 ### Route path
 
-derived route-local ids:
+RetroCast uses deterministic paths to refer to molecules and reactions inside a `Route`. The full grammar lives in [Route Node IDs](developers/route-node-ids); but here's a useful cheat sheet:
 
-- `m:_` root target molecule
-- `r:_` root reaction
-- `m:0` first reactant under `r:_`
-- `r:0` reaction producing `m:0`
-- `m:1.0` first child under `m:1`
+- `rc:m:/` root target molecule
+- `rc:r:/` root reaction
+- `rc:m:/0` first reactant under `rc:r:/`
+- `rc:r:/0` reaction producing `rc:m:/0`
+- `rc:m:/1/0` first child under `rc:m:/1`
 
-derived in memory, never serialized:
+these IDs are derived in memory and are not serialized:
 
 ```python
+# AM: replace with actual API once it's defined/implemented
 route.node_index: dict[str, Molecule]
 route.reaction_index: dict[str, Reaction]
 route.subtree_signature_by_path: dict[str, str]
@@ -79,6 +80,18 @@ route.subtree_paths_by_signature: dict[str, list[str]]
 route.reaction_signature_by_path: dict[str, str]
 route.prefix_signature_by_path_and_depth: dict[tuple[str, int], str]
 ```
+
+### Route signatures
+
+`Route` signatures give us a canonical way to talk about route structure without carrying around the whole tree or comparing nested objects by hand. they are the basis for exact route comparison: full-route equality, reaction equality, prefix matching to depth `k`, and subtree containment. The core idea is [Merkle-like](https://en.wikipedia.org/wiki/Merkle_tree): the signature of a parent is built from its own identity plus the signatures of its children. Signatures are:
+
+- order-invariant over reactant ordering
+- preserve multiplicity when the same reactant appears more than once
+- and can be parameterized by match level when needed. 
+
+we need three closely related signatures. `reaction_signature(path)` identifies the immediate reaction at a given path: product plus reactants, but not the deeper subtrees below those reactants. `subtree_signature(path)` identifies the entire rooted subtree below a molecule, including all downstream expansions. `prefix_signature(path, depth)` is the truncated version used for questions like “did the planner get the first reaction right?” or “how deep does this prediction agree with the reference route?”. together, these three cover the exact comparison cases we care about without forcing every downstream workflow to reimplement tree matching.
+
+it is important to be explicit about what signatures do not solve. they are for exact comparisons. if two subtree signatures differ, that means the rooted subtrees are not identical; it does **not** mean that no meaningful partial match exists below them. in particular, prune-tolerant or embedding-style questions such as “does this route appear inside that route if extra downstream branches are ignored?” require a separate recursive matcher. signatures are still useful there as a fast filter, but they are not the whole algorithm.
 
 signature rules:
 
@@ -106,7 +119,7 @@ subtree_signature(path):
     molecule = route.node_index[path]
     key = molecule.key(match_level)
 
-    if molecule.reaction is None:
+    if molecule.product_of is None:
         return ("mol", key)
 
     rxn_sig = reaction_signature(reaction_path_for_product(path))
@@ -121,7 +134,7 @@ prefix_signature(path, depth):
     molecule = route.node_index[path]
     key = molecule.key(match_level)
 
-    if depth == 0 or molecule.reaction is None:
+    if depth == 0 or molecule.product_of is None:
         return ("mol", key)
 
     rxn_sig = reaction_signature(reaction_path_for_product(path))
@@ -191,53 +204,53 @@ route.leaves(unique: bool = True) -> list[Molecule]
 route.root_reaction() -> Reaction | None
 
 route.subroute(path: str) -> Route
-route.prefix(depth: int, *, path: str = "rc:m:_") -> Route
+route.prefix(depth: int, *, path: str = "rc:m:/") -> Route
 route.iter_subroutes() -> Iterator[Route]
 
 route.subtree_signature(path: str, *, match_level=...) -> str
 route.reaction_signature(path: str, *, match_level=...) -> str
-route.prefix_signature(depth: int, *, path: str = "rc:m:_", match_level=...) -> str
+route.prefix_signature(depth: int, *, path: str = "rc:m:/", match_level=...) -> str
 route.subtree_signatures(*, match_level=...) -> dict[str, str]
 route.subtree_hit_paths(
     other: Route,
     *,
-    other_path: str = "rc:m:_",
+    other_path: str = "rc:m:/",
     match_level=...,
 ) -> list[str]
 route.embedded_subtree_hit_paths(
     other: Route,
     *,
-    other_path: str = "rc:m:_",
+    other_path: str = "rc:m:/",
     match_level=...,
 ) -> list[str]
 
-route.same_subtree(other: Route, *, path: str = "rc:m:_", other_path: str = "rc:m:_", match_level=...) -> bool
-route.same_reaction(other: Route, *, path: str = "rc:r:_", other_path: str = "rc:r:_", match_level=...) -> bool
+route.same_subtree(other: Route, *, path: str = "rc:m:/", other_path: str = "rc:m:/", match_level=...) -> bool
+route.same_reaction(other: Route, *, path: str = "rc:r:/", other_path: str = "rc:r:/", match_level=...) -> bool
 route.same_prefix(
     other: Route,
     *,
     depth: int,
-    path: str = "rc:m:_",
-    other_path: str = "rc:m:_",
+    path: str = "rc:m:/",
+    other_path: str = "rc:m:/",
     match_level=...,
 ) -> bool
 route.max_prefix_depth(
     other: Route,
     *,
-    path: str = "rc:m:_",
-    other_path: str = "rc:m:_",
+    path: str = "rc:m:/",
+    other_path: str = "rc:m:/",
     match_level=...,
 ) -> int
 route.contains_subtree(
     other: Route,
     *,
-    other_path: str = "rc:m:_",
+    other_path: str = "rc:m:/",
     match_level=...,
 ) -> bool
 route.contains_embedded_subtree(
     other: Route,
     *,
-    other_path: str = "rc:m:_",
+    other_path: str = "rc:m:/",
     match_level=...,
 ) -> bool
 ```
@@ -605,16 +618,16 @@ candidate.same_subtree(reference)
 candidate.same_reaction(reference)
 
 # branch-local subtree match
-candidate.same_subtree(reference, path="rc:m:1", other_path="rc:m:1")
+candidate.same_subtree(reference, path="rc:m:/1", other_path="rc:m:/1")
 
 # branch-local prefix match to depth 3
-candidate.same_prefix(reference, path="rc:m:1", other_path="rc:m:1", depth=3)
+candidate.same_prefix(reference, path="rc:m:/1", other_path="rc:m:/1", depth=3)
 
 # does reference contain this candidate subtree anywhere?
 reference.contains_subtree(candidate)
 
 # where does the right branch of candidate occur inside reference?
-reference.subtree_hit_paths(candidate, other_path="rc:m:1")
+reference.subtree_hit_paths(candidate, other_path="rc:m:/1")
 
 # does reference contain this candidate route after pruning deeper host branches?
 reference.contains_embedded_subtree(candidate)
@@ -623,7 +636,7 @@ reference.contains_embedded_subtree(candidate)
 for the branch-level example from [route-node-ids.md](/Users/morgunov/Developer/ischemist/synthesis-planning/project-procrustes/docs/developers/route-node-ids.md:1), this is the kind of query we want:
 
 ```python
-candidate.same_prefix(reference, path="rc:m:1", other_path="rc:m:1", depth=3)
+candidate.same_prefix(reference, path="rc:m:/1", other_path="rc:m:/1", depth=3)
 ```
 
 or, if you only care whether the whole right branch matches:
