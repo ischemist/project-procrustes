@@ -2,7 +2,13 @@
 icon: lucide/history
 ---
 
-# Changelog
+### Pre-1.0 Compatibility Policy
+
+RetroCast is still pre-`1.0.0`. Until `1.0.0`, we will make breaking changes to the core schema or workflows whenever we see a compelling reason to do so. We'll try to keep some [sane deprecation schedule](developers/deprecations) unless it incurs a significant complexity cost.
+
+Practically speaking, you should treat `2-raw` (or wherever you store the raw planner outputs) as the source of truth and `3-processed`, `4-scored`, `5-results` as regenerable.
+
+For most use cases, this should not be a problem since the full pipeline of ingest, score, and analyze is decently fast. If you are using (or planning to use) RetroCast in production pipelines that will handle large volumes of data, please feel free [to get in touch](ischemist.com/contact).
 
 ## v0.6.0
 

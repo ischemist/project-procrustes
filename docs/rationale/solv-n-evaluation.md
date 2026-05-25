@@ -1,5 +1,5 @@
 ---
-icon: lucide/git-branch
+icon: lucide/clipboard-check
 ---
 
 # Solv-N Evaluation

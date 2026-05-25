@@ -1,50 +1,24 @@
-# design doc
+---
+icon: lucide/cable
+---
 
-## goals
+# Schema Design
 
-retrocast should expose 2 clean primitives:
+This document captures the thinking process for the core data model and workflow design in RetroCast. It is a more elaborate version of the [concepts overview page](/concepts) and is the primary place to build a mental model of the codebase.
 
-- cast arbitrary planner output into canonical `Route`s
-- evaluate ranked outputs for one target or many targets
+## Goals
 
-benchmark evaluation is a wrapper around the single-target primitive, not the other way around.
+RetroCast is designed to handle two broad use cases:
 
-## principles
+- casting arbitrary planner output into canonical `Route`s
+- evaluating those outputs for one target or many targets
 
-- keep the data model small
-- keep the data flow explicit
-- store structural facts, derive summaries
-- route-first where possible
-- preserve failed candidates only when the workflow needs an honest denominator
-- make route-only workflows a projection of the same underlying adaptation
+## Route
 
-## core names
-
-- `Route`
-- `Molecule`
-- `Reaction`
-- `FailureRecord`
-- `Candidate`
-- `Target`
-- `Task`
-- `Scope`
-- `ScoredCandidate`
-- `TargetResult`
-- `Evaluation`
-- `AnalysisReport`
-
-## route
-
-`Route` stays a strict rooted tree.
+In RetroCast, a `Route` is an AND/OR tree of `Molecule` and `Reaction` nodes.
 
 ```text
 Route -> Molecule -> Reaction -> Molecule -> Reaction -> ...
-```
-
-not:
-
-```text
-Route -> Route -> Route
 ```
 
 ```mermaid
@@ -58,19 +32,19 @@ graph TD
     rx1 --> m4["Molecule"]
 ```
 
-### route schema
+Basic schema
 
 ```python
 class Molecule(BaseModel):
     smiles: SmilesStr
     inchikey: InchiKeyStr
-    reaction: Reaction | None = None
+    product_of: Reaction | None = None
     annotations: dict[str, Any] = Field(default_factory=dict)
 
 
 class Reaction(BaseModel):
     reactants: list[Molecule]
-    mapped_smiles: ReactionSmilesStr | None = None
+    mapped_reaction_smiles: ReactionSmilesStr | None = None
     template: str | None = None
     reagents: list[SmilesStr] | None = None
     solvents: list[SmilesStr] | None = None
@@ -83,12 +57,9 @@ class Route(BaseModel):
     schema_version: str = "2"
 ```
 
-### route semantics
+Identical molecules in different positions (e.g. same building block used in two branches) are different nodes; whence a Route is a tree, not just a DAG. Primarily because enforcing a 1 molecule = 1 node would introduce operational (serialization, signatures) complexity without any clear/obvious benefit beyond just marginally smaller disk usage.
 
-- `Molecule` is a positioned occurrence in one route, not a pure identity object
-- no custom `__eq__` / `__hash__` by inchikey
-- identical molecules in different positions are different nodes
-- chemical identity is compared explicitly via `molecule.key(...)`
+### Route path
 
 derived route-local ids:
 
@@ -104,8 +75,9 @@ derived in memory, never serialized:
 route.node_index: dict[str, Molecule]
 route.reaction_index: dict[str, Reaction]
 route.subtree_signature_by_path: dict[str, str]
+route.subtree_paths_by_signature: dict[str, list[str]]
 route.reaction_signature_by_path: dict[str, str]
-route.prefix_signature_by_depth: dict[int, str]
+route.prefix_signature_by_path_and_depth: dict[tuple[str, int], str]
 ```
 
 signature rules:
@@ -114,6 +86,102 @@ signature rules:
 - multiplicity-preserving for duplicate reactants
 - parameterized by match level when needed
 - never use `frozenset(...)`
+- exact signatures are merkle-like: parent signatures are built from child signatures
+- use a canonical tuple / string first; a hashed form can be a cache or optimization later
+
+signature sketches:
+
+```python
+reaction_signature(path):
+    product_path = product_path_for_reaction(path)
+    product_key = route.node_index[product_path].key(match_level)
+    reactant_keys = sorted(
+        route.node_index[child_path].key(match_level)
+        for child_path in reactant_paths_from_reaction(path)
+    )
+    return ("rxn", product_key, tuple(reactant_keys))
+
+
+subtree_signature(path):
+    molecule = route.node_index[path]
+    key = molecule.key(match_level)
+
+    if molecule.reaction is None:
+        return ("mol", key)
+
+    rxn_sig = reaction_signature(reaction_path_for_product(path))
+    child_sigs = sorted(
+        subtree_signature(child_path)
+        for child_path in reactant_paths(path)
+    )
+    return ("mol", key, rxn_sig, tuple(child_sigs))
+
+
+prefix_signature(path, depth):
+    molecule = route.node_index[path]
+    key = molecule.key(match_level)
+
+    if depth == 0 or molecule.reaction is None:
+        return ("mol", key)
+
+    rxn_sig = reaction_signature(reaction_path_for_product(path))
+    child_sigs = sorted(
+        prefix_signature(child_path, depth - 1)
+        for child_path in reactant_paths(path)
+    )
+    return ("mol", key, rxn_sig, tuple(child_sigs))
+```
+
+these signatures are for exact comparisons:
+
+- full subtree equality
+- full subtree containment
+- reaction equality
+- prefix equality up to depth `k`
+
+they are **not** the whole story for prune-tolerant or embedding-style matching. if we later want "can this route appear after pruning some branches?", that should be a separate recursive matcher, not a magic signature.
+
+embedded containment semantics:
+
+- exact `contains_subtree(...)` asks whether the query subtree appears unchanged
+- `contains_embedded_subtree(...)` asks whether the query subtree appears after pruning deeper expansions in the host
+- pruning is allowed below matched query leaves
+- pruning is **not** allowed to change the matched reaction frontier itself
+- so embedded matching may ignore extra downstream chemistry, but it does not ignore missing or different reactants in the matched reaction
+
+embedded matcher sketch:
+
+```python
+embeds(host_path, query_path):
+    if host.node(host_path).key(match_level) != query.node(query_path).key(match_level):
+        return False
+
+    query_rxn = query.reaction_at_product(query_path)
+    host_rxn = host.reaction_at_product(host_path)
+
+    if query_rxn is None:
+        return True
+
+    if host_rxn is None:
+        return False
+
+    if host.reaction_signature(host_rxn.path) != query.reaction_signature(query_rxn.path):
+        return False
+
+    return reactant_children_embed(host_rxn.reactants, query_rxn.reactants)
+```
+
+`reactant_children_embed(...)` should treat reactants as a multiset:
+
+- if reactant keys are unique, pair in canonical sorted order
+- if duplicates exist, backtrack only within the duplicate-key bucket
+- typical reaction fanout is small, so this stays tractable
+
+the important outcome split is:
+
+- exact subtree signatures answer full / prefix / exact containment cheaply
+- embedded containment answers "does this route logic occur here if deeper branches are pruned?"
+- that is useful for train/test filtration and as a secondary evaluation diagnostic
 
 ### route api
 
@@ -123,16 +191,55 @@ route.leaves(unique: bool = True) -> list[Molecule]
 route.root_reaction() -> Reaction | None
 
 route.subroute(path: str) -> Route
-route.prefix(depth: int) -> Route
+route.prefix(depth: int, *, path: str = "rc:m:_") -> Route
 route.iter_subroutes() -> Iterator[Route]
 
 route.subtree_signature(path: str, *, match_level=...) -> str
 route.reaction_signature(path: str, *, match_level=...) -> str
-route.prefix_signature(depth: int, *, match_level=...) -> str
+route.prefix_signature(depth: int, *, path: str = "rc:m:_", match_level=...) -> str
+route.subtree_signatures(*, match_level=...) -> dict[str, str]
+route.subtree_hit_paths(
+    other: Route,
+    *,
+    other_path: str = "rc:m:_",
+    match_level=...,
+) -> list[str]
+route.embedded_subtree_hit_paths(
+    other: Route,
+    *,
+    other_path: str = "rc:m:_",
+    match_level=...,
+) -> list[str]
 
-route.matches(other: Route, *, mode: Literal["full", "root_reaction", "prefix"], depth: int | None = None) -> bool
-route.max_prefix_depth(other: Route, *, match_level=...) -> int
-route.contains_subroute(other: Route, *, match_level=...) -> bool
+route.same_subtree(other: Route, *, path: str = "rc:m:_", other_path: str = "rc:m:_", match_level=...) -> bool
+route.same_reaction(other: Route, *, path: str = "rc:r:_", other_path: str = "rc:r:_", match_level=...) -> bool
+route.same_prefix(
+    other: Route,
+    *,
+    depth: int,
+    path: str = "rc:m:_",
+    other_path: str = "rc:m:_",
+    match_level=...,
+) -> bool
+route.max_prefix_depth(
+    other: Route,
+    *,
+    path: str = "rc:m:_",
+    other_path: str = "rc:m:_",
+    match_level=...,
+) -> int
+route.contains_subtree(
+    other: Route,
+    *,
+    other_path: str = "rc:m:_",
+    match_level=...,
+) -> bool
+route.contains_embedded_subtree(
+    other: Route,
+    *,
+    other_path: str = "rc:m:_",
+    match_level=...,
+) -> bool
 ```
 
 this is enough for:
@@ -142,6 +249,24 @@ this is enough for:
 - depth-`k` prefix match
 - mean / max matched depth
 - subroute containment
+
+containment is intentionally unanchored:
+
+- `same_*` compares 2 specific anchored paths
+- `contains_subtree(...)` asks whether the subtree rooted at `other_path` appears anywhere inside `self`
+- `contains_embedded_subtree(...)` asks whether the query appears anywhere inside `self` after pruning deeper host branches
+- `subtree_hit_paths(...)` returns the matching anchor paths in `self`
+- `embedded_subtree_hit_paths(...)` returns the embedded-match anchor paths in `self`
+
+implementation sketch:
+
+- build `route.subtree_signature_by_path` once with a post-order traversal
+- build `route.subtree_paths_by_signature` as `signature -> [paths]`
+- `contains_subtree(other, other_path=...)` computes `other.subtree_signature(other_path)` and checks membership
+- no cartesian product over all path pairs
+- `same_subtree(...)` is just signature equality on 2 anchored paths
+- `same_prefix(...)` is equality of truncated signatures
+- `contains_embedded_subtree(...)` should first try exact signature containment as a fast path, then recurse only over plausible anchor paths with the same root molecule key
 
 ## workflow
 
@@ -222,11 +347,9 @@ why `FailureRecord` still exists:
 
 this is the right place for flexible adapt.
 
-pruning does **not** mean the remaining prefix is chemically invalid.
-it means the plan is incomplete.
+pruning does **not** mean the remaining prefix is chemically invalid. it means the plan is incomplete.
 
-current code does not expose a structured partial-error contract for adapters.
-today the real seam is simpler:
+current code does not expose a structured partial-error contract for adapters. today the real seam is simpler:
 
 - adapter returns a `Route`
 - or adapter raises and adaptation records total failure
@@ -260,8 +383,7 @@ this is the real meaning of the current `--preserve-failed-candidates` flag.
 
 collection maps adapted outputs onto known targets.
 
-we use `collect` rather than `bind` here because that is already the project’s public vocabulary:
-adapter output is collected onto benchmark targets for scoring.
+we use `collect` rather than `bind` here because that is already the project’s public vocabulary: adapter output is collected onto benchmark targets for scoring.
 
 ingest is just the convenience workflow:
 
@@ -434,6 +556,13 @@ class ConstraintResult(BaseModel):
     checks: list[CheckResult] = Field(default_factory=list)
 ```
 
+why `ConstraintResult` has both `status` and `checks`:
+
+- `status` is the compact answer we query constantly
+- `checks` are sparse explanations for why it failed
+- empty `checks` must not ambiguously mean either "pass" or "not_evaluated"
+- we do not want to emit fake passing checks just to preserve status
+
 what we borrow from current [validity.py](/Users/morgunov/Developer/ischemist/synthesis-planning/project-procrustes/src/retrocast/models/validity.py:10):
 
 - `CheckStatus`
@@ -454,22 +583,54 @@ pass/fail is explicit:
 - reaction passes tier `t` iff the reaction's tier status is `"pass"`
 - scope passes iff `scope_results[scope_name].status == "pass"`
 
-### match schema
+### route comparison api
 
-matching is separate from validity.
+matching should not be a persisted schema in v1.
+
+the carmack move is simpler:
+
+- `Route` already knows how to derive subtree / reaction / prefix signatures
+- comparisons are just comparisons of those signatures
+- exact containment is an index lookup over subtree signatures
+- embedded containment is a separate recursive algorithm built on top of the same route api
+- if we ever need a richer persisted comparison contract later, add it later
+
+examples:
 
 ```python
-class MatchResult(BaseModel):
-    full_match_index: int | None = None
-    root_reaction_match: bool = False
-    best_prefix_depth: int | None = None
+# full route match
+candidate.same_subtree(reference)
+
+# root reaction match
+candidate.same_reaction(reference)
+
+# branch-local subtree match
+candidate.same_subtree(reference, path="rc:m:1", other_path="rc:m:1")
+
+# branch-local prefix match to depth 3
+candidate.same_prefix(reference, path="rc:m:1", other_path="rc:m:1", depth=3)
+
+# does reference contain this candidate subtree anywhere?
+reference.contains_subtree(candidate)
+
+# where does the right branch of candidate occur inside reference?
+reference.subtree_hit_paths(candidate, other_path="rc:m:1")
+
+# does reference contain this candidate route after pruning deeper host branches?
+reference.contains_embedded_subtree(candidate)
 ```
 
-this supports:
+for the branch-level example from [route-node-ids.md](/Users/morgunov/Developer/ischemist/synthesis-planning/project-procrustes/docs/developers/route-node-ids.md:1), this is the kind of query we want:
 
-- full acceptable-route match
-- root reaction match
-- best retained prefix depth
+```python
+candidate.same_prefix(reference, path="rc:m:1", other_path="rc:m:1", depth=3)
+```
+
+or, if you only care whether the whole right branch matches:
+
+```python
+candidate.same_subtree(reference, path="rc:m:1", other_path="rc:m:1")
+```
 
 ### scored row schema
 
@@ -482,7 +643,6 @@ class ScoredCandidate(BaseModel):
     failure: FailureRecord | None = None
     validity: RouteValidity = Field(default_factory=RouteValidity)
     scope_results: dict[str, ConstraintResult] = Field(default_factory=dict)
-    match: MatchResult | None = None
 
 
 class TargetResult(BaseModel):
@@ -510,6 +670,12 @@ why keep both `failure` and `validity`:
 
 - `failure` is adaptation-time information: no route was produced
 - `validity` is score-time information: given a route, which tiers / reactions passed or failed
+
+most route-comparison outputs should be derived because they depend on:
+
+- which reference route or route set you compare against
+- which route-local paths you anchor on
+- whether you care about full, root-reaction, prefix, subtree, or containment semantics
 
 for a failed adaptation slot:
 
@@ -581,6 +747,8 @@ scored.tier_passes(tier: Tier) -> bool
 scored.scope_passes(scope: str) -> bool
 scored.solv(tier: Tier, scope: str) -> bool
 ```
+
+route-comparison helpers should live on `Route`, not inside `ScoredCandidate`.
 
 examples:
 
