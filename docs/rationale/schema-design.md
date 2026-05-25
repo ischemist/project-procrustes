@@ -16,6 +16,7 @@ benchmark evaluation is a wrapper around the single-target primitive, not the ot
 - store structural facts, derive summaries
 - route-first where possible
 - preserve failed candidates only when the workflow needs an honest denominator
+- make route-only workflows a projection of the same underlying adaptation
 
 ## core names
 
@@ -146,14 +147,16 @@ this is enough for:
 
 ```mermaid
 graph LR
-    a["raw output"] --> b1["adapt_routes"]
-    a["raw output"] --> b2["adapt_candidates"]
-    b2 --> c["bind_to_task / ingest_candidates"]
-    b1 --> d["route-first use"]
-    c --> e["score_target / score_task"]
-    d --> e
-    e --> f["Evaluation"]
-    f --> g["analyze"]
+    a["raw output"] --> b["adapt_candidates(mode)"]
+    b --> c["Candidate[]"]
+    c --> d["successful routes projection"]
+    d --> e["Route[]"]
+    c --> f["collect_candidates / ingest_candidates"]
+    e --> g["route-first use"]
+    f --> h["score_target / score_task"]
+    g --> h
+    h --> i["Evaluation"]
+    i --> j["analyze"]
 ```
 
 ## 1. adapt
@@ -177,19 +180,10 @@ class FailureRecord(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
-class AdaptIssue(BaseModel):
-    path: str | None = None
-    code: str
-    message: str | None = None
-    context: dict[str, Any] = Field(default_factory=dict)
-
-
 class Candidate(BaseModel):
     rank: int
     route: Route | None = None
     failure: FailureRecord | None = None
-    adapt_issues: list[AdaptIssue] = Field(default_factory=list)
-    open_leaf_paths: list[str] = Field(default_factory=list)
 ```
 
 rules:
@@ -198,8 +192,6 @@ rules:
 - adapter `cast(...)` returns only `Route`
 - invalid smiles usually fail here, during casting / canonicalization
 - failed candidates must carry target hints if later benchmark binding depends on them
-- `adapt_issues` are for local recoverable adapt problems
-- `open_leaf_paths` mark leaves created by pruning, i.e. incomplete plan frontiers
 
 why `Candidate` exists:
 
@@ -208,6 +200,12 @@ why `Candidate` exists:
 - it gives scoring an honest denominator for tier-0
 
 if the user does not care about failures, use routes directly.
+
+why `FailureRecord` still exists:
+
+- sometimes no trustworthy `Route` can be produced at all
+- representing that as an "empty route" would introduce fake chemistry
+- total failure is the only failure we preserve in the core schema
 
 ### adapt modes
 
@@ -220,13 +218,20 @@ if the user does not care about failures, use routes directly.
 
 - a local chemistry error drops the containing reaction subtree
 - the valid prefix above it is kept
-- an `AdaptIssue` is recorded
-- the product of the dropped reaction becomes an open leaf
+- the retained route now ends at that frontier
 
 this is the right place for flexible adapt.
 
 pruning does **not** mean the remaining prefix is chemically invalid.
 it means the plan is incomplete.
+
+current code does not expose a structured partial-error contract for adapters.
+today the real seam is simpler:
+
+- adapter returns a `Route`
+- or adapter raises and adaptation records total failure
+
+so if we add `prune` mode, it should still return an ordinary retained-prefix `Route`, not a route plus extra prune annotations in the core schema.
 
 ### adapt api
 
@@ -243,11 +248,20 @@ intended use:
 - `adapt_routes(...)` for route-first inspection and ad hoc use
 - `adapt_candidates(...)` for benchmarking and honest solv/tier metrics
 
+important: these are not different chemistry conversions.
+
+- `adapt_candidates(...)` is the full ranked adaptation result
+- `adapt_routes(...)` is just the successful-route projection
+- `adapt_route(...)` is the single-item version of that projection
+
 this is the real meaning of the current `--preserve-failed-candidates` flag.
 
 ## 2. collect / ingest
 
-collect binds adapted outputs onto known targets.
+collection maps adapted outputs onto known targets.
+
+we use `collect` rather than `bind` here because that is already the project’s public vocabulary:
+adapter output is collected onto benchmark targets for scoring.
 
 ingest is just the convenience workflow:
 
@@ -271,8 +285,8 @@ class Task(BaseModel):
     schema_version: str = "2"
 
 
-BoundCandidates = dict[str, list[Candidate]]
-BoundRoutes = dict[str, list[Route]]
+CollectedCandidates = dict[str, list[Candidate]]
+CollectedRoutes = dict[str, list[Route]]
 ```
 
 one benchmark is a `Task`.
@@ -290,29 +304,34 @@ not a list of route sets.
 ### collect api
 
 ```python
-bind_to_task(
+collect_candidates(
     candidates: Iterable[Candidate],
     task: Task,
-) -> BoundCandidates
+) -> CollectedCandidates
 
 collect_routes(
     routes: Iterable[Route],
     task: Task,
-) -> BoundRoutes
+) -> CollectedRoutes
 ```
 
-binding rules:
+collection rules:
 
-- if `candidate.route` exists, bind by `route.target`
-- otherwise bind by `candidate.failure.target_id` / `candidate.failure.target_smiles`
+- if `candidate.route` exists, place it by `route.target`
+- otherwise place it by `candidate.failure.target_id` / `candidate.failure.target_smiles`
 - ambiguous and unmatched cases should be explicit policy decisions, not silent magic
+
+these do the same conceptual operation over different row types:
+
+- `collect_candidates(...)` preserves failed rank slots
+- `collect_routes(...)` is the route-only projection
 
 ### ingest api
 
 ```python
-ingest_routes(raw_output, adapter, task) -> BoundRoutes
+ingest_routes(raw_output, adapter, task) -> CollectedRoutes
 
-ingest_candidates(raw_output, adapter, task) -> BoundCandidates
+ingest_candidates(raw_output, adapter, task) -> CollectedCandidates
 ```
 
 intended use:
@@ -346,11 +365,17 @@ the right compromise is:
 - keep detailed per-check records sparse
 - do not store giant lists of passing checks just to say "everything was fine"
 
-### score schemas
+### score inputs
+
+scoring consumes:
+
+- collected candidates
+- a fixed tier taxonomy `0..3`
+- one or more named scopes
+- optional acceptable routes on the target
 
 ```python
 Tier = Literal[0, 1, 2, 3]
-CheckStatus = Literal["pass", "fail", "not_evaluated"]
 
 
 class StockConstraint(BaseModel):
@@ -372,6 +397,14 @@ Constraint = StockConstraint | RequiredLeafConstraint
 class Scope(BaseModel):
     name: str
     constraints: list[Constraint] = Field(default_factory=list)
+```
+
+### validity schema
+
+validity stores whether a route or reaction passed tier `n`, and why.
+
+```python
+CheckStatus = Literal["pass", "fail", "not_evaluated"]
 
 
 class CheckResult(BaseModel):
@@ -399,20 +432,54 @@ class RouteValidity(BaseModel):
 class ConstraintResult(BaseModel):
     status: CheckStatus
     checks: list[CheckResult] = Field(default_factory=list)
+```
 
+what we borrow from current [validity.py](/Users/morgunov/Developer/ischemist/synthesis-planning/project-procrustes/src/retrocast/models/validity.py:10):
 
+- `CheckStatus`
+- `TierResult(status, checks)`
+- `ReactionValidity`
+- `RouteValidity`
+- `ConstraintResult(status, checks)`
+
+what we do **not** carry over:
+
+- legacy serializer / parser cruft for `"tier N"` keys
+- `ScopeId = Literal["stock"]`
+- global “implemented tier” machinery inside the schema layer
+
+pass/fail is explicit:
+
+- route passes tier `t` iff `validity.tiers[t].status == "pass"`
+- reaction passes tier `t` iff the reaction's tier status is `"pass"`
+- scope passes iff `scope_results[scope_name].status == "pass"`
+
+### match schema
+
+matching is separate from validity.
+
+```python
 class MatchResult(BaseModel):
     full_match_index: int | None = None
     root_reaction_match: bool = False
     best_prefix_depth: int | None = None
+```
 
+this supports:
 
+- full acceptable-route match
+- root reaction match
+- best retained prefix depth
+
+### scored row schema
+
+`ScoredCandidate` is the post-score row.
+
+```python
 class ScoredCandidate(BaseModel):
     rank: int
     route: Route | None = None
     failure: FailureRecord | None = None
-    adapt_issues: list[AdaptIssue] = Field(default_factory=list)
-    open_leaf_paths: list[str] = Field(default_factory=list)
     validity: RouteValidity = Field(default_factory=RouteValidity)
     scope_results: dict[str, ConstraintResult] = Field(default_factory=dict)
     match: MatchResult | None = None
@@ -431,26 +498,6 @@ class Evaluation(BaseModel):
     schema_version: str = "2"
 ```
 
-what we borrow from current [validity.py](/Users/morgunov/Developer/ischemist/synthesis-planning/project-procrustes/src/retrocast/models/validity.py:10):
-
-- `CheckStatus`
-- `TierResult(status, checks)`
-- `ReactionValidity`
-- `RouteValidity`
-- `ConstraintResult(status, checks)`
-
-what we do **not** carry over:
-
-- legacy serializer / parser cruft for `"tier N"` keys
-- `ScopeId = Literal["stock"]`
-- global “implemented tier” machinery inside the schema layer
-
-pass/fail is now explicit:
-
-- route passes tier `t` iff `validity.tiers[t].status == "pass"`
-- reaction passes tier `t` iff the reaction's tier status is `"pass"`
-- scope passes iff `scope_results[scope_name].status == "pass"`
-
 solv-n under scope `s` is:
 
 ```text
@@ -463,11 +510,6 @@ why keep both `failure` and `validity`:
 
 - `failure` is adaptation-time information: no route was produced
 - `validity` is score-time information: given a route, which tiers / reactions passed or failed
-
-why keep `adapt_issues` and `open_leaf_paths`:
-
-- they record local pruning without pretending the surviving prefix is invalid
-- they let scoring distinguish "chemically valid prefix" from "complete plan"
 
 for a failed adaptation slot:
 
@@ -505,9 +547,8 @@ a pruned route can be:
 `stock` scope should therefore fail when either:
 
 - some leaf is not in stock
-- or `open_leaf_paths` is non-empty
 
-that is how we prevent pruning from laundering an incomplete plan into a solved one.
+that is how we prevent an incomplete plan from looking solved.
 
 ### score api
 
@@ -522,7 +563,7 @@ score_target(
 
 score_task(
     task: Task,
-    bound_candidates: BoundCandidates,
+    collected_candidates: CollectedCandidates,
     *,
     scopes: list[Scope] | None = None,
     tiers: Sequence[Tier] = (0, 1, 2, 3),
@@ -556,11 +597,11 @@ result = score_target(
 
 ```python
 # benchmark
-bound = ingest_candidates(raw_output, adapter, task)
+collected = ingest_candidates(raw_output, adapter, task)
 
 evaluation = score_task(
     task,
-    bound,
+    collected,
     scopes=[Scope(name="stock", constraints=[StockConstraint(stock_name="emolecules")])],
 )
 ```
