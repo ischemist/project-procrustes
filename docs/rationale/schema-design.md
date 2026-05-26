@@ -69,17 +69,41 @@ RetroCast uses deterministic paths to refer to molecules and reactions inside a 
 - `rc:r:/0` reaction producing `rc:m:/0`
 - `rc:m:/1/0` first child under `rc:m:/1`
 
-these IDs are derived in memory and are not serialized:
+these IDs are derived in memory and are not serialized. internally, they should be represented as typed addresses, not repeatedly parsed strings:
 
 ```python
-# AM: replace with actual API once it's defined/implemented
-route.node_index: dict[str, Molecule]
-route.reaction_index: dict[str, Reaction]
-route.subtree_signature_by_path: dict[str, str]
-route.subtree_paths_by_signature: dict[str, list[str]]
-route.reaction_signature_by_path: dict[str, str]
-route.prefix_signature_by_path_and_depth: dict[tuple[str, int], str]
+class RoutePath(BaseModel):
+    kind: Literal["m", "r"]
+    indices: tuple[int, ...] = ()
+
+    @classmethod
+    def parse(cls, value: str) -> RoutePath: ...
+
+    @classmethod
+    def target(cls) -> RoutePath: ...
+
+    @classmethod
+    def root_reaction(cls) -> RoutePath: ...
+
+    def id(self) -> str: ...
+    def depth(self) -> int: ...
+
+    def is_molecule(self) -> bool: ...
+    def is_reaction(self) -> bool: ...
+
+    def produced_by(self) -> RoutePath: ...
+    def product(self) -> RoutePath: ...
+    def reactant(self, index: int) -> RoutePath: ...
 ```
+
+semantics:
+
+- `RoutePath.target()` is `rc:m:/`
+- `RoutePath.root_reaction()` is `rc:r:/`
+- `RoutePath.parse("rc:m:/1/0").produced_by()` is `rc:r:/1/0`
+- `RoutePath.parse("rc:r:/1/0").product()` is `rc:m:/1/0`
+- `RoutePath.parse("rc:r:/1/0").reactant(2)` is `rc:m:/1/0/2`
+
 
 ## Route Signatures
 
@@ -89,7 +113,7 @@ route.prefix_signature_by_path_and_depth: dict[tuple[str, int], str]
 - preserve multiplicity when the same reactant appears more than once
 - and can be parameterized by match level when needed. 
 
-### Molecule identity and comparison
+### Molecule Identity
 
 We use [InChiKeys](https://en.wikipedia.org/wiki/International_Chemical_Identifier) as molecular identity. RetroCast currently supports three levels of InChiKey specificity:
 
@@ -100,186 +124,109 @@ We use [InChiKeys](https://en.wikipedia.org/wiki/International_Chemical_Identifi
 Most users should use the default `FULL` level, but sometimes a model developer might wish to disambiguate planner's failure to account for proper stereochemistry from more fundamental failures to find the right connectivity (wherefore he might use `NO_STEREO`). Or might want to ignore isotope/protonation differences (wherefore `CONNECTIVITY`).
 
 ```python
-# AM: replace with actual API once it's defined/implemented
-molecule_identity(molecule, match_level):
-    return reduce_inchikey(molecule.inchikey, match_level)
+class Molecule(BaseModel):
+    ...
+
+    def key(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> str:
+        return reduce_inchikey(self.inchikey, match_level)
+    def signature(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> str:
+        return stable_hash(self.key(match_level))
 ```
 
-### Reaction identity and comparison
+### Reaction Identity
 
-the next question is one-step reaction identity: did these two routes make the same retrosynthetic decision at this point? that is stricter than comparing just the product molecule, but intentionally narrower than comparing the full downstream subtree.
+At the most basic structural level, a reaction identity is defined by the structures of reactants and product. Defining `key` and `signature` method on a `Reaction` class is not possible without having a pointer to the `Reaction` product. There are two options:
+
+- treat `Reaction` as a Route-specific occurrence object (with an explicit pointer to its product), but that requires writing custom serialization logic and ensuring loaded Reaction objects are always "hydrated" with proper parent references. Violates the spirit of [SRP](https://en.wikipedia.org/wiki/Single-responsibility_principle) and I'm a bit WebDev-brained not to think of the Data-View split analogy, so instead
+- we create a `ReactionView` model that provides a required route-contextual representation of a `Reaction`.
 
 ```python
-reaction_payload(path):
-    product_path = product_path_for_reaction(path)
-    product_key = molecule_identity(route.node_index[product_path], match_level)
-    reactant_keys = sorted(
-        molecule_identity(route.node_index[child_path], match_level)
-        for child_path in reactant_paths_from_reaction(path)
-    )
-    return ("rxn", product_key, tuple(reactant_keys))
+class ReactionView:
+    route: Route
+    path: RoutePath
+    value: Reaction
 
+    def product(self) -> MoleculeView: ...
+    def reactants(self) -> list[MoleculeView]: ...
 
-reaction_signature(path):
-    return stable_hash(reaction_payload(path))
+    def key(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> tuple:
+        return (
+            "rxn",
+            self.product().key(match_level),
+            tuple(sorted(r.key(match_level) for r in self.reactants())),
+        )
+
+    def signature(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> str:
+        return stable_hash(self.key(match_level))
 ```
 
-this is what we want for checks like root-reaction match. if two routes choose the same reaction at the top but expand the lower branches differently, the reaction signatures should still match.
-
-### Route identity and comparison
-
-full route equality is just rooted subtree equality at the target. more generally, exact route comparison means: compare the entire subtree below a molecule path. that subtree payload is recursive and merkle-like: it is built from the molecule identity at the current path, the immediate reaction payload at that path, and the child subtrees below it.
+for consistency in api design and ease of subtree comparison, we also define a similar view model for `Molecule`.
 
 ```python
-subtree_payload(path, depth=None):
-    molecule = route.node_index[path]
-    key = molecule_identity(molecule, match_level)
+class MoleculeView:
+    route: Route
+    path: RoutePath
+    value: Molecule
 
-    if molecule.product_of is None or depth == 0:
-        return ("mol", key)
+    def key(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> str:
+        return self.value.key(match_level)
 
-    next_depth = None if depth is None else depth - 1
-    rxn_payload = reaction_payload(reaction_path_for_product(path))
-    child_sigs = sorted(
-        subtree_signature(child_path, depth=next_depth)
-        for child_path in reactant_paths(path)
-    )
-    return ("mol", key, rxn_payload, tuple(child_sigs))
+    def produced_by(self) -> ReactionView | None: ...
 
+    def subtree_key(self, match_level=InChIKeyLevel.FULL, *, depth=None):
+        if self.value.product_of is None or depth == 0:
+            return ("mol", self.key(match_level))
 
-subtree_signature(path, depth=None):
-    return stable_hash(subtree_payload(path, depth=depth))
+        next_depth = None if depth is None else depth - 1
+        reaction = self.produced_by()
+        child_sigs = sorted(
+            reactant.subtree_signature(match_level, depth=next_depth)
+            for reactant in reaction.reactants()
+        )
+
+        return (
+            "mol",
+            self.key(match_level),
+            reaction.key(match_level),
+            tuple(child_sigs),
+        )
+
+    def subtree_signature(self, match_level=InChIKeyLevel.FULL, *, depth=None):
+        return stable_hash(self.subtree_key(match_level, depth=depth))
 ```
 
-with that in place:
 
-- full route equality is `subtree_signature("rc:m:/")`
-- exact subtree equality is `subtree_signature(path)`
-- exact subtree containment is membership in a subtree-signature index
-- prefix matching to depth `k` is just `subtree_signature(path, depth=k)`
+### Route Identity
 
-in other words, `prefix_signature(path, depth)` does not need a separate concept; it is just a convenience wrapper around truncated subtree identity.
+With the primitives above, full route equality is established by the subtree signature of the target with unlimited depth. i.e. `route.signature()` is an alias for `route.molecule_at("rc:m:/").subtree_signature()`. A generic exact subtree equality is `route.molecule_at(path).subtree_signature()`.
+
+We often might be interested in asking how far along the plan (starting from the target) do any two Routes agree? Such prefix matching is simply a subtree signature of fixed depth `k` rooted at the target.
 
 ```python
-prefix_signature(path, depth):
-    return subtree_signature(path, depth=depth)
+class Route(BaseModel):
+    ...
+
+    def key(
+        self,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+        *,
+        depth: int | None = None,
+    ) -> tuple:
+        return self.target().subtree_key(match_level, depth=depth)
+
+    def signature(
+        self,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+        *,
+        depth: int | None = None,
+    ) -> str:
+        return stable_hash(self.key(match_level, depth=depth))
 ```
 
-this is the mechanism behind questions like “did the planner find the first reaction?”, “does it match up to depth `k`?”, and “what is the maximum matched prefix depth?”.
+### Route Embedding
 
-finally, exact subtree identity is still not enough for the looser embedded-containment question. if we want to know whether one route appears inside another while allowing the host to keep extra downstream branches, exact equality is the wrong test. that case needs a separate recursive matcher:
+To be defined later, once we finish the basic migration. But a subtree signature primitive should simplify simple queries like "does a <- b <- c" contain "a <- b" queries. 
 
-```python
-embeds(host_path, query_path):
-    if molecule_identity(host.node(host_path), match_level) != molecule_identity(query.node(query_path), match_level):
-        return False
-
-    query_rxn = query.reaction_at_product(query_path)
-    host_rxn = host.reaction_at_product(host_path)
-
-    if query_rxn is None:
-        return True
-
-    if host_rxn is None:
-        return False
-
-    if host.reaction_signature(host_rxn.path) != query.reaction_signature(query_rxn.path):
-        return False
-
-    return reactant_children_embed(host_rxn.reactants, query_rxn.reactants)
-```
-
-so the split is:
-
-- molecule identity answers “same molecule?”
-- reaction identity answers “same one-step decision?”
-- subtree identity answers “same route or same branch?”
-- embedded matching answers “does this route logic occur here if deeper host branches are ignored?”
-
-### route api
-
-```python
-route.length() -> int
-route.leaves(unique: bool = True) -> list[Molecule]
-route.root_reaction() -> Reaction | None
-
-route.subroute(path: str) -> Route
-route.prefix(depth: int, *, path: str = "rc:m:/") -> Route
-route.iter_subroutes() -> Iterator[Route]
-
-route.subtree_signature(path: str, *, match_level=...) -> str
-route.reaction_signature(path: str, *, match_level=...) -> str
-route.prefix_signature(depth: int, *, path: str = "rc:m:/", match_level=...) -> str
-route.subtree_signatures(*, match_level=...) -> dict[str, str]
-route.subtree_hit_paths(
-    other: Route,
-    *,
-    other_path: str = "rc:m:/",
-    match_level=...,
-) -> list[str]
-route.embedded_subtree_hit_paths(
-    other: Route,
-    *,
-    other_path: str = "rc:m:/",
-    match_level=...,
-) -> list[str]
-
-route.same_subtree(other: Route, *, path: str = "rc:m:/", other_path: str = "rc:m:/", match_level=...) -> bool
-route.same_reaction(other: Route, *, path: str = "rc:r:/", other_path: str = "rc:r:/", match_level=...) -> bool
-route.same_prefix(
-    other: Route,
-    *,
-    depth: int,
-    path: str = "rc:m:/",
-    other_path: str = "rc:m:/",
-    match_level=...,
-) -> bool
-route.max_prefix_depth(
-    other: Route,
-    *,
-    path: str = "rc:m:/",
-    other_path: str = "rc:m:/",
-    match_level=...,
-) -> int
-route.contains_subtree(
-    other: Route,
-    *,
-    other_path: str = "rc:m:/",
-    match_level=...,
-) -> bool
-route.contains_embedded_subtree(
-    other: Route,
-    *,
-    other_path: str = "rc:m:/",
-    match_level=...,
-) -> bool
-```
-
-this is enough for:
-
-- full acceptable-route match
-- root reaction match
-- depth-`k` prefix match
-- mean / max matched depth
-- subroute containment
-
-containment is intentionally unanchored:
-
-- `same_*` compares 2 specific anchored paths
-- `contains_subtree(...)` asks whether the subtree rooted at `other_path` appears anywhere inside `self`
-- `contains_embedded_subtree(...)` asks whether the query appears anywhere inside `self` after pruning deeper host branches
-- `subtree_hit_paths(...)` returns the matching anchor paths in `self`
-- `embedded_subtree_hit_paths(...)` returns the embedded-match anchor paths in `self`
-
-implementation sketch:
-
-- build `route.subtree_signature_by_path` once with a post-order traversal
-- build `route.subtree_paths_by_signature` as `signature -> [paths]`
-- `contains_subtree(other, other_path=...)` computes `other.subtree_signature(other_path)` and checks membership
-- no cartesian product over all path pairs
-- `same_subtree(...)` is just signature equality on 2 anchored paths
-- `same_prefix(...)` is equality of truncated signatures
-- `contains_embedded_subtree(...)` should first try exact signature containment as a fast path, then recurse only over plausible anchor paths with the same root molecule key
 
 ## workflow
 
