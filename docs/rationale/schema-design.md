@@ -81,92 +81,97 @@ route.reaction_signature_by_path: dict[str, str]
 route.prefix_signature_by_path_and_depth: dict[tuple[str, int], str]
 ```
 
-### Route signatures
+## Route Signatures
 
-`Route` signatures give us a canonical way to talk about route structure without carrying around the whole tree or comparing nested objects by hand. they are the basis for exact route comparison: full-route equality, reaction equality, prefix matching to depth `k`, and subtree containment. The core idea is [Merkle-like](https://en.wikipedia.org/wiki/Merkle_tree): the signature of a parent is built from its own identity plus the signatures of its children. Signatures are:
+`Route` signatures give us a canonical way to talk about route structure without carrying around the whole tree or comparing nested objects by hand. They are the basis for route comparison: full-route equality, reaction equality, prefix matching to depth `k`, and subtree containment. The core idea is [Merkle-like](https://en.wikipedia.org/wiki/Merkle_tree): the signature of a parent is built from its own identity plus the signatures of its children. Signatures are:
 
 - order-invariant over reactant ordering
 - preserve multiplicity when the same reactant appears more than once
 - and can be parameterized by match level when needed. 
 
-we need three closely related signatures. `reaction_signature(path)` identifies the immediate reaction at a given path: product plus reactants, but not the deeper subtrees below those reactants. `subtree_signature(path)` identifies the entire rooted subtree below a molecule, including all downstream expansions. `prefix_signature(path, depth)` is the truncated version used for questions like “did the planner get the first reaction right?” or “how deep does this prediction agree with the reference route?”. together, these three cover the exact comparison cases we care about without forcing every downstream workflow to reimplement tree matching.
+### Molecule identity and comparison
 
-it is important to be explicit about what signatures do not solve. they are for exact comparisons. if two subtree signatures differ, that means the rooted subtrees are not identical; it does **not** mean that no meaningful partial match exists below them. in particular, prune-tolerant or embedding-style questions such as “does this route appear inside that route if extra downstream branches are ignored?” require a separate recursive matcher. signatures are still useful there as a fast filter, but they are not the whole algorithm.
+We use [InChiKeys](https://en.wikipedia.org/wiki/International_Chemical_Identifier) as molecular identity. RetroCast currently supports three levels of InChiKey specificity:
 
-signature rules:
+- `retrocast.chem.InChIKeyLevel.FULL` - full 27-char InChIKey
+- `retrocast.chem.InChIKeyLevel.NO_STEREO` - 27-char InChIKey generated without stereochemical information
+- `retrocast.chem.InChIKeyLevel.CONNECTIVITY` - first 14 chars, connectivity layer only
 
-- order-invariant over reactant ordering
-- multiplicity-preserving for duplicate reactants
-- parameterized by match level when needed
-- never use `frozenset(...)`
-- exact signatures are merkle-like: parent signatures are built from child signatures
-- use a canonical tuple / string first; a hashed form can be a cache or optimization later
-
-signature sketches:
+Most users should use the default `FULL` level, but sometimes a model developer might wish to disambiguate planner's failure to account for proper stereochemistry from more fundamental failures to find the right connectivity (wherefore he might use `NO_STEREO`). Or might want to ignore isotope/protonation differences (wherefore `CONNECTIVITY`).
 
 ```python
-reaction_signature(path):
+# AM: replace with actual API once it's defined/implemented
+molecule_identity(molecule, match_level):
+    return reduce_inchikey(molecule.inchikey, match_level)
+```
+
+### Reaction identity and comparison
+
+the next question is one-step reaction identity: did these two routes make the same retrosynthetic decision at this point? that is stricter than comparing just the product molecule, but intentionally narrower than comparing the full downstream subtree.
+
+```python
+reaction_payload(path):
     product_path = product_path_for_reaction(path)
-    product_key = route.node_index[product_path].key(match_level)
+    product_key = molecule_identity(route.node_index[product_path], match_level)
     reactant_keys = sorted(
-        route.node_index[child_path].key(match_level)
+        molecule_identity(route.node_index[child_path], match_level)
         for child_path in reactant_paths_from_reaction(path)
     )
     return ("rxn", product_key, tuple(reactant_keys))
 
 
-subtree_signature(path):
-    molecule = route.node_index[path]
-    key = molecule.key(match_level)
-
-    if molecule.product_of is None:
-        return ("mol", key)
-
-    rxn_sig = reaction_signature(reaction_path_for_product(path))
-    child_sigs = sorted(
-        subtree_signature(child_path)
-        for child_path in reactant_paths(path)
-    )
-    return ("mol", key, rxn_sig, tuple(child_sigs))
-
-
-prefix_signature(path, depth):
-    molecule = route.node_index[path]
-    key = molecule.key(match_level)
-
-    if depth == 0 or molecule.product_of is None:
-        return ("mol", key)
-
-    rxn_sig = reaction_signature(reaction_path_for_product(path))
-    child_sigs = sorted(
-        prefix_signature(child_path, depth - 1)
-        for child_path in reactant_paths(path)
-    )
-    return ("mol", key, rxn_sig, tuple(child_sigs))
+reaction_signature(path):
+    return stable_hash(reaction_payload(path))
 ```
 
-these signatures are for exact comparisons:
+this is what we want for checks like root-reaction match. if two routes choose the same reaction at the top but expand the lower branches differently, the reaction signatures should still match.
 
-- full subtree equality
-- full subtree containment
-- reaction equality
-- prefix equality up to depth `k`
+### Route identity and comparison
 
-they are **not** the whole story for prune-tolerant or embedding-style matching. if we later want "can this route appear after pruning some branches?", that should be a separate recursive matcher, not a magic signature.
+full route equality is just rooted subtree equality at the target. more generally, exact route comparison means: compare the entire subtree below a molecule path. that subtree payload is recursive and merkle-like: it is built from the molecule identity at the current path, the immediate reaction payload at that path, and the child subtrees below it.
 
-embedded containment semantics:
+```python
+subtree_payload(path, depth=None):
+    molecule = route.node_index[path]
+    key = molecule_identity(molecule, match_level)
 
-- exact `contains_subtree(...)` asks whether the query subtree appears unchanged
-- `contains_embedded_subtree(...)` asks whether the query subtree appears after pruning deeper expansions in the host
-- pruning is allowed below matched query leaves
-- pruning is **not** allowed to change the matched reaction frontier itself
-- so embedded matching may ignore extra downstream chemistry, but it does not ignore missing or different reactants in the matched reaction
+    if molecule.product_of is None or depth == 0:
+        return ("mol", key)
 
-embedded matcher sketch:
+    next_depth = None if depth is None else depth - 1
+    rxn_payload = reaction_payload(reaction_path_for_product(path))
+    child_sigs = sorted(
+        subtree_signature(child_path, depth=next_depth)
+        for child_path in reactant_paths(path)
+    )
+    return ("mol", key, rxn_payload, tuple(child_sigs))
+
+
+subtree_signature(path, depth=None):
+    return stable_hash(subtree_payload(path, depth=depth))
+```
+
+with that in place:
+
+- full route equality is `subtree_signature("rc:m:/")`
+- exact subtree equality is `subtree_signature(path)`
+- exact subtree containment is membership in a subtree-signature index
+- prefix matching to depth `k` is just `subtree_signature(path, depth=k)`
+
+in other words, `prefix_signature(path, depth)` does not need a separate concept; it is just a convenience wrapper around truncated subtree identity.
+
+```python
+prefix_signature(path, depth):
+    return subtree_signature(path, depth=depth)
+```
+
+this is the mechanism behind questions like “did the planner find the first reaction?”, “does it match up to depth `k`?”, and “what is the maximum matched prefix depth?”.
+
+finally, exact subtree identity is still not enough for the looser embedded-containment question. if we want to know whether one route appears inside another while allowing the host to keep extra downstream branches, exact equality is the wrong test. that case needs a separate recursive matcher:
 
 ```python
 embeds(host_path, query_path):
-    if host.node(host_path).key(match_level) != query.node(query_path).key(match_level):
+    if molecule_identity(host.node(host_path), match_level) != molecule_identity(query.node(query_path), match_level):
         return False
 
     query_rxn = query.reaction_at_product(query_path)
@@ -184,17 +189,12 @@ embeds(host_path, query_path):
     return reactant_children_embed(host_rxn.reactants, query_rxn.reactants)
 ```
 
-`reactant_children_embed(...)` should treat reactants as a multiset:
+so the split is:
 
-- if reactant keys are unique, pair in canonical sorted order
-- if duplicates exist, backtrack only within the duplicate-key bucket
-- typical reaction fanout is small, so this stays tractable
-
-the important outcome split is:
-
-- exact subtree signatures answer full / prefix / exact containment cheaply
-- embedded containment answers "does this route logic occur here if deeper branches are pruned?"
-- that is useful for train/test filtration and as a secondary evaluation diagnostic
+- molecule identity answers “same molecule?”
+- reaction identity answers “same one-step decision?”
+- subtree identity answers “same route or same branch?”
+- embedded matching answers “does this route logic occur here if deeper host branches are ignored?”
 
 ### route api
 
