@@ -238,10 +238,7 @@ class MoleculeView(BaseModel):
         if self.value.product_of is None or depth == 0:
             return ("mol", self.key(match_level))
 
-        reaction = self.produced_by()
-        if reaction is None:
-            return ("mol", self.key(match_level))
-
+        reaction = ReactionView(route=self.route, path=self.path.produced_by(), value=self.value.product_of)
         next_depth = None if depth is None else depth - 1
         child_signatures = sorted(
             reactant.subtree_signature(match_level, depth=next_depth) for reactant in reaction.reactants()
