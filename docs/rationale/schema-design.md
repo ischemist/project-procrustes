@@ -104,6 +104,25 @@ semantics:
 - `RoutePath.parse("rc:r:/1/0").product()` is `rc:m:/1/0`
 - `RoutePath.parse("rc:r:/1/0").reactant(2)` is `rc:m:/1/0/2`
 
+for convenience, we define the following subtypes:
+
+```py
+def validate_reaction_id(value: str) -> str:
+    path = RoutePath.parse(value)
+    if not path.is_reaction():
+        raise ValueError("reaction id must identify a reaction node, e.g. 'rc:r:/1/0'")
+    return value
+
+def validate_molecule_id(value: str) -> str:
+    path = RoutePath.parse(value)
+    if not path.is_molecule():
+        raise ValueError("molecule id must identify a molecule node, e.g. 'rc:m:/1/0'")
+    return value
+
+ReactionId = Annotated[str, AfterValidator(validate_reaction_id)]
+MoleculeId = Annotated[str, AfterValidator(validate_molecule_id)]
+```
+
 
 ## Route Signatures
 
@@ -349,64 +368,27 @@ ingest_candidates(raw_payload, adapter, task) -> CollectedCandidates
 The ultimate method for scoring any synthesis plan is by passing it through the [Solv-N filter](/rationale/solv-n-evaluation), which is defined as:
 
 ```text
-Solv-i[scope] = Tier-i validity + Satisfaction of problem scope.
+Solv-i[task] = Tier-i validity + satisfaction of task constraints.
 ```
 
-that post-score row should be called `ScoredCandidate`.
+Tier-N validity is stored as `TierResult`. `RouteValidity` stores the validity of a `Route` as a whole and of all individual `Reactions` that compose it.
 
-the earlier failures-only sketch was too spartan.
-
-the right compromise is:
-
-- keep explicit positive `status` on tier / route / scope results
-- keep detailed per-check records sparse
-- do not store giant lists of passing checks just to say "everything was fine"
-
-### score inputs
-
-scoring consumes:
-
-- collected candidates
-- a fixed tier taxonomy `0..3`
-- one or more named scopes
-- optional acceptable routes on the target
-
-```python
-Tier = Literal[0, 1, 2, 3]
+```py
+class CheckStatus(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    NOT_EVALUATED = "not_evaluated"
 
 
-class StockConstraint(BaseModel):
-    type: Literal["stock"] = "stock"
-    stock_name: str
-    match_level: str = "full"
-
-
-class RequiredLeafConstraint(BaseModel):
-    type: Literal["required_leaf"] = "required_leaf"
-    smiles: SmilesStr | None = None
-    inchikey: InchiKeyStr | None = None
-    match_level: str = "full"
-
-
-Constraint = StockConstraint | RequiredLeafConstraint
-
-
-class Scope(BaseModel):
-    name: str
-    constraints: list[Constraint] = Field(default_factory=list)
-```
-
-### validity schema
-
-validity stores whether a route or reaction passed tier `n`, and why.
-
-```python
-CheckStatus = Literal["pass", "fail", "not_evaluated"]
-
+class Tier(IntEnum):
+    ZERO = 0
+    ONE = 1
+    TWO = 2
+    THREE = 3
 
 class CheckResult(BaseModel):
     code: str
-    status: CheckStatus = "fail"
+    status: CheckStatus = CheckStatus.FAIL
     message: str | None = None
     details: dict[str, Any] = Field(default_factory=dict)
 
@@ -417,256 +399,148 @@ class TierResult(BaseModel):
 
 
 class ReactionValidity(BaseModel):
-    path: str
+    reaction_id: ReactionId  # rc:r:/1/0
     tiers: dict[Tier, TierResult] = Field(default_factory=dict)
 
 
 class RouteValidity(BaseModel):
     tiers: dict[Tier, TierResult] = Field(default_factory=dict)
     reactions: list[ReactionValidity] = Field(default_factory=list)
+```
 
+Task constraint satisfaction is stored separately:
 
+```py
 class ConstraintResult(BaseModel):
     status: CheckStatus
     checks: list[CheckResult] = Field(default_factory=list)
 ```
 
-why `ConstraintResult` has both `status` and `checks`:
+A `Candidate` that undergoes scoring becomes `ScoredCandidate`.
 
-- `status` is the compact answer we query constantly
-- `checks` are sparse explanations for why it failed
-- empty `checks` must not ambiguously mean either "pass" or "not_evaluated"
-- we do not want to emit fake passing checks just to preserve status
-
-what we borrow from current [validity.py](/Users/morgunov/Developer/ischemist/synthesis-planning/project-procrustes/src/retrocast/models/validity.py:10):
-
-- `CheckStatus`
-- `TierResult(status, checks)`
-- `ReactionValidity`
-- `RouteValidity`
-- `ConstraintResult(status, checks)`
-
-what we do **not** carry over:
-
-- legacy serializer / parser cruft for `"tier N"` keys
-- `ScopeId = Literal["stock"]`
-- global “implemented tier” machinery inside the schema layer
-
-pass/fail is explicit:
-
-- route passes tier `t` iff `validity.tiers[t].status == "pass"`
-- reaction passes tier `t` iff the reaction's tier status is `"pass"`
-- scope passes iff `scope_results[scope_name].status == "pass"`
-
-### route comparison api
-
-matching should not be a persisted schema in v1.
-
-the carmack move is simpler:
-
-- `Route` already knows how to derive subtree / reaction / prefix signatures
-- comparisons are just comparisons of those signatures
-- exact containment is an index lookup over subtree signatures
-- embedded containment is a separate recursive algorithm built on top of the same route api
-- if we ever need a richer persisted comparison contract later, add it later
-
-examples:
-
-```python
-# full route match
-candidate.same_subtree(reference)
-
-# root reaction match
-candidate.same_reaction(reference)
-
-# branch-local subtree match
-candidate.same_subtree(reference, path="rc:m:/1", other_path="rc:m:/1")
-
-# branch-local prefix match to depth 3
-candidate.same_prefix(reference, path="rc:m:/1", other_path="rc:m:/1", depth=3)
-
-# does reference contain this candidate subtree anywhere?
-reference.contains_subtree(candidate)
-
-# where does the right branch of candidate occur inside reference?
-reference.subtree_hit_paths(candidate, other_path="rc:m:/1")
-
-# does reference contain this candidate route after pruning deeper host branches?
-reference.contains_embedded_subtree(candidate)
-```
-
-for the branch-level example from [route-node-ids.md](/Users/morgunov/Developer/ischemist/synthesis-planning/project-procrustes/docs/developers/route-node-ids.md:1), this is the kind of query we want:
-
-```python
-candidate.same_prefix(reference, path="rc:m:/1", other_path="rc:m:/1", depth=3)
-```
-
-or, if you only care whether the whole right branch matches:
-
-```python
-candidate.same_subtree(reference, path="rc:m:1", other_path="rc:m:1")
-```
-
-### scored row schema
-
-`ScoredCandidate` is the post-score row.
-
-```python
+```py
 class ScoredCandidate(BaseModel):
     rank: int
     route: Route | None = None
     failure: FailureRecord | None = None
+
     validity: RouteValidity = Field(default_factory=RouteValidity)
-    scope_results: dict[str, ConstraintResult] = Field(default_factory=dict)
+    constraints: ConstraintResult = Field(
+        default_factory=lambda: ConstraintResult(status="not_evaluated")
+    )
 
+    matches_acceptable: bool = False
+    matched_acceptable_index: int | None = None
+    
+    def has_route(self) -> bool: ...
 
+    def failed_adaptation(self) -> bool: ...
+
+    def tier_result(self, tier: Tier) -> TierResult: ...
+
+    def reaction_tier_result(
+        self,
+        reaction_id: ReactionId,
+        tier: Tier,
+    ) -> TierResult | None: ...
+
+    def satisfies_validity(self, tier: Tier) -> bool: ...
+
+    def satisfies_task(self) -> bool: ...
+
+    def satisfies_solv(self, tier: Tier) -> bool: ...
+```
+
+`ScoredCandidate`s are collected into `TargetResult`, which in turn is collected into `Evaluation`.
+
+```py
 class TargetResult(BaseModel):
     target: Target
+    effective_constraints: TaskConstraints
     candidates: list[ScoredCandidate] = Field(default_factory=list)
 
 
 class Evaluation(BaseModel):
-    task: Task | None = None
-    scopes: list[Scope] = Field(default_factory=list)
-    tiers: list[Tier] = Field(default_factory=lambda: [0, 1, 2, 3])
+    task: Task
+    tiers: list[Tier] = Field(default_factory=list)
     targets: dict[str, TargetResult] = Field(default_factory=dict)
     schema_version: str = "2"
 ```
 
-solv-n under scope `s` is:
 
-```text
-validity.tiers[n].status == "pass"
-and
-scope_results[s].status == "pass"
+!!! note "An intentional violation of single-responsibility principle"
+
+    In principle, Tier-0 validity should be assessed at the `score` workflow stage. The cleanest design would then be if `adapt` always returned an equivalent of `Candidate`s (or a `Route` was extended to hold the information of `Candidate`), but that would result in subpar UX for every use case outside of benchmarking. As a result, we intentionally allow for a slight leakage of responsibility between `adapt` and `score` (i.e., `adapt` without ``--preserve-failed-candidates` returns Tier-0 valid `Route`s.)
+
+
+### Score API
+
+Because we're far from having a universal Tier-2 validity checker, it is natural to expect multiple solutions emerging from different research groups. To enable modularity of scoring, we define a `TierChecker` protocol.
+
+```py
+class TierChecker(Protocol):
+    tier: Tier
+    name: str
+
+    def check_route(self, route: Route) -> RouteValidity: ...
 ```
 
-why keep both `failure` and `validity`:
+and to support extension to different problem settings:
 
-- `failure` is adaptation-time information: no route was produced
-- `validity` is score-time information: given a route, which tiers / reactions passed or failed
+```py
+class ConstraintChecker(Protocol):
+    name: str
 
-most route-comparison outputs should be derived because they depend on:
+    def check_route(
+        self,
+        route: Route,
+        constraints: TaskConstraints,
+    ) -> ConstraintResult: ...
+```
 
-- which reference route or route set you compare against
-- which route-local paths you anchor on
-- whether you care about full, root-reaction, prefix, subtree, or containment semantics
+which results in the following API:
 
-for a failed adaptation slot:
-
-- `route is None`
-- `failure` is populated
-- `validity.tiers[0].status == "fail"`
-- higher tiers can be `"not_evaluated"`
-
-### tier-0 model
-
-the intended tier-0 logic is:
-
-- a reaction fails tier-0 if product or any reactant is not a valid smiles
-- a route fails tier-0 if any reaction fails tier-0
-- a failed adaptation slot counts as tier-0 fail
-
-important subtlety:
-
-- for successful canonical routes, smiles validity is usually already guaranteed by adaptation
-- in `prune` mode, invalid deeper reactions can be dropped while the remaining prefix still passes tier-0
-- therefore the honest tier-0 denominator requires the candidate-preserving path, but incompleteness should not be conflated with invalidity
-
-in other words, tier-0 is partly a scoring concern and partly an adaptation concern.
-
-### termination / stock semantics
-
-incomplete and invalid are different.
-
-a pruned route can be:
-
-- tier-0 valid on all surviving reactions
-- even tier-3 valid on all surviving reactions
-- but still not solvable
-
-`stock` scope should therefore fail when either:
-
-- some leaf is not in stock
-
-that is how we prevent an incomplete plan from looking solved.
-
-### score api
-
-```python
-score_target(
+```py
+def score_candidate(
+    candidate: Candidate,
+    *,
     target: Target,
-    candidates: list[Candidate],
-    *,
-    scopes: list[Scope] | None = None,
-    tiers: Sequence[Tier] = (0, 1, 2, 3),
-) -> TargetResult
+    constraints: TaskConstraints,
+    tier_checkers: Sequence[TierChecker],
+    constraint_checker: ConstraintChecker,
+    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+) -> ScoredCandidate: ...
 
-score_task(
+
+def score_target(
+    candidates: Sequence[Candidate],
+    *,
+    target: Target,
+    constraints: TaskConstraints,
+    tier_checkers: Sequence[TierChecker],
+    constraint_checker: ConstraintChecker,
+    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+) -> TargetResult: ...
+
+
+def score(
+    predictions: Mapping[str, Sequence[Candidate]],
     task: Task,
-    collected_candidates: CollectedCandidates,
     *,
-    scopes: list[Scope] | None = None,
-    tiers: Sequence[Tier] = (0, 1, 2, 3),
-) -> Evaluation
+    tier_checkers: Sequence[TierChecker],
+    constraint_checker: ConstraintChecker,
+    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+) -> Evaluation: ...
 ```
 
-`score_target(...)` is the primitive.
+## 4. Analyze
 
-`score_task(...)` is the benchmark wrapper.
-
-helper methods that belong on `ScoredCandidate`:
-
-```python
-scored.tier_passes(tier: Tier) -> bool
-scored.scope_passes(scope: str) -> bool
-scored.solv(tier: Tier, scope: str) -> bool
-```
-
-route-comparison helpers should live on `Route`, not inside `ScoredCandidate`.
-
-examples:
-
-```python
-# single target
-candidates = adapt_candidates(raw_output, adapter)
-
-result = score_target(
-    Target(id="query-1", smiles=query_smiles),
-    candidates,
-    scopes=[Scope(name="stock", constraints=[StockConstraint(stock_name="emolecules")])],
-)
-```
-
-```python
-# benchmark
-collected = ingest_candidates(raw_output, adapter, task)
-
-evaluation = score_task(
-    task,
-    collected,
-    scopes=[Scope(name="stock", constraints=[StockConstraint(stock_name="emolecules")])],
-)
-```
-
-## 4. analyze
-
-analyze should derive benchmark-style metrics from `Evaluation`.
-
-these should be derived here, not permanently stored in `TargetResult`:
-
-- first valid rank by tier
-- first solv rank by tier and scope
-- first full-match rank
-- first root-reaction-match rank
-- mean / median best prefix depth
-- any top-k metric
-
-### analyze schema
+`analyze` should derive benchmark-style metrics from `Evaluation`.
 
 ```python
 class MetricSummary(BaseModel):
     value: float
+    count: int
     ci_low: float | None = None
     ci_high: float | None = None
 
@@ -675,8 +549,6 @@ class AnalysisReport(BaseModel):
     metrics: dict[str, MetricSummary] = Field(default_factory=dict)
     by_stratum: dict[str, dict[str, MetricSummary]] = Field(default_factory=dict)
 ```
-
-### analyze api
 
 ```python
 analyze(
@@ -687,10 +559,4 @@ analyze(
 ) -> AnalysisReport
 ```
 
-examples of analysis metrics we should support natively:
-
-- `solv_0@k`, `solv_1@k`, `solv_2@k`, `solv_3@k`
-- `full_match@k`
-- `root_reaction_match@k`
-- `mean_best_prefix_depth`
-- `mean_best_prefix_fraction`
+Top-K reconstruction metrics are emitted only for targets with acceptable_routes; if no target has acceptable_routes, reconstruction metrics are omitted.

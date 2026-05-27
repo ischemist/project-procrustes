@@ -18,10 +18,10 @@ RetroCast originally used "solvability" in in the common retrosynthesis sense: a
 Fundamentally, Solv-N combines two key concepts:
 
 - all reactions composing a `Route` must be "valid" at some level of validity (internal, chemical constraints)
-- the `Route` must solve the problem scope (user-defined constraints)
+- the `Route` must solve the problem task (user-defined constraints)
 
 ```text
-Solv-i[scope] = Tier-i validity + Problem Scope
+Solv-i[task] = Tier-i validity + satisfying task constraints
 ```
 
 ### Tier-N Chemical Validity
@@ -38,14 +38,20 @@ If a `Route` is Tier-2 valid, it is experimentally _plausible_. If a `Route` is 
 1. Assess Tier-0 and Tier-1 validity
 2. be modular enough to incorporate any external Tier-2 validity check
 
-### Problem Scope Satisfaction
+### Problem Task Satisfaction
 
-Tier-N validity is not enough. A `Route` might start with a target, which will undergo Tier-3 valid reactions, but it still might not be a solution to the retrosynthesis problem if this `Route` does not terminate in commercially available building blocks. Satisfaction of problem scope is what turns Tier-N validity into a Solv-N metric.
+Tier-N validity is not enough. A `Route` might start with a target, which will undergo Tier-3 valid reactions, but it still might not be a solution to the retrosynthesis problem if this `Route` does not terminate in commercially available building blocks. Satisfaction of problem constraints is what turns Tier-N validity into a Solv-N metric.
 
 This definition allows for clear generalization of Solv-N to other problems:
 
-- in synthesis-aware molecular design (forward planning from a set of commercial building blocks), problem scope is "forward plan terminates in desired target" or "the target satisfies desired properties"
-- in constrained versions of retrosynthesis, i.e. bidirectional planning, problem scope is "the Route terminates in the commercial stock AND one of the leaves is whatever the user specified"
+- in synthesis-aware molecular design (forward planning from a set of commercial building blocks), task satisfaction is "forward plan terminates in desired target" or "the target satisfies desired properties"
+- in constrained versions of retrosynthesis, i.e. bidirectional planning, task satisfaction is "the Route terminates in the commercial stock AND one of the leaves is whatever the user specified"
+
+### Mean-Reverse Rank (MRR) is a companion to Solv-N
+
+Solv-N measures if a model finds any `Route` that satisfies the problem constraints and all its reactions are Tier-N valid. A user of the planner might also be interested in whether the model prioritizes the Tier-N valid `Routes` or he has to go through 50 predictions before finding a valid one.
+
+This is measured by mean-reverse rank (MRR@Solv-N) metric.
 
 ## Acceptable Route Reconstruction
 
@@ -58,9 +64,3 @@ As proposed in the original [RetroCast preprint](https://arxiv.org/abs/2512.0707
 While Top-K accuracy fails to reward construction of potentially valid alternative route (a limitation well discussed in the Syntax of Matter preprint), the acceptable-route is one of the valid `Routes` that any planner (even the future Tier-3 compliant ones) should consider, and so it is reasonable to expect its reconstruction for some value of K. The exact value of K is up to debate (how many unique ways are there to make any random molecule?), and we think `K=10` and `K=50` are worth paying attention to.
 
 Notably, this means that `Top-1` acurracy should not be the headline metric.
-
-## Mean-Reverse Rank (MRR) is a companion to Solv-N
-
-Solv-N measures if a model finds any `Route` that satisfies the problem scope and all its reactions are Tier-N valid. A user of the planner might also be interested in whether the model prioritizes the Tier-N valid `Routes` or he has to go through 50 predictions before finding a valid one.
-
-This is measured by mean-reverse rank (MRR@Solv-N) metric.
