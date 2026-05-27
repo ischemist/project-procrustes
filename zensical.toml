@@ -45,6 +45,7 @@ nav = [
   { "Engineering" = [
     { "Rationale" = [
       "rationale/solv-n-evaluation.md",
+      "rationale/schema-design.md",
       "rationale/training-set-releases.md",
     ] },
     { "Developers" = [

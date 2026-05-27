@@ -1,0 +1,276 @@
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass
+from typing import Annotated, Any, Literal
+
+from pydantic import AfterValidator, BaseModel, Field
+
+from retrocast.chem import InchiKeyLevel as InChIKeyLevel
+from retrocast.chem import reduce_inchikey
+from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
+
+RouteNodeKind = Literal["m", "r"]
+
+
+def _stable_hash(value: Any) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _validate_depth(depth: int | None) -> None:
+    if depth is not None and depth < 0:
+        raise ValueError("depth must be non-negative")
+
+
+@dataclass(frozen=True, slots=True)
+class RoutePath:
+    kind: RouteNodeKind
+    indices: tuple[int, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.kind not in ("m", "r"):
+            raise ValueError("route path kind must be 'm' or 'r'")
+        if any(index < 0 for index in self.indices):
+            raise ValueError("route path indices must be non-negative")
+
+    @classmethod
+    def parse(cls, value: str) -> RoutePath:
+        prefix = "rc:"
+        if not value.startswith(prefix):
+            raise ValueError("route path must start with 'rc:'")
+
+        try:
+            kind, rest = value[len(prefix) :].split(":", 1)
+        except ValueError as exc:
+            raise ValueError("route path must have form 'rc:<kind>:/...'") from exc
+
+        if kind == "m":
+            route_kind: RouteNodeKind = "m"
+        elif kind == "r":
+            route_kind = "r"
+        else:
+            raise ValueError("route path kind must be 'm' or 'r'")
+        if not rest.startswith("/"):
+            raise ValueError("route path indices must start with '/'")
+
+        tail = rest[1:]
+        if tail == "":
+            return cls(kind=route_kind, indices=())
+
+        parts = tail.split("/")
+        try:
+            indices = tuple(int(part) for part in parts)
+        except ValueError as exc:
+            raise ValueError("route path indices must be integers") from exc
+        if any(index < 0 for index in indices):
+            raise ValueError("route path indices must be non-negative")
+        if any(str(index) != part for index, part in zip(indices, parts, strict=True)):
+            raise ValueError("route path indices must be canonical non-negative integers")
+        return cls(kind=route_kind, indices=indices)
+
+    @classmethod
+    def target(cls) -> RoutePath:
+        return cls(kind="m")
+
+    @classmethod
+    def root_reaction(cls) -> RoutePath:
+        return cls(kind="r")
+
+    def id(self) -> str:
+        suffix = "/".join(str(index) for index in self.indices)
+        return f"rc:{self.kind}:/{suffix}" if suffix else f"rc:{self.kind}:/"
+
+    def depth(self) -> int:
+        return len(self.indices)
+
+    def is_molecule(self) -> bool:
+        return self.kind == "m"
+
+    def is_reaction(self) -> bool:
+        return self.kind == "r"
+
+    def produced_by(self) -> RoutePath:
+        if not self.is_molecule():
+            raise ValueError("only molecule paths have a producing reaction")
+        return RoutePath(kind="r", indices=self.indices)
+
+    def product(self) -> RoutePath:
+        if not self.is_reaction():
+            raise ValueError("only reaction paths have a product molecule")
+        return RoutePath(kind="m", indices=self.indices)
+
+    def reactant(self, index: int) -> RoutePath:
+        if not self.is_reaction():
+            raise ValueError("only reaction paths have reactants")
+        if index < 0:
+            raise ValueError("reactant index must be non-negative")
+        return RoutePath(kind="m", indices=(*self.indices, index))
+
+
+def validate_reaction_id(value: str) -> str:
+    path = RoutePath.parse(value)
+    if not path.is_reaction():
+        raise ValueError("reaction id must identify a reaction node, e.g. 'rc:r:/1/0'")
+    return path.id()
+
+
+def validate_molecule_id(value: str) -> str:
+    path = RoutePath.parse(value)
+    if not path.is_molecule():
+        raise ValueError("molecule id must identify a molecule node, e.g. 'rc:m:/1/0'")
+    return path.id()
+
+
+ReactionId = Annotated[str, AfterValidator(validate_reaction_id)]
+MoleculeId = Annotated[str, AfterValidator(validate_molecule_id)]
+
+
+class Reaction(BaseModel):
+    reactants: list[Molecule]
+    mapped_reaction_smiles: ReactionSmilesStr | None = None
+    template: str | None = None
+    reagents: list[SmilesStr] | None = None
+    solvents: list[SmilesStr] | None = None
+    annotations: dict[str, Any] = Field(default_factory=dict)
+
+
+class Molecule(BaseModel):
+    smiles: SmilesStr
+    inchikey: InchiKeyStr
+    product_of: Reaction | None = None
+    annotations: dict[str, Any] = Field(default_factory=dict)
+
+    def key(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> str:
+        return str(reduce_inchikey(self.inchikey, match_level))
+
+    def signature(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> str:
+        return _stable_hash(self.key(match_level))
+
+
+class Route(BaseModel):
+    target: Molecule
+    annotations: dict[str, Any] = Field(default_factory=dict)
+    schema_version: Literal["2"] = "2"
+
+    def molecule_at(self, path: RoutePath | str) -> MoleculeView:
+        route_path = RoutePath.parse(path) if isinstance(path, str) else path
+        if not route_path.is_molecule():
+            raise ValueError("path must identify a molecule")
+
+        molecule = self.target
+        for index in route_path.indices:
+            reaction = molecule.product_of
+            if reaction is None:
+                raise KeyError(route_path.id())
+            try:
+                molecule = reaction.reactants[index]
+            except IndexError as exc:
+                raise KeyError(route_path.id()) from exc
+        return MoleculeView(route=self, path=route_path, value=molecule)
+
+    def reaction_at(self, path: RoutePath | str) -> ReactionView:
+        route_path = RoutePath.parse(path) if isinstance(path, str) else path
+        if not route_path.is_reaction():
+            raise ValueError("path must identify a reaction")
+
+        try:
+            product = self.molecule_at(route_path.product())
+        except KeyError as exc:
+            raise KeyError(route_path.id()) from exc
+        if product.value.product_of is None:
+            raise KeyError(route_path.id())
+        return ReactionView(route=self, path=route_path, value=product.value.product_of)
+
+    def key(
+        self,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+        *,
+        depth: int | None = None,
+    ) -> tuple[Any, ...]:
+        _validate_depth(depth)
+        return self.molecule_at(RoutePath.target()).subtree_key(match_level, depth=depth)
+
+    def signature(
+        self,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+        *,
+        depth: int | None = None,
+    ) -> str:
+        return _stable_hash(self.key(match_level, depth=depth))
+
+
+class ReactionView(BaseModel):
+    route: Route
+    path: RoutePath
+    value: Reaction
+
+    def id(self) -> ReactionId:
+        return self.path.id()
+
+    def product(self) -> MoleculeView:
+        return self.route.molecule_at(self.path.product())
+
+    def reactants(self) -> list[MoleculeView]:
+        return [
+            MoleculeView(route=self.route, path=self.path.reactant(index), value=reactant)
+            for index, reactant in enumerate(self.value.reactants)
+        ]
+
+    def key(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> tuple[str, str, tuple[str, ...]]:
+        return (
+            "rxn",
+            self.product().key(match_level),
+            tuple(sorted(reactant.key(match_level) for reactant in self.reactants())),
+        )
+
+    def signature(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> str:
+        return _stable_hash(self.key(match_level))
+
+
+class MoleculeView(BaseModel):
+    route: Route
+    path: RoutePath
+    value: Molecule
+
+    def id(self) -> MoleculeId:
+        return self.path.id()
+
+    def key(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> str:
+        return self.value.key(match_level)
+
+    def produced_by(self) -> ReactionView | None:
+        if self.value.product_of is None:
+            return None
+        return ReactionView(route=self.route, path=self.path.produced_by(), value=self.value.product_of)
+
+    def subtree_key(
+        self,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+        *,
+        depth: int | None = None,
+    ) -> tuple[Any, ...]:
+        _validate_depth(depth)
+        if self.value.product_of is None or depth == 0:
+            return ("mol", self.key(match_level))
+
+        reaction = ReactionView(route=self.route, path=self.path.produced_by(), value=self.value.product_of)
+        next_depth = None if depth is None else depth - 1
+        child_signatures = sorted(
+            reactant.subtree_signature(match_level, depth=next_depth) for reactant in reaction.reactants()
+        )
+        return (
+            "mol",
+            self.key(match_level),
+            reaction.key(match_level),
+            tuple(child_signatures),
+        )
+
+    def subtree_signature(
+        self,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+        *,
+        depth: int | None = None,
+    ) -> str:
+        return _stable_hash(self.subtree_key(match_level, depth=depth))

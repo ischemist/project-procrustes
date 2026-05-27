@@ -1,122 +1,66 @@
 ---
-icon: lucide/git-branch
+icon: lucide/clipboard-check
 ---
 
 # Solv-N Evaluation
 
-This page explains the design rationale behind the Solv-N evaluation model.
+This page explains the implementation of the Solv-N evaluation framework in RetroCast.
 
 ## Historical Context
 
-RetroCast originally used "solvability" in the common retrosynthesis sense: a route was solved if it terminated in the selected stock. That metric is really stock-termination rate, not universal chemical solvability.
+RetroCast originally used "solvability" in in the common retrosynthesis sense: a route was solved if it terminated in the selected stock.
 
-Two external pieces motivate the terminology shift:
-
-- [arxiv:2512.07079](https://arxiv.org/abs/2512.07079) highlighted that reported solvability is often no more than stock-termination rate.
-- The [Syntax of Matter preprint](https://chemrxiv.org/doi/full/10.26434/chemrxiv.15001278/v3) introduces the Solv-N / Tier-N framing this migration targets.
-
-Those links belong in rationale and concepts docs, not runtime deprecation warnings.
+- The original RetroCast preprint [arxiv:2512.07079](https://arxiv.org/abs/2512.07079) highlighted that such "stock-termination rate" is an insufficient measure of success.
+- and the following [Syntax of Matter preprint](https://ischemist.com/syntax-of-matter) formalized the Tier-N hierarchy of chemical validity and proposed the Solv-N metric system.
 
 ## Core Separation
 
-The design separates four concepts.
+Fundamentally, Solv-N combines two key concepts:
 
-`Tier-i validity` is intrinsic chemical validity. It starts at the reaction level and lifts to a route only when every reaction in the route passes the tier.
-
-`MetricScope` is the set of user/task constraints that determines whether a candidate is eligible for a metric. Stock termination is the default scope for ordinary retrosynthesis benchmarks, but it is not the only possible scope.
-
-`Solv-i[scope]` is the conjunction of intrinsic validity and scope satisfaction:
+- all reactions composing a `Route` must be "valid" at some level of validity (internal, chemical constraints)
+- the `Route` must solve the problem task (user-defined constraints)
 
 ```text
-Solv-i[scope] = Tier-i validity + MetricScope
+Solv-i[task] = Tier-i validity + satisfying task constraints
 ```
 
-`Acceptable-route reconstruction` is reference matching. It is a conservative proxy used because higher-tier validity is hard to automate, not the definition of Solv-i.
+### Tier-N Chemical Validity
 
-## Why Solv-i Is Parameterized
+As a refresher (consult [Syntax of Matter](https://ischemist.com/syntax-of-matter) for more details):
 
-Solvability is always relative to boundary conditions. A route can be solvable against one stock and unsolvable against another. Future benchmark tasks may add other constraints, such as requiring a specific starting material or maximum route depth.
+- Tier 0 validity ensures all proposed SMILES correspond to valid chemical structures (e.g. satisfying basic valency rules)
+- Tier 1 validity ensures all reactions are topologically valid (e.g., you can extract a valid SMARTS template)
+- Tier 2 validity ensures all reactions satisfy chemoselectivity, regioselectivity, diastereoselectivity, enantioselectivity, and stoichiometry
+- Tier 3 validity ensures all reactions are experimentally viable
 
-Using `Solv-i[scope]` keeps this explicit:
+If a `Route` is Tier-2 valid, it is experimentally _plausible_. If a `Route` is Tier-3 valid, it is experimentally _feasible_. Currently, we lack a systematized and universal way to assess even Tier-2 validity, so RetroCast is built to:
 
-```text
-Solv-1[stock]
-Solv-1[stock + required starting material]
-Solv-1[stock + required starting material + max depth]
-```
+1. Assess Tier-0 and Tier-1 validity
+2. be modular enough to incorporate any external Tier-2 validity check
 
-The default shorthand remains useful:
+### Problem Task Satisfaction
 
-```text
-Solv-i := Solv-i[stock]
-```
+Tier-N validity is not enough. A `Route` might start with a target, which will undergo Tier-3 valid reactions, but it still might not be a solution to the retrosynthesis problem if this `Route` does not terminate in commercially available building blocks. Satisfaction of problem constraints is what turns Tier-N validity into a Solv-N metric.
 
-but only when the report or artifact declares that the active scope is `stock`.
+This definition allows for clear generalization of Solv-N to other problems:
 
-This avoids inventing parallel names like `constrained_solv_i` while still making cross-benchmark comparisons safe.
+- in synthesis-aware molecular design (forward planning from a set of commercial building blocks), task satisfaction is "forward plan terminates in desired target" or "the target satisfies desired properties"
+- in constrained versions of retrosynthesis, i.e. bidirectional planning, task satisfaction is "the Route terminates in the commercial stock AND one of the leaves is whatever the user specified"
 
-## Why Stock Is Not Special
+### Mean-Reverse Rank (MRR) is a companion to Solv-N
 
-Stock termination is historically central because retrosynthesis planners are usually evaluated against an allowed stock. Mathematically, it is a constraint in the same family as "must include this starting material" or "must have depth <= 4."
+Solv-N measures if a model finds any `Route` that satisfies the problem constraints and all its reactions are Tier-N valid. A user of the planner might also be interested in whether the model prioritizes the Tier-N valid `Routes` or he has to go through 50 predictions before finding a valid one.
 
-Treating stock as the default `MetricScope` gives RetroCast continuity with existing benchmarks while keeping the schema general enough for future tasks.
+This is measured by mean-reverse rank (MRR@Solv-N) metric.
 
-## Why Top-K Uses Scope, Not Solv-i
+## Acceptable Route Reconstruction
 
-Top-K acceptable-route accuracy asks:
+In the absence of automated Tier-2 validity checks, as a temporary proxy of full chemical validity we test whether a model can reconstruct an existing, experimentally-verified route for a novel target. 
 
-```text
-among routes eligible under the user's task constraints, did the model recover a benchmark-acceptable route?
-```
+Top-K accuracy measures if an experimentally verified `Route` is present within first `k` `Routes` returned by the model. 
 
-For current RetroCast benchmarks, the task constraint is stock termination, so the default metric is effectively `Top-K[stock]`.
+As proposed in the original [RetroCast preprint](https://arxiv.org/abs/2512.07079), we utilize a user-centric evaluation approach. As such, the ranking is performed **after** Routes are filtered for satisfaction of the problem scope (because Routes that do not satisfy them are of no interest to the user).
 
-Top-K should not be filtered by Solv-i as a headline metric. A route can satisfy Solv-3 without resembling a benchmark reference route. Conversely, acceptable-route matching is a conservative proxy for unmeasured validity, not the same thing as validity itself.
+While Top-K accuracy fails to reward construction of potentially valid alternative route (a limitation well discussed in the Syntax of Matter preprint), the acceptable-route is one of the valid `Routes` that any planner (even the future Tier-3 compliant ones) should consider, and so it is reasonable to expect its reconstruction for some value of K. The exact value of K is up to debate (how many unique ways are there to make any random molecule?), and we think `K=10` and `K=50` are worth paying attention to.
 
-Keeping Top-K scoped by user constraints, rather than by Tier/Solv predicates, preserves that distinction.
-
-## Why MRR Is A Raw-Rank Diagnostic
-
-MRR-style metrics answer a different question from user-centric reconstruction:
-
-```text
-how early did the model emit a candidate satisfying this predicate?
-```
-
-That makes `mrr_tier_i` and `mrr_solv_i[scope]` useful diagnostics for ranking behavior. They should use raw model rank, not effective rank after filtering, because the point is to measure how much unusable material appears before the first valid or solvable candidate.
-
-## Why Candidate Records Exist
-
-Route-only artifacts cannot honestly measure candidate-level Tier-0 behavior.
-
-Adaptation canonicalizes and validates routes. Malformed sequence-model outputs can disappear before scoring. If failed rank slots are dropped, Tier-0 candidate validity and raw-rank MRR become inflated.
-
-Candidate records preserve the raw ranked candidate stream:
-
-- successful candidates keep a canonical `Route`
-- failed candidates keep `route=None` plus a typed failure record
-- raw rank remains intact
-
-Route-only artifacts remain the default for standalone adaptation and flat provider output because they are simple and useful. Project ingest writes candidate records by default for target-keyed raw output because benchmark scoring needs denominator integrity.
-
-## Why Failed Candidates Are Not Empty Routes
-
-Failed rank slots are not represented as empty routes. An empty `Route` would pretend RetroCast has chemistry where it only has a failed model emission. That would pollute route traversal, hashing, and deduplication semantics.
-
-## Why Validity Is Not Stored On ReactionStep
-
-`Route`, `Molecule`, and `ReactionStep` describe canonical chemistry. Validity is an evaluator result.
-
-Embedding validity on `ReactionStep` would make the chemistry object depend on the selected scope, validator set, mapper version, optional dependencies, and scoring run. It would also pollute content hashes and deduplication.
-
-Validity belongs in the evaluation sidecar. The sidecar can carry stable reaction identifiers for debugging without changing canonical chemistry.
-
-## Why Pydantic At Boundaries
-
-Solv-N records cross artifact, CLI, and library boundaries. They need stable JSON shapes, readable validation errors, defaults, and compatibility behavior. Pydantic is the right boundary tool.
-
-Dataclasses remain appropriate for small internal validator values when they make computation clearer. Persisted records should be Pydantic.
-
-## Why Validator Check Results Are Not Exceptions
-
-Validator outcomes are measured results, not necessarily exceptions. A failed validator check should use a check record with a stable code and status.
+Notably, this means that `Top-1` accuracy should not be the headline metric.

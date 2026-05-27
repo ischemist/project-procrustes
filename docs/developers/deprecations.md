@@ -4,9 +4,9 @@ icon: lucide/calendar-clock
 
 # Deprecation Schedule
 
-RetroCast uses warnings to keep pre-1.0 cleanup visible without forcing every downstream project to migrate immediately. A deprecated API remains usable until the removal version listed here, emits `RetroCastFutureWarning`, and should have a documented replacement before removal.
+RetroCast uses warnings to keep pre-1.0 changes visible without forcing every downstream project to migrate immediately. A deprecated API remains usable until the removal version listed here, emits `RetroCastFutureWarning`, and should have a documented replacement before removal.
 
-## Policy
+## Internal Policy
 
 - Treat the removal version in the warning as the public contract.
 - Prefer one minor release of warning time for narrow aliases and two minor releases for workflow/API shape changes.
