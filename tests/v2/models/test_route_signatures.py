@@ -1,6 +1,7 @@
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from pydantic import ValidationError
 
 from retrocast.typing import InchiKeyStr, SmilesStr
 from retrocast.v2.models.route import InChIKeyLevel, Molecule, Reaction, Route
@@ -58,8 +59,9 @@ def test_missing_molecule_or_reaction_lookup_raises_key_error() -> None:
         route.reaction_at("rc:m:/")
     with pytest.raises(KeyError):
         route.molecule_at("rc:m:/9")
-    with pytest.raises(KeyError):
+    with pytest.raises(KeyError) as exc_info:
         route.reaction_at("rc:r:/0")
+    assert exc_info.value.args == ("rc:r:/0",)
 
 
 @pytest.mark.unit
@@ -68,6 +70,15 @@ def test_lookup_past_leaf_raises_key_error() -> None:
 
     with pytest.raises(KeyError):
         route.molecule_at("rc:m:/0/0")
+
+
+@pytest.mark.unit
+def test_reaction_lookup_past_leaf_raises_requested_reaction_id() -> None:
+    route = one_step_route([molecule("C", KEY_A)])
+
+    with pytest.raises(KeyError) as exc_info:
+        route.reaction_at("rc:r:/0/0")
+    assert exc_info.value.args == ("rc:r:/0/0",)
 
 
 @pytest.mark.unit
@@ -166,6 +177,15 @@ def test_route_serialization_does_not_include_derived_node_ids() -> None:
 
 
 @pytest.mark.unit
+def test_route_schema_version_is_literal_v2() -> None:
+    route = two_step_route()
+
+    assert route.schema_version == "2"
+    with pytest.raises(ValidationError):
+        Route.model_validate({"target": route.target.model_dump(mode="json"), "schema_version": "3"})
+
+
+@pytest.mark.unit
 def test_match_level_controls_molecule_identity() -> None:
     route_a = Route(target=molecule("C", KEY_A_STEREO_1))
     route_b = Route(target=molecule("C", KEY_A_STEREO_2))
@@ -173,6 +193,20 @@ def test_match_level_controls_molecule_identity() -> None:
     assert route_a.signature(InChIKeyLevel.FULL) != route_b.signature(InChIKeyLevel.FULL)
     assert route_a.signature(InChIKeyLevel.NO_STEREO) == route_b.signature(InChIKeyLevel.NO_STEREO)
     assert route_a.signature(InChIKeyLevel.CONNECTIVITY) == route_b.signature(InChIKeyLevel.CONNECTIVITY)
+
+
+@pytest.mark.unit
+def test_negative_depth_is_rejected() -> None:
+    route = two_step_route()
+
+    with pytest.raises(ValueError):
+        route.key(depth=-1)
+    with pytest.raises(ValueError):
+        route.signature(depth=-1)
+    with pytest.raises(ValueError):
+        route.molecule_at("rc:m:/0").subtree_key(depth=-1)
+    with pytest.raises(ValueError):
+        route.molecule_at("rc:m:/0").subtree_signature(depth=-1)
 
 
 @pytest.mark.unit

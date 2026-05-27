@@ -19,6 +19,11 @@ def _stable_hash(value: Any) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
+def _validate_depth(depth: int | None) -> None:
+    if depth is not None and depth < 0:
+        raise ValueError("depth must be non-negative")
+
+
 @dataclass(frozen=True, slots=True)
 class RoutePath:
     kind: RouteNodeKind
@@ -61,6 +66,8 @@ class RoutePath:
             raise ValueError("route path indices must be integers") from exc
         if any(index < 0 for index in indices):
             raise ValueError("route path indices must be non-negative")
+        if any(str(index) != part for index, part in zip(indices, parts, strict=True)):
+            raise ValueError("route path indices must be canonical non-negative integers")
         return cls(kind=route_kind, indices=indices)
 
     @classmethod
@@ -106,14 +113,14 @@ def validate_reaction_id(value: str) -> str:
     path = RoutePath.parse(value)
     if not path.is_reaction():
         raise ValueError("reaction id must identify a reaction node, e.g. 'rc:r:/1/0'")
-    return value
+    return path.id()
 
 
 def validate_molecule_id(value: str) -> str:
     path = RoutePath.parse(value)
     if not path.is_molecule():
         raise ValueError("molecule id must identify a molecule node, e.g. 'rc:m:/1/0'")
-    return value
+    return path.id()
 
 
 ReactionId = Annotated[str, AfterValidator(validate_reaction_id)]
@@ -145,7 +152,7 @@ class Molecule(BaseModel):
 class Route(BaseModel):
     target: Molecule
     annotations: dict[str, Any] = Field(default_factory=dict)
-    schema_version: str = "2"
+    schema_version: Literal["2"] = "2"
 
     def molecule_at(self, path: RoutePath | str) -> MoleculeView:
         route_path = RoutePath.parse(path) if isinstance(path, str) else path
@@ -168,7 +175,10 @@ class Route(BaseModel):
         if not route_path.is_reaction():
             raise ValueError("path must identify a reaction")
 
-        product = self.molecule_at(route_path.product())
+        try:
+            product = self.molecule_at(route_path.product())
+        except KeyError as exc:
+            raise KeyError(route_path.id()) from exc
         if product.value.product_of is None:
             raise KeyError(route_path.id())
         return ReactionView(route=self, path=route_path, value=product.value.product_of)
@@ -179,6 +189,7 @@ class Route(BaseModel):
         *,
         depth: int | None = None,
     ) -> tuple[Any, ...]:
+        _validate_depth(depth)
         return self.molecule_at(RoutePath.target()).subtree_key(match_level, depth=depth)
 
     def signature(
@@ -240,6 +251,7 @@ class MoleculeView(BaseModel):
         *,
         depth: int | None = None,
     ) -> tuple[Any, ...]:
+        _validate_depth(depth)
         if self.value.product_of is None or depth == 0:
             return ("mol", self.key(match_level))
 

@@ -38,6 +38,9 @@ def test_route_path_parse_render_round_trip(value: str, kind: str, indices: tupl
         "rc:m:",
         "rc:m:0",
         "rc:m:/-1",
+        "rc:m:/-0",
+        "rc:m:/+1",
+        "rc:m:/01",
         "rc:m:/a",
         "rc:m:/0//1",
         "rc:m:/0/",
@@ -85,6 +88,10 @@ def test_route_path_rejects_wrong_navigation_kind() -> None:
         RoutePath.target().product()
     with pytest.raises(ValueError):
         RoutePath.target().reactant(0)
+
+
+@pytest.mark.unit
+def test_route_path_rejects_negative_reactant_index() -> None:
     with pytest.raises(ValueError):
         RoutePath.root_reaction().reactant(-1)
 
@@ -98,6 +105,8 @@ def test_reaction_and_molecule_id_validators_enforce_kind() -> None:
         TypeAdapter(ReactionId).validate_python("rc:m:/0")
     with pytest.raises(ValidationError):
         TypeAdapter(MoleculeId).validate_python("rc:r:/0")
+    with pytest.raises(ValidationError):
+        TypeAdapter(ReactionId).validate_python("rc:r:/01")
 
 
 @pytest.mark.unit

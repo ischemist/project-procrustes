@@ -2,7 +2,9 @@
 icon: lucide/history
 ---
 
-### Pre-1.0 Compatibility Policy
+# Changelog
+
+## Pre-1.0 Compatibility Policy
 
 RetroCast is still pre-`1.0.0`. Until `1.0.0`, we will make breaking changes to the core schema or workflows whenever we see a compelling reason to do so. We'll try to keep some [sane deprecation schedule](developers/deprecations) unless it incurs a significant complexity cost.
 

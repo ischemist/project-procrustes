@@ -63,4 +63,4 @@ As proposed in the original [RetroCast preprint](https://arxiv.org/abs/2512.0707
 
 While Top-K accuracy fails to reward construction of potentially valid alternative route (a limitation well discussed in the Syntax of Matter preprint), the acceptable-route is one of the valid `Routes` that any planner (even the future Tier-3 compliant ones) should consider, and so it is reasonable to expect its reconstruction for some value of K. The exact value of K is up to debate (how many unique ways are there to make any random molecule?), and we think `K=10` and `K=50` are worth paying attention to.
 
-Notably, this means that `Top-1` acurracy should not be the headline metric.
+Notably, this means that `Top-1` accuracy should not be the headline metric.

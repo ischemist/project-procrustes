@@ -277,6 +277,7 @@ class Candidate(BaseModel):
 ### Adapt modes
 
 By default, `adapt` returns a `FailureRecord` if even a single SMILES is invalid. Model developers might sometimes be interested in the validity of predictions up to the corrupted SMILES, and `AdaptMode` allows them to relax adapters to return `Route`/`Candidate` objects that contain the longest-possible valid prefix `Route` with the corrupted SMILES node and all its children pruned out.
+
 ```python
 AdaptMode = Literal["strict", "prune"]
 ```

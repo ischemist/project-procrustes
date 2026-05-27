@@ -94,10 +94,10 @@ Depth is the number of numeric path segments:
 ## Library Access
 
 ```python
-for route_reaction in route.iter_reactions():
-    print(route_reaction.reaction_id, route_reaction.product_id)
+root_reaction = route.reaction_at("rc:r:/")
+print(root_reaction.id(), root_reaction.product().id())
 
-route_reaction = route.get_reaction_by_id("rc:r:/1/0")
+child_reaction = route.reaction_at("rc:r:/1/0")
 ```
 
 Evaluation annotations use these ids:
