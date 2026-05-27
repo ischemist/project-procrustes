@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, Field
@@ -18,9 +19,16 @@ def _stable_hash(value: Any) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-class RoutePath(BaseModel):
+@dataclass(frozen=True, slots=True)
+class RoutePath:
     kind: RouteNodeKind
     indices: tuple[int, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.kind not in ("m", "r"):
+            raise ValueError("route path kind must be 'm' or 'r'")
+        if any(index < 0 for index in self.indices):
+            raise ValueError("route path indices must be non-negative")
 
     @classmethod
     def parse(cls, value: str) -> RoutePath:

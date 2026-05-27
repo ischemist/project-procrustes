@@ -1,9 +1,11 @@
+from typing import cast
+
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
-from retrocast.v2.models.route import MoleculeId, ReactionId, RoutePath
+from retrocast.v2.models.route import MoleculeId, ReactionId, RouteNodeKind, RoutePath
 
 
 @pytest.mark.unit
@@ -52,6 +54,14 @@ def test_route_path_generated_paths_round_trip(kind: str, indices: list[int]) ->
     path = RoutePath(kind="m" if kind == "m" else "r", indices=tuple(indices))
 
     assert RoutePath.parse(path.id()) == path
+
+
+@pytest.mark.unit
+def test_route_path_direct_construction_validates_invariants() -> None:
+    with pytest.raises(ValueError):
+        RoutePath(kind=cast(RouteNodeKind, "x"))
+    with pytest.raises(ValueError):
+        RoutePath(kind="m", indices=(-1,))
 
 
 @pytest.mark.unit
