@@ -225,43 +225,27 @@ class Route(BaseModel):
 
 ### Route Embedding
 
-To be defined later, once we finish the basic migration. But a subtree signature primitive should simplify simple queries like "does a <- b <- c" contain "a <- b" queries. 
+To be defined later, once we finish the basic migration. A subtree signature primitive simplifies simple queries like "does a <- b <- c <- d" contain "a <- b", so it's part of the solution, but it doesn't help with containment check for queries like "b <- c".
 
+## Workflows
 
-## workflow
+Raw planner payloads can be `adapt`ed into `Route` objects, which constitute fully Tier-0 valid routes, or `Candidate` objects, which preserve failed slots for proper accounting of Solv-0. Canonical `Candidates` can be `collect`ed into predictions for each `Target`/`Task`. A collection of `Task`s is a `Benchmark`.
 
-```mermaid
-graph LR
-    a["raw output"] --> b["adapt_candidates(mode)"]
-    b --> c["Candidate[]"]
-    c --> d["successful routes projection"]
-    d --> e["Route[]"]
-    c --> f["collect_candidates / ingest_candidates"]
-    e --> g["route-first use"]
-    f --> h["score_target / score_task"]
-    g --> h
-    h --> i["Evaluation"]
-    i --> j["analyze"]
-```
+Direct `adapt`ing is useful for single-target pipelines. For benchmarking, one can use `ingest` which is `adapt`ing and `collect`ing into `Benchmark` predictions.
 
-## 1. adapt
+`Benchmark` predictions are keyed by target id. These predictions can be `score`d with Tier-N validity checks against `TaskConstraints`, resulting in Solv-N values. Predictions can also be compared against `Target.acceptable_routes` to obtain Top-K reconstruction accuracy.
 
-adapt turns raw planner output into either:
+## 1. Adapt
 
-- canonical `Route`s
-- or ranked `Candidate`s that preserve failed slots
-
-### adapt schemas
+By default, adapt tries to turn raw planner output into canonical `Route` objects and if fails, returns None. While it's a reasonable default for regular planning, it inflates the Tier-0 validity of the planner's predictions for strict benchmarking. As such, `adapt` can be configured to return `Candidate` objects which either hold a `Route` or a `FailureRecord` that specifies `target_{id,smiles,inchikey}` for proper accounting of failed predictions.
 
 ```python
-AdaptMode = Literal["strict", "prune"]
-
-
 class FailureRecord(BaseModel):
     code: str
     message: str | None = None
     target_id: str | None = None
     target_smiles: SmilesStr | None = None
+    target_inchikey: InchiKeyStr | None = None
     context: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -271,121 +255,35 @@ class Candidate(BaseModel):
     failure: FailureRecord | None = None
 ```
 
-rules:
+### Adapt modes
 
-- exactly one of `route` or `failure`
-- adapter `cast(...)` returns only `Route`
-- invalid smiles usually fail here, during casting / canonicalization
-- failed candidates must carry target hints if later benchmark binding depends on them
-
-why `Candidate` exists:
-
-- it preserves original rank slots
-- it preserves adaptation failures
-- it gives scoring an honest denominator for tier-0
-
-if the user does not care about failures, use routes directly.
-
-why `FailureRecord` still exists:
-
-- sometimes no trustworthy `Route` can be produced at all
-- representing that as an "empty route" would introduce fake chemistry
-- total failure is the only failure we preserve in the core schema
-
-### adapt modes
-
-`strict`:
-
-- any chemistry error discards the whole route
-- output is either a full `Route` or a total `FailureRecord`
-
-`prune`:
-
-- a local chemistry error drops the containing reaction subtree
-- the valid prefix above it is kept
-- the retained route now ends at that frontier
-
-this is the right place for flexible adapt.
-
-pruning does **not** mean the remaining prefix is chemically invalid. it means the plan is incomplete.
-
-current code does not expose a structured partial-error contract for adapters. today the real seam is simpler:
-
-- adapter returns a `Route`
-- or adapter raises and adaptation records total failure
-
-so if we add `prune` mode, it should still return an ordinary retained-prefix `Route`, not a route plus extra prune annotations in the core schema.
-
-### adapt api
-
+By default, `adapt` returns a `FailureRecord` if even a single SMILES is invalid. Model developers might sometimes be interested in the validity of predictions up to the corrupted SMILES, and `AdaptMode` allows them to relax adapters to return `Route`/`Candidate` objects that contain the longest-possible valid prefix `Route` with the corrupted SMILES node and all its children pruned out.
 ```python
-adapt_route(raw_route, adapter, *, mode: AdaptMode = "strict") -> Route | None
-
-adapt_routes(raw_output, adapter, *, mode: AdaptMode = "strict") -> list[Route]
-
-adapt_candidates(raw_output, adapter, *, mode: AdaptMode = "strict") -> list[Candidate]
+AdaptMode = Literal["strict", "prune"]
 ```
 
-intended use:
-
-- `adapt_routes(...)` for route-first inspection and ad hoc use
-- `adapt_candidates(...)` for benchmarking and honest solv/tier metrics
-
-important: these are not different chemistry conversions.
-
-- `adapt_candidates(...)` is the full ranked adaptation result
-- `adapt_routes(...)` is just the successful-route projection
-- `adapt_route(...)` is the single-item version of that projection
-
-this is the real meaning of the current `--preserve-failed-candidates` flag.
-
-## 2. collect / ingest
-
-collection maps adapted outputs onto known targets.
-
-we use `collect` rather than `bind` here because that is already the project’s public vocabulary: adapter output is collected onto benchmark targets for scoring.
-
-ingest is just the convenience workflow:
-
-```text
-adapt + collect + save
-```
-
-### collect schemas
+### Adapt API
 
 ```python
-class Target(BaseModel):
-    id: str
-    smiles: SmilesStr
-    acceptable_routes: list[Route] = Field(default_factory=list)
-    annotations: dict[str, Any] = Field(default_factory=dict)
+adapt_route(raw_route_payload, adapter, *, mode: AdaptMode = "strict") -> Route | None
 
+# for route-first inspection and ad hoc use
+adapt_routes(raw_payload, adapter, *, mode: AdaptMode = "strict") -> list[Route]
 
-class Task(BaseModel):
-    name: str
-    targets: dict[str, Target]
-    schema_version: str = "2"
+# for benchmarking and honest solv/tier-N metrics
+adapt_candidates(raw_payload, adapter, *, mode: AdaptMode = "strict") -> list[Candidate]
+```
 
+Which method is called through CLI is determined by the `--preserve-failed-candidates` flag.
 
-CollectedCandidates = dict[str, list[Candidate]]
+## 2. Collect
+
+Collection maps adapted outputs onto known targets.
+
+```python
+CollectedCandidates = dict[str, list[Candidate]] # where str is target_id
 CollectedRoutes = dict[str, list[Route]]
-```
 
-one benchmark is a `Task`.
-
-one daedalus query is also a `Task`, usually with one target.
-
-for now, one target has one 1d acceptable-route list:
-
-```python
-acceptable_routes: list[Route]
-```
-
-not a list of route sets.
-
-### collect api
-
-```python
 collect_candidates(
     candidates: Iterable[Candidate],
     task: Task,
@@ -400,42 +298,59 @@ collect_routes(
 collection rules:
 
 - if `candidate.route` exists, place it by `route.target`
-- otherwise place it by `candidate.failure.target_id` / `candidate.failure.target_smiles`
-- ambiguous and unmatched cases should be explicit policy decisions, not silent magic
+- otherwise place it by `candidate.failure.target_id` / `candidate.failure.target_inchikey`
 
-these do the same conceptual operation over different row types:
-
-- `collect_candidates(...)` preserves failed rank slots
-- `collect_routes(...)` is the route-only projection
-
-### ingest api
+where `Task` is defined through `Target`s and `TaskConstraints`:
 
 ```python
-ingest_routes(raw_output, adapter, task) -> CollectedRoutes
+class Target(BaseModel):
+    id: str
+    smiles: SmilesStr
+    inchikey: InchiKeyStr
+    acceptable_routes: list[Route] = Field(default_factory=list)
+    annotations: dict[str, Any] = Field(default_factory=dict)
 
-ingest_candidates(raw_output, adapter, task) -> CollectedCandidates
+
+class TaskConstraints(BaseModel):
+    stock: str | None = None
+    required_leaves_smiles: list[SmilesStr] | None = None
+    route_depth: int | Literal["short", "medium", "long"] | None = None
+
+
+class Task(BaseModel):
+    name: str
+    targets: dict[str, Target]
+    default_constraints: TaskConstraints = Field(default_factory=TaskConstraints)
+    constraints: dict[str, TaskConstraints] = Field(default_factory=dict)
+    annotations: dict[str, Any] = Field(default_factory=dict)
+    schema_version: str = "2"
+
+
+class Benchmark(Task):
+    name: str
+    description: str
 ```
 
-intended use:
+One benchmark is a `Task`. One daedalus query is also a `Task`, usually with one target.
 
-- `ingest_routes(...)` when the user wants only valid canonical routes
-- `ingest_candidates(...)` when the user wants an honest evaluation artifact
+## 3. Ingest
 
-## 3. score
+Ingest is just the convenience alias for `adapt + collect`
 
-score is where solv-n and acceptable-route comparisons happen.
+```python
+# when the user wants only valid canonical routes
+ingest_routes(raw_payload, adapter, task) -> CollectedRoutes
+# when the user wants an honest evaluation artifact
+ingest_candidates(raw_payload, adapter, task) -> CollectedCandidates
+```
 
-this is why we still need a post-score row. `Candidate` only says:
+## 4. Score
 
-- what rank slot existed
-- whether adaptation produced a route
+The ultimate method for scoring any synthesis plan is by passing it through the [Solv-N filter](/rationale/solv-n-evaluation), which is defined as:
 
-scoring adds genuinely new facts:
-
-- which tiers the route failed
-- which reactions failed
-- which scope constraints failed
-- whether the route matches an acceptable route fully, at the root reaction, or only to some prefix depth
+```text
+Solv-i[scope] = Tier-i validity + Satisfaction of problem scope.
+```
 
 that post-score row should be called `ScoredCandidate`.
 
@@ -779,17 +694,3 @@ examples of analysis metrics we should support natively:
 - `root_reaction_match@k`
 - `mean_best_prefix_depth`
 - `mean_best_prefix_fraction`
-
-## recommended persisted artifacts
-
-- route-first artifact: bound `Route`s only
-- candidate artifact: bound `Candidate`s with failed slots preserved
-- evaluation artifact: `Evaluation`
-- analysis artifact: `AnalysisReport`
-
-## migration notes
-
-- keep reading v1 artifacts via upgraders
-- add `schema_version` to route, task, evaluation, and analysis artifacts
-- stop serializing derived/computed route fields
-- move summary ranks and benchmark-only stratification out of score artifacts
