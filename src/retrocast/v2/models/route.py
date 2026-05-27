@@ -147,9 +147,6 @@ class Route(BaseModel):
     annotations: dict[str, Any] = Field(default_factory=dict)
     schema_version: str = "2"
 
-    def target_view(self) -> MoleculeView:
-        return MoleculeView(route=self, path=RoutePath.target(), value=self.target)
-
     def molecule_at(self, path: RoutePath | str) -> MoleculeView:
         route_path = RoutePath.parse(path) if isinstance(path, str) else path
         if not route_path.is_molecule():
@@ -182,7 +179,7 @@ class Route(BaseModel):
         *,
         depth: int | None = None,
     ) -> tuple[Any, ...]:
-        return self.target_view().subtree_key(match_level, depth=depth)
+        return self.molecule_at(RoutePath.target()).subtree_key(match_level, depth=depth)
 
     def signature(
         self,
