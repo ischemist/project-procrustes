@@ -23,6 +23,10 @@ def stock_for(*smiles_values: str) -> set[InChIKeyStr]:
     return {InChIKeyStr(get_inchi_key(canonicalize_smiles(smiles))) for smiles in smiles_values}
 
 
+def inchikey_for(smiles: str) -> InChIKeyStr:
+    return InChIKeyStr(get_inchi_key(canonicalize_smiles(smiles)))
+
+
 def test_stock_constraint_passes_when_all_leaves_are_in_stock() -> None:
     result = TaskConstraintChecker(stock=stock_for("C", "CO"), stock_name="stock-a").check_route(
         route(), TaskConstraints(stock="stock-a")
@@ -41,10 +45,11 @@ def test_stock_constraint_fails_when_leaf_is_missing() -> None:
 
 
 def test_required_leaf_constraint_fails_when_required_leaf_is_missing() -> None:
-    result = TaskConstraintChecker().check_route(route(), TaskConstraints(required_leaves_smiles=[SmilesStr("CC")]))
+    result = TaskConstraintChecker().check_route(route(), TaskConstraints(required_leaves=[inchikey_for("CC")]))
 
     assert result.status == CheckStatus.FAIL
     assert result.checks[0].code == "constraint.required_leaf.missing"
+    assert result.checks[0].details == {"missing_leaf_inchikeys": [inchikey_for("CC")]}
 
 
 def test_route_depth_constraint_fails_when_route_is_too_deep() -> None:
@@ -66,7 +71,7 @@ def test_route_depth_constraint_fails_when_route_is_too_deep() -> None:
 def test_stock_only_checker_ignores_other_task_constraints() -> None:
     result = TaskConstraintChecker.stock_termination(stock=stock_for("C", "CO"), stock_name="stock-a").check_route(
         route(),
-        TaskConstraints(stock="stock-a", required_leaves_smiles=[SmilesStr("CC")], route_depth=0),
+        TaskConstraints(stock="stock-a", required_leaves=[inchikey_for("CC")], route_depth=0),
     )
 
     assert result.status == CheckStatus.PASS

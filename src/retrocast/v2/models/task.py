@@ -30,7 +30,7 @@ class Target(BaseModel):
 
 class TaskConstraints(BaseModel):
     stock: str | None = None
-    required_leaves_smiles: list[SmilesStr] | None = None
+    required_leaves: list[InChIKeyStr] | None = None
     route_depth: int | Literal["short", "medium", "long"] | None = None
 
 

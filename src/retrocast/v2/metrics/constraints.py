@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-from retrocast.chem import canonicalize_smiles, get_inchi_key, reduce_inchikey
+from retrocast.chem import reduce_inchikey
 from retrocast.typing import InChIKeyStr
 from retrocast.v2.models.evaluation import CheckResult, CheckStatus, ConstraintResult
 from retrocast.v2.models.route import InChIKeyLevel, Route
@@ -108,24 +108,24 @@ class RequiredLeavesCheck:
         self.match_level = match_level
 
     def check_route(self, route: Route, constraints: TaskConstraints) -> list[CheckResult]:
-        if not constraints.required_leaves_smiles:
+        if not constraints.required_leaves:
             return []
-        return self._check_required_leaves(route, constraints.required_leaves_smiles)
+        return self._check_required_leaves(route, constraints.required_leaves)
 
-    def _check_required_leaves(self, route: Route, required_leaves_smiles: Sequence[str]) -> list[CheckResult]:
+    def _check_required_leaves(self, route: Route, required_leaves: Sequence[InChIKeyStr]) -> list[CheckResult]:
         leaf_keys = {leaf.key(self.match_level) for leaf in route.iter_leaves()}
         missing_required_leaves = []
-        for smiles in required_leaves_smiles:
-            required_key = get_inchi_key(canonicalize_smiles(smiles), level=self.match_level)
+        for inchikey in required_leaves:
+            required_key = str(reduce_inchikey(inchikey, self.match_level))
             if required_key not in leaf_keys:
-                missing_required_leaves.append(smiles)
+                missing_required_leaves.append(inchikey)
         if not missing_required_leaves:
             return []
         return [
             CheckResult(
                 code="constraint.required_leaf.missing",
                 status=CheckStatus.FAIL,
-                details={"missing_leaf_smiles": missing_required_leaves},
+                details={"missing_leaf_inchikeys": missing_required_leaves},
             )
         ]
 
