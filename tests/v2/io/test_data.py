@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import gzip
+
 import pytest
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import ArtifactNotFoundError
+from retrocast.exceptions import ArtifactDecodeError, ArtifactFormatError, ArtifactNotFoundError, ArtifactWriteError
 from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
 from retrocast.v2.io import (
     load_benchmark,
@@ -87,3 +89,28 @@ def test_collected_candidates_round_trip(tmp_path) -> None:
 def test_missing_benchmark_raises_io_error(tmp_path) -> None:
     with pytest.raises(ArtifactNotFoundError):
         load_benchmark(tmp_path / "missing.json.gz")
+
+
+def test_invalid_gzip_raises_decode_error(tmp_path) -> None:
+    path = tmp_path / "benchmark.json.gz"
+    path.write_text("not gzip", encoding="utf-8")
+
+    with pytest.raises(ArtifactDecodeError):
+        load_benchmark(path)
+
+
+def test_invalid_benchmark_shape_raises_format_error(tmp_path) -> None:
+    path = tmp_path / "benchmark.json.gz"
+    with gzip.open(path, "wb") as handle:
+        handle.write(b"{}")
+
+    with pytest.raises(ArtifactFormatError):
+        load_benchmark(path)
+
+
+def test_save_failure_raises_write_error(tmp_path) -> None:
+    parent_file = tmp_path / "not-a-dir"
+    parent_file.write_text("occupied", encoding="utf-8")
+
+    with pytest.raises(ArtifactWriteError):
+        save_benchmark(benchmark(), parent_file / "benchmark.json.gz")

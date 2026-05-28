@@ -62,3 +62,12 @@ def test_ingest_candidates_handles_target_keyed_payloads() -> None:
     assert [candidate.rank for candidate in collected["ethanol"]] == [1, 2]
     assert collected["ethanol"][0].route is not None
     assert collected["ethanol"][1].failure is not None
+
+
+def test_ingest_candidates_handles_target_smiles_keyed_payloads() -> None:
+    raw_payload = {"CCO": [{"smiles": "CCO"}]}
+
+    collected = ingest_candidates(raw_payload, SmilesAdapter(), task())
+
+    assert len(collected["ethanol"]) == 1
+    assert collected["ethanol"][0].route is not None

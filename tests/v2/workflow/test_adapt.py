@@ -115,6 +115,32 @@ def test_adapt_candidates_records_failed_target_identity_from_entry_hint() -> No
     assert failure.target_inchikey == get_inchi_key("CC(=O)O")
 
 
+def test_adapt_candidates_records_target_id_when_smiles_hint_is_missing() -> None:
+    candidates = adapt_candidates(
+        [{"rank": 3, "target_id": "target-1", "smiles": "not-a-smiles"}],
+        TreeAdapter(),
+    )
+
+    failure = candidates[0].failure
+    assert failure is not None
+    assert failure.target_id == "target-1"
+    assert failure.target_smiles is None
+    assert failure.target_inchikey is None
+
+
+def test_adapt_candidates_ignores_invalid_target_smiles_hint() -> None:
+    candidates = adapt_candidates(
+        [{"rank": 3, "target_id": "target-1", "target_smiles": "not-a-smiles", "smiles": "not-a-smiles"}],
+        TreeAdapter(),
+    )
+
+    failure = candidates[0].failure
+    assert failure is not None
+    assert failure.target_id == "target-1"
+    assert failure.target_smiles is None
+    assert failure.target_inchikey is None
+
+
 def test_prune_mode_drops_invalid_branch() -> None:
     candidates = adapt_candidates(
         [
