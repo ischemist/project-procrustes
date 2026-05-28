@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -22,6 +22,7 @@ class TreeAdapter:
         for index, raw_route in enumerate(raw_payload, start=1):
             if not isinstance(raw_route, dict):
                 raise AdapterSchemaError("expected route dict", code="adapter.schema_invalid")
+            raw_route = cast("dict[str, Any]", raw_route)
             yield RawRouteEntry(
                 payload=raw_route,
                 source_key=source_key,
