@@ -92,6 +92,7 @@ data/retrocast/0-assets/model-configs/**/*.md
 data/retrocast/**/*.gz
 data/retrocast/**/*.hdf5
 data/retrocast/2-raw/
+data/retrocast/1-benchmarks/definitions/v0.5.0/
 data/retrocast/3-processed/
 data/retrocast/4-scored/
 data/retrocast/5-results/

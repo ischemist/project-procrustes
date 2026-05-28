@@ -1,9 +1,22 @@
 """Schema v2 workflow APIs."""
 
 from retrocast.v2.workflow.adapt import adapt_candidates, adapt_route, adapt_routes
+from retrocast.v2.workflow.collect import (
+    CollectedCandidates,
+    CollectedRoutes,
+    collect_candidates,
+    collect_routes,
+)
+from retrocast.v2.workflow.ingest import ingest_candidates, ingest_routes
 
 __all__ = [
+    "CollectedCandidates",
+    "CollectedRoutes",
     "adapt_candidates",
     "adapt_route",
     "adapt_routes",
+    "collect_candidates",
+    "collect_routes",
+    "ingest_candidates",
+    "ingest_routes",
 ]

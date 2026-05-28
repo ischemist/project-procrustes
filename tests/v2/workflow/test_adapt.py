@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -22,6 +22,7 @@ class TreeAdapter:
         for index, raw_route in enumerate(raw_payload, start=1):
             if not isinstance(raw_route, dict):
                 raise AdapterSchemaError("expected route dict", code="adapter.schema_invalid")
+            raw_route = cast("dict[str, Any]", raw_route)
             yield RawRouteEntry(
                 payload=raw_route,
                 source_key=source_key,
@@ -112,6 +113,32 @@ def test_adapt_candidates_records_failed_target_identity_from_entry_hint() -> No
     assert failure.target_id == "target-1"
     assert failure.target_smiles == "CC(=O)O"
     assert failure.target_inchikey == get_inchi_key("CC(=O)O")
+
+
+def test_adapt_candidates_records_target_id_when_smiles_hint_is_missing() -> None:
+    candidates = adapt_candidates(
+        [{"rank": 3, "target_id": "target-1", "smiles": "not-a-smiles"}],
+        TreeAdapter(),
+    )
+
+    failure = candidates[0].failure
+    assert failure is not None
+    assert failure.target_id == "target-1"
+    assert failure.target_smiles is None
+    assert failure.target_inchikey is None
+
+
+def test_adapt_candidates_ignores_invalid_target_smiles_hint() -> None:
+    candidates = adapt_candidates(
+        [{"rank": 3, "target_id": "target-1", "target_smiles": "not-a-smiles", "smiles": "not-a-smiles"}],
+        TreeAdapter(),
+    )
+
+    failure = candidates[0].failure
+    assert failure is not None
+    assert failure.target_id == "target-1"
+    assert failure.target_smiles is None
+    assert failure.target_inchikey is None
 
 
 def test_prune_mode_drops_invalid_branch() -> None:
