@@ -148,13 +148,34 @@ class PaRoutesAdapter:
         *,
         source_key: str | None = None,
     ) -> Iterator[RawRouteEntry]:
-        target_id = source_key or "<unknown>"
+        if not isinstance(raw_payload, Mapping):
+            target_id = source_key or "<unknown>"
+            raise adapter_schema_error("paroutes", target_id, "expected route root or mapping of target ids to routes")
+
+        is_route_root = raw_payload.get("type") == "mol" or "smiles" in raw_payload or "children" in raw_payload
+        if is_route_root:
+            target_id = source_key or "<unknown>"
+            yield RawRouteEntry(
+                payload=self._validate_route_root(raw_payload, target_id=target_id),
+                source_key=source_key,
+                source_order=1,
+            )
+            return
+
+        for source_order, (target_id, raw_route) in enumerate(raw_payload.items(), start=1):
+            if not isinstance(target_id, str):
+                raise adapter_schema_error("paroutes", source_key or "<unknown>", "target id keys must be strings")
+            yield RawRouteEntry(
+                payload=self._validate_route_root(raw_route, target_id=target_id),
+                source_key=target_id,
+                source_order=source_order,
+            )
+
+    def _validate_route_root(self, raw_route: Any, *, target_id: str) -> PaRoutesMoleculeInput:
         try:
-            validated_route_root = PaRoutesMoleculeInput.model_validate(raw_payload)
+            return PaRoutesMoleculeInput.model_validate(raw_route)
         except ValidationError as exc:
             raise adapter_schema_error("paroutes", target_id, "invalid molecule route root") from exc
-
-        yield RawRouteEntry(payload=validated_route_root, source_key=source_key, source_order=1)
 
     def cast(
         self,
@@ -163,22 +184,20 @@ class PaRoutesAdapter:
         mode: AdaptMode = "strict",
         target: Target | None = None,
     ) -> Route:
-        if not isinstance(raw_route, PaRoutesMoleculeInput):
-            raw_route = PaRoutesMoleculeInput.model_validate(raw_route)
-
         target_id = target.id if target is not None else "<unknown>"
+        raw_route = self._validate_route_root(raw_route, target_id=target_id)
         patent_ids = self._get_patent_ids(raw_route)
-        if len(patent_ids) > 1:
-            raise AdapterLogicError(
-                f"PaRoutes route for target '{target_id}' contains reactions from multiple patents",
-                code="adapter.multiple_patents",
-                context={"adapter": "paroutes", "target_id": target_id, "patent_ids": sorted(patent_ids)},
-            )
         if not patent_ids:
             raise AdapterLogicError(
                 f"PaRoutes route for target '{target_id}' does not contain a patent id",
                 code="adapter.patent_id_missing",
                 context={"adapter": "paroutes", "target_id": target_id},
+            )
+        if len(patent_ids) > 1:
+            raise AdapterLogicError(
+                f"PaRoutes route for target '{target_id}' contains reactions from multiple patents",
+                code="adapter.multiple_patents",
+                context={"adapter": "paroutes", "target_id": target_id, "patent_ids": sorted(patent_ids)},
             )
 
         route_target = self._build_molecule(raw_route, visited=set(), mode=mode)
@@ -205,8 +224,7 @@ class PaRoutesAdapter:
         if visited is None:
             visited = set()
         if node.smiles in visited:
-            logger.warning("cycle detected in _get_patent_ids for smiles: %s", node.smiles)
-            return set()
+            raise adapter_cycle_error("paroutes", node.smiles)
 
         patent_ids: set[str] = set()
         new_visited = visited | {node.smiles}
@@ -254,6 +272,14 @@ class PaRoutesAdapter:
             reactant = self._build_molecule(reactant_node, visited | {canon_smiles}, mode=mode)
             if reactant is not None:
                 reactants.append(reactant)
+        if not reactants:
+            if mode == "prune":
+                return None
+            raise AdapterLogicError(
+                "PaRoutes reaction has no reactants",
+                code="adapter.reaction_empty",
+                context={"adapter": "paroutes", "smiles": canon_smiles},
+            )
 
         reaction = Reaction(
             reactants=reactants,

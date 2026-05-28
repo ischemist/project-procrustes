@@ -1,15 +1,24 @@
 from __future__ import annotations
 
+import gzip
+import json
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, InvalidSmilesError
+from retrocast.exceptions import AdapterLogicError
 from retrocast.typing import SmilesStr
 from retrocast.v2.adapters.paroutes import ConditionSlotParseStatistics, PaRoutesAdapter, analyze_condition_slots
-from retrocast.v2.models.route import Route
 from retrocast.v2.models.task import Target
+from tests.v2.adapters.base import (
+    AdapterContractCase,
+    AdapterContractSuite,
+    CastContractCase,
+    InvalidSmilesContractCase,
+    RawExtractionContractCase,
+)
 
 
 def target_for(raw_route: dict, target_id: str = "target") -> Target:
@@ -47,35 +56,85 @@ def raw_paroutes_route() -> dict:
     }
 
 
-@pytest.mark.contract
-def test_paroutes_iter_raw_routes_validates_route_root(raw_paroutes_route) -> None:
-    adapter = PaRoutesAdapter()
+@pytest.fixture
+def raw_paroutes_invalid_leaf_route() -> dict:
+    return {
+        "type": "mol",
+        "smiles": "CCO",
+        "children": [
+            {
+                "type": "reaction",
+                "smiles": "CCO",
+                "metadata": {"ID": "US123;1", "rsmi": "C.CCO>>CCO"},
+                "children": [
+                    {"type": "mol", "smiles": "C", "in_stock": True, "children": []},
+                    {"type": "mol", "smiles": "not-smiles", "in_stock": True, "children": []},
+                ],
+            }
+        ],
+    }
 
-    entries = list(adapter.iter_raw_routes(raw_paroutes_route, source_key="paroutes-ex-1"))
 
-    assert len(entries) == 1
-    assert entries[0].source_key == "paroutes-ex-1"
-    assert entries[0].source_order == 1
+@pytest.fixture
+def raw_paroutes_payload(raw_paroutes_route) -> dict:
+    second_route = deepcopy(raw_paroutes_route)
+    second_route["smiles"] = "CCC"
+    second_route["children"][0]["smiles"] = "CCC"
+    second_route["children"][0]["metadata"]["rsmi"] = "C.CC>>CCC"
+    return {"paroutes-ex-1": raw_paroutes_route, "paroutes-ex-2": second_route}
 
-    with pytest.raises(AdapterSchemaError) as exc_info:
-        list(adapter.iter_raw_routes({"smiles": "CCO"}, source_key="bad"))
-    assert exc_info.value.code == "adapter.schema_invalid"
+
+class TestPaRoutesAdapterContract(AdapterContractSuite):
+    @pytest.fixture
+    def adapter_contract_case(
+        self,
+        raw_paroutes_payload,
+        raw_paroutes_route,
+        raw_paroutes_invalid_leaf_route,
+    ) -> AdapterContractCase:
+        return AdapterContractCase(
+            adapter=PaRoutesAdapter(),
+            extraction=RawExtractionContractCase(
+                valid_payload=raw_paroutes_payload,
+                malformed_payload={"smiles": "CCO"},
+                source_key="paroutes-fixture",
+                expected_entry_count=2,
+                expected_source_keys=["paroutes-ex-1", "paroutes-ex-2"],
+                expected_source_order=1,
+            ),
+            casting=CastContractCase(
+                valid_raw_route=raw_paroutes_route,
+                malformed_raw_route={"smiles": "CCO"},
+                target=target_for(raw_paroutes_route, "paroutes-ex-1"),
+                mismatched_target=Target(id="paroutes-ex-1", smiles=SmilesStr("CCC"), inchikey=get_inchi_key("CCC")),
+                expected_root_reactant_count=2,
+            ),
+            invalid_smiles=InvalidSmilesContractCase(
+                invalid_leaf_raw_route=raw_paroutes_invalid_leaf_route,
+                expected_pruned_root_reactants=["C"],
+            ),
+        )
+
+    @pytest.mark.contract
+    def test_cast_preserves_patent_annotation(self, raw_paroutes_route) -> None:
+        adapter = PaRoutesAdapter()
+
+        route = adapter.cast(raw_paroutes_route, target=target_for(raw_paroutes_route, "paroutes-ex-1"))
+
+        assert route.annotations["patent_id"] == "US123"
+        assert len(route.target.product_of.reactants) == 2
 
 
-@pytest.mark.contract
-def test_paroutes_cast_emits_route(raw_paroutes_route) -> None:
-    adapter = PaRoutesAdapter()
-    raw_route = raw_paroutes_route
+@pytest.mark.regression
+def test_paroutes_iter_raw_routes_accepts_real_fixture_payload() -> None:
+    path = Path("tests/testing_data/paroutes.json.gz")
+    with gzip.open(path, "rt", encoding="utf-8") as file:
+        raw_payload = json.load(file)
 
-    route = adapter.cast(raw_route, target=target_for(raw_route, "paroutes-ex-1"))
+    entries = list(PaRoutesAdapter().iter_raw_routes(raw_payload))
 
-    assert isinstance(route, Route)
-    assert route.schema_version == "2"
-    assert route.annotations["patent_id"] == "US123"
-    assert route.target.smiles == canonicalize_smiles(raw_route["smiles"])
-    assert route.target.inchikey
-    assert route.target.product_of is not None
-    assert len(route.target.product_of.reactants) == 2
+    assert [entry.source_key for entry in entries] == ["paroutes-ex-1", "paroutes-ex-2"]
+    assert [entry.source_order for entry in entries] == [1, 2]
 
 
 @pytest.mark.contract
@@ -101,17 +160,6 @@ def test_paroutes_reaction_annotations_keep_condition_slot(raw_paroutes_route) -
 
 
 @pytest.mark.contract
-def test_paroutes_rejects_mismatched_target(raw_paroutes_route) -> None:
-    adapter = PaRoutesAdapter()
-    raw_route = raw_paroutes_route
-    target = Target(id="paroutes-ex-1", smiles=SmilesStr("CCC"), inchikey=get_inchi_key("CCC"))
-
-    with pytest.raises(AdapterLogicError) as exc_info:
-        adapter.cast(raw_route, target=target)
-    assert exc_info.value.code == "adapter.target_mismatch"
-
-
-@pytest.mark.contract
 def test_paroutes_rejects_mixed_patents(raw_paroutes_route) -> None:
     adapter = PaRoutesAdapter()
     raw_route = deepcopy(raw_paroutes_route)
@@ -123,7 +171,7 @@ def test_paroutes_rejects_mixed_patents(raw_paroutes_route) -> None:
 
 
 @pytest.mark.contract
-def test_paroutes_prune_mode_drops_invalid_branch() -> None:
+def test_paroutes_rejects_cycles_before_patent_checks() -> None:
     adapter = PaRoutesAdapter()
     raw_route = {
         "type": "mol",
@@ -132,21 +180,51 @@ def test_paroutes_prune_mode_drops_invalid_branch() -> None:
             {
                 "type": "reaction",
                 "smiles": "CCO",
-                "metadata": {"ID": "US123;1", "rsmi": "C.CCO>>CCO"},
+                "metadata": {"ID": "US123;1", "rsmi": "CC>>CCO"},
                 "children": [
-                    {"type": "mol", "smiles": "C", "in_stock": True, "children": []},
-                    {"type": "mol", "smiles": "not-smiles", "in_stock": True, "children": []},
+                    {
+                        "type": "mol",
+                        "smiles": "CC",
+                        "children": [
+                            {
+                                "type": "reaction",
+                                "smiles": "CC",
+                                "metadata": {"ID": "US123;2", "rsmi": "CCO>>CC"},
+                                "children": [{"type": "mol", "smiles": "CCO", "children": []}],
+                            }
+                        ],
+                    }
                 ],
             }
         ],
     }
 
-    strict_target = target_for(raw_route, "prune-target")
-    with pytest.raises(InvalidSmilesError):
-        adapter.cast(raw_route, target=strict_target, mode="strict")
+    with pytest.raises(AdapterLogicError) as exc_info:
+        adapter.cast(raw_route, target=target_for(raw_route, "cycle-target"))
 
-    route = adapter.cast(raw_route, target=strict_target, mode="prune")
-    assert [reactant.value.smiles for reactant in route.reaction_at("rc:r:/").reactants()] == [SmilesStr("C")]
+    assert exc_info.value.code == "adapter.cycle_detected"
+
+
+@pytest.mark.contract
+def test_paroutes_prune_mode_drops_branch_when_all_reactants_are_invalid() -> None:
+    adapter = PaRoutesAdapter()
+    raw_route = {
+        "type": "mol",
+        "smiles": "CCO",
+        "children": [
+            {
+                "type": "reaction",
+                "smiles": "CCO",
+                "metadata": {"ID": "US123;1", "rsmi": "not-smiles>>CCO"},
+                "children": [{"type": "mol", "smiles": "not-smiles", "in_stock": True, "children": []}],
+            }
+        ],
+    }
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        adapter.cast(raw_route, target=target_for(raw_route, "paroutes-ex-1"), mode="prune")
+
+    assert exc_info.value.code == "adapter.target_pruned"
 
 
 @pytest.mark.contract
