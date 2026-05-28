@@ -28,6 +28,17 @@ def test_candidate_accepts_failure_record() -> None:
 
 
 @pytest.mark.unit
+def test_candidate_accepts_route() -> None:
+    route = one_step_route()
+
+    candidate = Candidate(rank=1, route=route)
+
+    assert candidate.rank == 1
+    assert candidate.route == route
+    assert candidate.failure is None
+
+
+@pytest.mark.unit
 def test_candidate_requires_route_or_failure() -> None:
     with pytest.raises(ValidationError):
         Candidate(rank=1)

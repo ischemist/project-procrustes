@@ -59,7 +59,7 @@ PaRoutesNode = Annotated[PaRoutesMoleculeInput | PaRoutesReactionInput, Field(di
 class ConditionSlotParseStatistics(BaseModel):
     malformed_rsmi_count: int = 0
     uncanonicalizable_token_count: int = 0
-    uncanonicalizable_tokens: dict[str, int] = Field(default_factory=lambda: defaultdict(int))
+    uncanonicalizable_tokens: defaultdict[str, int] = Field(default_factory=lambda: defaultdict(int))
 
     @property
     def distinct_uncanonicalizable_token_count(self) -> int:
@@ -183,7 +183,7 @@ class PaRoutesAdapter:
     ) -> Route:
         target_id = target.id if target is not None else "<unknown>"
         raw_route = self._validate_route_root(raw_route, target_id=target_id)
-        patent_ids = self._get_patent_ids(raw_route)
+        patent_ids = self._get_patent_ids(raw_route, mode=mode)
         if not patent_ids:
             raise AdapterLogicError(
                 f"PaRoutes route for target '{target_id}' does not contain a patent id",
@@ -217,19 +217,38 @@ class PaRoutesAdapter:
 
         return Route(target=route_target, annotations={"patent_id": next(iter(patent_ids))})
 
-    def _get_patent_ids(self, node: PaRoutesMoleculeInput, visited: set[str] | None = None) -> set[str]:
+    def _get_patent_ids(
+        self,
+        node: PaRoutesMoleculeInput,
+        *,
+        mode: AdaptMode,
+        visited: set[str] | None = None,
+    ) -> set[str]:
         if visited is None:
             visited = set()
-        if node.smiles in visited:
-            raise adapter_cycle_error("paroutes", node.smiles)
+        try:
+            canon_smiles = canonicalize_smiles(node.smiles)
+        except InvalidSmilesError:
+            if mode == "prune":
+                return set()
+            raise
+        if canon_smiles in visited:
+            raise adapter_cycle_error("paroutes", canon_smiles)
 
         patent_ids: set[str] = set()
-        new_visited = visited | {node.smiles}
-        for reaction_node in node.children:
-            reaction_node = self._require_reaction_node(reaction_node, role="molecule child")
-            patent_ids.add(reaction_node.metadata.id.split(";")[0])
+        new_visited = visited | {canon_smiles}
+        if node.children:
+            reaction_node = self._require_reaction_node(node.children[0], role="molecule child")
+            patent_id = reaction_node.metadata.id.split(";", 1)[0].strip()
+            if not patent_id:
+                raise AdapterLogicError(
+                    "PaRoutes reaction metadata contains an empty patent id",
+                    code="adapter.patent_id_missing",
+                    context={"adapter": "paroutes", "source_id": reaction_node.metadata.id},
+                )
+            patent_ids.add(patent_id)
             for reactant_node in reaction_node.children:
-                patent_ids.update(self._get_patent_ids(reactant_node, visited=new_visited))
+                patent_ids.update(self._get_patent_ids(reactant_node, mode=mode, visited=new_visited))
         return patent_ids
 
     def _require_reaction_node(self, node: PaRoutesNode, *, role: str) -> PaRoutesReactionInput:

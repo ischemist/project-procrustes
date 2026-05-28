@@ -234,11 +234,44 @@ def test_paroutes_rejects_mixed_patents(raw_paroutes_route) -> None:
 
 
 @pytest.mark.contract
+def test_paroutes_patent_scan_uses_only_selected_reaction(raw_paroutes_route) -> None:
+    raw_route = deepcopy(raw_paroutes_route)
+    raw_route["children"].append(
+        {
+            "type": "reaction",
+            "smiles": raw_route["smiles"],
+            "metadata": {"ID": "OTHER;1", "rsmi": "C>>CCO"},
+            "children": [{"type": "mol", "smiles": "C", "children": []}],
+        }
+    )
+
+    route = PaRoutesAdapter().cast(raw_route, target=target_for(raw_route, "paroutes-ex-1"))
+
+    assert route.annotations["patent_id"] == "US123"
+
+
+@pytest.mark.contract
 def test_paroutes_rejects_missing_patent_id() -> None:
     raw_route = {"type": "mol", "smiles": "CCO", "in_stock": True, "children": []}
 
     with pytest.raises(AdapterLogicError) as exc_info:
         PaRoutesAdapter().cast(raw_route, target=target_for(raw_route, "missing-patent"))
+
+    assert exc_info.value.code == "adapter.patent_id_missing"
+
+
+@pytest.mark.contract
+def test_paroutes_rejects_empty_patent_id() -> None:
+    raw_route = {
+        "type": "mol",
+        "smiles": "CCO",
+        "children": [
+            {"type": "reaction", "smiles": "CCO", "metadata": {"ID": " ;1", "rsmi": "C>>CCO"}, "children": []}
+        ],
+    }
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        PaRoutesAdapter().cast(raw_route, target=target_for(raw_route, "empty-patent"))
 
     assert exc_info.value.code == "adapter.patent_id_missing"
 
