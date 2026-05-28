@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError
+from retrocast.exceptions import AdapterLogicError, AdapterSchemaError
 from retrocast.typing import SmilesStr
 from retrocast.v2.adapters.paroutes import ConditionSlotParseStatistics, PaRoutesAdapter, analyze_condition_slots
 from retrocast.v2.models.task import Target
@@ -138,6 +138,31 @@ def test_paroutes_iter_raw_routes_accepts_real_fixture_payload() -> None:
 
 
 @pytest.mark.contract
+def test_paroutes_iter_raw_routes_accepts_single_route_root(raw_paroutes_route) -> None:
+    entries = list(PaRoutesAdapter().iter_raw_routes(raw_paroutes_route, source_key="single-target"))
+
+    assert len(entries) == 1
+    assert entries[0].source_key == "single-target"
+    assert entries[0].source_order == 1
+
+
+@pytest.mark.contract
+def test_paroutes_iter_raw_routes_rejects_non_mapping_payload() -> None:
+    with pytest.raises(AdapterSchemaError) as exc_info:
+        list(PaRoutesAdapter().iter_raw_routes(["not", "a", "payload"], source_key="bad"))
+
+    assert exc_info.value.code == "adapter.schema_invalid"
+
+
+@pytest.mark.contract
+def test_paroutes_iter_raw_routes_rejects_non_string_target_keys(raw_paroutes_route) -> None:
+    with pytest.raises(AdapterSchemaError) as exc_info:
+        list(PaRoutesAdapter().iter_raw_routes({1: raw_paroutes_route}))
+
+    assert exc_info.value.code == "adapter.schema_invalid"
+
+
+@pytest.mark.contract
 def test_paroutes_reaction_annotations_keep_condition_slot(raw_paroutes_route) -> None:
     adapter = PaRoutesAdapter()
     raw_route = raw_paroutes_route
@@ -168,6 +193,30 @@ def test_paroutes_rejects_mixed_patents(raw_paroutes_route) -> None:
     with pytest.raises(AdapterLogicError) as exc_info:
         adapter.cast(raw_route, target=target_for(raw_route, "paroutes-ex-1"))
     assert exc_info.value.code == "adapter.multiple_patents"
+
+
+@pytest.mark.contract
+def test_paroutes_rejects_missing_patent_id() -> None:
+    raw_route = {"type": "mol", "smiles": "CCO", "in_stock": True, "children": []}
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        PaRoutesAdapter().cast(raw_route, target=target_for(raw_route, "missing-patent"))
+
+    assert exc_info.value.code == "adapter.patent_id_missing"
+
+
+@pytest.mark.contract
+def test_paroutes_rejects_molecule_child_under_molecule() -> None:
+    raw_route = {
+        "type": "mol",
+        "smiles": "CCO",
+        "children": [{"type": "mol", "smiles": "C", "children": []}],
+    }
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        PaRoutesAdapter().cast(raw_route, target=target_for(raw_route, "bad-topology"))
+
+    assert exc_info.value.code == "adapter.node_type_invalid"
 
 
 @pytest.mark.contract
@@ -206,6 +255,44 @@ def test_paroutes_rejects_cycles_before_patent_checks() -> None:
 
 
 @pytest.mark.contract
+def test_paroutes_rejects_cycles_after_smiles_canonicalization() -> None:
+    adapter = PaRoutesAdapter()
+    raw_route = {
+        "type": "mol",
+        "smiles": "CCO",
+        "children": [
+            {
+                "type": "reaction",
+                "smiles": "CCO",
+                "metadata": {"ID": "US123;1", "rsmi": "OCC>>CCO"},
+                "children": [{"type": "mol", "smiles": "OCC", "children": []}],
+            }
+        ],
+    }
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        adapter.cast(raw_route, target=target_for(raw_route, "cycle-target"))
+
+    assert exc_info.value.code == "adapter.cycle_detected"
+
+
+@pytest.mark.contract
+def test_paroutes_rejects_empty_reaction_in_strict_mode() -> None:
+    raw_route = {
+        "type": "mol",
+        "smiles": "CCO",
+        "children": [
+            {"type": "reaction", "smiles": "CCO", "metadata": {"ID": "US123;1", "rsmi": ">>CCO"}, "children": []}
+        ],
+    }
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        PaRoutesAdapter().cast(raw_route, target=target_for(raw_route, "empty-reaction"))
+
+    assert exc_info.value.code == "adapter.reaction_empty"
+
+
+@pytest.mark.contract
 def test_paroutes_prune_mode_drops_branch_when_all_reactants_are_invalid() -> None:
     adapter = PaRoutesAdapter()
     raw_route = {
@@ -236,4 +323,39 @@ def test_analyze_condition_slots_counts_non_fatal_failures(raw_paroutes_route) -
     analyze_condition_slots(raw_route, stats=stats)
 
     assert stats.malformed_rsmi_count == 1
+    assert stats.uncanonicalizable_token_count == 0
+
+
+@pytest.mark.contract
+def test_analyze_condition_slots_counts_uncanonicalizable_tokens(raw_paroutes_route) -> None:
+    raw_route = deepcopy(raw_paroutes_route)
+    raw_route["children"][0]["metadata"]["rsmi"] = "CCO>not-smiles..O>CCO"
+    stats = ConditionSlotParseStatistics()
+
+    analyze_condition_slots(raw_route, stats=stats)
+
+    assert stats.uncanonicalizable_token_count == 1
+    assert stats.distinct_uncanonicalizable_token_count == 1
+    assert stats.top_uncanonicalizable_tokens == [("not-smiles", 1)]
+
+
+@pytest.mark.contract
+def test_analyze_condition_slots_ignores_missing_rsmi(raw_paroutes_route) -> None:
+    raw_route = deepcopy(raw_paroutes_route)
+    raw_route["children"][0]["metadata"].pop("rsmi")
+    stats = ConditionSlotParseStatistics()
+
+    analyze_condition_slots(raw_route, stats=stats)
+
+    assert stats.malformed_rsmi_count == 0
+    assert stats.uncanonicalizable_token_count == 0
+
+
+@pytest.mark.contract
+def test_analyze_condition_slots_ignores_malformed_tree_shapes() -> None:
+    stats = ConditionSlotParseStatistics()
+
+    analyze_condition_slots({"children": [{"children": "not-a-list"}, "not-a-node"]}, stats=stats)
+
+    assert stats.malformed_rsmi_count == 0
     assert stats.uncanonicalizable_token_count == 0

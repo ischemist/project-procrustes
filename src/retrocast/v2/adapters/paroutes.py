@@ -52,9 +52,6 @@ class PaRoutesReactionInput(PaRoutesBaseNode):
 
 PaRoutesNode = Annotated[PaRoutesMoleculeInput | PaRoutesReactionInput, Field(discriminator="type")]
 
-PaRoutesMoleculeInput.model_rebuild()
-PaRoutesReactionInput.model_rebuild()
-
 
 # SECTION: Condition Slot Annotations
 
@@ -229,12 +226,16 @@ class PaRoutesAdapter:
         patent_ids: set[str] = set()
         new_visited = visited | {node.smiles}
         for reaction_node in node.children:
-            if not isinstance(reaction_node, PaRoutesReactionInput):
-                continue
+            reaction_node = self._require_reaction_node(reaction_node, role="molecule child")
             patent_ids.add(reaction_node.metadata.id.split(";")[0])
             for reactant_node in reaction_node.children:
                 patent_ids.update(self._get_patent_ids(reactant_node, visited=new_visited))
         return patent_ids
+
+    def _require_reaction_node(self, node: PaRoutesNode, *, role: str) -> PaRoutesReactionInput:
+        if isinstance(node, PaRoutesReactionInput):
+            return node
+        raise adapter_node_type_error("paroutes", expected="reaction", actual=node.type, role=role)
 
     def _build_molecule(
         self,
@@ -243,9 +244,6 @@ class PaRoutesAdapter:
         *,
         mode: AdaptMode,
     ) -> Molecule | None:
-        if raw_mol_node.type != "mol":
-            raise adapter_node_type_error("paroutes", expected="mol", actual=raw_mol_node.type, role="molecule")
-
         try:
             canon_smiles = canonicalize_smiles(raw_mol_node.smiles)
         except InvalidSmilesError:
@@ -262,10 +260,7 @@ class PaRoutesAdapter:
         if len(raw_mol_node.children) > 1:
             logger.warning("molecule %s has multiple child reactions; only the first is used", canon_smiles)
 
-        reaction_node = raw_mol_node.children[0]
-        if not isinstance(reaction_node, PaRoutesReactionInput):
-            actual = getattr(reaction_node, "type", type(reaction_node).__name__)
-            raise adapter_node_type_error("paroutes", expected="reaction", actual=actual, role="molecule child")
+        reaction_node = self._require_reaction_node(raw_mol_node.children[0], role="molecule child")
 
         reactants = []
         for reactant_node in reaction_node.children:
