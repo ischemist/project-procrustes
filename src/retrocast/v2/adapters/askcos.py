@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterator, Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Annotated, Any, Literal
@@ -82,7 +83,7 @@ class AskcosOutput(BaseModel):
     results: AskcosResults
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class AskcosPathwayPayload:
     pathway_edges: tuple[AskcosPathwayEdge, ...]
     uuid2smiles: MappingProxyType[str, str]
@@ -120,10 +121,10 @@ class AskcosAdapter:
         for pathway_index, pathway_edges in enumerate(uds.pathways, start=1):
             yield RawRouteEntry(
                 payload=AskcosPathwayPayload(
-                    pathway_edges=tuple(pathway_edges),
-                    uuid2smiles=MappingProxyType(uds.uuid2smiles),
-                    node_dict=MappingProxyType(uds.node_dict),
-                    annotations=MappingProxyType(annotations),
+                    pathway_edges=tuple(edge.model_copy(deep=True) for edge in pathway_edges),
+                    uuid2smiles=MappingProxyType(deepcopy(uds.uuid2smiles)),
+                    node_dict=MappingProxyType(deepcopy(uds.node_dict)),
+                    annotations=MappingProxyType(deepcopy(annotations)),
                 ),
                 source_key=source_key,
                 source_order=pathway_index,

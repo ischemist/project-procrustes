@@ -153,6 +153,8 @@ def test_askcos_cast_preserves_run_annotations(askcos_route_payload) -> None:
 
 @pytest.mark.contract
 def test_askcos_pathway_payload_uses_immutable_boundary_containers(askcos_route_payload) -> None:
+    with pytest.raises(AttributeError):
+        askcos_route_payload.annotations = {}
     with pytest.raises(TypeError):
         askcos_route_payload.uuid2smiles["new"] = "C"
     with pytest.raises(TypeError):
@@ -160,6 +162,19 @@ def test_askcos_pathway_payload_uses_immutable_boundary_containers(askcos_route_
     with pytest.raises(TypeError):
         askcos_route_payload.annotations["new"] = 1
     assert isinstance(askcos_route_payload.pathway_edges, tuple)
+
+
+@pytest.mark.contract
+def test_askcos_pathway_payload_does_not_share_raw_payload_backing(raw_askcos_output) -> None:
+    raw_route = next(AskcosAdapter().iter_raw_routes(raw_askcos_output)).payload
+    raw_askcos_output["results"]["uds"]["uuid2smiles"].pop("uuid-ethanol")
+    raw_askcos_output["results"]["uds"]["node_dict"].pop("CCO")
+    raw_askcos_output["results"]["stats"]["total_paths"] = 999
+
+    route = AskcosAdapter().cast(raw_route, target=target_for("CCOC(C)=O"))
+
+    assert route.annotations["total_paths"] == 2
+    assert [reactant.value.smiles for reactant in route.reaction_at("rc:r:/").reactants()] == ["CCO", "CC(=O)O"]
 
 
 @pytest.mark.contract
