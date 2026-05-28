@@ -49,9 +49,7 @@ class UrsaAdapter:
                     "each completion record must be a dict with a string 'completion' field",
                     record_index=row_index - 1,
                 )
-            target_hint_smiles = _extract_target_hint(
-                raw_record, self.adapter_key, target_id, row_index - 1, source_key
-            )
+            target_hint_smiles = _extract_target_hint(raw_record, self.adapter_key, target_id, row_index - 1)
             yield RawRouteEntry(
                 payload=raw_record["completion"],
                 source_key=source_key,
@@ -130,20 +128,24 @@ def _extract_target_hint(
     adapter_key: str,
     target_id: str,
     record_index: int,
-    source_key: str | None,
 ) -> str | None:
     meta = raw_record.get("meta")
-    if not isinstance(meta, dict) or not isinstance(meta.get("product_smiles"), str):
-        if source_key is None:
-            raise adapter_schema_error(
-                adapter_key,
-                target_id,
-                "completion records must include meta.product_smiles",
-                record_index=record_index,
-            )
+    if meta is None:
         return None
+    if not isinstance(meta, dict):
+        return None
+    product_smiles = meta.get("product_smiles")
+    if product_smiles is None:
+        return None
+    if not isinstance(product_smiles, str):
+        raise adapter_schema_error(
+            adapter_key,
+            target_id,
+            "completion record has non-string meta.product_smiles",
+            record_index=record_index,
+        )
     try:
-        return canonicalize_smiles(meta["product_smiles"])
+        return canonicalize_smiles(product_smiles)
     except RetroCastException as exc:
         raise adapter_schema_error(
             adapter_key,

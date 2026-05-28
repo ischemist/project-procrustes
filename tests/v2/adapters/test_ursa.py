@@ -73,10 +73,10 @@ def test_ursa_iter_raw_routes_preserves_row_index_and_target_hint(raw_ursa_paylo
 
 
 @pytest.mark.contract
-def test_ursa_iter_raw_routes_requires_meta_product_without_source_key() -> None:
-    with pytest.raises(AdapterSchemaError) as exc_info:
-        list(UrsaAdapter().iter_raw_routes([{"completion": completion("C")}]))
-    assert exc_info.value.code == "adapter.schema_invalid"
+def test_ursa_iter_raw_routes_allows_missing_target_hint() -> None:
+    entries = list(UrsaAdapter().iter_raw_routes([{"completion": completion("C")}]))
+
+    assert entries[0].target_hint_smiles is None
 
 
 @pytest.mark.contract

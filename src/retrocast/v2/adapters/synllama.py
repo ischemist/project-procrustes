@@ -94,6 +94,7 @@ class SynLlamaAdapter:
             except InvalidSmilesError:
                 if mode == "strict":
                     raise
+                last_product_smiles = None
                 reactant_start = product_index + 1
                 continue
             reactants = parts[reactant_start:template_index]

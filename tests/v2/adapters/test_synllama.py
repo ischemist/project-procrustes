@@ -128,6 +128,15 @@ def test_synllama_prune_skips_invalid_intermediate_product() -> None:
 
 
 @pytest.mark.contract
+def test_synllama_prune_does_not_carry_over_product_after_failure() -> None:
+    raw_route = {"synthesis_string": "C;R1;CC;C;R2;not-smiles;CCC;R3;CCO"}
+
+    route = SynLlamaAdapter().cast(raw_route, target=target_for("CCO"), mode="prune")
+
+    assert [reactant.value.smiles for reactant in route.reaction_at("rc:r:/").reactants()] == ["CCC"]
+
+
+@pytest.mark.contract
 def test_synllama_allows_duplicate_leaf_molecules() -> None:
     route = SynLlamaAdapter().cast({"synthesis_string": "C;C;R1;CCO"}, target=target_for("CCO"))
     assert [reactant.value.smiles for reactant in route.reaction_at("rc:r:/").reactants()] == ["C", "C"]
