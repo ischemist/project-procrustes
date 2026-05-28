@@ -9,10 +9,9 @@ from retrocast.io import load_json_gz, load_stock_file
 from retrocast.utils.logging import configure_script_logging, logger
 from retrocast.v2.adapters import AiZynthFinderAdapter
 from retrocast.v2.io import load_benchmark
+from retrocast.v2.metrics import TaskConstraintChecker, TierZeroChecker
 from retrocast.v2.models import Tier
 from retrocast.v2.workflow import (
-    TaskConstraintChecker,
-    TierZeroChecker,
     adapt_candidates,
     adapt_routes,
     collect_candidates,
