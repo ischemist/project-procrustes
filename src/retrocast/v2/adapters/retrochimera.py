@@ -13,7 +13,7 @@ from retrocast.adapters.errors import (
     adapter_target_mismatch,
 )
 from retrocast.chem import canonicalize_smiles
-from retrocast.exceptions import AdapterLogicError
+from retrocast.exceptions import AdapterLogicError, InvalidSmilesError
 from retrocast.v2.adapters.base import AdaptMode, RawRouteEntry
 from retrocast.v2.adapters.common import build_molecule_from_precursor_map
 from retrocast.v2.models.route import Route
@@ -109,7 +109,16 @@ class RetroChimeraAdapter:
         target_id = target.id if target is not None else "<unknown>"
         if not isinstance(raw_route, RetrochimeraRoutePayload):
             raise adapter_schema_error("retrochimera", target_id, "expected a retrochimera route payload")
-        root_smiles = canonicalize_smiles(raw_route.target_smiles)
+        try:
+            root_smiles = canonicalize_smiles(raw_route.target_smiles)
+        except InvalidSmilesError:
+            if mode == "prune":
+                raise AdapterLogicError(
+                    "RetroChimera target molecule was pruned",
+                    code="adapter.target_pruned",
+                    context={"adapter": "retrochimera", "target_id": target_id},
+                ) from None
+            raise
         if target is not None:
             expected_smiles = canonicalize_smiles(target.smiles)
             if root_smiles != expected_smiles:
@@ -119,13 +128,17 @@ class RetroChimeraAdapter:
                     expected_smiles=expected_smiles,
                     actual_smiles=root_smiles,
                 )
-        precursor_map = {
-            canonicalize_smiles(reaction.product): reaction.reactants for reaction in raw_route.route.reactions
-        }
-        reaction_annotations = {
-            canonicalize_smiles(reaction.product): {"probability": reaction.probability, **reaction.metadata}
-            for reaction in raw_route.route.reactions
-        }
+        precursor_map = {}
+        reaction_annotations = {}
+        for reaction in raw_route.route.reactions:
+            try:
+                product_smiles = canonicalize_smiles(reaction.product)
+            except InvalidSmilesError:
+                if mode == "strict":
+                    raise
+                continue
+            precursor_map[product_smiles] = reaction.reactants
+            reaction_annotations[product_smiles] = {"probability": reaction.probability, **reaction.metadata}
         route_target = build_molecule_from_precursor_map(
             root_smiles,
             precursor_map,

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, AdapterSchemaError
+from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, InvalidSmilesError
 from retrocast.typing import SmilesStr
 from retrocast.v2.adapters.multistepttl import MultiStepTTLAdapter
 from retrocast.v2.models.task import Target
@@ -123,3 +123,52 @@ def test_multistepttl_prune_rejects_route_when_all_reactants_are_invalid() -> No
         MultiStepTTLAdapter().cast(raw_route, target=target_for("CCO"), mode="prune")
 
     assert exc_info.value.code == "adapter.target_pruned"
+
+
+@pytest.mark.contract
+def test_multistepttl_strict_rejects_invalid_root_product_smiles() -> None:
+    raw_route = {"reactions": [{"product": "not-smiles", "reactants": ["C"]}]}
+
+    with pytest.raises(InvalidSmilesError) as exc_info:
+        MultiStepTTLAdapter().cast(raw_route, mode="strict")
+
+    assert exc_info.value.code == "chem.invalid_smiles"
+
+
+@pytest.mark.contract
+def test_multistepttl_prune_rejects_invalid_root_product_smiles() -> None:
+    raw_route = {"reactions": [{"product": "not-smiles", "reactants": ["C"]}]}
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        MultiStepTTLAdapter().cast(raw_route, mode="prune")
+
+    assert exc_info.value.code == "adapter.target_pruned"
+
+
+@pytest.mark.contract
+def test_multistepttl_strict_rejects_invalid_intermediate_product_smiles() -> None:
+    raw_route = {
+        "reactions": [
+            {"product": "CCO", "reactants": ["C", "not-smiles"]},
+            {"product": "not-smiles", "reactants": ["C"]},
+        ]
+    }
+
+    with pytest.raises(InvalidSmilesError) as exc_info:
+        MultiStepTTLAdapter().cast(raw_route, target=target_for("CCO"), mode="strict")
+
+    assert exc_info.value.code == "chem.invalid_smiles"
+
+
+@pytest.mark.contract
+def test_multistepttl_prune_skips_invalid_intermediate_product_smiles() -> None:
+    raw_route = {
+        "reactions": [
+            {"product": "CCO", "reactants": ["C", "not-smiles"]},
+            {"product": "not-smiles", "reactants": ["C"]},
+        ]
+    }
+
+    route = MultiStepTTLAdapter().cast(raw_route, target=target_for("CCO"), mode="prune")
+
+    assert [reactant.value.smiles for reactant in route.reaction_at("rc:r:/").reactants()] == ["C"]

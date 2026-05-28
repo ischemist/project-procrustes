@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, RootModel, ValidationError
 
 from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError
+from retrocast.exceptions import AdapterLogicError, InvalidSmilesError
 from retrocast.v2.adapters.base import AdaptMode, RawRouteEntry
 from retrocast.v2.adapters.common import build_molecule_from_precursor_map
 from retrocast.v2.models.route import Molecule, Route
@@ -63,14 +63,31 @@ class MultiStepTTLAdapter:
                 annotations=route.metadata,
             )
 
-        root_smiles = canonicalize_smiles(route.reactions[0].product)
+        try:
+            root_smiles = canonicalize_smiles(route.reactions[0].product)
+        except InvalidSmilesError:
+            if mode == "prune":
+                raise AdapterLogicError(
+                    "MultiStepTTL target molecule was pruned",
+                    code="adapter.target_pruned",
+                    context={"adapter": "multistepttl", "target_id": target_id},
+                ) from None
+            raise
         if target is not None:
             expected_smiles = canonicalize_smiles(target.smiles)
             if root_smiles != expected_smiles:
                 raise adapter_target_mismatch(
                     "multistepttl", target.id, expected_smiles=expected_smiles, actual_smiles=root_smiles
                 )
-        precursor_map = {canonicalize_smiles(reaction.product): reaction.reactants for reaction in route.reactions}
+        precursor_map = {}
+        for reaction in route.reactions:
+            try:
+                product_smiles = canonicalize_smiles(reaction.product)
+            except InvalidSmilesError:
+                if mode == "strict":
+                    raise
+                continue
+            precursor_map[product_smiles] = reaction.reactants
         route_target = build_molecule_from_precursor_map(root_smiles, precursor_map, adapter="multistepttl", mode=mode)
         if route_target is None:
             raise AdapterLogicError(
