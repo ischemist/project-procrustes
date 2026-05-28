@@ -10,7 +10,7 @@ from retrocast.v2.workflow.collect import (
 from retrocast.v2.workflow.ingest import ingest_candidates, ingest_routes
 from retrocast.v2.workflow.score import (
     ConstraintChecker,
-    TierChecker,
+    RouteTierChecker,
     score,
     score_candidate,
     score_target,
@@ -20,7 +20,7 @@ __all__ = [
     "CollectedCandidates",
     "CollectedRoutes",
     "ConstraintChecker",
-    "TierChecker",
+    "RouteTierChecker",
     "adapt_candidates",
     "adapt_route",
     "adapt_routes",

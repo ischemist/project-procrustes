@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
 from retrocast.v2.models import (
@@ -22,8 +24,8 @@ from retrocast.v2.workflow.score import score, score_candidate
 
 
 class FixedTierChecker:
-    tier = Tier.ZERO
-    name = "fixed-tier-zero"
+    tier = Tier.ONE
+    name = "fixed-tier-one"
 
     def __init__(self, status: CheckStatus = CheckStatus.PASS) -> None:
         self.status = status
@@ -35,9 +37,13 @@ class FixedTierChecker:
         except KeyError:
             reactions = []
         else:
-            reaction_tiers[Tier.ZERO] = TierResult(status=self.status)
+            reaction_tiers[Tier.ONE] = TierResult(status=self.status)
             reactions = [ReactionValidity(reaction_id=reaction_id, tiers=reaction_tiers)]
-        return RouteValidity(tiers={Tier.ZERO: TierResult(status=self.status)}, reactions=reactions)
+        return RouteValidity(tiers={Tier.ONE: TierResult(status=self.status)}, reactions=reactions)
+
+
+class InvalidTierZeroRouteChecker(FixedTierChecker):
+    tier = Tier.ZERO
 
 
 class FixedConstraintChecker:
@@ -92,7 +98,7 @@ def test_failed_candidate_does_not_satisfy_solv_zero() -> None:
         candidate,
         target=target(),
         constraints=TaskConstraints(),
-        tier_checkers=[FixedTierChecker()],
+        route_tier_checkers=[],
         constraint_checker=FixedConstraintChecker(),
     )
 
@@ -102,12 +108,12 @@ def test_failed_candidate_does_not_satisfy_solv_zero() -> None:
     assert not scored.satisfies_solv(Tier.ZERO)
 
 
-def test_valid_route_can_satisfy_tier_zero_and_task() -> None:
+def test_valid_route_satisfies_tier_zero_from_candidate_boundary() -> None:
     scored = score_candidate(
         Candidate(rank=2, route=route()),
         target=target(),
         constraints=TaskConstraints(),
-        tier_checkers=[FixedTierChecker()],
+        route_tier_checkers=[],
         constraint_checker=FixedConstraintChecker(),
     )
 
@@ -122,13 +128,15 @@ def test_task_constraint_failure_prevents_solv_zero() -> None:
         Candidate(rank=1, route=route()),
         target=target(),
         constraints=TaskConstraints(stock="stock-a"),
-        tier_checkers=[FixedTierChecker()],
+        route_tier_checkers=[FixedTierChecker()],
         constraint_checker=FixedConstraintChecker(CheckStatus.FAIL),
     )
 
     assert scored.satisfies_validity(Tier.ZERO)
+    assert scored.satisfies_validity(Tier.ONE)
     assert not scored.satisfies_task()
     assert not scored.satisfies_solv(Tier.ZERO)
+    assert not scored.satisfies_solv(Tier.ONE)
 
 
 def test_reaction_validity_is_addressable_by_reaction_id() -> None:
@@ -136,13 +144,24 @@ def test_reaction_validity_is_addressable_by_reaction_id() -> None:
         Candidate(rank=1, route=route()),
         target=target(),
         constraints=TaskConstraints(),
-        tier_checkers=[FixedTierChecker()],
+        route_tier_checkers=[FixedTierChecker()],
         constraint_checker=FixedConstraintChecker(),
     )
 
-    result = scored.reaction_tier_result("rc:r:/", Tier.ZERO)
+    result = scored.reaction_tier_result("rc:r:/", Tier.ONE)
     assert result is not None
     assert result.status == CheckStatus.PASS
+
+
+def test_route_tier_checker_cannot_claim_tier_zero() -> None:
+    with pytest.raises(ValueError, match="Tier.ZERO"):
+        score_candidate(
+            Candidate(rank=1, route=route()),
+            target=target(),
+            constraints=TaskConstraints(),
+            route_tier_checkers=[InvalidTierZeroRouteChecker()],
+            constraint_checker=FixedConstraintChecker(),
+        )
 
 
 def test_score_preserves_candidate_rank_and_records_acceptable_match() -> None:
@@ -152,12 +171,12 @@ def test_score_preserves_candidate_rank_and_records_acceptable_match() -> None:
     evaluation = score(
         {"ethanol": [Candidate(rank=7, route=predicted_route)]},
         task(benchmark_target),
-        tier_checkers=[FixedTierChecker()],
+        route_tier_checkers=[FixedTierChecker()],
         constraint_checker=FixedConstraintChecker(),
     )
 
     scored = evaluation.targets["ethanol"].candidates[0]
-    assert evaluation.tiers == [Tier.ZERO]
+    assert evaluation.tiers == [Tier.ZERO, Tier.ONE]
     assert scored.rank == 7
     assert scored.matches_acceptable
     assert scored.matched_acceptable_index == 1

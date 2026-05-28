@@ -9,7 +9,7 @@ from retrocast.io import load_json_gz, load_stock_file
 from retrocast.utils.logging import configure_script_logging, logger
 from retrocast.v2.adapters import AiZynthFinderAdapter
 from retrocast.v2.io import load_benchmark
-from retrocast.v2.metrics import TaskConstraintChecker, TierZeroChecker
+from retrocast.v2.metrics import TaskConstraintChecker
 from retrocast.v2.models import Tier
 from retrocast.v2.workflow import (
     adapt_candidates,
@@ -69,7 +69,7 @@ def main() -> None:
     evaluation = score(
         collected_candidates,
         task,
-        tier_checkers=[TierZeroChecker()],
+        route_tier_checkers=[],
         constraint_checker=TaskConstraintChecker(stock=stock, stock_name=stock_name),
     )
     solv_zero_count = sum(
