@@ -10,8 +10,10 @@ from retrocast.v2.adapters.multistepttl import MultiStepTTLAdapter
 from retrocast.v2.adapters.paroutes import PaRoutesAdapter
 from retrocast.v2.adapters.retrochimera import RetroChimeraAdapter
 from retrocast.v2.adapters.retrostar import RetroStarAdapter
+from retrocast.v2.adapters.synllama import SynLlamaAdapter
 from retrocast.v2.adapters.synplanner import SynPlannerAdapter
 from retrocast.v2.adapters.syntheseus import SyntheseusAdapter
+from retrocast.v2.adapters.ursa import UrsaAdapter
 
 __all__ = [
     "Adapter",
@@ -26,6 +28,8 @@ __all__ = [
     "RawRouteEntry",
     "RetroChimeraAdapter",
     "RetroStarAdapter",
+    "SynLlamaAdapter",
     "SynPlannerAdapter",
     "SyntheseusAdapter",
+    "UrsaAdapter",
 ]
