@@ -4,9 +4,8 @@ from collections.abc import Sequence
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key, reduce_inchikey
 from retrocast.typing import InChIKeyStr
-from retrocast.v2.metrics._route import iter_reactions, leaf_molecules
 from retrocast.v2.models.evaluation import CheckResult, CheckStatus, ConstraintResult
-from retrocast.v2.models.route import InChIKeyLevel, Route
+from retrocast.v2.models.route import InChIKeyLevel, Molecule, Route
 from retrocast.v2.models.task import TaskConstraints
 
 
@@ -86,7 +85,7 @@ def _reduce_inchikeys(inchikeys: set[InChIKeyStr], match_level: InChIKeyLevel) -
 
 def _missing_stock_leaves(route: Route, stock_keys: set[str], match_level: InChIKeyLevel) -> list[str]:
     missing = []
-    for leaf in leaf_molecules(route):
+    for leaf in _leaf_molecules(route.target):
         leaf_key = leaf.key(match_level)
         if leaf_key not in stock_keys:
             missing.append(leaf.inchikey)
@@ -98,7 +97,7 @@ def _missing_required_leaves(
     required_leaves_smiles: Sequence[str],
     match_level: InChIKeyLevel,
 ) -> list[str]:
-    leaf_keys = {leaf.key(match_level) for leaf in leaf_molecules(route)}
+    leaf_keys = {leaf.key(match_level) for leaf in _leaf_molecules(route.target)}
     missing = []
     for smiles in required_leaves_smiles:
         required_key = get_inchi_key(canonicalize_smiles(smiles), level=match_level)
@@ -108,7 +107,24 @@ def _missing_required_leaves(
 
 
 def _route_depth(route: Route) -> int:
-    reactions = iter_reactions(route)
-    if not reactions:
+    return _molecule_depth(route.target)
+
+
+def _leaf_molecules(molecule: Molecule) -> list[Molecule]:
+    reaction = molecule.product_of
+    if reaction is None:
+        return [molecule]
+
+    leaves = []
+    for reactant in reaction.reactants:
+        leaves.extend(_leaf_molecules(reactant))
+    return leaves
+
+
+def _molecule_depth(molecule: Molecule) -> int:
+    reaction = molecule.product_of
+    if reaction is None:
         return 0
-    return max(reaction.path.depth() + 1 for reaction in reactions)
+    if not reaction.reactants:
+        return 1
+    return 1 + max(_molecule_depth(reactant) for reactant in reaction.reactants)
