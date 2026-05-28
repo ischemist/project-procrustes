@@ -45,8 +45,6 @@ def score_candidate(
     """Score one candidate while preserving failed adaptation slots."""
     if candidate.failure is not None:
         tiers = {checker.tier: _failed_tier_result(candidate) for checker in tier_checkers}
-        if Tier.ZERO not in tiers:
-            tiers[Tier.ZERO] = _failed_tier_result(candidate)
         return ScoredCandidate(
             rank=candidate.rank,
             failure=candidate.failure,
@@ -80,10 +78,9 @@ def score_target(
     constraint_checker: ConstraintChecker,
     acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
 ) -> TargetResult:
-    return TargetResult(
-        target=target,
-        effective_constraints=constraints,
-        candidates=[
+    scored_candidates = []
+    for candidate in candidates:
+        scored_candidates.append(
             score_candidate(
                 candidate,
                 target=target,
@@ -92,8 +89,12 @@ def score_target(
                 constraint_checker=constraint_checker,
                 acceptable_match_level=acceptable_match_level,
             )
-            for candidate in candidates
-        ],
+        )
+
+    return TargetResult(
+        target=target,
+        effective_constraints=constraints,
+        candidates=scored_candidates,
     )
 
 

@@ -9,6 +9,7 @@ from retrocast.io import load_json_gz
 from retrocast.utils.logging import configure_script_logging, logger
 from retrocast.v2.adapters import AiZynthFinderAdapter
 from retrocast.v2.io import load_benchmark
+from retrocast.v2.models import CheckStatus, ConstraintResult, Route, RouteValidity, TaskConstraints, Tier, TierResult
 from retrocast.v2.workflow import (
     adapt_candidates,
     adapt_routes,
@@ -16,10 +17,26 @@ from retrocast.v2.workflow import (
     collect_routes,
     ingest_candidates,
     ingest_routes,
+    score,
 )
 
 RAW_PATH = Path("data/retrocast/2-raw/aizynthfinder-4.4.1-mcts-iter100-depth6/mkt-cnv-160/results.json.gz")
 BENCHMARK_PATH = Path("data/retrocast/1-benchmarks/definitions/mkt-cnv-160.json.gz")
+
+
+class PassTierZeroChecker:
+    tier = Tier.ZERO
+    name = "pass-tier-zero"
+
+    def check_route(self, route: Route) -> RouteValidity:
+        return RouteValidity(tiers={Tier.ZERO: TierResult(status=CheckStatus.PASS)})
+
+
+class PassTaskChecker:
+    name = "pass-task"
+
+    def check_route(self, route: Route, constraints: TaskConstraints) -> ConstraintResult:
+        return ConstraintResult(status=CheckStatus.PASS)
 
 
 def main() -> None:
@@ -59,6 +76,18 @@ def main() -> None:
     ingested_candidates = ingest_candidates(raw_payload, adapter, task)
     logger.info("ingest_routes: %s", sum(len(items) for items in ingested_routes.values()))
     logger.info("ingest_candidates: %s", sum(len(items) for items in ingested_candidates.values()))
+
+    evaluation = score(
+        collected_candidates,
+        task,
+        tier_checkers=[PassTierZeroChecker()],
+        constraint_checker=PassTaskChecker(),
+    )
+    solv_zero_count = sum(
+        any(candidate.satisfies_solv(Tier.ZERO) for candidate in target_result.candidates)
+        for target_result in evaluation.targets.values()
+    )
+    logger.info("score: solv_zero_targets=%s/%s", solv_zero_count, len(evaluation.targets))
 
 
 if __name__ == "__main__":
