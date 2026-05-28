@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import cached_property
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -30,8 +31,14 @@ class Target(BaseModel):
 
 class TaskConstraints(BaseModel):
     stock: str | None = None
-    required_leaves: list[InChIKeyStr] | None = None
+    required_leaves_smiles: list[SmilesStr] | None = None
     route_depth: int | Literal["short", "medium", "long"] | None = None
+
+    @cached_property
+    def required_leaf_inchikeys(self) -> tuple[InChIKeyStr, ...]:
+        if not self.required_leaves_smiles:
+            return ()
+        return tuple(get_inchi_key(smiles) for smiles in self.required_leaves_smiles)
 
 
 class Task(BaseModel):

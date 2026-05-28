@@ -108,9 +108,9 @@ class RequiredLeavesCheck:
         self.match_level = match_level
 
     def check_route(self, route: Route, constraints: TaskConstraints) -> list[CheckResult]:
-        if not constraints.required_leaves:
+        if not constraints.required_leaf_inchikeys:
             return []
-        return self._check_required_leaves(route, constraints.required_leaves)
+        return self._check_required_leaves(route, constraints.required_leaf_inchikeys)
 
     def _check_required_leaves(self, route: Route, required_leaves: Sequence[InChIKeyStr]) -> list[CheckResult]:
         leaf_keys = {leaf.key(self.match_level) for leaf in route.iter_leaves()}

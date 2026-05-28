@@ -45,7 +45,7 @@ def test_stock_constraint_fails_when_leaf_is_missing() -> None:
 
 
 def test_required_leaf_constraint_fails_when_required_leaf_is_missing() -> None:
-    result = TaskConstraintChecker().check_route(route(), TaskConstraints(required_leaves=[inchikey_for("CC")]))
+    result = TaskConstraintChecker().check_route(route(), TaskConstraints(required_leaves_smiles=[SmilesStr("CC")]))
 
     assert result.status == CheckStatus.FAIL
     assert result.checks[0].code == "constraint.required_leaf.missing"
@@ -71,7 +71,7 @@ def test_route_depth_constraint_fails_when_route_is_too_deep() -> None:
 def test_stock_only_checker_ignores_other_task_constraints() -> None:
     result = TaskConstraintChecker.stock_termination(stock=stock_for("C", "CO"), stock_name="stock-a").check_route(
         route(),
-        TaskConstraints(stock="stock-a", required_leaves=[inchikey_for("CC")], route_depth=0),
+        TaskConstraints(stock="stock-a", required_leaves_smiles=[SmilesStr("CC")], route_depth=0),
     )
 
     assert result.status == CheckStatus.PASS
