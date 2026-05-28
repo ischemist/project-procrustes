@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Protocol, cast
+from typing import Protocol
 
 from retrocast.v2.models.candidates import Candidate
 from retrocast.v2.models.evaluation import (
@@ -43,25 +43,25 @@ def score_candidate(
 ) -> ScoredCandidate:
     """Score one candidate while preserving failed adaptation slots."""
     validity = _tier_zero_validity(candidate)
-    if candidate.failure is not None:
+    if candidate.route is not None:
+        route = candidate.route
+        _check_route_validity(route, route_tier_checkers, validity)
+        constraints_result = constraint_checker.check_route(route, constraints)
+        matched_index = _acceptable_match_index(route, target.acceptable_routes, acceptable_match_level)
         return ScoredCandidate(
             rank=candidate.rank,
-            failure=candidate.failure,
+            route=route,
             validity=validity,
-            constraints=ConstraintResult(status=CheckStatus.NOT_EVALUATED),
+            constraints=constraints_result,
+            matches_acceptable=matched_index is not None,
+            matched_acceptable_index=matched_index,
         )
 
-    route = cast("Route", candidate.route)
-    _check_route_validity(route, route_tier_checkers, validity)
-    constraints_result = constraint_checker.check_route(route, constraints)
-    matched_index = _acceptable_match_index(route, target.acceptable_routes, acceptable_match_level)
     return ScoredCandidate(
         rank=candidate.rank,
-        route=route,
+        failure=candidate.failure,
         validity=validity,
-        constraints=constraints_result,
-        matches_acceptable=matched_index is not None,
-        matched_acceptable_index=matched_index,
+        constraints=ConstraintResult(status=CheckStatus.NOT_EVALUATED),
     )
 
 
