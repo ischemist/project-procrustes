@@ -99,7 +99,7 @@ def test_molbuilder_preserves_route_molecule_and_reaction_annotations(raw_molbui
     route = MolBuilderAdapter().cast(raw_molbuilder_route, target=target_for("CCO"))
     reaction = route.reaction_at("rc:r:/").value
 
-    assert route.annotations["score"] == 0.85
+    assert route.annotations == {}
     assert route.target.annotations == {"functional_groups": ["alcohol"]}
     assert reaction.template == "Reduction"
     assert reaction.annotations["reaction_name"] == "Reduction"

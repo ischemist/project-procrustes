@@ -100,10 +100,7 @@ class MolBuilderAdapter:
                     actual_smiles=route_target.smiles,
                 )
 
-        annotations: dict[str, Any] = {}
-        if route_root.best_disconnection is not None:
-            annotations["score"] = route_root.best_disconnection.score
-        return Route(target=route_target, annotations=annotations)
+        return Route(target=route_target)
 
 
 # SECTION: Helpers

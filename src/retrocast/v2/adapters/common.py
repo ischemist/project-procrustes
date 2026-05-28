@@ -24,12 +24,27 @@ def build_molecule_from_precursor_map(
     *,
     adapter: str,
     mode: AdaptMode,
-    visited: set[SmilesStr] | None = None,
     reaction_annotations: ReactionAnnotations | None = None,
 ) -> Molecule | None:
-    if visited is None:
-        visited = set()
+    return _build_molecule_from_precursor_map(
+        smiles,
+        precursor_map,
+        adapter=adapter,
+        mode=mode,
+        visited=set(),
+        reaction_annotations=reaction_annotations,
+    )
 
+
+def _build_molecule_from_precursor_map(
+    smiles: str,
+    precursor_map: Mapping[SmilesStr, Sequence[str]],
+    *,
+    adapter: str,
+    mode: AdaptMode,
+    visited: set[SmilesStr],
+    reaction_annotations: ReactionAnnotations | None,
+) -> Molecule | None:
     try:
         canon_smiles = canonicalize_smiles(smiles)
     except InvalidSmilesError:
@@ -46,7 +61,7 @@ def build_molecule_from_precursor_map(
 
     reactants: list[Molecule] = []
     for reactant in reactant_smiles:
-        reactant_molecule = build_molecule_from_precursor_map(
+        reactant_molecule = _build_molecule_from_precursor_map(
             reactant,
             precursor_map,
             adapter=adapter,
@@ -233,7 +248,13 @@ def _build_plain_tree_molecule(
             reactants.append(reactant)
 
     if not reactants:
-        return None
+        if mode == "prune":
+            return None
+        raise AdapterLogicError(
+            f"{adapter} reaction has no reactants",
+            code="adapter.reaction_empty",
+            context={"adapter": adapter, "smiles": canon_smiles},
+        )
 
     fields = dict(get_reaction_fields(node)) if get_reaction_fields is not None else {}
     return Molecule(
