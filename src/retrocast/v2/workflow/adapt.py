@@ -54,10 +54,8 @@ def adapt_candidates(
 ) -> list[Candidate]:
     """Adapt raw planner output while preserving failed candidate rank slots."""
     candidates: list[Candidate] = []
-    next_rank = 1
-    for entry in adapter.iter_raw_routes(raw_payload, source_key=source_key):
-        rank = entry.source_order if entry.source_order is not None else next_rank
-        next_rank += 1
+    for fallback_rank, entry in enumerate(adapter.iter_raw_routes(raw_payload, source_key=source_key), start=1):
+        rank = entry.source_order if entry.source_order is not None else fallback_rank
         entry_target = target or _target_from_entry(entry)
         try:
             route = adapter.cast(entry.payload, mode=mode, target=entry_target)
