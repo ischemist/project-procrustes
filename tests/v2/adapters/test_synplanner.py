@@ -129,3 +129,23 @@ def test_synplanner_allows_duplicate_leaf_molecules() -> None:
     }
     route = SynPlannerAdapter().cast(raw_route, target=target_for("CCO"))
     assert [reactant.value.smiles for reactant in route.reaction_at("rc:r:/").reactants()] == ["C", "C"]
+
+
+@pytest.mark.contract
+def test_synplanner_prune_rejects_route_when_all_reactants_are_invalid() -> None:
+    raw_route = {
+        "type": "mol",
+        "smiles": "CCO",
+        "children": [
+            {
+                "type": "reaction",
+                "smiles": "C>>CCO",
+                "children": [{"type": "mol", "smiles": "not-smiles"}],
+            }
+        ],
+    }
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        SynPlannerAdapter().cast(raw_route, target=target_for("CCO"), mode="prune")
+
+    assert exc_info.value.code == "adapter.target_pruned"

@@ -141,6 +141,36 @@ def test_aizynth_allows_duplicate_leaf_molecules() -> None:
 
 
 @pytest.mark.contract
+def test_aizynth_prune_rejects_route_when_all_reactants_are_invalid() -> None:
+    raw_route = {
+        "type": "mol",
+        "smiles": "CCO",
+        "children": [
+            {
+                "type": "reaction",
+                "smiles": "CCO",
+                "children": [{"type": "mol", "smiles": "not-smiles", "in_stock": True}],
+            }
+        ],
+    }
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        AiZynthFinderAdapter().cast(raw_route, target=target_for("CCO"), mode="prune")
+
+    assert exc_info.value.code == "adapter.target_pruned"
+
+
+@pytest.mark.contract
+def test_aizynth_rejects_empty_reaction_in_strict_mode() -> None:
+    raw_route = {"type": "mol", "smiles": "CCO", "children": [{"type": "reaction", "smiles": "CCO"}]}
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        AiZynthFinderAdapter().cast(raw_route, target=target_for("CCO"))
+
+    assert exc_info.value.code == "adapter.reaction_empty"
+
+
+@pytest.mark.contract
 def test_aizynth_rejects_multiple_child_reactions() -> None:
     raw_route = {
         "type": "mol",
@@ -155,3 +185,33 @@ def test_aizynth_rejects_multiple_child_reactions() -> None:
         AiZynthFinderAdapter().cast(raw_route, target=target_for("CCO"))
 
     assert exc_info.value.code == "adapter.route_not_tree"
+
+
+@pytest.mark.contract
+def test_aizynth_rejects_molecule_child_under_molecule() -> None:
+    raw_route = {"type": "mol", "smiles": "CCO", "children": [{"type": "mol", "smiles": "C"}]}
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        AiZynthFinderAdapter().cast(raw_route, target=target_for("CCO"))
+
+    assert exc_info.value.code == "adapter.node_type_invalid"
+
+
+@pytest.mark.contract
+def test_aizynth_rejects_reaction_child_under_reaction() -> None:
+    raw_route = {
+        "type": "mol",
+        "smiles": "CCO",
+        "children": [
+            {
+                "type": "reaction",
+                "smiles": "CCO",
+                "children": [{"type": "reaction", "smiles": "C>>CCO"}],
+            }
+        ],
+    }
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        AiZynthFinderAdapter().cast(raw_route, target=target_for("CCO"))
+
+    assert exc_info.value.code == "adapter.node_type_invalid"

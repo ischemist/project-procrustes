@@ -221,6 +221,42 @@ def test_askcos_rejects_missing_reaction_uuid(raw_askcos_output) -> None:
 
 
 @pytest.mark.contract
+def test_askcos_rejects_missing_chemical_uuid(raw_askcos_output) -> None:
+    raw_payload = deepcopy(raw_askcos_output)
+    raw_payload["results"]["uds"]["uuid2smiles"].pop("uuid-ethanol")
+    raw_route = next(AskcosAdapter().iter_raw_routes(raw_payload)).payload
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        AskcosAdapter().cast(raw_route, target=target_for("CCOC(C)=O"))
+
+    assert exc_info.value.code == "adapter.node_missing"
+
+
+@pytest.mark.contract
+def test_askcos_rejects_missing_chemical_node(raw_askcos_output) -> None:
+    raw_payload = deepcopy(raw_askcos_output)
+    raw_payload["results"]["uds"]["node_dict"].pop("CCO")
+    raw_route = next(AskcosAdapter().iter_raw_routes(raw_payload)).payload
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        AskcosAdapter().cast(raw_route, target=target_for("CCOC(C)=O"))
+
+    assert exc_info.value.code == "adapter.node_missing"
+
+
+@pytest.mark.contract
+def test_askcos_rejects_missing_reaction_node(raw_askcos_output) -> None:
+    raw_payload = deepcopy(raw_askcos_output)
+    raw_payload["results"]["uds"]["node_dict"].pop("CC(=O)O.CCO>>CCOC(C)=O")
+    raw_route = next(AskcosAdapter().iter_raw_routes(raw_payload)).payload
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        AskcosAdapter().cast(raw_route, target=target_for("CCOC(C)=O"))
+
+    assert exc_info.value.code == "adapter.node_missing"
+
+
+@pytest.mark.contract
 def test_askcos_rejects_cycles(raw_askcos_output) -> None:
     raw_payload = deepcopy(raw_askcos_output)
     raw_payload["results"]["uds"]["pathways"][0] = [
@@ -283,6 +319,23 @@ def test_askcos_rejects_empty_reaction_in_strict_mode(raw_askcos_output) -> None
         AskcosAdapter().cast(raw_route, target=target_for("CCOC(C)=O"))
 
     assert exc_info.value.code == "adapter.reaction_empty"
+
+
+@pytest.mark.contract
+def test_askcos_prune_rejects_route_when_all_reactants_are_invalid() -> None:
+    raw_payload = invalid_leaf_output()
+    raw_payload["results"]["uds"]["pathways"] = [
+        [
+            {"source": "00000000-0000-0000-0000-000000000000", "target": "uuid-rxn"},
+            {"source": "uuid-rxn", "target": "uuid-bad"},
+        ]
+    ]
+    raw_route = next(AskcosAdapter().iter_raw_routes(raw_payload)).payload
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        AskcosAdapter().cast(raw_route, target=target_for("CCOC(C)=O"), mode="prune")
+
+    assert exc_info.value.code == "adapter.target_pruned"
 
 
 @pytest.mark.contract
