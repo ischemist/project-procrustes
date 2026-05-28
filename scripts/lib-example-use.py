@@ -72,11 +72,26 @@ def main() -> None:
         route_tier_checkers=[],
         constraint_checker=TaskConstraintChecker.stock_termination(stock=stock, stock_name=stock_name),
     )
-    solv_zero_count = sum(
-        any(candidate.satisfies_solv(Tier.ZERO) for candidate in target_result.candidates)
-        for target_result in evaluation.targets.values()
-    )
-    logger.info("score: solv_zero_targets=%s/%s", solv_zero_count, len(evaluation.targets))
+    target_count = len(evaluation.targets)
+    tier_zero_count = 0
+    solv_zero_count = 0
+    top_one_count = 0
+    top_ten_count = 0
+    for target_result in evaluation.targets.values():
+        candidates = target_result.candidates
+        if any(candidate.satisfies_validity(Tier.ZERO) for candidate in candidates):
+            tier_zero_count += 1
+        if any(candidate.satisfies_solv(Tier.ZERO) for candidate in candidates):
+            solv_zero_count += 1
+        if any(candidate.matches_acceptable for candidate in candidates[:1]):
+            top_one_count += 1
+        if any(candidate.matches_acceptable for candidate in candidates[:10]):
+            top_ten_count += 1
+
+    logger.info("score: tier_zero_targets=%s/%s", tier_zero_count, target_count)
+    logger.info("score: solv_zero_targets=%s/%s", solv_zero_count, target_count)
+    logger.info("score: top_one_targets=%s/%s", top_one_count, target_count)
+    logger.info("score: top_ten_targets=%s/%s", top_ten_count, target_count)
 
 
 if __name__ == "__main__":
