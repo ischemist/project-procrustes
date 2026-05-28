@@ -1,0 +1,166 @@
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import Protocol
+
+from retrocast.v2.models.candidates import Candidate
+from retrocast.v2.models.evaluation import (
+    CheckResult,
+    CheckStatus,
+    ConstraintResult,
+    Evaluation,
+    ReactionValidity,
+    RouteValidity,
+    ScoredCandidate,
+    TargetResult,
+    Tier,
+    TierResult,
+)
+from retrocast.v2.models.route import InChIKeyLevel, Route
+from retrocast.v2.models.task import Target, Task, TaskConstraints
+
+
+class TierChecker(Protocol):
+    tier: Tier
+    name: str
+
+    def check_route(self, route: Route) -> RouteValidity: ...
+
+
+class ConstraintChecker(Protocol):
+    name: str
+
+    def check_route(self, route: Route, constraints: TaskConstraints) -> ConstraintResult: ...
+
+
+def score_candidate(
+    candidate: Candidate,
+    *,
+    target: Target,
+    constraints: TaskConstraints,
+    tier_checkers: Sequence[TierChecker],
+    constraint_checker: ConstraintChecker,
+    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+) -> ScoredCandidate:
+    """Score one candidate while preserving failed adaptation slots."""
+    if candidate.failure is not None:
+        tiers = {checker.tier: _failed_tier_result(candidate) for checker in tier_checkers}
+        if Tier.ZERO not in tiers:
+            tiers[Tier.ZERO] = _failed_tier_result(candidate)
+        return ScoredCandidate(
+            rank=candidate.rank,
+            failure=candidate.failure,
+            validity=RouteValidity(tiers=tiers),
+            constraints=ConstraintResult(status=CheckStatus.NOT_EVALUATED),
+        )
+
+    route = candidate.route
+    if route is None:
+        raise ValueError("Candidate requires route or failure.")
+
+    validity = _check_route_validity(route, tier_checkers)
+    constraints_result = constraint_checker.check_route(route, constraints)
+    matched_index = _acceptable_match_index(route, target.acceptable_routes, acceptable_match_level)
+    return ScoredCandidate(
+        rank=candidate.rank,
+        route=route,
+        validity=validity,
+        constraints=constraints_result,
+        matches_acceptable=matched_index is not None,
+        matched_acceptable_index=matched_index,
+    )
+
+
+def score_target(
+    candidates: Sequence[Candidate],
+    *,
+    target: Target,
+    constraints: TaskConstraints,
+    tier_checkers: Sequence[TierChecker],
+    constraint_checker: ConstraintChecker,
+    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+) -> TargetResult:
+    return TargetResult(
+        target=target,
+        effective_constraints=constraints,
+        candidates=[
+            score_candidate(
+                candidate,
+                target=target,
+                constraints=constraints,
+                tier_checkers=tier_checkers,
+                constraint_checker=constraint_checker,
+                acceptable_match_level=acceptable_match_level,
+            )
+            for candidate in candidates
+        ],
+    )
+
+
+def score(
+    predictions: Mapping[str, Sequence[Candidate]],
+    task: Task,
+    *,
+    tier_checkers: Sequence[TierChecker],
+    constraint_checker: ConstraintChecker,
+    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+) -> Evaluation:
+    tiers = sorted({checker.tier for checker in tier_checkers})
+    return Evaluation(
+        task=task,
+        tiers=tiers,
+        targets={
+            target_id: score_target(
+                predictions.get(target_id, []),
+                target=target,
+                constraints=task.constraints.get(target_id, task.default_constraints),
+                tier_checkers=tier_checkers,
+                constraint_checker=constraint_checker,
+                acceptable_match_level=acceptable_match_level,
+            )
+            for target_id, target in task.targets.items()
+        },
+    )
+
+
+def _failed_tier_result(candidate: Candidate) -> TierResult:
+    failure = candidate.failure
+    return TierResult(
+        status=CheckStatus.FAIL,
+        checks=[
+            CheckResult(
+                code=failure.code if failure is not None else "adapter.unknown_failure",
+                status=CheckStatus.FAIL,
+                message=failure.message if failure is not None else None,
+                details=failure.context if failure is not None else {},
+            )
+        ],
+    )
+
+
+def _check_route_validity(route: Route, tier_checkers: Sequence[TierChecker]) -> RouteValidity:
+    validity = RouteValidity()
+    reactions_by_id: dict[str, ReactionValidity] = {}
+    for checker in tier_checkers:
+        result = checker.check_route(route)
+        validity.tiers.update(result.tiers)
+        for reaction in result.reactions:
+            existing = reactions_by_id.get(reaction.reaction_id)
+            if existing is None:
+                reactions_by_id[reaction.reaction_id] = reaction
+            else:
+                existing.tiers.update(reaction.tiers)
+    validity.reactions = list(reactions_by_id.values())
+    return validity
+
+
+def _acceptable_match_index(
+    route: Route,
+    acceptable_routes: Sequence[Route],
+    match_level: InChIKeyLevel,
+) -> int | None:
+    route_signature = route.signature(match_level)
+    for index, acceptable_route in enumerate(acceptable_routes):
+        if route_signature == acceptable_route.signature(match_level):
+            return index
+    return None
