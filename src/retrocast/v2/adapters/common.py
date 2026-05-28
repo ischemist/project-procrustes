@@ -83,11 +83,26 @@ def build_bipartite_molecule(
     mode: AdaptMode,
     reaction_fields: Callable[[Any], ReactionFields] | None = None,
     remove_mapping: bool = False,
-    visited: set[SmilesStr] | None = None,
 ) -> Molecule | None:
-    if visited is None:
-        visited = set()
+    return _build_bipartite_molecule(
+        node,
+        adapter=adapter,
+        mode=mode,
+        reaction_fields=reaction_fields,
+        remove_mapping=remove_mapping,
+        visited=set(),
+    )
 
+
+def _build_bipartite_molecule(
+    node: Any,
+    *,
+    adapter: str,
+    mode: AdaptMode,
+    reaction_fields: Callable[[Any], ReactionFields] | None,
+    remove_mapping: bool,
+    visited: set[SmilesStr],
+) -> Molecule | None:
     if getattr(node, "type", None) != "mol":
         actual = getattr(node, "type", type(node).__name__)
         raise adapter_node_type_error(adapter, expected="mol", actual=actual, role="molecule")
@@ -122,7 +137,7 @@ def build_bipartite_molecule(
         if getattr(child, "type", None) != "mol":
             actual = getattr(child, "type", type(child).__name__)
             raise adapter_node_type_error(adapter, expected="mol", actual=actual, role="reaction child")
-        reactant = build_bipartite_molecule(
+        reactant = _build_bipartite_molecule(
             child,
             adapter=adapter,
             mode=mode,
