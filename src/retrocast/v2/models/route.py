@@ -268,12 +268,20 @@ class MoleculeView(BaseModel):
             yield from reactant.iter_leaves()
 
     def depth(self) -> int:
-        reaction = self.produced_by()
-        if reaction is None:
-            return 0
-        if not reaction.value.reactants:
-            return 1
-        return 1 + max(reactant.depth() for reactant in reaction.reactants())
+        max_depth = 0
+        stack: list[tuple[MoleculeView, int]] = [(self, 0)]
+        while stack:
+            molecule, depth = stack.pop()
+            reaction = molecule.produced_by()
+            if reaction is None:
+                max_depth = max(max_depth, depth)
+                continue
+            if not reaction.value.reactants:
+                max_depth = max(max_depth, depth + 1)
+                continue
+            for reactant in reaction.reactants():
+                stack.append((reactant, depth + 1))
+        return max_depth
 
     def subtree_key(
         self,
