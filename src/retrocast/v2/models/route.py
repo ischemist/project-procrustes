@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
@@ -201,7 +202,10 @@ class Route(BaseModel):
         return _stable_hash(self.key(match_level, depth=depth))
 
     def leaves(self) -> list[MoleculeView]:
-        return self.molecule_at(RoutePath.target()).leaves()
+        return list(self.iter_leaves())
+
+    def iter_leaves(self) -> Iterator[MoleculeView]:
+        yield from self.molecule_at(RoutePath.target()).iter_leaves()
 
     def depth(self) -> int:
         return self.molecule_at(RoutePath.target()).depth()
@@ -252,14 +256,16 @@ class MoleculeView(BaseModel):
         return ReactionView(route=self.route, path=self.path.produced_by(), value=self.value.product_of)
 
     def leaves(self) -> list[MoleculeView]:
+        return list(self.iter_leaves())
+
+    def iter_leaves(self) -> Iterator[MoleculeView]:
         reaction = self.produced_by()
         if reaction is None:
-            return [self]
+            yield self
+            return
 
-        leaves = []
         for reactant in reaction.reactants():
-            leaves.extend(reactant.leaves())
-        return leaves
+            yield from reactant.iter_leaves()
 
     def depth(self) -> int:
         reaction = self.produced_by()

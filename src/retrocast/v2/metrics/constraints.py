@@ -86,7 +86,7 @@ class StockTerminationCheck:
             )
 
         missing_leaves = []
-        for leaf in route.leaves():
+        for leaf in route.iter_leaves():
             if leaf.key(self.match_level) not in self._stock_keys:
                 missing_leaves.append(leaf.value.inchikey)
         missing_leaves = sorted(set(missing_leaves))
@@ -113,7 +113,7 @@ class RequiredLeavesCheck:
         return self._check_required_leaves(route, constraints.required_leaves_smiles)
 
     def _check_required_leaves(self, route: Route, required_leaves_smiles: Sequence[str]) -> list[CheckResult]:
-        leaf_keys = {leaf.key(self.match_level) for leaf in route.leaves()}
+        leaf_keys = {leaf.key(self.match_level) for leaf in route.iter_leaves()}
         missing_required_leaves = []
         for smiles in required_leaves_smiles:
             required_key = get_inchi_key(canonicalize_smiles(smiles), level=self.match_level)
