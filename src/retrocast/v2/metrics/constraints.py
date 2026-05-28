@@ -6,7 +6,7 @@ from typing import Protocol
 from retrocast.chem import canonicalize_smiles, get_inchi_key, reduce_inchikey
 from retrocast.typing import InChIKeyStr
 from retrocast.v2.models.evaluation import CheckResult, CheckStatus, ConstraintResult
-from retrocast.v2.models.route import InChIKeyLevel, Molecule, Route
+from retrocast.v2.models.route import InChIKeyLevel, Route
 from retrocast.v2.models.task import TaskConstraints
 
 
@@ -51,7 +51,8 @@ class TaskConstraintChecker:
         checks = []
         for check in self.checks:
             checks.extend(check.check_route(route, constraints))
-        return ConstraintResult(status=_checks_status(checks), checks=checks)
+        status = CheckStatus.FAIL if checks else CheckStatus.PASS
+        return ConstraintResult(status=status, checks=checks)
 
 
 class StockTerminationCheck:
@@ -66,7 +67,7 @@ class StockTerminationCheck:
     ) -> None:
         self.stock_name = stock_name
         self.match_level = match_level
-        self._stock_keys = _reduce_inchikeys(stock or set(), match_level)
+        self._stock_keys = {str(reduce_inchikey(inchikey, match_level)) for inchikey in stock or set()}
 
     def check_route(self, route: Route, constraints: TaskConstraints) -> list[CheckResult]:
         if constraints.stock is None:
@@ -84,7 +85,11 @@ class StockTerminationCheck:
                 )
             )
 
-        missing_leaves = _missing_stock_leaves(route, self._stock_keys, self.match_level)
+        missing_leaves = []
+        for leaf in route.leaves():
+            if leaf.key(self.match_level) not in self._stock_keys:
+                missing_leaves.append(leaf.value.inchikey)
+        missing_leaves = sorted(set(missing_leaves))
         if missing_leaves:
             checks.append(
                 CheckResult(
@@ -108,7 +113,12 @@ class RequiredLeavesCheck:
         return self._check_required_leaves(route, constraints.required_leaves_smiles)
 
     def _check_required_leaves(self, route: Route, required_leaves_smiles: Sequence[str]) -> list[CheckResult]:
-        missing_required_leaves = _missing_required_leaves(route, required_leaves_smiles, self.match_level)
+        leaf_keys = {leaf.key(self.match_level) for leaf in route.leaves()}
+        missing_required_leaves = []
+        for smiles in required_leaves_smiles:
+            required_key = get_inchi_key(canonicalize_smiles(smiles), level=self.match_level)
+            if required_key not in leaf_keys:
+                missing_required_leaves.append(smiles)
         if not missing_required_leaves:
             return []
         return [
@@ -129,7 +139,7 @@ class RouteDepthCheck:
         return self._check_route_depth(route, constraints.route_depth)
 
     def _check_route_depth(self, route: Route, max_depth: int) -> list[CheckResult]:
-        route_depth = _route_depth(route)
+        route_depth = route.depth()
         if route_depth <= max_depth:
             return []
         return [
@@ -139,60 +149,3 @@ class RouteDepthCheck:
                 details={"route_depth": route_depth, "max_depth": max_depth},
             )
         ]
-
-
-def _checks_status(checks: Sequence[CheckResult]) -> CheckStatus:
-    return CheckStatus.FAIL if checks else CheckStatus.PASS
-
-
-def _reduce_inchikeys(inchikeys: set[InChIKeyStr], match_level: InChIKeyLevel) -> set[str]:
-    if match_level == InChIKeyLevel.FULL:
-        return set(inchikeys)
-    return {str(reduce_inchikey(inchikey, match_level)) for inchikey in inchikeys}
-
-
-def _missing_stock_leaves(route: Route, stock_keys: set[str], match_level: InChIKeyLevel) -> list[str]:
-    missing = []
-    for leaf in _leaf_molecules(route.target):
-        leaf_key = leaf.key(match_level)
-        if leaf_key not in stock_keys:
-            missing.append(leaf.inchikey)
-    return sorted(set(missing))
-
-
-def _missing_required_leaves(
-    route: Route,
-    required_leaves_smiles: Sequence[str],
-    match_level: InChIKeyLevel,
-) -> list[str]:
-    leaf_keys = {leaf.key(match_level) for leaf in _leaf_molecules(route.target)}
-    missing = []
-    for smiles in required_leaves_smiles:
-        required_key = get_inchi_key(canonicalize_smiles(smiles), level=match_level)
-        if required_key not in leaf_keys:
-            missing.append(smiles)
-    return missing
-
-
-def _route_depth(route: Route) -> int:
-    return _molecule_depth(route.target)
-
-
-def _leaf_molecules(molecule: Molecule) -> list[Molecule]:
-    reaction = molecule.product_of
-    if reaction is None:
-        return [molecule]
-
-    leaves = []
-    for reactant in reaction.reactants:
-        leaves.extend(_leaf_molecules(reactant))
-    return leaves
-
-
-def _molecule_depth(molecule: Molecule) -> int:
-    reaction = molecule.product_of
-    if reaction is None:
-        return 0
-    if not reaction.reactants:
-        return 1
-    return 1 + max(_molecule_depth(reactant) for reactant in reaction.reactants)

@@ -200,6 +200,12 @@ class Route(BaseModel):
     ) -> str:
         return _stable_hash(self.key(match_level, depth=depth))
 
+    def leaves(self) -> list[MoleculeView]:
+        return self.molecule_at(RoutePath.target()).leaves()
+
+    def depth(self) -> int:
+        return self.molecule_at(RoutePath.target()).depth()
+
 
 class ReactionView(BaseModel):
     route: Route
@@ -244,6 +250,24 @@ class MoleculeView(BaseModel):
         if self.value.product_of is None:
             return None
         return ReactionView(route=self.route, path=self.path.produced_by(), value=self.value.product_of)
+
+    def leaves(self) -> list[MoleculeView]:
+        reaction = self.produced_by()
+        if reaction is None:
+            return [self]
+
+        leaves = []
+        for reactant in reaction.reactants():
+            leaves.extend(reactant.leaves())
+        return leaves
+
+    def depth(self) -> int:
+        reaction = self.produced_by()
+        if reaction is None:
+            return 0
+        if not reaction.value.reactants:
+            return 1
+        return 1 + max(reactant.depth() for reactant in reaction.reactants())
 
     def subtree_key(
         self,
