@@ -70,7 +70,7 @@ def main() -> None:
         collected_candidates,
         task,
         route_tier_checkers=[],
-        constraint_checker=TaskConstraintChecker(stock=stock, stock_name=stock_name),
+        constraint_checker=TaskConstraintChecker.stock_termination(stock=stock, stock_name=stock_name),
     )
     solv_zero_count = sum(
         any(candidate.satisfies_solv(Tier.ZERO) for candidate in target_result.candidates)

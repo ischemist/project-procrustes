@@ -61,3 +61,12 @@ def test_route_depth_constraint_fails_when_route_is_too_deep() -> None:
 
     assert result.status == CheckStatus.FAIL
     assert result.checks[0].code == "constraint.route_depth.exceeded"
+
+
+def test_stock_only_checker_ignores_other_task_constraints() -> None:
+    result = TaskConstraintChecker.stock_termination(stock=stock_for("C", "CO"), stock_name="stock-a").check_route(
+        route(),
+        TaskConstraints(stock="stock-a", required_leaves_smiles=[SmilesStr("CC")], route_depth=0),
+    )
+
+    assert result.status == CheckStatus.PASS
