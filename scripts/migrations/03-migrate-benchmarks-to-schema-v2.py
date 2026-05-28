@@ -1,8 +1,13 @@
-"""Migrate v0.5.0 benchmark definition artifacts to schema v2.
+"""Migrate v0.5.0 benchmark definitions to schema v2.
 
-By default this script only validates conversion. Pass ``--write`` to move each
-v0.5.0 benchmark and manifest into ``definitions/v0.5.0/`` and write schema v2
-benchmarks plus refreshed manifests at the original paths.
+Before writing, move the old benchmark artifacts out of the output directory:
+
+    mkdir -p data/retrocast/1-benchmarks/definitions/v0.5.0
+    mv data/retrocast/1-benchmarks/definitions/*.json.gz data/retrocast/1-benchmarks/definitions/v0.5.0/
+    mv data/retrocast/1-benchmarks/definitions/*.manifest.json data/retrocast/1-benchmarks/definitions/v0.5.0/
+
+By default this script only validates conversion. Pass ``--write`` to write the
+schema v2 benchmarks and refreshed manifests at the original paths.
 """
 
 from __future__ import annotations
@@ -29,23 +34,18 @@ def main() -> None:
     args = parse_args()
     definitions_dir = args.definitions_dir
     legacy_dir = definitions_dir / LEGACY_DIRNAME
+    root_dir = definitions_dir.parents[1]
 
-    benchmark_names = {path.name for path in definitions_dir.glob("*.json.gz") if ".rc0.6." not in path.name} | {
-        path.name for path in legacy_dir.glob("*.json.gz")
-    }
-    benchmark_files = [definitions_dir / name for name in sorted(benchmark_names)]
-    logger.info("Found %s benchmark definitions in %s", len(benchmark_files), definitions_dir)
+    source_dir = legacy_dir
+    benchmark_files = sorted(source_dir.glob("*.json.gz"))
+    if not benchmark_files:
+        source_dir = definitions_dir
+        benchmark_files = sorted(source_dir.glob("*.json.gz"))
+    logger.info("Found %s benchmark definitions in %s", len(benchmark_files), source_dir)
 
-    for benchmark_path in benchmark_files:
-        sibling_legacy_path = legacy_sibling_path(benchmark_path)
-        if (legacy_dir / benchmark_path.name).exists():
-            source_path = legacy_dir / benchmark_path.name
-        elif sibling_legacy_path.exists():
-            source_path = sibling_legacy_path
-        else:
-            source_path = benchmark_path
-        source_manifest_path = legacy_manifest_path(source_path)
-        manifest_path = benchmark_manifest_path(benchmark_path)
+    for source_path in benchmark_files:
+        output_path = definitions_dir / source_path.name
+        manifest_path = definitions_dir / source_path.name.replace(".json.gz", ".manifest.json")
         logger.info("Migrating %s", source_path.name)
 
         benchmark = convert_benchmark(load_json_gz(source_path))
@@ -54,31 +54,31 @@ def main() -> None:
 
         if not args.write:
             continue
-        source_for_manifest = source_manifest_path if source_manifest_path.exists() else source_path
-        legacy_dir.mkdir(parents=True, exist_ok=True)
-        if source_path == benchmark_path:
-            move_to_legacy(benchmark_path, legacy_dir / benchmark_path.name, force=args.force)
-            if manifest_path.exists():
-                move_to_legacy(manifest_path, legacy_dir / manifest_path.name, force=args.force)
-                source_for_manifest = legacy_dir / manifest_path.name
-            else:
-                source_for_manifest = legacy_dir / benchmark_path.name
-        elif source_path == sibling_legacy_path:
-            move_to_legacy(sibling_legacy_path, legacy_dir / benchmark_path.name, force=args.force)
-            source_for_manifest = legacy_dir / benchmark_path.name
-        save_benchmark(benchmark, benchmark_path)
-        save_manifest(
-            benchmark=benchmark,
-            benchmark_path=benchmark_path,
-            manifest_path=manifest_path,
-            source_path=source_for_manifest,
-            route_count=route_count,
-            root_dir=definitions_dir.parents[1],
+        save_benchmark(benchmark, output_path)
+        manifest = Manifest(
+            action="scripts/migrations/03-migrate-benchmarks-to-schema-v2",
+            parameters={"migration": "v0.5.0-benchmark-to-schema-v2", "legacy_dir": LEGACY_DIRNAME},
+            source_files=[
+                FileInfo(
+                    path=str(source_path.relative_to(root_dir)),
+                    file_hash=calculate_file_hash(source_path),
+                )
+            ],
+            output_files=[
+                FileInfo(
+                    path=str(output_path.relative_to(root_dir)),
+                    file_hash=calculate_file_hash(output_path),
+                    content_hash=benchmark_content_hash(benchmark),
+                )
+            ],
+            statistics={"n_targets": len(benchmark.targets), "n_acceptable_routes": route_count},
+            summary={"schema_version": "2", "legacy_schema": "v0.5.0"},
         )
-        logger.info("  wrote %s and refreshed %s", benchmark_path.name, manifest_path.name)
+        manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+        logger.info("  wrote %s and refreshed %s", output_path.name, manifest_path.name)
 
     if not args.write:
-        logger.info("Dry run complete. Re-run with --write to move v0.5.0 artifacts and write schema v2 files.")
+        logger.info("Dry run complete. Move legacy artifacts as documented, then re-run with --write.")
 
 
 def parse_args() -> argparse.Namespace:
@@ -89,70 +89,8 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=project_root / "data" / "retrocast" / "1-benchmarks" / "definitions",
     )
-    parser.add_argument("--write", action="store_true", help="Move originals and write schema v2 benchmarks.")
-    parser.add_argument("--force", action="store_true", help="Allow overwriting existing v0.5.0 legacy artifacts.")
+    parser.add_argument("--write", action="store_true", help="Write schema v2 benchmarks and manifests.")
     return parser.parse_args()
-
-
-def benchmark_manifest_path(path: Path) -> Path:
-    return path.with_name(path.name.removesuffix(".json.gz") + ".manifest.json")
-
-
-def legacy_sibling_path(path: Path) -> Path:
-    return path.with_name(path.name.removesuffix(".json.gz") + ".rc0.6.json.gz")
-
-
-def legacy_manifest_path(path: Path) -> Path:
-    return path.with_name(path.name.removesuffix(".rc0.6.json.gz").removesuffix(".json.gz") + ".manifest.json")
-
-
-def move_to_legacy(source: Path, destination: Path, *, force: bool) -> None:
-    if destination.exists():
-        if not force:
-            raise FileExistsError(f"Legacy artifact already exists: {destination}")
-        destination.unlink()
-    source.rename(destination)
-
-
-def save_manifest(
-    *,
-    benchmark: Benchmark,
-    benchmark_path: Path,
-    manifest_path: Path,
-    source_path: Path,
-    route_count: int,
-    root_dir: Path,
-) -> None:
-    manifest = Manifest(
-        action="scripts/migrations/03-migrate-benchmarks-to-schema-v2",
-        parameters={"migration": "v0.5.0-benchmark-to-schema-v2", "legacy_dir": LEGACY_DIRNAME},
-        source_files=[file_info(source_path, root_dir=root_dir)],
-        output_files=[
-            file_info(
-                benchmark_path,
-                root_dir=root_dir,
-                content_hash=benchmark_content_hash(benchmark),
-            )
-        ],
-        statistics={"n_targets": len(benchmark.targets), "n_acceptable_routes": route_count},
-        summary={"schema_version": "2", "legacy_schema": "v0.5.0"},
-    )
-    manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
-
-
-def file_info(path: Path, *, root_dir: Path, content_hash: str | None = None) -> FileInfo:
-    return FileInfo(
-        path=relative_path(path, root_dir=root_dir),
-        file_hash=calculate_file_hash(path),
-        content_hash=content_hash,
-    )
-
-
-def relative_path(path: Path, *, root_dir: Path) -> str:
-    try:
-        return str(path.resolve().relative_to(root_dir.resolve()))
-    except ValueError:
-        return str(path.resolve())
 
 
 def benchmark_content_hash(benchmark: Benchmark) -> str:
