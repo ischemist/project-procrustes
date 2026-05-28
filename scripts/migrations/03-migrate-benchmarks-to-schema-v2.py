@@ -32,12 +32,14 @@ LEGACY_DIRNAME = "v0.5.0"
 def main() -> None:
     configure_script_logging()
     args = parse_args()
-    definitions_dir = args.definitions_dir
+    definitions_dir = args.definitions_dir.resolve()
     legacy_dir = definitions_dir / LEGACY_DIRNAME
     root_dir = definitions_dir.parents[1]
 
     source_dir = legacy_dir
     benchmark_files = sorted(source_dir.glob("*.json.gz"))
+    if not benchmark_files and args.write:
+        raise FileNotFoundError(f"Move legacy benchmark artifacts into {legacy_dir} before running with --write.")
     if not benchmark_files:
         source_dir = definitions_dir
         benchmark_files = sorted(source_dir.glob("*.json.gz"))
@@ -103,7 +105,7 @@ def convert_benchmark(data: dict[str, Any]) -> Benchmark:
     targets = {target_id: convert_target(target_id, target_data) for target_id, target_data in data["targets"].items()}
     return Benchmark(
         name=data["name"],
-        description=data.get("description", ""),
+        description=data.get("description") or "",
         targets=targets,
         default_constraints=TaskConstraints(stock=data.get("stock_name")),
         annotations={"migrated_from": "v0.5.0"},

@@ -7,12 +7,8 @@ from typing import TypeVar
 from pydantic import TypeAdapter, ValidationError
 
 from retrocast.exceptions import ArtifactDecodeError, ArtifactFormatError, ArtifactNotFoundError, ArtifactWriteError
-from retrocast.v2.models.candidates import Candidate
-from retrocast.v2.models.route import Route
 from retrocast.v2.models.task import Benchmark, Task
-
-CollectedCandidates = dict[str, list[Candidate]]
-CollectedRoutes = dict[str, list[Route]]
+from retrocast.v2.workflow.collect import CollectedCandidates, CollectedRoutes
 
 _TASK_ADAPTER = TypeAdapter(Task)
 _BENCHMARK_ADAPTER = TypeAdapter(Benchmark)
@@ -66,7 +62,7 @@ def _load_model(path: Path, adapter: TypeAdapter[T], *, artifact: str) -> T:
     try:
         with gzip.open(path, "rb") as handle:
             payload = handle.read()
-    except OSError as exc:
+    except (OSError, EOFError) as exc:
         raise ArtifactDecodeError(
             f"Failed to load {artifact} from {path}: {exc}",
             code="io.decode_failed",

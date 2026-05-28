@@ -36,9 +36,14 @@ def main() -> None:
     with quiet_info_logs("retrocast"), create_cli_progress(console=console, unit="target") as progress:
         task_id = progress.add_task("adapting targets", total=len(task.targets))
         for target_id, target in task.targets.items():
-            target_payload = raw_payload[target_id]
-            routes.extend(adapt_routes(target_payload, adapter, target=target, source_key=target_id))
-            candidates.extend(adapt_candidates(target_payload, adapter, target=target, source_key=target_id))
+            source_key = target_id if target_id in raw_payload else target.smiles
+            if source_key not in raw_payload:
+                logger.warning("missing payload for target_id=%s smiles=%s", target_id, target.smiles)
+                progress.advance(task_id)
+                continue
+            target_payload = raw_payload[source_key]
+            routes.extend(adapt_routes(target_payload, adapter, target=target, source_key=source_key))
+            candidates.extend(adapt_candidates(target_payload, adapter, target=target, source_key=source_key))
             progress.advance(task_id)
     logger.info("adapted routes=%s candidates=%s", len(routes), len(candidates))
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
+import pytest
+
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
 from retrocast.v2.adapters.base import AdaptMode, RawRouteEntry
@@ -31,6 +33,12 @@ def target(smiles: str, target_id: str) -> Target:
 def task() -> Task:
     ethanol = target("CCO", "ethanol")
     return Task(name="one-target", targets={ethanol.id: ethanol})
+
+
+def two_target_task() -> Task:
+    ethanol = target("CCO", "ethanol")
+    acetic_acid = target("CC(=O)O", "acetic-acid")
+    return Task(name="two-targets", targets={ethanol.id: ethanol, acetic_acid.id: acetic_acid})
 
 
 def test_ingest_routes_is_adapt_plus_collect() -> None:
@@ -71,3 +79,8 @@ def test_ingest_candidates_handles_target_smiles_keyed_payloads() -> None:
 
     assert len(collected["ethanol"]) == 1
     assert collected["ethanol"][0].route is not None
+
+
+def test_ingest_candidates_rejects_unkeyed_multi_target_payload() -> None:
+    with pytest.raises(ValueError, match="Multi-target ingest"):
+        ingest_candidates([{"smiles": "CCO"}], SmilesAdapter(), two_target_task())

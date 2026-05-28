@@ -44,7 +44,9 @@ def ingest_candidates(
 
 def _target_payloads(raw_payload: Any, task: Task) -> Iterator[tuple[Target | None, Any, str | None]]:
     if not isinstance(raw_payload, Mapping):
-        target = next(iter(task.targets.values())) if len(task.targets) == 1 else None
+        if len(task.targets) != 1:
+            raise ValueError("Multi-target ingest requires raw_payload keyed by target id or target SMILES.")
+        target = next(iter(task.targets.values()))
         yield target, raw_payload, None
         return
 

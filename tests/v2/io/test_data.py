@@ -99,6 +99,16 @@ def test_invalid_gzip_raises_decode_error(tmp_path) -> None:
         load_benchmark(path)
 
 
+def test_truncated_gzip_raises_decode_error(tmp_path) -> None:
+    path = tmp_path / "benchmark.json.gz"
+    with gzip.open(path, "wb") as handle:
+        handle.write(b"{}")
+    path.write_bytes(path.read_bytes()[:-4])
+
+    with pytest.raises(ArtifactDecodeError):
+        load_benchmark(path)
+
+
 def test_invalid_benchmark_shape_raises_format_error(tmp_path) -> None:
     path = tmp_path / "benchmark.json.gz"
     with gzip.open(path, "wb") as handle:
