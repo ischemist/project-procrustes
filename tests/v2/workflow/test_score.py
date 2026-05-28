@@ -104,7 +104,7 @@ def test_failed_candidate_does_not_satisfy_solv_zero() -> None:
         candidate,
         target=target(),
         constraints=TaskConstraints(),
-        route_tier_checkers=[],
+        tier_checkers=[],
         constraint_checker=FixedConstraintChecker(),
     )
 
@@ -119,7 +119,7 @@ def test_valid_route_satisfies_tier_zero_from_candidate_boundary() -> None:
         Candidate(rank=2, route=route()),
         target=target(),
         constraints=TaskConstraints(),
-        route_tier_checkers=[],
+        tier_checkers=[],
         constraint_checker=FixedConstraintChecker(),
     )
 
@@ -134,7 +134,7 @@ def test_task_constraint_failure_prevents_solv_zero() -> None:
         Candidate(rank=1, route=route()),
         target=target(),
         constraints=TaskConstraints(stock="stock-a"),
-        route_tier_checkers=[FixedTierChecker()],
+        tier_checkers=[FixedTierChecker()],
         constraint_checker=FixedConstraintChecker(CheckStatus.FAIL),
     )
 
@@ -150,7 +150,7 @@ def test_reaction_validity_is_addressable_by_reaction_id() -> None:
         Candidate(rank=1, route=route()),
         target=target(),
         constraints=TaskConstraints(),
-        route_tier_checkers=[FixedTierChecker()],
+        tier_checkers=[FixedTierChecker()],
         constraint_checker=FixedConstraintChecker(),
     )
 
@@ -165,7 +165,7 @@ def test_route_tier_checker_cannot_claim_tier_zero() -> None:
             Candidate(rank=1, route=route()),
             target=target(),
             constraints=TaskConstraints(),
-            route_tier_checkers=[InvalidTierZeroRouteChecker()],
+            tier_checkers=[InvalidTierZeroRouteChecker()],
             constraint_checker=FixedConstraintChecker(),
         )
     assert exc_info.value.code == "validity.unsupported_tier"
@@ -177,7 +177,7 @@ def test_reaction_validity_merges_results_from_multiple_tier_checkers() -> None:
         Candidate(rank=1, route=route()),
         target=target(),
         constraints=TaskConstraints(),
-        route_tier_checkers=[FixedTierChecker(), FixedTierTwoChecker(CheckStatus.FAIL)],
+        tier_checkers=[FixedTierChecker(), FixedTierTwoChecker(CheckStatus.FAIL)],
         constraint_checker=FixedConstraintChecker(),
     )
 
@@ -196,7 +196,7 @@ def test_score_preserves_candidate_rank_and_records_acceptable_match() -> None:
     evaluation = score(
         {"ethanol": [Candidate(rank=7, route=predicted_route)]},
         task(benchmark_target),
-        route_tier_checkers=[FixedTierChecker()],
+        tier_checkers=[FixedTierChecker()],
         constraint_checker=FixedConstraintChecker(),
     )
 

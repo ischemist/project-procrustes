@@ -69,7 +69,7 @@ def main() -> None:
     evaluation = score(
         collected_candidates,
         task,
-        route_tier_checkers=[],
+        tier_checkers=[],
         constraint_checker=TaskConstraintChecker.stock_termination(stock=stock, stock_name=stock_name),
     )
     target_count = len(evaluation.targets)
