@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Protocol
 
+from retrocast.exceptions import UnsupportedValidityTierError
 from retrocast.v2.models.candidates import Candidate
 from retrocast.v2.models.evaluation import (
     CheckResult,
@@ -77,16 +78,15 @@ def score_target(
 ) -> TargetResult:
     scored_candidates = []
     for candidate in candidates:
-        scored_candidates.append(
-            score_candidate(
-                candidate,
-                target=target,
-                constraints=constraints,
-                route_tier_checkers=route_tier_checkers,
-                constraint_checker=constraint_checker,
-                acceptable_match_level=acceptable_match_level,
-            )
+        scored_candidate = score_candidate(
+            candidate,
+            target=target,
+            constraints=constraints,
+            route_tier_checkers=route_tier_checkers,
+            constraint_checker=constraint_checker,
+            acceptable_match_level=acceptable_match_level,
         )
+        scored_candidates.append(scored_candidate)
 
     return TargetResult(
         target=target,
@@ -104,21 +104,18 @@ def score(
     acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
 ) -> Evaluation:
     tiers = [Tier.ZERO, *sorted({checker.tier for checker in route_tier_checkers})]
-    return Evaluation(
-        task=task,
-        tiers=tiers,
-        targets={
-            target_id: score_target(
-                predictions.get(target_id, []),
-                target=target,
-                constraints=task.constraints.get(target_id, task.default_constraints),
-                route_tier_checkers=route_tier_checkers,
-                constraint_checker=constraint_checker,
-                acceptable_match_level=acceptable_match_level,
-            )
-            for target_id, target in task.targets.items()
-        },
-    )
+    target_results = {}
+    for target_id, target in task.targets.items():
+        constraints = task.constraints.get(target_id, task.default_constraints)
+        target_results[target_id] = score_target(
+            predictions.get(target_id, []),
+            target=target,
+            constraints=constraints,
+            route_tier_checkers=route_tier_checkers,
+            constraint_checker=constraint_checker,
+            acceptable_match_level=acceptable_match_level,
+        )
+    return Evaluation(task=task, tiers=tiers, targets=target_results)
 
 
 def _tier_zero_validity(candidate: Candidate) -> RouteValidity:
@@ -142,7 +139,10 @@ def _check_route_validity(
     reactions_by_id = {reaction.reaction_id: reaction for reaction in validity.reactions}
     for checker in route_tier_checkers:
         if checker.tier == Tier.ZERO:
-            raise ValueError("Tier.ZERO is reserved for candidate adaptation validity.")
+            raise UnsupportedValidityTierError(
+                "Tier-0 route validity is reserved for candidate adaptation validity.",
+                context={"tier": int(checker.tier), "checker": checker.name},
+            )
         result = checker.check_route(route)
         validity.tiers.update(result.tiers)
         for reaction in result.reactions:
@@ -150,6 +150,7 @@ def _check_route_validity(
             if existing is None:
                 reactions_by_id[reaction.reaction_id] = reaction
             else:
+                # Multiple tier checkers can report validity for the same route reaction.
                 existing.tiers.update(reaction.tiers)
     validity.reactions = list(reactions_by_id.values())
 

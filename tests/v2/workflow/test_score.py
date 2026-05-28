@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
+from retrocast.exceptions import UnsupportedValidityTierError
 from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
 from retrocast.v2.models import (
     Candidate,
@@ -37,13 +38,18 @@ class FixedTierChecker:
         except KeyError:
             reactions = []
         else:
-            reaction_tiers[Tier.ONE] = TierResult(status=self.status)
+            reaction_tiers[self.tier] = TierResult(status=self.status)
             reactions = [ReactionValidity(reaction_id=reaction_id, tiers=reaction_tiers)]
-        return RouteValidity(tiers={Tier.ONE: TierResult(status=self.status)}, reactions=reactions)
+        return RouteValidity(tiers={self.tier: TierResult(status=self.status)}, reactions=reactions)
 
 
 class InvalidTierZeroRouteChecker(FixedTierChecker):
     tier = Tier.ZERO
+    name = "invalid-tier-zero"
+
+
+class FixedTierTwoChecker(FixedTierChecker):
+    tier = Tier.TWO
 
 
 class FixedConstraintChecker:
@@ -154,7 +160,7 @@ def test_reaction_validity_is_addressable_by_reaction_id() -> None:
 
 
 def test_route_tier_checker_cannot_claim_tier_zero() -> None:
-    with pytest.raises(ValueError, match="Tier.ZERO"):
+    with pytest.raises(UnsupportedValidityTierError) as exc_info:
         score_candidate(
             Candidate(rank=1, route=route()),
             target=target(),
@@ -162,6 +168,25 @@ def test_route_tier_checker_cannot_claim_tier_zero() -> None:
             route_tier_checkers=[InvalidTierZeroRouteChecker()],
             constraint_checker=FixedConstraintChecker(),
         )
+    assert exc_info.value.code == "validity.unsupported_tier"
+    assert exc_info.value.context == {"tier": 0, "checker": "invalid-tier-zero"}
+
+
+def test_reaction_validity_merges_results_from_multiple_tier_checkers() -> None:
+    scored = score_candidate(
+        Candidate(rank=1, route=route()),
+        target=target(),
+        constraints=TaskConstraints(),
+        route_tier_checkers=[FixedTierChecker(), FixedTierTwoChecker(CheckStatus.FAIL)],
+        constraint_checker=FixedConstraintChecker(),
+    )
+
+    tier_one = scored.reaction_tier_result("rc:r:/", Tier.ONE)
+    tier_two = scored.reaction_tier_result("rc:r:/", Tier.TWO)
+    assert tier_one is not None
+    assert tier_one.status == CheckStatus.PASS
+    assert tier_two is not None
+    assert tier_two.status == CheckStatus.FAIL
 
 
 def test_score_preserves_candidate_rank_and_records_acceptable_match() -> None:
