@@ -20,10 +20,23 @@ from tests.v2.adapters.base import (
     RawExtractionContractCase,
 )
 
+# SECTION: Fixtures
+
 
 def target_for(raw_route: dict, target_id: str = "target") -> Target:
     smiles = canonicalize_smiles(raw_route["smiles"])
     return Target(id=target_id, smiles=smiles, inchikey=get_inchi_key(smiles))
+
+
+def target_for_entry(entry) -> Target:
+    smiles = canonicalize_smiles(entry.payload.smiles)
+    return Target(id=entry.source_key, smiles=smiles, inchikey=get_inchi_key(smiles))
+
+
+def load_real_paroutes_payload() -> dict:
+    path = Path("tests/testing_data/paroutes.json.gz")
+    with gzip.open(path, "rt", encoding="utf-8") as file:
+        return json.load(file)
 
 
 @pytest.fixture
@@ -84,6 +97,9 @@ def raw_paroutes_payload(raw_paroutes_route) -> dict:
     return {"paroutes-ex-1": raw_paroutes_route, "paroutes-ex-2": second_route}
 
 
+# SECTION: Shared Contract Suite
+
+
 class TestPaRoutesAdapterContract(AdapterContractSuite):
     @pytest.fixture
     def adapter_contract_case(
@@ -125,16 +141,38 @@ class TestPaRoutesAdapterContract(AdapterContractSuite):
         assert len(route.target.product_of.reactants) == 2
 
 
+# SECTION: Regression Tests
+
+
 @pytest.mark.regression
 def test_paroutes_iter_raw_routes_accepts_real_fixture_payload() -> None:
-    path = Path("tests/testing_data/paroutes.json.gz")
-    with gzip.open(path, "rt", encoding="utf-8") as file:
-        raw_payload = json.load(file)
+    raw_payload = load_real_paroutes_payload()
 
     entries = list(PaRoutesAdapter().iter_raw_routes(raw_payload))
 
     assert [entry.source_key for entry in entries] == ["paroutes-ex-1", "paroutes-ex-2"]
     assert [entry.source_order for entry in entries] == [1, 2]
+
+
+@pytest.mark.regression
+def test_paroutes_casts_real_fixture_routes_with_stable_signatures() -> None:
+    adapter = PaRoutesAdapter()
+    entries = list(adapter.iter_raw_routes(load_real_paroutes_payload()))
+
+    routes = [adapter.cast(entry.payload, target=target_for_entry(entry)) for entry in entries]
+
+    assert [route.signature() for route in routes] == [
+        "d79f5952f18331a4c889c073db1aac16a9842c7474900c3cd81aca276184e11e",
+        "b83d6ef3188683bb33b26921cb9ba9a0669ad389f695d941a3de6fa420730985",
+    ]
+    assert [route.annotations["patent_id"] for route in routes] == ["US20150051201A1", "US08242133B2"]
+    assert [[reactant.value.smiles for reactant in route.reaction_at("rc:r:/").reactants()] for route in routes] == [
+        ["CN1CCn2ncc(N)c21", "CNc1nc(Cl)ncc1C(F)(F)F"],
+        ["Nc1cc(OC(F)(F)F)ccc1O", "O=C(O)c1ccncc1Cl"],
+    ]
+
+
+# SECTION: Contract Tests
 
 
 @pytest.mark.contract
@@ -312,6 +350,9 @@ def test_paroutes_prune_mode_drops_branch_when_all_reactants_are_invalid() -> No
         adapter.cast(raw_route, target=target_for(raw_route, "paroutes-ex-1"), mode="prune")
 
     assert exc_info.value.code == "adapter.target_pruned"
+
+
+# SECTION: Diagnostics Tests
 
 
 @pytest.mark.contract
