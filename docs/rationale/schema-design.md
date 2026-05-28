@@ -37,7 +37,7 @@ Basic schema
 ```python
 class Molecule(BaseModel):
     smiles: SmilesStr
-    inchikey: InchiKeyStr
+    inchikey: InChIKeyStr
     product_of: Reaction | None = None
     annotations: dict[str, Any] = Field(default_factory=dict)
 
@@ -260,11 +260,11 @@ By default, adapt tries to turn raw planner output into canonical `Route` object
 
 ```python
 class FailureRecord(BaseModel):
-    code: str
+    code: ErrorCode
     message: str | None = None
     target_id: str | None = None
     target_smiles: SmilesStr | None = None
-    target_inchikey: InchiKeyStr | None = None
+    target_inchikey: InChIKeyStr | None = None
     context: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -326,7 +326,7 @@ where `Task` is defined through `Target`s and `TaskConstraints`:
 class Target(BaseModel):
     id: str
     smiles: SmilesStr
-    inchikey: InchiKeyStr
+    inchikey: InChIKeyStr
     acceptable_routes: list[Route] = Field(default_factory=list)
     annotations: dict[str, Any] = Field(default_factory=dict)
 
