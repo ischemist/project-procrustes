@@ -9,7 +9,7 @@ from pydantic import AfterValidator, BaseModel, Field
 
 from retrocast.chem import InchiKeyLevel as InChIKeyLevel
 from retrocast.chem import reduce_inchikey
-from retrocast.typing import InchiKeyStr, ReactionSmilesStr, SmilesStr
+from retrocast.typing import InChIKeyStr, ReactionSmilesStr, SmilesStr
 
 RouteNodeKind = Literal["m", "r"]
 
@@ -138,7 +138,7 @@ class Reaction(BaseModel):
 
 class Molecule(BaseModel):
     smiles: SmilesStr
-    inchikey: InchiKeyStr
+    inchikey: InChIKeyStr
     product_of: Reaction | None = None
     annotations: dict[str, Any] = Field(default_factory=dict)
 

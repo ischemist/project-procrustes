@@ -3,7 +3,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from retrocast.typing import InchiKeyStr, SmilesStr
+from retrocast.typing import InChIKeyStr, SmilesStr
 from retrocast.v2.models.route import InChIKeyLevel, Molecule, Reaction, Route
 
 KEY_A = "AAAAAAAAAAAAAA-UHFFFAOYSA-N"
@@ -16,7 +16,7 @@ KEY_A_STEREO_2 = "AAAAAAAAAAAAAA-CCCCCCCCSA-N"
 
 
 def molecule(smiles: str, inchikey: str, product_of: Reaction | None = None) -> Molecule:
-    return Molecule(smiles=SmilesStr(smiles), inchikey=InchiKeyStr(inchikey), product_of=product_of)
+    return Molecule(smiles=SmilesStr(smiles), inchikey=InChIKeyStr(inchikey), product_of=product_of)
 
 
 def one_step_route(reactants: list[Molecule], *, target_key: str = KEY_C) -> Route:
