@@ -152,6 +152,17 @@ def test_askcos_cast_preserves_run_annotations(askcos_route_payload) -> None:
 
 
 @pytest.mark.contract
+def test_askcos_pathway_payload_uses_immutable_boundary_containers(askcos_route_payload) -> None:
+    with pytest.raises(TypeError):
+        askcos_route_payload.uuid2smiles["new"] = "C"
+    with pytest.raises(TypeError):
+        askcos_route_payload.node_dict["new"] = askcos_route_payload.node_dict["CCO"]
+    with pytest.raises(TypeError):
+        askcos_route_payload.annotations["new"] = 1
+    assert isinstance(askcos_route_payload.pathway_edges, tuple)
+
+
+@pytest.mark.contract
 def test_askcos_reaction_fields_and_annotations(askcos_route_payload) -> None:
     route = AskcosAdapter().cast(askcos_route_payload, target=target_for("CCOC(C)=O"))
     reaction = route.reaction_at("rc:r:/").value
@@ -207,6 +218,26 @@ def test_askcos_rejects_cycles(raw_askcos_output) -> None:
         AskcosAdapter().cast(raw_route, target=target_for("CCOC(C)=O"))
 
     assert exc_info.value.code == "adapter.cycle_detected"
+
+
+@pytest.mark.contract
+def test_askcos_rejects_multiple_child_reactions(raw_askcos_output) -> None:
+    raw_payload = deepcopy(raw_askcos_output)
+    raw_payload["results"]["uds"]["node_dict"]["C>>CCOC(C)=O"] = {
+        "smiles": "C>>CCOC(C)=O",
+        "id": "rxn-2",
+        "type": "reaction",
+    }
+    raw_payload["results"]["uds"]["uuid2smiles"]["uuid-rxn-2"] = "C>>CCOC(C)=O"
+    raw_payload["results"]["uds"]["pathways"][0].append(
+        {"source": "00000000-0000-0000-0000-000000000000", "target": "uuid-rxn-2"}
+    )
+    raw_route = next(AskcosAdapter().iter_raw_routes(raw_payload)).payload
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        AskcosAdapter().cast(raw_route, target=target_for("CCOC(C)=O"))
+
+    assert exc_info.value.code == "adapter.route_not_tree"
 
 
 @pytest.mark.contract

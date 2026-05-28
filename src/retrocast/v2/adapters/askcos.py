@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import logging
 from collections import defaultdict
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -20,8 +20,6 @@ from retrocast.typing import ReactionSmilesStr, SmilesStr
 from retrocast.v2.adapters.base import AdaptMode, RawRouteEntry
 from retrocast.v2.models.route import Molecule, Reaction, Route
 from retrocast.v2.models.task import Target
-
-logger = logging.getLogger(__name__)
 
 ASKCOS_ROOT_UUID = "00000000-0000-0000-0000-000000000000"
 
@@ -84,12 +82,12 @@ class AskcosOutput(BaseModel):
     results: AskcosResults
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class AskcosPathwayPayload:
-    pathway_edges: list[AskcosPathwayEdge]
-    uuid2smiles: dict[str, str]
-    node_dict: dict[str, AskcosNode]
-    annotations: dict[str, Any]
+    pathway_edges: tuple[AskcosPathwayEdge, ...]
+    uuid2smiles: MappingProxyType[str, str]
+    node_dict: MappingProxyType[str, AskcosNode]
+    annotations: MappingProxyType[str, Any]
 
 
 # SECTION: Adapter
@@ -122,10 +120,10 @@ class AskcosAdapter:
         for pathway_index, pathway_edges in enumerate(uds.pathways, start=1):
             yield RawRouteEntry(
                 payload=AskcosPathwayPayload(
-                    pathway_edges=pathway_edges,
-                    uuid2smiles=uds.uuid2smiles,
-                    node_dict=uds.node_dict,
-                    annotations=annotations,
+                    pathway_edges=tuple(pathway_edges),
+                    uuid2smiles=MappingProxyType(uds.uuid2smiles),
+                    node_dict=MappingProxyType(uds.node_dict),
+                    annotations=MappingProxyType(annotations),
                 ),
                 source_key=source_key,
                 source_order=pathway_index,
@@ -186,8 +184,8 @@ class AskcosAdapter:
         *,
         chem_uuid: str,
         adj_list: dict[str, list[str]],
-        uuid2smiles: dict[str, str],
-        node_dict: dict[str, AskcosNode],
+        uuid2smiles: Mapping[str, str],
+        node_dict: Mapping[str, AskcosNode],
         visited: set[SmilesStr],
         mode: AdaptMode,
     ) -> Molecule | None:
@@ -214,7 +212,15 @@ class AskcosAdapter:
 
         child_reaction_uuids = adj_list[chem_uuid]
         if len(child_reaction_uuids) > 1:
-            logger.warning("molecule %s has multiple child reactions; only the first is used", canon_smiles)
+            raise AdapterLogicError(
+                "ASKCOS pathway is not a route tree: molecule has multiple child reactions",
+                code="adapter.route_not_tree",
+                context={
+                    "adapter": "askcos",
+                    "smiles": canon_smiles,
+                    "child_reaction_count": len(child_reaction_uuids),
+                },
+            )
 
         reaction = self._build_reaction(
             rxn_uuid=child_reaction_uuids[0],
@@ -240,8 +246,8 @@ class AskcosAdapter:
         *,
         rxn_uuid: str,
         adj_list: dict[str, list[str]],
-        uuid2smiles: dict[str, str],
-        node_dict: dict[str, AskcosNode],
+        uuid2smiles: Mapping[str, str],
+        node_dict: Mapping[str, AskcosNode],
         visited: set[SmilesStr],
         mode: AdaptMode,
     ) -> Reaction | None:
