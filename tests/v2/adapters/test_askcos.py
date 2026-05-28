@@ -18,6 +18,8 @@ from tests.v2.adapters.base import (
     RawExtractionContractCase,
 )
 
+# SECTION: Fixtures
+
 
 def target_for(smiles: str, target_id: str = "askcos-target") -> Target:
     canon_smiles = canonicalize_smiles(smiles)
@@ -98,6 +100,9 @@ def askcos_invalid_leaf_payload():
     return next(AskcosAdapter().iter_raw_routes(invalid_leaf_output())).payload
 
 
+# SECTION: Shared Contract Suite
+
+
 class TestAskcosAdapterContract(AdapterContractSuite):
     @pytest.fixture
     def adapter_contract_case(
@@ -128,6 +133,9 @@ class TestAskcosAdapterContract(AdapterContractSuite):
                 expected_pruned_root_reactants=["CCO"],
             ),
         )
+
+
+# SECTION: Contract Tests
 
 
 @pytest.mark.contract

@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 ASKCOS_ROOT_UUID = "00000000-0000-0000-0000-000000000000"
 
 
+# SECTION: Raw ASKCOS Schema
+
+
 class AskcosBaseNode(BaseModel):
     smiles: str
     id: str
@@ -87,6 +90,9 @@ class AskcosPathwayPayload:
     uuid2smiles: dict[str, str]
     node_dict: dict[str, AskcosNode]
     annotations: dict[str, Any]
+
+
+# SECTION: Adapter
 
 
 class AskcosAdapter:
@@ -273,6 +279,9 @@ class AskcosAdapter:
             template=node.model_metadata[0].get_template() if node.model_metadata else None,
             annotations={"source_id": node.id},
         )
+
+
+# SECTION: Annotations
 
 
 def _extract_run_annotations(stats: dict[str, Any]) -> dict[str, Any]:
