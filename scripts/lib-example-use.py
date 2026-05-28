@@ -5,12 +5,14 @@ from pathlib import Path
 from rich.console import Console
 
 from retrocast.cli.progress import create_cli_progress, quiet_info_logs
-from retrocast.io import load_json_gz
+from retrocast.io import load_json_gz, load_stock_file
 from retrocast.utils.logging import configure_script_logging, logger
 from retrocast.v2.adapters import AiZynthFinderAdapter
 from retrocast.v2.io import load_benchmark
-from retrocast.v2.models import CheckStatus, ConstraintResult, Route, RouteValidity, TaskConstraints, Tier, TierResult
+from retrocast.v2.models import Tier
 from retrocast.v2.workflow import (
+    TaskConstraintChecker,
+    TierZeroChecker,
     adapt_candidates,
     adapt_routes,
     collect_candidates,
@@ -22,21 +24,7 @@ from retrocast.v2.workflow import (
 
 RAW_PATH = Path("data/retrocast/2-raw/aizynthfinder-4.4.1-mcts-iter100-depth6/mkt-cnv-160/results.json.gz")
 BENCHMARK_PATH = Path("data/retrocast/1-benchmarks/definitions/mkt-cnv-160.json.gz")
-
-
-class PassTierZeroChecker:
-    tier = Tier.ZERO
-    name = "pass-tier-zero"
-
-    def check_route(self, route: Route) -> RouteValidity:
-        return RouteValidity(tiers={Tier.ZERO: TierResult(status=CheckStatus.PASS)})
-
-
-class PassTaskChecker:
-    name = "pass-task"
-
-    def check_route(self, route: Route, constraints: TaskConstraints) -> ConstraintResult:
-        return ConstraintResult(status=CheckStatus.PASS)
+STOCKS_DIR = Path("data/retrocast/1-benchmarks/stocks")
 
 
 def main() -> None:
@@ -45,6 +33,8 @@ def main() -> None:
     console = Console()
     raw_payload = load_json_gz(RAW_PATH)
     task = load_benchmark(BENCHMARK_PATH)
+    stock_name = task.default_constraints.stock
+    stock = load_stock_file(STOCKS_DIR / f"{stock_name}.csv.gz") if stock_name is not None else set()
     adapter = AiZynthFinderAdapter()
     logger.info("loaded raw payload and benchmark: targets=%s", len(task.targets))
 
@@ -80,8 +70,8 @@ def main() -> None:
     evaluation = score(
         collected_candidates,
         task,
-        tier_checkers=[PassTierZeroChecker()],
-        constraint_checker=PassTaskChecker(),
+        tier_checkers=[TierZeroChecker()],
+        constraint_checker=TaskConstraintChecker(stock=stock, stock_name=stock_name),
     )
     solv_zero_count = sum(
         any(candidate.satisfies_solv(Tier.ZERO) for candidate in target_result.candidates)
