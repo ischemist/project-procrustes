@@ -129,21 +129,20 @@ def _tier_zero_validity(candidate: Candidate) -> RouteValidity:
     if failure is None:
         return RouteValidity(tiers={Tier.ZERO: TierResult(status=CheckStatus.PASS)})
 
-    return RouteValidity(tiers={Tier.ZERO: _failed_tier_zero_result(candidate)})
-
-
-def _failed_tier_zero_result(candidate: Candidate) -> TierResult:
-    failure = candidate.failure
-    return TierResult(
-        status=CheckStatus.FAIL,
-        checks=[
-            CheckResult(
-                code=failure.code if failure is not None else "adapter.unknown_failure",
+    return RouteValidity(
+        tiers={
+            Tier.ZERO: TierResult(
                 status=CheckStatus.FAIL,
-                message=failure.message if failure is not None else None,
-                details=failure.context if failure is not None else {},
+                checks=[
+                    CheckResult(
+                        code=failure.code,
+                        status=CheckStatus.FAIL,
+                        message=failure.message,
+                        details=failure.context,
+                    )
+                ],
             )
-        ],
+        }
     )
 
 
