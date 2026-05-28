@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, AdapterSchemaError
+from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, InvalidSmilesError
 from retrocast.typing import SmilesStr
 from retrocast.v2.adapters.retrostar import RetroStarAdapter
 from retrocast.v2.models.task import Target
@@ -130,6 +130,29 @@ def test_retrostar_rejects_malformed_later_route_step() -> None:
         adapter._parse_route_string("CCO>0.9>CC=O|CC=O>0.8")
 
     assert exc_info.value.code == "adapter.route_string_invalid"
+
+
+@pytest.mark.contract
+def test_retrostar_strict_rejects_invalid_intermediate_product_smiles() -> None:
+    raw_route = next(
+        RetroStarAdapter().iter_raw_routes({"succ": True, "routes": "CCO>0.9>C.not-smiles|not-smiles>0.8>C"})
+    ).payload
+
+    with pytest.raises(InvalidSmilesError) as exc_info:
+        RetroStarAdapter().cast(raw_route, target=target_for("CCO"), mode="strict")
+
+    assert exc_info.value.code == "chem.invalid_smiles"
+
+
+@pytest.mark.contract
+def test_retrostar_prune_skips_invalid_intermediate_product_smiles() -> None:
+    raw_route = next(
+        RetroStarAdapter().iter_raw_routes({"succ": True, "routes": "CCO>0.9>C.not-smiles|not-smiles>0.8>C"})
+    ).payload
+
+    route = RetroStarAdapter().cast(raw_route, target=target_for("CCO"), mode="prune")
+
+    assert [reactant.value.smiles for reactant in route.reaction_at("rc:r:/").reactants()] == ["C"]
 
 
 @pytest.mark.contract

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.exceptions import AdapterLogicError, AdapterSchemaError
+from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, InvalidSmilesError
 from retrocast.typing import SmilesStr
 from retrocast.v2.adapters.dreamretro import DreamRetroErAdapter
 from retrocast.v2.models.task import Target
@@ -103,12 +103,22 @@ def test_dreamretro_payload_annotations_are_immutable_and_private(raw_dreamretro
     raw_route = next(DreamRetroErAdapter().iter_raw_routes(raw_dreamretro_payload)).payload
     raw_dreamretro_payload["expand_model_call"] = 999
 
-    with pytest.raises(TypeError):
-        raw_route.annotations["new"] = 1
+    with pytest.raises(AttributeError):
+        raw_route.annotations = ()
 
     route = DreamRetroErAdapter().cast(raw_route, target=target_for("CCO"))
 
     assert route.annotations["expand_model_call"] == 4
+
+
+@pytest.mark.contract
+def test_dreamretro_payloads_use_value_equality() -> None:
+    payloads = [
+        next(DreamRetroErAdapter().iter_raw_routes({"succ": True, "routes": "CCO", "expand_model_call": 4})).payload,
+        next(DreamRetroErAdapter().iter_raw_routes({"succ": True, "routes": "CCO", "expand_model_call": 4})).payload,
+    ]
+
+    assert payloads[0] == payloads[1]
 
 
 @pytest.mark.contract
@@ -144,6 +154,29 @@ def test_dreamretro_rejects_malformed_route_step() -> None:
 
 
 @pytest.mark.contract
+def test_dreamretro_strict_rejects_invalid_intermediate_product_smiles() -> None:
+    raw_route = next(
+        DreamRetroErAdapter().iter_raw_routes({"succ": True, "routes": "CCO>0.9>C.not-smiles|not-smiles>0.8>C"})
+    ).payload
+
+    with pytest.raises(InvalidSmilesError) as exc_info:
+        DreamRetroErAdapter().cast(raw_route, target=target_for("CCO"), mode="strict")
+
+    assert exc_info.value.code == "chem.invalid_smiles"
+
+
+@pytest.mark.contract
+def test_dreamretro_prune_skips_invalid_intermediate_product_smiles() -> None:
+    raw_route = next(
+        DreamRetroErAdapter().iter_raw_routes({"succ": True, "routes": "CCO>0.9>C.not-smiles|not-smiles>0.8>C"})
+    ).payload
+
+    route = DreamRetroErAdapter().cast(raw_route, target=target_for("CCO"), mode="prune")
+
+    assert [reactant.value.smiles for reactant in route.reaction_at("rc:r:/").reactants()] == ["C"]
+
+
+@pytest.mark.contract
 def test_dreamretro_rejects_cycles_after_smiles_canonicalization() -> None:
     raw_route = next(DreamRetroErAdapter().iter_raw_routes({"succ": True, "routes": "CCO>0.9>C|C>0.8>OCC"})).payload
 
@@ -170,6 +203,16 @@ def test_dreamretro_prune_rejects_route_when_all_reactants_are_invalid() -> None
         DreamRetroErAdapter().cast(raw_route, target=target_for("CCO"), mode="prune")
 
     assert exc_info.value.code == "adapter.target_pruned"
+
+
+@pytest.mark.contract
+def test_dreamretro_rejects_empty_reaction_in_strict_mode() -> None:
+    raw_route = next(DreamRetroErAdapter().iter_raw_routes({"succ": True, "routes": "CCO>0.9>"})).payload
+
+    with pytest.raises(AdapterLogicError) as exc_info:
+        DreamRetroErAdapter().cast(raw_route, target=target_for("CCO"))
+
+    assert exc_info.value.code == "adapter.reaction_empty"
 
 
 @pytest.mark.contract

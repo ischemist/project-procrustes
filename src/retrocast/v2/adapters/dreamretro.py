@@ -3,12 +3,11 @@ from __future__ import annotations
 from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass
-from types import MappingProxyType
 from typing import Any
 
 from retrocast.adapters.errors import adapter_route_string_error, adapter_schema_error, adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles
-from retrocast.exceptions import AdapterLogicError
+from retrocast.exceptions import AdapterLogicError, InvalidSmilesError
 from retrocast.typing import SmilesStr
 from retrocast.v2.adapters.base import AdaptMode, RawRouteEntry
 from retrocast.v2.adapters.common import build_molecule_from_precursor_map
@@ -18,10 +17,13 @@ from retrocast.v2.models.task import Target
 # SECTION: Raw DreamRetro Schema
 
 
-@dataclass(frozen=True, slots=True, eq=False)
+@dataclass(frozen=True, slots=True)
 class DreamRetroRoutePayload:
     route_str: str
-    annotations: MappingProxyType[str, Any]
+    annotations: tuple[tuple[str, Any], ...]
+
+    def route_annotations(self) -> dict[str, Any]:
+        return dict(self.annotations)
 
 
 @dataclass(slots=True)
@@ -58,7 +60,7 @@ class DreamRetroErAdapter:
         yield RawRouteEntry(
             payload=DreamRetroRoutePayload(
                 route_str=route_str,
-                annotations=MappingProxyType(deepcopy(annotations)),
+                annotations=tuple((key, deepcopy(value)) for key, value in annotations.items()),
             ),
             source_key=source_key,
             source_order=1,
@@ -75,7 +77,7 @@ class DreamRetroErAdapter:
         if not isinstance(raw_route, DreamRetroRoutePayload):
             raise adapter_schema_error("dreamretro", target_id, "expected a dreamretro route payload")
 
-        parsed_route = self._parse_route_string(raw_route.route_str)
+        parsed_route = self._parse_route_string(raw_route.route_str, mode=mode)
         if target is not None:
             expected_smiles = canonicalize_smiles(target.smiles)
             if parsed_route.target_smiles != expected_smiles:
@@ -98,9 +100,9 @@ class DreamRetroErAdapter:
                 code="adapter.target_pruned",
                 context={"adapter": "dreamretro", "target_id": target_id},
             )
-        return Route(target=route_target, annotations=raw_route.annotations)
+        return Route(target=route_target, annotations=raw_route.route_annotations())
 
-    def _parse_route_string(self, route_str: str) -> DreamRetroParsedRoute:
+    def _parse_route_string(self, route_str: str, *, mode: AdaptMode = "strict") -> DreamRetroParsedRoute:
         steps = route_str.split("|")
         if not steps or not steps[0]:
             raise adapter_route_string_error("dreamretro", "empty route string", empty=True)
@@ -111,19 +113,27 @@ class DreamRetroErAdapter:
         precursor_map: dict[SmilesStr, list[str]] = {}
         current_step = ""
         try:
-            target_smiles = canonicalize_smiles(steps[0].split(">")[0])
+            first_product_smiles = steps[0].split(">")[0]
+            target_smiles = canonicalize_smiles(first_product_smiles)
             for step in steps:
                 current_step = step
                 parts = step.split(">")
                 if len(parts) != 3:
                     raise ValueError("invalid step format")
                 product_smiles, _, reactants_smiles = parts
-                canon_product = canonicalize_smiles(product_smiles)
+                try:
+                    canon_product = canonicalize_smiles(product_smiles)
+                except InvalidSmilesError:
+                    if mode == "prune" and product_smiles != first_product_smiles:
+                        continue
+                    raise
                 precursor_map[canon_product] = [
                     reactant.strip() for reactant in reactants_smiles.split(".") if reactant.strip()
                 ]
             return DreamRetroParsedRoute(target_smiles=target_smiles, precursor_map=precursor_map)
         except (ValueError, IndexError) as exc:
+            if isinstance(exc, InvalidSmilesError):
+                raise
             raise adapter_route_string_error(
                 "dreamretro",
                 "expected each reaction step to split into product, reagents, and reactants",

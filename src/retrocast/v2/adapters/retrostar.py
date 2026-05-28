@@ -12,7 +12,7 @@ from retrocast.adapters.errors import (
     adapter_target_mismatch,
 )
 from retrocast.chem import canonicalize_smiles
-from retrocast.exceptions import AdapterLogicError
+from retrocast.exceptions import AdapterLogicError, InvalidSmilesError
 from retrocast.typing import SmilesStr
 from retrocast.v2.adapters.base import AdaptMode, RawRouteEntry
 from retrocast.v2.adapters.common import build_molecule_from_precursor_map
@@ -79,7 +79,7 @@ class RetroStarAdapter:
         if not isinstance(raw_route, RetroStarRoutePayload):
             raise adapter_schema_error("retrostar", target_id, "expected a retrostar route payload")
 
-        parsed_route = self._parse_route_string(raw_route.route_str)
+        parsed_route = self._parse_route_string(raw_route.route_str, mode=mode)
 
         if target is not None:
             expected_smiles = canonicalize_smiles(target.smiles)
@@ -113,7 +113,7 @@ class RetroStarAdapter:
             annotations["route_cost"] = raw_route.route_cost
         return Route(target=route_target, annotations=annotations)
 
-    def _parse_route_string(self, route_str: str) -> RetroStarParsedRoute:
+    def _parse_route_string(self, route_str: str, *, mode: AdaptMode = "strict") -> RetroStarParsedRoute:
         steps = route_str.split("|")
         if not steps or not steps[0]:
             raise adapter_route_string_error("retrostar", "empty route string", empty=True)
@@ -134,7 +134,12 @@ class RetroStarAdapter:
                 if len(parts) != 3:
                     raise ValueError("invalid step format")
                 product_smiles, score_text, reactants_smiles = parts
-                canon_product = canonicalize_smiles(product_smiles)
+                try:
+                    canon_product = canonicalize_smiles(product_smiles)
+                except InvalidSmilesError:
+                    if mode == "prune" and product_smiles != first_product_smiles:
+                        continue
+                    raise
                 reactants = [reactant.strip() for reactant in reactants_smiles.split(".") if reactant.strip()]
                 precursor_map[canon_product] = reactants
                 with suppress(ValueError):
@@ -146,6 +151,8 @@ class RetroStarAdapter:
                 step_scores=step_scores,
             )
         except (ValueError, IndexError) as exc:
+            if isinstance(exc, InvalidSmilesError):
+                raise
             raise adapter_route_string_error(
                 "retrostar",
                 "expected each reaction step to split into product, reagents, and reactants",
