@@ -4,8 +4,7 @@ import time
 
 import pytest
 
-from retrocast.models.benchmark import ExecutionStats
-from retrocast.utils.timing import ExecutionTimer
+from retrocast.utils.timing import ExecutionStats, ExecutionTimer
 
 
 @pytest.mark.unit
@@ -119,6 +118,19 @@ class TestExecutionTimer:
         assert "task_b" in stats.wall_time
         assert "task_a" in stats.cpu_time
         assert "task_b" in stats.cpu_time
+
+    def test_to_model_returns_snapshot(self):
+        timer = ExecutionTimer()
+
+        with timer.measure("first"):
+            time.sleep(0.001)
+        stats = timer.to_model()
+
+        with timer.measure("second"):
+            time.sleep(0.001)
+
+        assert "second" not in stats.wall_time
+        assert "second" not in stats.cpu_time
 
     def test_wall_vs_cpu_time(self):
         """Wall time >= CPU time for sleep-dominated workload."""

@@ -9,10 +9,10 @@ Steps:
 1. Load routes from retro* pickle (list of reaction SMILES lists)
 2. Extract target SMILES from first step of each route
 3. Convert to RetroStar format and cast to Route objects
-4. Create BenchmarkSet with stock_name='buyables-stock'
+4. Create Benchmark with stock='buyables-stock'
 
-With --check-buyables: validates routes are solvable by buyables stock
-Without --check-buyables: skips validation (many USPTO routes aren't solvable by buyables)
+With --check-buyables: keeps only routes that terminate in buyables stock
+Without --check-buyables: skips stock-termination filtering
 """
 
 from __future__ import annotations
@@ -21,13 +21,12 @@ import argparse
 import pickle
 from pathlib import Path
 
-from retrocast.adapters.retrostar_adapter import RetroStarAdapter, RetroStarRoutePayload
-from retrocast.chem import canonicalize_smiles
+from retrocast.adapters.retrostar import RetroStarAdapter, RetroStarRoutePayload
+from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import InvalidSmilesError, RetroCastException
-from retrocast.io import create_manifest, load_stock_file, save_json_gz
-from retrocast.metrics.solvability import is_route_solved
-from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget, create_benchmark, create_benchmark_target
-from retrocast.models.chem import TargetInput
+from retrocast.io import create_manifest, load_stock_file, save_benchmark
+from retrocast.metrics import TaskConstraintChecker
+from retrocast.models import Benchmark, Route, Target, TaskConstraints
 from retrocast.utils.logging import configure_script_logging, logger
 
 BASE_DIR = Path(__file__).resolve().parents[3]
@@ -81,9 +80,12 @@ def create_benchmark_from_pickle(
 
     # Process routes into benchmark targets
     adapter = RetroStarAdapter()
-    benchmark_targets: dict[str, BenchmarkTarget] = {}
+    benchmark_targets: dict[str, Target] = {}
     failed = 0
-    unsolvable = 0
+    stock_termination_failures = 0
+    stock_checker = (
+        TaskConstraintChecker.stock_termination(stock=stock, stock_name="buyables-stock") if stock is not None else None
+    )
 
     for idx, route_steps in enumerate(routes):
         target_id = f"USPTO-{idx + 1:03d}/{len(routes)}"
@@ -96,26 +98,26 @@ def create_benchmark_from_pickle(
             route_str = to_retrostar_format(route_steps)
 
             # Cast to Route object
-            target_input = TargetInput(id=target_id, smiles=target_smiles)
+            target_input = Target(id=target_id, smiles=target_smiles, inchikey=get_inchi_key(target_smiles))
             route = adapter.cast(
                 RetroStarRoutePayload(route_str=route_str, route_cost=None),
-                expected_target=target_input,
+                target=target_input,
             )
 
-            # If checking buyables, filter out unsolvable routes
+            # If checking buyables, filter out routes that do not terminate in stock.
             if check_buyables:
-                if stock is None:
-                    raise ValueError("stock must be loaded when check_buyables=True")
-                if not is_route_solved(route, stock):
-                    unsolvable += 1
+                if stock_checker is None:
+                    raise ValueError("stock checker must be loaded when check_buyables=True")
+                if not satisfies_stock_termination(route, stock_checker=stock_checker, stock_name="buyables-stock"):
+                    stock_termination_failures += 1
                     continue
 
-            # Create benchmark target
-            benchmark_target = create_benchmark_target(
+            benchmark_target = Target(
                 id=target_id,
                 smiles=target_smiles,
+                inchikey=target_input.inchikey,
                 acceptable_routes=[route],
-                metadata={"source": "retro-pickle"},
+                annotations={"source": "retro-pickle"},
             )
             benchmark_targets[target_id] = benchmark_target
 
@@ -124,48 +126,51 @@ def create_benchmark_from_pickle(
             failed += 1
 
     n_success = len(benchmark_targets)
-    logger.info(f"Converted {n_success}/{len(routes)} routes ({failed} failed, {unsolvable} unsolvable)")
+    logger.info(
+        f"Converted {n_success}/{len(routes)} routes "
+        f"({failed} failed, {stock_termination_failures} failed stock termination)"
+    )
 
     # Log route length distribution
     length_counts: dict[int, int] = {}
     for target in benchmark_targets.values():
         if target.acceptable_routes:
-            length = target.acceptable_routes[0].length
+            length = target.acceptable_routes[0].depth()
             length_counts[length] = length_counts.get(length, 0) + 1
 
     if length_counts:
         logger.info(f"Route length distribution: {dict(sorted(length_counts.items()))}")
 
+    if check_buyables:
+        if stock_checker is None:
+            raise ValueError("stock checker must be loaded when check_buyables=True")
+        validate_acceptable_routes_satisfy_stock(
+            targets=benchmark_targets,
+            stock_checker=stock_checker,
+            stock_name="buyables-stock",
+        )
+
     # Create benchmark
     DEF_DIR.mkdir(parents=True, exist_ok=True)
     name = f"uspto-{n_success}"
 
-    if check_buyables:
-        if stock is None:
-            raise ValueError("stock must be loaded when check_buyables=True")
-        # All routes have been pre-filtered for solvability, so validation will pass
-        description = f"USPTO-{n_success} benchmark with buyables-solvable routes from retro* pickle."
-        benchmark = create_benchmark(
-            name=name,
-            description=description,
-            stock=stock,
-            stock_name="buyables-stock",
-            targets=benchmark_targets,
-        )
-    else:
-        # Set stock_name but skip validation (many USPTO routes not solvable by buyables)
-        description = f"USPTO-{n_success} benchmark with routes from retro* pickle as acceptable routes."
-        benchmark = BenchmarkSet(
-            name=name,
-            description=description,
-            stock_name="buyables-stock",
-            targets=benchmark_targets,
-        )
+    description = (
+        f"USPTO-{n_success} benchmark with buyables-terminating routes from retro* pickle."
+        if check_buyables
+        else f"USPTO-{n_success} benchmark with routes from retro* pickle as acceptable routes."
+    )
+    benchmark = Benchmark(
+        name=name,
+        description=description,
+        targets=benchmark_targets,
+        default_constraints=TaskConstraints(stock="buyables-stock"),
+        annotations={"source": "retro-pickle"},
+    )
 
     # Save benchmark
     out_path = DEF_DIR / f"{name}.json.gz"
     logger.info(f"Writing benchmark with {n_success} targets to {out_path}")
-    save_json_gz(benchmark, out_path)
+    save_benchmark(benchmark, out_path)
 
     # Create and save manifest
     manifest = create_manifest(
@@ -174,7 +179,11 @@ def create_benchmark_from_pickle(
         outputs=[(out_path, benchmark, "benchmark")],
         root_dir=BASE_DIR / "data",
         parameters={"check_buyables": check_buyables},
-        statistics={"n_targets": n_success, "n_failed": failed, "n_unsolvable": unsolvable},
+        statistics={
+            "n_targets": n_success,
+            "n_failed": failed,
+            "n_stock_termination_failures": stock_termination_failures,
+        },
     )
 
     manifest_path = DEF_DIR / f"{name}.manifest.json"
@@ -185,13 +194,31 @@ def create_benchmark_from_pickle(
     logger.info(f"Manifest saved: {manifest_path}")
 
 
+def validate_acceptable_routes_satisfy_stock(
+    *,
+    targets: dict[str, Target],
+    stock_checker: TaskConstraintChecker,
+    stock_name: str,
+) -> None:
+    for target in targets.values():
+        for route_index, route in enumerate(target.acceptable_routes, start=1):
+            if not satisfies_stock_termination(route, stock_checker=stock_checker, stock_name=stock_name):
+                raise ValueError(
+                    f"{target.id}: acceptable route {route_index} fails declared stock constraint '{stock_name}'"
+                )
+
+
+def satisfies_stock_termination(route: Route, *, stock_checker: TaskConstraintChecker, stock_name: str) -> bool:
+    return not stock_checker.check_route(route, TaskConstraints(stock=stock_name)).checks
+
+
 def main():
     configure_script_logging()
     parser = argparse.ArgumentParser(description="Create USPTO benchmark from retro* pickle")
     parser.add_argument(
         "--check-buyables",
         action="store_true",
-        help="Validate that acceptable routes are solvable by buyables stock",
+        help="Keep only routes that terminate in buyables stock",
     )
     args = parser.parse_args()
 

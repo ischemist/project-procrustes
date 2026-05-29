@@ -14,10 +14,6 @@ from urllib.request import Request, urlopen
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from retrocast.curation.training.records import (
-    TrainingReactionRecord as TrainingReactionRecord,
-)
-from retrocast.curation.training.records import TrainingRouteRecord as TrainingRouteRecord
 from retrocast.exceptions import (
     ArtifactFormatError,
     ConfigurationError,
@@ -25,9 +21,7 @@ from retrocast.exceptions import (
     DatasetResolutionError,
     DatasetVerificationError,
 )
-from retrocast.io import (
-    load_benchmark,
-)
+from retrocast.io import load_benchmark
 from retrocast.paths import validate_filename
 
 TrainingDatasetName = Literal["paroutes"]
@@ -45,22 +39,16 @@ DEFAULT_TRAINING_SET_BASE_URL = os.getenv(
     "https://files.ischemist.com/retrocast/training-sets",
 )
 DEFAULT_TRAINING_SET_CACHE_DIR = Path(
-    os.getenv(
-        "RETROCAST_TRAINING_SET_CACHE_DIR",
-        str(Path.home() / ".cache" / "retrocast" / "training-sets"),
-    )
+    os.getenv("RETROCAST_TRAINING_SET_CACHE_DIR", str(Path.home() / ".cache" / "retrocast" / "training-sets"))
 )
 DEFAULT_HOSTED_DATA_BASE_URL = os.getenv(
     "RETROCAST_HOSTED_DATA_BASE_URL",
     "https://files.ischemist.com/retrocast/data",
 )
 DEFAULT_HOSTED_DATA_CACHE_DIR = Path(
-    os.getenv(
-        "RETROCAST_HOSTED_DATA_CACHE_DIR",
-        str(Path.home() / ".cache" / "retrocast" / "data"),
-    )
+    os.getenv("RETROCAST_HOSTED_DATA_CACHE_DIR", str(Path.home() / ".cache" / "retrocast" / "data"))
 )
-DEFAULT_DATASET_USER_AGENT = "retrocast/1.0"
+DEFAULT_DATASET_USER_AGENT = "retrocast/2"
 SUPPORTED_DATASETS: tuple[TrainingDatasetName, ...] = ("paroutes",)
 
 
@@ -83,7 +71,7 @@ class TrainingArtifactSpec:
     suffix_by_format: dict[TrainingSetFormat, str]
 
 
-TRAINING_ARTIFACT_SPECS: dict[TrainingArtifactName, TrainingArtifactSpec] = {
+TRAINING_ARTIFACT_SPECS: dict[str, TrainingArtifactSpec] = {
     "route-holdout-n1-n5": TrainingArtifactSpec(
         supported_formats=("jsonl",),
         suffix_by_format={"jsonl": ".jsonl.gz"},
@@ -113,91 +101,65 @@ def download_training_set(
 ) -> Path:
     validate_training_dataset_request(dataset=dataset, artifact=artifact, split=split, format=format)
     resolved_release = resolve_training_set_release(dataset=dataset, release=release, base_url=base_url)
-    filename = resolve_training_set_filename(artifact=artifact, split=split, format=format)
-    progress_enabled = should_show_download_progress(show_progress)
-    release_cache_dir = resolve_training_set_root(
+    release_dir = resolve_training_set_root(
         dataset=dataset,
         release=resolved_release,
         cache_dir=cache_dir,
         output_dir=output_dir,
     )
-    artifact_cache_dir = release_cache_dir / artifact
-    artifact_cache_dir.mkdir(parents=True, exist_ok=True)
-
-    local_path = artifact_cache_dir / filename
-    manifest_path = artifact_cache_dir / "manifest.json"
-    checksums_path = release_cache_dir / "SHA256SUMS"
+    filename = resolve_training_set_filename(artifact=artifact, split=split, format=format)
+    checksums_path = release_dir / "SHA256SUMS"
     checksums_url = build_training_set_url(
         base_url=base_url,
         dataset=dataset,
         release=resolved_release,
         filename="SHA256SUMS",
     )
-    checksum_key = build_training_set_checksum_key(artifact=artifact, filename=filename)
-    download_url = build_training_set_url(
-        base_url=base_url,
-        dataset=dataset,
-        release=resolved_release,
-        artifact=artifact,
-        filename=filename,
-    )
+    artifact_dir = release_dir / artifact
+    artifact_path = artifact_dir / filename
+
     download_verified_file(
-        local_path=local_path,
+        local_path=artifact_path,
         checksums_path=checksums_path,
         checksums_url=checksums_url,
-        checksum_key=checksum_key,
-        download_url=download_url,
-        show_progress=progress_enabled,
+        checksum_key=build_training_set_checksum_key(artifact=artifact, filename=filename),
+        download_url=build_training_set_url(
+            base_url=base_url,
+            dataset=dataset,
+            release=resolved_release,
+            artifact=artifact,
+            filename=filename,
+        ),
+        show_progress=should_show_download_progress(show_progress),
         progress_description=f"downloading {artifact}/{filename}",
         missing_message=f"artifact '{artifact}' release '{resolved_release}' does not publish '{filename}'",
-        missing_context={
-            "dataset": dataset,
-            "artifact": artifact,
-            "release": resolved_release,
-            "filename": filename,
-            "checksum_key": checksum_key,
-            "checksums_url": checksums_url,
-        },
+        missing_context={"dataset": dataset, "artifact": artifact, "release": resolved_release, "filename": filename},
         mismatch_message=f"downloaded dataset file failed integrity verification: {filename}",
-        mismatch_context={
-            "dataset": dataset,
-            "artifact": artifact,
-            "release": resolved_release,
-            "filename": filename,
-        },
+        mismatch_context={"dataset": dataset, "artifact": artifact, "release": resolved_release, "filename": filename},
     )
-    manifest_url = build_training_set_url(
-        base_url=base_url,
-        dataset=dataset,
-        release=resolved_release,
-        artifact=artifact,
-        filename="manifest.json",
-    )
-    manifest_checksum_key = build_training_set_checksum_key(artifact=artifact, filename="manifest.json")
     download_verified_file(
-        local_path=manifest_path,
+        local_path=artifact_dir / "manifest.json",
         checksums_path=checksums_path,
         checksums_url=checksums_url,
-        checksum_key=manifest_checksum_key,
-        download_url=manifest_url,
+        checksum_key=build_training_set_checksum_key(artifact=artifact, filename="manifest.json"),
+        download_url=build_training_set_url(
+            base_url=base_url,
+            dataset=dataset,
+            release=resolved_release,
+            artifact=artifact,
+            filename="manifest.json",
+        ),
         missing_message=f"artifact '{artifact}' release '{resolved_release}' does not publish 'manifest.json'",
         missing_context={
             "dataset": dataset,
             "artifact": artifact,
             "release": resolved_release,
             "filename": "manifest.json",
-            "checksum_key": manifest_checksum_key,
-            "checksums_url": checksums_url,
         },
-        mismatch_message="downloaded dataset file failed integrity verification: manifest.json",
-        mismatch_context={
-            "dataset": dataset,
-            "artifact": artifact,
-            "release": resolved_release,
-            "filename": "manifest.json",
-        },
+        mismatch_message="downloaded dataset manifest failed integrity verification",
+        mismatch_context={"dataset": dataset, "artifact": artifact, "release": resolved_release},
     )
-    return local_path
+    return artifact_path
 
 
 def download_benchmark(
@@ -268,17 +230,17 @@ def download_benchmark_assets(
         base_url=base_url,
         include_manifest=include_manifests,
     )
-    benchmark = load_benchmark(benchmark_path)
+    stock_name = _single_stock_name(load_benchmark(benchmark_path))
     stock_path = (
         download_stock(
-            benchmark.stock_name,
+            stock_name,
             format=stock_format,
             cache_dir=cache_dir,
             output_dir=output_dir,
             base_url=base_url,
             include_manifest=include_manifests,
         )
-        if benchmark.stock_name
+        if stock_name is not None
         else None
     )
     return DownloadedBenchmarkAssets(benchmark_path=benchmark_path, stock_path=stock_path)
@@ -286,10 +248,10 @@ def download_benchmark_assets(
 
 def validate_training_dataset_request(
     *,
-    dataset: TrainingDatasetName,
-    artifact: TrainingArtifactName,
-    split: TrainingSplitName,
-    format: TrainingSetFormat,
+    dataset: str,
+    artifact: str,
+    split: str,
+    format: str,
 ) -> None:
     if dataset not in SUPPORTED_DATASETS:
         raise ConfigurationError(
@@ -315,7 +277,6 @@ def validate_training_dataset_request(
             code="dataset.unsupported_format",
             context={"format": format},
         )
-
     supported_formats = TRAINING_ARTIFACT_SPECS[artifact].supported_formats
     if format not in supported_formats:
         raise ConfigurationError(
@@ -352,7 +313,6 @@ def resolve_training_set_release(
             code="dataset.invalid_latest_payload",
             context={"dataset": dataset, "url": latest_url},
         ) from exc
-
     if latest.dataset != dataset:
         raise DatasetResolutionError(
             f"latest release pointer dataset mismatch: expected '{dataset}', got '{latest.dataset}'",
@@ -369,7 +329,7 @@ def resolve_training_set_filename(*, artifact: TrainingArtifactName, split: str,
 
 def resolve_training_set_root(
     *,
-    dataset: TrainingDatasetName,
+    dataset: str,
     release: str,
     cache_dir: Path | None,
     output_dir: Path | None,
@@ -393,9 +353,9 @@ def build_training_set_url(
     *,
     base_url: str,
     dataset: str,
+    filename: str,
     release: str | None = None,
     artifact: str | None = None,
-    filename: str,
 ) -> str:
     parts = [base_url.rstrip("/"), quote(dataset, safe="")]
     if release is not None:
@@ -410,47 +370,42 @@ def build_training_set_checksum_key(*, artifact: str, filename: str) -> str:
     return f"{artifact}/{filename}"
 
 
+def build_hosted_data_url(*, base_url: str, relative_path: Path) -> str:
+    return "/".join([base_url.rstrip("/"), *(quote(part, safe=".") for part in relative_path.parts)])
+
+
 def should_show_download_progress(show_progress: bool | None) -> bool:
     if show_progress is not None:
         return show_progress
-
-    stderr = sys.stderr
-    if stderr is None:
-        return False
-
     try:
-        return stderr.isatty()
+        return sys.stderr is not None and sys.stderr.isatty()
     except (AttributeError, OSError):
         return False
 
 
-def download_sha256sums(url: str, destination: Path) -> dict[str, str]:
-    download_url_to_path(url, destination)
-    return load_sha256sums(destination)
-
-
-def resolve_expected_hash(
+def download_hosted_data_file(
     *,
-    checksums_path: Path,
-    checksums_url: str,
-    checksum_key: str,
-    missing_message: str,
-    missing_context: dict[str, object],
-) -> str:
-    expected_hashes = load_or_download_checksums(checksums_path=checksums_path, checksums_url=checksums_url)
-    expected_hash = expected_hashes.get(checksum_key)
-    if expected_hash is not None:
-        return expected_hash
-
-    expected_hashes = download_sha256sums(checksums_url, checksums_path)
-    expected_hash = expected_hashes.get(checksum_key)
-    if expected_hash is None:
-        raise DatasetResolutionError(
-            missing_message,
-            code="dataset.file_not_published",
-            context=missing_context,
-        )
-    return expected_hash
+    relative_path: Path,
+    cache_dir: Path | None,
+    output_dir: Path | None,
+    base_url: str,
+) -> Path:
+    root_dir = resolve_hosted_data_root(cache_dir=cache_dir, output_dir=output_dir)
+    local_path = root_dir / relative_path
+    checksums_path = root_dir / "SHA256SUMS"
+    checksums_url = build_hosted_data_url(base_url=base_url, relative_path=Path("SHA256SUMS"))
+    download_verified_file(
+        local_path=local_path,
+        checksums_path=checksums_path,
+        checksums_url=checksums_url,
+        checksum_key=str(relative_path),
+        download_url=build_hosted_data_url(base_url=base_url, relative_path=relative_path),
+        missing_message=f"hosted data file is not published: {relative_path}",
+        missing_context={"relative_path": str(relative_path), "checksums_url": checksums_url},
+        mismatch_message=f"downloaded hosted data file failed integrity verification: {relative_path.name}",
+        mismatch_context={"relative_path": str(relative_path)},
+    )
+    return local_path
 
 
 def download_verified_file(
@@ -460,12 +415,12 @@ def download_verified_file(
     checksums_url: str,
     checksum_key: str,
     download_url: str,
-    show_progress: bool = False,
-    progress_description: str | None = None,
     missing_message: str,
     missing_context: dict[str, object],
     mismatch_message: str,
     mismatch_context: dict[str, object],
+    show_progress: bool = False,
+    progress_description: str | None = None,
 ) -> str:
     expected_hash = resolve_expected_hash(
         checksums_path=checksums_path,
@@ -483,48 +438,36 @@ def download_verified_file(
         show_progress=show_progress,
         progress_description=progress_description,
     )
-
     actual_hash = sha256_file(local_path)
     if actual_hash != expected_hash:
-        invalidate_cached_download(local_path=local_path, checksums_path=checksums_path)
+        local_path.unlink(missing_ok=True)
+        checksums_path.unlink(missing_ok=True)
         raise DatasetVerificationError(
             mismatch_message,
             code="dataset.hash_mismatch",
-            context={
-                **mismatch_context,
-                "expected_sha256": expected_hash,
-                "actual_sha256": actual_hash,
-            },
+            context={**mismatch_context, "expected_sha256": expected_hash, "actual_sha256": actual_hash},
         )
     return expected_hash
 
 
-def download_hosted_data_file(
+def resolve_expected_hash(
     *,
-    relative_path: Path,
-    cache_dir: Path | None,
-    output_dir: Path | None,
-    base_url: str,
-) -> Path:
-    root_dir = resolve_hosted_data_root(cache_dir=cache_dir, output_dir=output_dir)
-    local_path = root_dir / relative_path
-    local_path.parent.mkdir(parents=True, exist_ok=True)
-    checksums_path = root_dir / "SHA256SUMS"
-    checksums_url = build_hosted_data_url(base_url=base_url, relative_path=Path("SHA256SUMS"))
+    checksums_path: Path,
+    checksums_url: str,
+    checksum_key: str,
+    missing_message: str,
+    missing_context: dict[str, object],
+) -> str:
+    hashes = load_or_download_checksums(checksums_path=checksums_path, checksums_url=checksums_url)
+    expected_hash = hashes.get(checksum_key)
+    if expected_hash is not None:
+        return expected_hash
 
-    download_url = build_hosted_data_url(base_url=base_url, relative_path=relative_path)
-    download_verified_file(
-        local_path=local_path,
-        checksums_path=checksums_path,
-        checksums_url=checksums_url,
-        checksum_key=str(relative_path),
-        download_url=download_url,
-        missing_message=f"hosted data file is not published: {relative_path}",
-        missing_context={"relative_path": str(relative_path), "checksums_url": checksums_url},
-        mismatch_message=f"downloaded hosted data file failed integrity verification: {relative_path.name}",
-        mismatch_context={"relative_path": str(relative_path)},
-    )
-    return local_path
+    hashes = download_sha256sums(checksums_url, checksums_path)
+    expected_hash = hashes.get(checksum_key)
+    if expected_hash is None:
+        raise DatasetResolutionError(missing_message, code="dataset.file_not_published", context=missing_context)
+    return expected_hash
 
 
 def load_or_download_checksums(*, checksums_path: Path, checksums_url: str) -> dict[str, str]:
@@ -535,9 +478,9 @@ def load_or_download_checksums(*, checksums_path: Path, checksums_url: str) -> d
     )
 
 
-def invalidate_cached_download(*, local_path: Path, checksums_path: Path) -> None:
-    local_path.unlink(missing_ok=True)
-    checksums_path.unlink(missing_ok=True)
+def download_sha256sums(url: str, destination: Path) -> dict[str, str]:
+    download_url_to_path(url, destination)
+    return load_sha256sums(destination)
 
 
 def load_sha256sums(path: Path) -> dict[str, str]:
@@ -550,7 +493,7 @@ def load_sha256sums(path: Path) -> dict[str, str]:
             context={"path": str(path)},
         ) from exc
 
-    output: dict[str, str] = {}
+    checksums = {}
     for line in lines:
         if not line.strip():
             continue
@@ -562,14 +505,8 @@ def load_sha256sums(path: Path) -> dict[str, str]:
                 code="dataset.invalid_checksums",
                 context={"path": str(path), "line": line},
             ) from exc
-        output[filename.strip()] = sha256
-    return output
-
-
-def build_hosted_data_url(*, base_url: str, relative_path: Path) -> str:
-    parts = [base_url.rstrip("/")]
-    parts.extend(quote(part, safe=".") for part in relative_path.parts)
-    return "/".join(parts)
+        checksums[filename.strip()] = sha256
+    return checksums
 
 
 def load_json_url(url: str) -> object:
@@ -621,12 +558,14 @@ def download_url_to_path(
                 while chunk := response.read(8192):
                     handle.write(chunk)
     except HTTPError as exc:
+        tmp_path.unlink(missing_ok=True)
         raise DatasetResolutionError(
             f"failed to download hosted file from {url}: HTTP {exc.code}",
             code="dataset.file_http_error",
             context={"url": url, "status": exc.code},
         ) from exc
     except URLError as exc:
+        tmp_path.unlink(missing_ok=True)
         raise DatasetDownloadError(
             f"failed to reach hosted file at {url}: {exc.reason}",
             code="dataset.file_unreachable",
@@ -640,7 +579,6 @@ def download_url_to_path(
             code="dataset.cache_write_failed",
             context={"path": str(destination), "url": url},
         ) from exc
-
     try:
         tmp_path.replace(destination)
     except OSError as exc:
@@ -664,9 +602,9 @@ def write_response_with_progress(*, response: Any, handle: BufferedWriter, descr
         TransferSpeedColumn,
     )
 
-    total = response.headers.get("Content-Length")
+    content_length = response.headers.get("Content-Length")
     try:
-        total_bytes = int(total) if total is not None else None
+        total_bytes = int(content_length) if content_length is not None else None
     except ValueError:
         total_bytes = None
 
@@ -692,3 +630,14 @@ def sha256_file(path: Path) -> str:
         while chunk := handle.read(8192):
             sha256.update(chunk)
     return sha256.hexdigest()
+
+
+def _single_stock_name(benchmark: Any) -> str | None:
+    stock_names = {
+        benchmark.effective_constraints(target_id).stock
+        for target_id in benchmark.targets
+        if benchmark.effective_constraints(target_id).stock is not None
+    }
+    if len(stock_names) == 1:
+        return next(iter(stock_names))
+    return None

@@ -13,7 +13,6 @@ from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.cli.main import main
 from retrocast.io import (
     load_analysis_report,
-    load_benchmark,
     load_candidates,
     load_collected_candidates,
     load_evaluation,
