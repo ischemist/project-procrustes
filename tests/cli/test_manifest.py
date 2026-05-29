@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from retrocast.v2.cli.manifest import manifest_sidecar_path, write_manifest
+from retrocast.cli.manifest import manifest_sidecar_path, write_manifest
 
 
 def test_manifest_sidecar_path_handles_unknown_suffix(tmp_path) -> None:

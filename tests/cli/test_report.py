@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from rich.console import Console
 
-from retrocast.v2.cli.report import create_analysis_table, generate_markdown_report
-from retrocast.v2.models.analysis import AnalysisReport, MetricSummary
+from retrocast.cli.report import create_analysis_table, generate_markdown_report
+from retrocast.models.analysis import AnalysisReport, MetricSummary
 
 
 def report_with_all_metric_groups() -> AnalysisReport:

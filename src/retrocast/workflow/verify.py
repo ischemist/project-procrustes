@@ -21,17 +21,18 @@ def _build_provenance_graph(start_path: Path, root_dir: Path, report: Verificati
 
     while queue:
         manifest_path = queue.pop(0)
-        if manifest_path in visited:
+        resolved_manifest_path = _resolve_tracked_path(manifest_path, root_dir)
+        if resolved_manifest_path in visited:
             continue
-        visited.add(manifest_path)
+        visited.add(resolved_manifest_path)
 
-        relative_path = manifest_path.relative_to(root_dir)
-        if not manifest_path.exists():
+        relative_path = _tracked_path_key(manifest_path, root_dir)
+        if not resolved_manifest_path.exists():
             report.add("FAIL", relative_path, "Manifest file in dependency chain is MISSING.", category="graph")
             continue
 
         try:
-            with open(manifest_path, encoding="utf-8") as f:
+            with open(resolved_manifest_path, encoding="utf-8") as f:
                 manifest = Manifest.model_validate_json(f.read())
             graph[relative_path] = manifest
             report.add("PASS", relative_path, f"Loaded manifest for action '{manifest.action}'.", category="graph")
@@ -40,7 +41,7 @@ def _build_provenance_graph(start_path: Path, root_dir: Path, report: Verificati
                 source_path = Path(source_file.path)
                 is_primary = any(part in PRIMARY_ARTIFACT_DIRS for part in source_path.parts)
                 if not is_primary:
-                    parent_manifest_path = root_dir / source_path.parent / "manifest.json"
+                    parent_manifest_path = _resolve_tracked_path(source_path.parent / "manifest.json", root_dir)
                     if parent_manifest_path not in visited:
                         report.add(
                             "INFO",
@@ -55,7 +56,7 @@ def _build_provenance_graph(start_path: Path, root_dir: Path, report: Verificati
     return graph
 
 
-def _verify_logical_chain(graph: dict[Path, Manifest], report: VerificationReport) -> None:
+def _verify_logical_chain(graph: dict[Path, Manifest], report: VerificationReport, root_dir: Path | None = None) -> None:
     """Phase 1: Check for hash consistency between parent and child manifests."""
     report.add("INFO", report.manifest_path, "Phase 1 - Verifying manifest chain consistency", category="header")
 
@@ -76,6 +77,8 @@ def _verify_logical_chain(graph: dict[Path, Manifest], report: VerificationRepor
                 continue
 
             parent_manifest_path = source_path.parent / "manifest.json"
+            if root_dir is not None:
+                parent_manifest_path = _tracked_path_key(parent_manifest_path, root_dir)
             if parent_manifest_path not in graph:
                 report.add(
                     "WARN",
@@ -140,7 +143,7 @@ def _verify_physical_integrity(
 
     # 2. Iterate and check every file against the disk.
     for relative_path, expected_hash in sorted(expected_hashes.items()):
-        absolute_path = root_dir / relative_path
+        absolute_path = _resolve_tracked_path(relative_path, root_dir)
 
         if not absolute_path.exists():
             # In lenient mode (default), missing files are warnings (expected for partial downloads)
@@ -170,12 +173,12 @@ def verify_manifest(
         output_only: If True, only verifies output files (skips input file hash checks)
         lenient: If True (default), missing files are warnings; if False, missing files are failures
     """
-    report = VerificationReport(manifest_path=manifest_path.relative_to(root_dir))
+    report = VerificationReport(manifest_path=_tracked_path_key(manifest_path, root_dir))
 
     if not deep:
         # Perform a simple, shallow verification if not deep
         try:
-            with open(manifest_path, encoding="utf-8") as f:
+            with open(_resolve_tracked_path(manifest_path, root_dir), encoding="utf-8") as f:
                 manifest = Manifest.model_validate_json(f.read())
             # A shallow check is just phase 2 on a single manifest
             _verify_physical_integrity(
@@ -200,7 +203,7 @@ def verify_manifest(
     )
 
     # 2. Phase 1: Verify the logical consistency of the entire graph.
-    _verify_logical_chain(provenance_graph, report)
+    _verify_logical_chain(provenance_graph, report, root_dir=root_dir)
     if not report.is_valid:
         report.add(
             "FAIL",
@@ -214,3 +217,24 @@ def verify_manifest(
     _verify_physical_integrity(provenance_graph, root_dir, report, output_only=output_only, lenient=lenient)
 
     return report
+
+
+def _resolve_tracked_path(path: Path, root_dir: Path) -> Path:
+    if path.is_absolute():
+        return path
+
+    candidates = [root_dir / path]
+    candidates.extend(parent / path for parent in root_dir.parents)
+    candidates.append(Path.cwd() / path)
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+def _tracked_path_key(path: Path, root_dir: Path) -> Path:
+    resolved = _resolve_tracked_path(path, root_dir)
+    try:
+        return resolved.relative_to(root_dir.resolve())
+    except ValueError:
+        return path if not path.is_absolute() else resolved

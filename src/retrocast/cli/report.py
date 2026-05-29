@@ -5,7 +5,7 @@ import re
 from rich.markup import escape
 from rich.table import Table
 
-from retrocast.v2.models.analysis import AnalysisReport, MetricSummary
+from retrocast.models.analysis import AnalysisReport, MetricSummary
 
 _SOLV_RATE = re.compile(r"^solv_(\d+)\[(.+)]_rate$")
 _MRR_SOLV = re.compile(r"^mrr_solv_(\d+)\[(.+)]$")
