@@ -4,7 +4,6 @@ import argparse
 import json
 import logging
 import sys
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +26,7 @@ from retrocast.paths import (
 )
 from retrocast.utils.logging import configure_script_logging
 from retrocast.v2.adapters import ADAPTER_TYPES, DEPRECATED_ADAPTER_SLUGS, get_adapter, normalize_adapter_slug
-from retrocast.v2.adapters.base import Adapter, AdaptMode
+from retrocast.v2.adapters.base import AdaptMode
 from retrocast.v2.cli.manifest import manifest_sidecar_path, write_manifest
 from retrocast.v2.cli.report import create_analysis_table, generate_markdown_report
 from retrocast.v2.io import (
@@ -107,10 +106,6 @@ def _build_parser() -> argparse.ArgumentParser:
     adapt.add_argument("--input", required=True, type=Path)
     adapt.add_argument("--output", required=True, type=Path)
     adapt.add_argument("--adapter", required=True)
-    adapt.add_argument("--benchmark", type=Path, help="V2 task/benchmark for target-keyed raw output")
-    adapt.add_argument(
-        "--input-kind", choices=["provider-output", "target-keyed-provider-output"], default="provider-output"
-    )
     adapt.add_argument("--mode", choices=["strict", "prune"], default="strict")
 
     collect = subparsers.add_parser("collect", help="Collect v2 candidates by benchmark target")
@@ -159,30 +154,18 @@ def handle_adapt(args: argparse.Namespace) -> None:
     raw_payload = load_json_artifact(args.input)
     mode: AdaptMode = args.mode
     root_dir = args.output.parent.resolve()
-
-    if args.input_kind == "target-keyed-provider-output":
-        if args.benchmark is None:
-            raise ValueError("--benchmark is required for target-keyed provider output")
-        task = load_benchmark(args.benchmark)
-        candidates = _adapt_target_keyed_candidates(raw_payload, adapter, task, mode=mode)
-        save_candidates(candidates, args.output)
-        stats = candidate_statistics(candidates).to_manifest_dict()
-        sources = [args.input, args.benchmark]
-    else:
-        candidates = adapt_candidates(raw_payload, adapter, mode=mode)
-        save_candidates(candidates, args.output)
-        stats = candidate_statistics(candidates).to_manifest_dict()
-        sources = [args.input]
+    candidates = adapt_candidates(raw_payload, adapter, mode=mode)
+    save_candidates(candidates, args.output)
+    stats = candidate_statistics(candidates).to_manifest_dict()
 
     write_manifest(
         manifest_sidecar_path(args.output),
         action="[cli:v2]adapt",
-        sources=sources,
+        sources=[args.input],
         outputs=[args.output],
         root_dir=root_dir,
         parameters={
             "adapter": normalize_adapter_slug(args.adapter),
-            "input_kind": args.input_kind,
             "mode": mode,
         },
         statistics=stats,
@@ -481,27 +464,6 @@ def _resolve_stock_name(task: Benchmark, stock_override: str | None) -> str | No
     if len(stock_names) == 1:
         return next(iter(stock_names))
     return None
-
-
-def _adapt_target_keyed_candidates(
-    raw_payload: Any, adapter: Adapter, task: Benchmark, *, mode: AdaptMode
-) -> list[Candidate]:
-    if not isinstance(raw_payload, Mapping):
-        raise ValueError("target-keyed provider output requires a mapping keyed by target id or target SMILES")
-
-    candidates = []
-    for target_id, target in task.targets.items():
-        if target_id in raw_payload:
-            candidates.extend(
-                adapt_candidates(raw_payload[target_id], adapter, mode=mode, target=target, source_key=target_id)
-            )
-        elif target.smiles in raw_payload:
-            candidates.extend(
-                adapt_candidates(
-                    raw_payload[target.smiles], adapter, mode=mode, target=target, source_key=target.smiles
-                )
-            )
-    return candidates
 
 
 def _flatten_candidates(candidates_by_target: dict[str, list[Candidate]]) -> list[Candidate]:
