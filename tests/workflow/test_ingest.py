@@ -5,14 +5,14 @@ from typing import Any
 
 import pytest
 
+from retrocast.adapters.base import AdaptMode, RawRouteEntry
 from retrocast.chem import canonicalize_smiles, get_inchi_key
+from retrocast.models.route import Molecule, Route
+from retrocast.models.task import Target, Task
 from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
-from retrocast.v2.adapters.base import AdaptMode, RawRouteEntry
-from retrocast.v2.models.route import Molecule, Route
-from retrocast.v2.models.task import Target, Task
-from retrocast.v2.workflow.adapt import adapt_candidates, adapt_routes
-from retrocast.v2.workflow.collect import collect_candidates, collect_routes
-from retrocast.v2.workflow.ingest import ingest_candidates, ingest_routes
+from retrocast.workflow.adapt import adapt_candidates, adapt_routes
+from retrocast.workflow.collect import collect_candidates, collect_routes
+from retrocast.workflow.ingest import ingest_candidates, ingest_routes
 
 
 class SmilesAdapter:

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
+from retrocast.models.candidates import Candidate, FailureRecord
+from retrocast.models.route import Molecule, Route
+from retrocast.models.task import Target, Task
 from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
-from retrocast.v2.models.candidates import Candidate, FailureRecord
-from retrocast.v2.models.route import Molecule, Route
-from retrocast.v2.models.task import Target, Task
-from retrocast.v2.workflow.collect import collect_candidates, collect_routes
+from retrocast.workflow.collect import collect_candidates, collect_routes
 
 
 def target(smiles: str, target_id: str) -> Target:

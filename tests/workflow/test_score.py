@@ -4,8 +4,7 @@ import pytest
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import UnsupportedValidityTierError
-from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
-from retrocast.v2.models import (
+from retrocast.models import (
     Candidate,
     CheckStatus,
     ConstraintResult,
@@ -21,7 +20,8 @@ from retrocast.v2.models import (
     Tier,
     TierResult,
 )
-from retrocast.v2.workflow.score import score, score_candidate
+from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
+from retrocast.workflow.score import score, score_candidate
 
 
 class FixedTierChecker:

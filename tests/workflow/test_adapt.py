@@ -5,14 +5,14 @@ from typing import Any, cast
 
 import pytest
 
+from retrocast.adapters.base import AdaptMode, RawRouteEntry
+from retrocast.adapters.common import build_plain_tree_molecule
 from retrocast.adapters.errors import adapter_target_mismatch
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import AdapterLogicError, AdapterSchemaError
-from retrocast.v2.adapters.base import AdaptMode, RawRouteEntry
-from retrocast.v2.adapters.common import build_plain_tree_molecule
-from retrocast.v2.models.route import Route
-from retrocast.v2.models.task import Target
-from retrocast.v2.workflow.adapt import adapt_candidates, adapt_route, adapt_routes
+from retrocast.models.route import Route
+from retrocast.models.task import Target
+from retrocast.workflow.adapt import adapt_candidates, adapt_route, adapt_routes
 
 
 class TreeAdapter:

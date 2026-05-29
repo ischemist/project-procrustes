@@ -1,106 +1,42 @@
 from __future__ import annotations
 
-from collections import defaultdict
 from collections.abc import Iterable
-from typing import Literal
 
-from retrocast.exceptions import BenchmarkCollectionError
-from retrocast.models.benchmark import BenchmarkSet
-from retrocast.models.chem import PredictedRoute, Route
-from retrocast.models.collections import BenchmarkCollectionStats, CollectedBenchmarkRoutes
+from retrocast.models.candidates import Candidate
+from retrocast.models.route import Route
+from retrocast.models.task import Task
 
-UnmatchedPolicy = Literal["ignore", "error"]
-AmbiguousPolicy = Literal["ignore", "error"]
+CollectedCandidates = dict[str, list[Candidate]]
+CollectedRoutes = dict[str, list[Route]]
 
 
-def _normalize_collection_policy(policy: str, *, name: str) -> Literal["ignore", "error"]:
-    if policy == "error":
-        return "error"
-    if policy == "ignore":
-        return "ignore"
-    raise ValueError(f"{name} must be 'ignore' or 'error'")
+def collect_candidates(candidates: Iterable[Candidate], task: Task) -> CollectedCandidates:
+    """Map adapted candidates onto task targets by route or failure identity."""
+    collected: CollectedCandidates = {target_id: [] for target_id in task.targets}
+    target_id_by_inchikey = {target.inchikey: target_id for target_id, target in task.targets.items()}
+
+    for candidate in candidates:
+        target_id = None
+        if candidate.route is not None:
+            target_id = target_id_by_inchikey.get(candidate.route.target.inchikey)
+        elif candidate.failure is not None:
+            if candidate.failure.target_id in task.targets:
+                target_id = candidate.failure.target_id
+            elif candidate.failure.target_inchikey is not None:
+                target_id = target_id_by_inchikey.get(candidate.failure.target_inchikey)
+
+        if target_id is not None:
+            collected[target_id].append(candidate)
+    return collected
 
 
-def collect_benchmark_predictions(
-    routes: Iterable[Route | PredictedRoute],
-    benchmark: BenchmarkSet,
-    *,
-    on_unmatched: UnmatchedPolicy = "ignore",
-    on_ambiguous: AmbiguousPolicy = "error",
-    deduplicate: bool = True,
-) -> CollectedBenchmarkRoutes:
-    """
-    Match predicted routes onto a benchmark and return benchmark-keyed routes.
+def collect_routes(routes: Iterable[Route], task: Task) -> CollectedRoutes:
+    """Map valid canonical routes onto task targets."""
+    collected: CollectedRoutes = {target_id: [] for target_id in task.targets}
+    target_id_by_inchikey = {target.inchikey: target_id for target_id, target in task.targets.items()}
 
-    The core collector is deliberately route-first and benchmark-specific:
-    it does not parse raw provider payloads, and it does not require adapter-
-    specific provenance in the prediction route corpus.
-    """
-    stats = BenchmarkCollectionStats()
-    predicted_routes_by_target: dict[str, list[PredictedRoute]] = {target_id: [] for target_id in benchmark.targets}
-    benchmark_smiles_index: dict[str, list[str]] = defaultdict(list)
-    unmatched_policy = _normalize_collection_policy(on_unmatched, name="on_unmatched")
-    ambiguous_policy = _normalize_collection_policy(on_ambiguous, name="on_ambiguous")
-
-    for target_id, target in benchmark.targets.items():
-        benchmark_smiles_index[target.smiles].append(target_id)
-
-    for route_or_prediction in routes:
-        prediction = (
-            route_or_prediction
-            if isinstance(route_or_prediction, PredictedRoute)
-            else PredictedRoute.from_route(route_or_prediction)
-        )
-        route = prediction.route
-        stats.total_routes += 1
-        matching_ids = benchmark_smiles_index.get(route.target.smiles, [])
-
-        if len(matching_ids) == 1:
-            stats.matched_by_canonical_smiles += 1
-            predicted_routes_by_target[matching_ids[0]].append(prediction)
-            continue
-
-        if len(matching_ids) > 1:
-            stats.ambiguous_routes += 1
-            if ambiguous_policy == "error":
-                raise BenchmarkCollectionError(
-                    "Route matched multiple benchmark targets by canonical smiles.",
-                    code="collection.ambiguous_smiles_match",
-                    context={"target_smiles": route.target.smiles, "matching_target_ids": matching_ids},
-                )
-            continue
-
-        stats.unmatched_routes += 1
-        if unmatched_policy == "error":
-            raise BenchmarkCollectionError(
-                "Route could not be matched to the benchmark.",
-                code="collection.unmatched_route",
-                context={"target_smiles": route.target.smiles},
-            )
-
-    collected_predictions: dict[str, list[PredictedRoute]] = {}
-    collected_routes: dict[str, list[Route]] = {}
-    for target_id, target_predictions in predicted_routes_by_target.items():
-        ordered_predictions = list(target_predictions)
-        if deduplicate:
-            seen_signatures: set[str] = set()
-            deduplicated_predictions: list[PredictedRoute] = []
-            for prediction in ordered_predictions:
-                signature = prediction.route.get_structural_signature()
-                if signature in seen_signatures:
-                    continue
-                seen_signatures.add(signature)
-                deduplicated_predictions.append(prediction)
-            stats.duplicate_routes_dropped += len(ordered_predictions) - len(deduplicated_predictions)
-            ordered_predictions = deduplicated_predictions
-
-        collected_predictions[target_id] = ordered_predictions
-        ordered_routes = [prediction.route for prediction in ordered_predictions]
-        collected_routes[target_id] = ordered_routes
-        stats.final_unique_routes_saved += len(ordered_routes)
-
-    return CollectedBenchmarkRoutes(
-        routes_by_target=collected_routes,
-        predicted_routes_by_target=collected_predictions,
-        stats=stats,
-    )
+    for route in routes:
+        target_id = target_id_by_inchikey.get(route.target.inchikey)
+        if target_id is not None:
+            collected[target_id].append(route)
+    return collected

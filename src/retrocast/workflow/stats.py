@@ -5,8 +5,8 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, Field
 
-from retrocast.v2.models.candidates import Candidate
-from retrocast.v2.models.evaluation import Evaluation, Tier
+from retrocast.models.candidates import Candidate
+from retrocast.models.evaluation import Evaluation, Tier
 
 
 class CandidateRunStatistics(BaseModel):

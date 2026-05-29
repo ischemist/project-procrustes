@@ -3,8 +3,7 @@ from __future__ import annotations
 from pytest import approx
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
-from retrocast.v2.models import (
+from retrocast.models import (
     CheckStatus,
     ConstraintResult,
     Evaluation,
@@ -21,7 +20,8 @@ from retrocast.v2.models import (
     Tier,
     TierResult,
 )
-from retrocast.v2.workflow.analyze import analyze
+from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
+from retrocast.workflow.analyze import analyze
 
 
 def molecule(smiles: str, *, product_of: Reaction | None = None) -> Molecule:
