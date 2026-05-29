@@ -19,33 +19,52 @@ def create_analysis_table(report: AnalysisReport, *, title: str = "Analysis Resu
     table.add_column("Value", justify="right")
     table.add_column("95% CI", justify="center")
     table.add_column("N", justify="right")
+    table.add_column("Reliability", justify="center")
 
     solv_metrics = _matching_metrics(report.metrics, _SOLV_RATE)
     if solv_metrics:
-        table.add_row("[dim]Solv-N hierarchy[/]", "", "", "")
+        table.add_row("[dim]Solv-N hierarchy[/]", "", "", "", "")
         for name, metric, match in solv_metrics:
-            table.add_row(_solv_label(match), _format_value(name, metric), _format_ci(name, metric), str(metric.count))
+            table.add_row(
+                _solv_label(match),
+                _format_value(name, metric),
+                _format_ci(name, metric),
+                str(metric.count),
+                _format_reliability(metric),
+            )
 
     mrr_metrics = _matching_metrics(report.metrics, _MRR_SOLV)
     if mrr_metrics:
         table.add_section()
-        table.add_row("[dim]Rank within Solv-N hierarchy[/]", "", "", "")
+        table.add_row("[dim]Rank within Solv-N hierarchy[/]", "", "", "", "")
         for name, metric, match in mrr_metrics:
-            table.add_row(_mrr_label(match), _format_value(name, metric), _format_ci(name, metric), str(metric.count))
+            table.add_row(
+                _mrr_label(match),
+                _format_value(name, metric),
+                _format_ci(name, metric),
+                str(metric.count),
+                _format_reliability(metric),
+            )
 
     top_k_metrics = _matching_metrics(report.metrics, _TOP_K)
     if top_k_metrics:
         table.add_section()
-        table.add_row("[dim]Benchmark route reconstruction[/]", "", "", "")
+        table.add_row("[dim]Benchmark route reconstruction[/]", "", "", "", "")
         for name, metric, match in top_k_metrics:
-            table.add_row(_top_k_label(match), _format_value(name, metric), _format_ci(name, metric), str(metric.count))
+            table.add_row(
+                _top_k_label(match),
+                _format_value(name, metric),
+                _format_ci(name, metric),
+                str(metric.count),
+                _format_reliability(metric),
+            )
 
     runtime_rows = _runtime_rows(report)
     if runtime_rows:
         table.add_section()
-        table.add_row("[dim]Runtime[/]", "", "", "")
+        table.add_row("[dim]Runtime[/]", "", "", "", "")
         for label, value in runtime_rows:
-            table.add_row(label, value, "", str(report.runtime.timed_target_count))
+            table.add_row(label, value, "", str(report.runtime.timed_target_count), "")
 
     return table
 
@@ -68,11 +87,11 @@ def generate_markdown_report(report: AnalysisReport, *, title: str = "Evaluation
 
 
 def _markdown_metric_table(metrics: dict[str, MetricSummary]) -> list[str]:
-    lines = ["| Metric | Value | 95% CI | N |", "| --- | ---: | :---: | ---: |"]
+    lines = ["| Metric | Value | 95% CI | N | Flags |", "| --- | ---: | :---: | ---: | :---: |"]
     for name, metric, match in _ordered_metrics(metrics):
         lines.append(
             f"| {_display_metric_name(name, match)} | {_format_value(name, metric, rich=False)} | "
-            f"{_format_ci(name, metric, rich=False)} | {metric.count} |"
+            f"{_format_ci(name, metric, rich=False)} | {metric.count} | {_format_reliability(metric, rich=False)} |"
         )
     return lines
 
@@ -94,6 +113,16 @@ def _runtime_rows(report: AnalysisReport, *, rich: bool = True) -> list[tuple[st
 def _format_seconds(value: float, *, rich: bool) -> str:
     formatted = f"{value:.2f}s"
     return f"[green]{formatted}[/]" if rich else formatted
+
+
+def _format_reliability(metric: MetricSummary, *, rich: bool = True) -> str:
+    reliability = metric.reliability
+    if reliability is None:
+        return ""
+    if reliability.code == "OK":
+        return "[green]OK[/]" if rich else "OK"
+    code = escape(reliability.code) if rich else reliability.code
+    return f"[yellow]{code}[/]" if rich else code
 
 
 def _ordered_metrics(metrics: dict[str, MetricSummary]) -> list[tuple[str, MetricSummary, re.Match[str]]]:

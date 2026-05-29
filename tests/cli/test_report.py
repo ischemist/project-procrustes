@@ -3,7 +3,7 @@ from __future__ import annotations
 from rich.console import Console
 
 from retrocast.cli.report import create_analysis_table, generate_markdown_report
-from retrocast.models.analysis import AnalysisReport, MetricSummary, RuntimeSummary
+from retrocast.models.analysis import AnalysisReport, MetricSummary, ReliabilityFlag, RuntimeSummary
 
 
 def report_with_all_metric_groups() -> AnalysisReport:
@@ -11,7 +11,11 @@ def report_with_all_metric_groups() -> AnalysisReport:
         metrics={
             "solv_0[test-stock]_rate": MetricSummary(value=1.0, count=4, ci_low=0.8, ci_high=1.0),
             "mrr_solv_0[test-stock]": MetricSummary(value=0.5, count=4, ci_low=0.25, ci_high=0.75),
-            "acceptable_reconstruction_top_3[test-stock]": MetricSummary(value=0.75, count=4),
+            "acceptable_reconstruction_top_3[test-stock]": MetricSummary(
+                value=0.75,
+                count=4,
+                reliability=ReliabilityFlag(code="LOW_N", message="Small sample size."),
+            ),
         },
         by_stratum={
             "depth=2": {
@@ -30,7 +34,8 @@ def test_generate_markdown_report_includes_strata_and_metric_groups() -> None:
     assert "Top-3" in markdown
     assert "## By Stratum" in markdown
     assert "### depth=2" in markdown
-    assert "| Top-1 | 25.0% |  | 2 |" in markdown
+    assert "| Top-1 | 25.0% |  | 2 |  |" in markdown
+    assert "| Top-3 | 75.0% |  | 4 | LOW_N |" in markdown
 
 
 def test_create_analysis_table_renders_top_k_without_ci() -> None:
@@ -41,6 +46,8 @@ def test_create_analysis_table_renders_top_k_without_ci() -> None:
     assert "Benchmark route reconstruction" in output
     assert "Top-3" in output
     assert "75.0%" in output
+    assert "Reliability" in output
+    assert "LOW_N" in output
 
 
 def test_reports_render_runtime_summary() -> None:
