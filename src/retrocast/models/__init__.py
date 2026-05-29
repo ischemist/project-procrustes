@@ -1,6 +1,6 @@
 """Schema v2 models."""
 
-from retrocast.models.analysis import AnalysisReport, MetricSummary
+from retrocast.models.analysis import AnalysisReport, MetricSummary, ReliabilityFlag
 from retrocast.models.candidates import Candidate, FailureRecord
 from retrocast.models.evaluation import (
     CheckResult,
@@ -47,6 +47,7 @@ __all__ = [
     "ReactionId",
     "ReactionValidity",
     "ReactionView",
+    "ReliabilityFlag",
     "Route",
     "RoutePath",
     "RouteValidity",

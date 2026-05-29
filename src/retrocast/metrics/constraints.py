@@ -4,10 +4,10 @@ from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from retrocast.chem import reduce_inchikey
+from retrocast.models.evaluation import CheckResult, CheckStatus, ConstraintResult
+from retrocast.models.route import InChIKeyLevel, Route
+from retrocast.models.task import TaskConstraints
 from retrocast.typing import InChIKeyStr
-from retrocast.v2.models.evaluation import CheckResult, CheckStatus, ConstraintResult
-from retrocast.v2.models.route import InChIKeyLevel, Route
-from retrocast.v2.models.task import TaskConstraints
 
 ROUTE_DEPTH_RANGES = {
     "short": (1, 3),

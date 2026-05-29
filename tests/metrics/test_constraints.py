@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
+from retrocast.metrics.constraints import TaskConstraintChecker
+from retrocast.models import CheckStatus, Molecule, Reaction, Route, TaskConstraints
 from retrocast.typing import InChIKeyStr, SmilesStr
-from retrocast.v2.metrics.constraints import TaskConstraintChecker
-from retrocast.v2.models import CheckStatus, Molecule, Reaction, Route, TaskConstraints
 
 
 def molecule(smiles: str, *, product_of: Reaction | None = None) -> Molecule:

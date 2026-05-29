@@ -1,109 +1,148 @@
-import logging
-from collections.abc import Callable
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import TypeVar
 
 import numpy as np
 
-from retrocast.metrics.bootstrap import compute_paired_difference, get_bootstrap_distribution
-from retrocast.models.evaluation import EvaluationResults, TargetEvaluation
-from retrocast.models.stats import ModelComparison, RankResult
+from retrocast.metrics.bootstrap import get_bootstrap_distribution
 
-logger = logging.getLogger(__name__)
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class RankResult:
+    model_name: str
+    rank_probs: dict[int, float]
+    expected_rank: float
+
+
+@dataclass(frozen=True)
+class PairwiseComparison:
+    metric: str
+    model_a: str
+    model_b: str
+    diff_mean: float
+    diff_ci_low: float
+    diff_ci_high: float
+    is_significant: bool
+    count: int
 
 
 def compute_probabilistic_ranking(
-    model_results: dict[str, EvaluationResults],
-    metric_extractor: Callable[[TargetEvaluation], float],
+    model_results: dict[str, Sequence[T]],
+    metric_extractor: Callable[[T], float],
+    *,
     n_boot: int = 10000,
     seed: int = 42,
 ) -> list[RankResult]:
-    # Ensure consistent order
-    model_names = sorted(model_results.keys())
+    model_names = sorted(model_results)
     n_models = len(model_names)
+    if n_models == 0:
+        return []
 
-    # 1. Generate Bootstrap Matrix (n_boot, n_models)
-    logger.info("Generating bootstrap distributions...")
     boot_matrix = np.zeros((n_boot, n_models))
-
-    for i, name in enumerate(model_names):
-        boot_matrix[:, i] = get_bootstrap_distribution(
-            list(model_results[name].results.values()), metric_extractor, n_boot=n_boot, seed=seed
+    for index, name in enumerate(model_names):
+        boot_matrix[:, index] = get_bootstrap_distribution(
+            model_results[name],
+            metric_extractor,
+            n_boot=n_boot,
+            seed=seed + index,
         )
 
-    # 2. Calculate Ranks (Pure Numpy)
-    logger.info("Simulating tournament...")
-
-    # We want descending sort (higher score = rank 1).
-    # np.argsort sorts ascending. So we sort -boot_matrix.
-    # argsort gives indices. argsort of argsort gives ranks (0-based).
-    # axis=1 sorts along the model dimension for each bootstrap sample.
-
-    # Example: Scores [0.8, 0.9, 0.7] -> Neg [-0.8, -0.9, -0.7]
-    # Argsort: [1, 0, 2] (indices of max to min)
-    # Argsort of Argsort: [1, 0, 2] -> Ranks: Model 0 is rank 1, Model 1 is rank 0, Model 2 is rank 2.
-
-    temp_sort = np.argsort(-boot_matrix, axis=1)
-    ranks_0based = np.argsort(temp_sort, axis=1)
-    ranks_1based = ranks_0based + 1
-
-    # 3. Aggregate Probabilities
+    ranks = np.argsort(np.argsort(-boot_matrix, axis=1), axis=1) + 1
     results = []
-    for i, name in enumerate(model_names):
-        # Extract this model's column of ranks
-        model_ranks = ranks_1based[:, i]
-
-        # Count occurrences of each rank
-        unique, counts = np.unique(model_ranks, return_counts=True)
-        counts_dict = dict(zip(unique, counts, strict=True))
-
-        rank_probs = {}
-        expected_sum = 0.0
-
-        for r in range(1, n_models + 1):
-            count = counts_dict.get(r, 0)
-            prob = count / n_boot
-            rank_probs[r] = prob
-            expected_sum += r * prob
-
-        results.append(RankResult(model_name=name, rank_probs=rank_probs, expected_rank=expected_sum))
-
-    results.sort(key=lambda x: x.expected_rank)
-    return results
+    for index, name in enumerate(model_names):
+        model_ranks = ranks[:, index]
+        probabilities = {rank: float(np.mean(model_ranks == rank)) for rank in range(1, n_models + 1)}
+        expected_rank = sum(rank * probability for rank, probability in probabilities.items())
+        results.append(RankResult(model_name=name, rank_probs=probabilities, expected_rank=expected_rank))
+    return sorted(results, key=lambda result: (result.expected_rank, result.model_name))
 
 
 def compute_pairwise_tournament(
-    model_results: dict[str, EvaluationResults],
-    metric_extractor: Callable[[TargetEvaluation], float],
+    model_results: dict[str, Sequence[T]],
+    metric_extractor: Callable[[T], float],
     metric_name: str,
+    *,
+    id_extractor: Callable[[T], str] | None = None,
     n_boot: int = 10000,
-) -> list[ModelComparison]:
-    """
-    Runs a round-robin tournament where every model plays every other model.
-    Returns a flat list of pairwise comparisons.
-    """
-    models = sorted(model_results.keys())
+    seed: int = 42,
+) -> list[PairwiseComparison]:
     comparisons = []
-
-    logger.info(f"Starting pairwise tournament for {len(models)} models...")
-
-    for i, model_a in enumerate(models):
-        for j, model_b in enumerate(models):
-            if i == j:
+    models = sorted(model_results)
+    for left_index, model_a in enumerate(models):
+        for right_index, model_b in enumerate(models):
+            if model_a == model_b:
                 continue
-
-            # We run A vs B.
-            # (Optimization: We could just invert A vs B to get B vs A,
-            # but running it explicitly is safer and cheap enough).
-
-            # Get target lists (aligned by ID inside compute_paired_difference)
-            targets_a = list(model_results[model_a].results.values())
-            targets_b = list(model_results[model_b].results.values())
-
-            try:
-                comp = compute_paired_difference(
-                    targets_a, targets_b, metric_extractor, model_a, model_b, metric_name, n_boot=n_boot
+            comparisons.append(
+                compute_paired_difference(
+                    model_results[model_a],
+                    model_results[model_b],
+                    metric_extractor,
+                    model_a_name=model_a,
+                    model_b_name=model_b,
+                    metric_name=metric_name,
+                    id_extractor=id_extractor,
+                    n_boot=n_boot,
+                    seed=seed + left_index * len(models) + right_index,
                 )
-                comparisons.append(comp)
-            except ValueError:
-                logger.warning(f"Could not compare {model_a} vs {model_b}")
-
+            )
     return comparisons
+
+
+def compute_paired_difference(
+    targets_a: Sequence[T],
+    targets_b: Sequence[T],
+    metric_extractor: Callable[[T], float],
+    *,
+    model_a_name: str,
+    model_b_name: str,
+    metric_name: str,
+    id_extractor: Callable[[T], str] | None = None,
+    n_boot: int = 10000,
+    seed: int = 42,
+) -> PairwiseComparison:
+    get_id = id_extractor or _default_target_id
+    left = {get_id(target): target for target in targets_a}
+    right = {get_id(target): target for target in targets_b}
+    target_ids = sorted(set(left) & set(right))
+    if not target_ids:
+        raise ValueError("no common targets found between models")
+
+    values_a = np.array([metric_extractor(left[target_id]) for target_id in target_ids])
+    values_b = np.array([metric_extractor(right[target_id]) for target_id in target_ids])
+    diffs = _paired_bootstrap_difference(values_a, values_b, n_boot=n_boot, seed=seed)
+    ci_low = float(np.percentile(diffs, 2.5))
+    ci_high = float(np.percentile(diffs, 97.5))
+    diff_mean = float(np.mean(values_b) - np.mean(values_a))
+    return PairwiseComparison(
+        metric=metric_name,
+        model_a=model_a_name,
+        model_b=model_b_name,
+        diff_mean=diff_mean,
+        diff_ci_low=ci_low,
+        diff_ci_high=ci_high,
+        is_significant=not (ci_low <= 0 <= ci_high),
+        count=len(target_ids),
+    )
+
+
+def _paired_bootstrap_difference(values_a: np.ndarray, values_b: np.ndarray, *, n_boot: int, seed: int) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    indices = rng.integers(0, len(values_a), (n_boot, len(values_a)))
+    return np.mean(values_b[indices], axis=1) - np.mean(values_a[indices], axis=1)
+
+
+def _default_target_id(target: object) -> str:
+    target_id = getattr(target, "target_id", None)
+    if isinstance(target_id, str):
+        return target_id
+
+    nested_target = getattr(target, "target", None)
+    nested_id = getattr(nested_target, "id", None)
+    if isinstance(nested_id, str):
+        return nested_id
+
+    raise TypeError("target id is not discoverable; pass id_extractor")
