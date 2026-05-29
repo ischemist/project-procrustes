@@ -10,17 +10,18 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import csv
 from pathlib import Path
 
 from tqdm import tqdm
 
-from retrocast.adapters.paroutes_adapter import PaRoutesAdapter
-from retrocast.chem import canonicalize_smiles
+from retrocast.adapters.paroutes import PaRoutesAdapter
+from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import RetroCastException
 from retrocast.io import load_benchmark, load_raw_paroutes_list
-from retrocast.models.chem import Molecule, TargetInput
-from retrocast.typing import InchiKeyStr
+from retrocast.models import Molecule, Target
+from retrocast.typing import InChIKeyStr, InchiKeyStr, SmilesStr
 from retrocast.utils.logging import configure_script_logging, logger
 
 BASE_DIR = Path(__file__).resolve().parents[3]
@@ -39,12 +40,12 @@ SUBSETS: dict[str, str] = {
 }
 
 
-def get_all_molecules(mol: Molecule) -> set[Molecule]:
+def get_all_molecules(mol: Molecule) -> list[Molecule]:
     """Recursively collect all molecules from a synthesis tree."""
-    result = {mol}
-    if mol.synthesis_step:
-        for reactant in mol.synthesis_step.reactants:
-            result.update(get_all_molecules(reactant))
+    result = [mol]
+    if mol.product_of:
+        for reactant in mol.product_of.reactants:
+            result.extend(get_all_molecules(reactant))
     return result
 
 
@@ -53,9 +54,9 @@ def collect_inchikeys_from_benchmark(path: Path) -> set[InchiKeyStr]:
     benchmark = load_benchmark(path)
     inchikeys: set[InchiKeyStr] = set()
     for target in benchmark.targets.values():
-        route = target.primary_route
-        if route is None:
+        if not target.acceptable_routes:
             continue
+        route = target.acceptable_routes[0]
         for mol in get_all_molecules(route.target):
             inchikeys.add(mol.inchikey)
     return inchikeys
@@ -63,6 +64,8 @@ def collect_inchikeys_from_benchmark(path: Path) -> set[InchiKeyStr]:
 
 def main():
     configure_script_logging()
+    parser = argparse.ArgumentParser(description="extract unique molecules from the full PaRoutes dataset.")
+    parser.parse_args()
 
     raw_path = RAW_DIR / "all-routes.json.gz"
     out_path = RAW_DIR / "all-molecules.csv"
@@ -81,9 +84,9 @@ def main():
         target_id = f"all-{i + 1:06d}"
         smiles = canonicalize_smiles(raw_item["smiles"])
 
-        target_input = TargetInput(id=target_id, smiles=smiles)
+        target_input = Target(id=target_id, smiles=SmilesStr(smiles), inchikey=InChIKeyStr(get_inchi_key(smiles)))
         try:
-            route = adapter.cast(raw_item, expected_target=target_input)
+            route = adapter.cast(raw_item, target=target_input)
         except RetroCastException as exc:
             logger.warning("failed to cast route %s: %s [%s]", target_id, exc, exc.code)
             failures += 1

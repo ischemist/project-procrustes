@@ -23,14 +23,14 @@ Outputs:
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from pathlib import Path
 
 from tqdm import tqdm
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import RetroCastException
-from retrocast.io.data import save_stock_files
-from retrocast.models.chem import StockStatistics
+from retrocast.io import save_stock_files
 from retrocast.typing import InchiKeyStr, SmilesStr
 from retrocast.utils.logging import configure_script_logging, logger
 
@@ -38,6 +38,28 @@ from retrocast.utils.logging import configure_script_logging, logger
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RAW_STOCKS_DIR = PROJECT_ROOT / "data" / "1-benchmarks" / "raw-stocks"
 OUTPUT_STOCKS_DIR = PROJECT_ROOT / "data" / "1-benchmarks" / "stocks"
+
+
+@dataclass
+class StockStatistics:
+    raw_input_lines: int = 0
+    empty_lines: int = 0
+    invalid_smiles: int = 0
+    inchi_generation_failed: int = 0
+    duplicate_smiles: int = 0
+    duplicate_inchikeys: int = 0
+    unique_molecules: int = 0
+
+    def to_manifest_dict(self) -> dict[str, int]:
+        return {
+            "raw_input_lines": self.raw_input_lines,
+            "empty_lines": self.empty_lines,
+            "invalid_smiles": self.invalid_smiles,
+            "inchi_generation_failed": self.inchi_generation_failed,
+            "duplicate_smiles": self.duplicate_smiles,
+            "duplicate_inchikeys": self.duplicate_inchikeys,
+            "unique_molecules": self.unique_molecules,
+        }
 
 
 def canonicalize_stock(

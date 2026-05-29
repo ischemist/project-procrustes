@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+import argparse
 import gzip
 import json
+from enum import StrEnum
 from pathlib import Path
 
+from pydantic import BaseModel
 from tqdm import tqdm
 
 from retrocast.chem import get_inchi_key
 from retrocast.io.blob import save_json_gz
 from retrocast.io.data import load_stock_file
 from retrocast.io.provenance import create_manifest
-from retrocast.models.chem import BuyableMolecule, VendorSource
 from retrocast.typing import InchiKeyStr, SmilesStr
 from retrocast.utils.logging import configure_script_logging, logger
 
@@ -21,6 +23,22 @@ configure_script_logging(log_level="INFO")
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 STOCKS_DIR = DATA_DIR / "1-benchmarks" / "stocks"
 TMP_DIR = DATA_DIR / "tmp"
+
+
+class VendorSource(StrEnum):
+    EMOLECULES = "emolecules"
+    MCULE = "mcule"
+    MOLPORT = "molport"
+    UNKNOWN = "unknown"
+
+
+class BuyableMolecule(BaseModel):
+    smiles: SmilesStr
+    inchikey: InchiKeyStr
+    ppg: float | None = None
+    source: VendorSource | None = None
+    lead_time: str | None = None
+    link: str | None = None
 
 
 def load_buyables_metadata() -> dict[InchiKeyStr, dict]:
@@ -112,8 +130,7 @@ def augment_stock_with_metadata(
                 )
             )
         else:
-            # Map source string to enum
-            source = VendorSource(metadata["source"]) if metadata["source"] else None
+            source = parse_vendor_source(metadata["source"])
 
             buyables.append(
                 BuyableMolecule(
@@ -136,8 +153,19 @@ def augment_stock_with_metadata(
     return buyables
 
 
+def parse_vendor_source(value: str | None) -> VendorSource | None:
+    if not value:
+        return None
+    try:
+        return VendorSource(value.lower())
+    except ValueError:
+        return VendorSource.UNKNOWN
+
+
 def main():
     """Main execution flow."""
+    parser = argparse.ArgumentParser(description="augment buyables stock with commercial metadata.")
+    parser.parse_args()
     logger.info("=" * 80)
     logger.info("AUGMENT BUYABLES STOCK WITH METADATA")
     logger.info("=" * 80)
