@@ -198,13 +198,12 @@ def handle_ingest(args: argparse.Namespace, config: dict[str, Any]) -> None:
     total_jobs = len(models) * len(benchmarks)
 
     if show_progress and total_jobs > 1:
-        with create_cli_progress(console=console, unit="jobs") as progress:
+        with create_cli_progress(console=console, unit="jobs") as progress, quiet_info_logs("retrocast"):
             task_id = progress.add_task("Ingesting model/dataset jobs", total=total_jobs)
-            with quiet_info_logs("retrocast"):
-                for model_name in models:
-                    for benchmark_name in benchmarks:
-                        _ingest_one(model_name, benchmark_name, paths, args, show_route_progress=False)
-                        progress.advance(task_id)
+            for model_name in models:
+                for benchmark_name in benchmarks:
+                    _ingest_one(model_name, benchmark_name, paths, args, show_route_progress=False)
+                    progress.advance(task_id)
         return
 
     for model_name in models:
@@ -246,23 +245,22 @@ def _ingest_one(
         benchmark_targets=task.targets,
     )
 
-    def run_ingest(progress_callback=None) -> tuple[Path, dict[str, object]]:
-        collected = ingest_candidates(raw_payload, adapter, task, mode=args.mode, progress_callback=progress_callback)
-        output_path = output_dir / "candidates.json.gz"
-        save_collected_candidates(collected, output_path)
-        return output_path, collected_candidate_statistics(collected).to_manifest_dict()
-
     if show_route_progress:
-        with create_cli_progress(console=console, unit="routes") as progress:
+        with create_cli_progress(console=console, unit="routes") as progress, quiet_info_logs("retrocast"):
             task_id = progress.add_task(f"Ingesting {model_name}/{benchmark_name}", total=progress_total)
-
-            def advance_progress() -> None:
-                progress.advance(task_id)
-
-            with quiet_info_logs("retrocast"):
-                output_path, stats = run_ingest(advance_progress)
+            collected = ingest_candidates(
+                raw_payload,
+                adapter,
+                task,
+                mode=args.mode,
+                progress_callback=lambda: progress.advance(task_id),
+            )
     else:
-        output_path, stats = run_ingest()
+        collected = ingest_candidates(raw_payload, adapter, task, mode=args.mode)
+
+    output_path = output_dir / "candidates.json.gz"
+    save_collected_candidates(collected, output_path)
+    stats = collected_candidate_statistics(collected).to_manifest_dict()
 
     write_manifest(
         output_dir / "manifest.json",
