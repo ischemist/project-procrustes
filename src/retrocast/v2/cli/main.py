@@ -43,7 +43,6 @@ from retrocast.v2.io import (
     save_evaluation,
 )
 from retrocast.v2.metrics.constraints import TaskConstraintChecker
-from retrocast.v2.models import Candidate
 from retrocast.v2.models.route import InChIKeyLevel
 from retrocast.v2.models.task import Benchmark
 from retrocast.v2.workflow import (
@@ -148,7 +147,7 @@ def _add_model_dataset_args(parser: argparse.ArgumentParser) -> None:
 def _load_config(config_path: Path) -> dict[str, Any]:
     if not config_path.exists():
         return {}
-    with open(config_path, encoding="utf-8") as handle:
+    with open(config_path) as handle:
         return yaml.safe_load(handle) or {}
 
 
@@ -356,10 +355,7 @@ def _analyze_one(model_name: str, benchmark_name: str, paths: dict[str, Path], a
         markdown_path = output_dir / "report.md"
         save_analysis_report(report, analysis_path)
         markdown_path.write_text(
-            generate_markdown_report(
-                report, title=f"Evaluation Report: {model_name} / {benchmark_name} / {stock_name}"
-            ),
-            encoding="utf-8",
+            generate_markdown_report(report, title=f"Evaluation Report: {model_name} / {benchmark_name} / {stock_name}")
         )
         write_manifest(
             output_dir / "manifest.json",
@@ -416,17 +412,19 @@ def _resolve_models(args: argparse.Namespace, paths: dict[str, Path], *, stage: 
         base = paths["processed"]
     else:
         base = paths["scored"]
+    if not base.exists():
+        return []
+
     models = set()
-    if base.exists():
-        for benchmark_dir in base.iterdir():
-            if not benchmark_dir.is_dir():
-                continue
-            if stage == "ingest":
-                models.add(benchmark_dir.name)
-            else:
-                for model_dir in benchmark_dir.iterdir():
-                    if model_dir.is_dir():
-                        models.add(model_dir.name)
+    for benchmark_dir in base.iterdir():
+        if not benchmark_dir.is_dir():
+            continue
+        if stage == "ingest":
+            models.add(benchmark_dir.name)
+        else:
+            for model_dir in benchmark_dir.iterdir():
+                if model_dir.is_dir():
+                    models.add(model_dir.name)
     return sorted(validate_directory_name(model, param_name="model") for model in models)
 
 
@@ -444,7 +442,7 @@ def _resolve_benchmarks(args: argparse.Namespace, paths: dict[str, Path]) -> lis
 def _manifest_directive(path: Path, key: str) -> str | None:
     if not path.exists():
         return None
-    with open(path, encoding="utf-8") as handle:
+    with open(path) as handle:
         payload = json.load(handle)
     value = payload.get("directives", {}).get(key)
     return str(value) if value is not None else None
@@ -496,10 +494,6 @@ def _route_progress(
     with create_cli_progress(console=console, unit="routes") as progress, quiet_info_logs("retrocast"):
         task_id = progress.add_task(description, total=total)
         yield lambda: progress.advance(task_id)
-
-
-def _flatten_candidates(candidates_by_target: dict[str, list[Candidate]]) -> list[Candidate]:
-    return [candidate for candidates in candidates_by_target.values() for candidate in candidates]
 
 
 if __name__ == "__main__":
