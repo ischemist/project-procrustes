@@ -10,7 +10,7 @@ RetroCast includes a suite of analysis scripts designed for rigorous statistical
 
     - Scripts are located in the `scripts/` directory
     - Execute using `uv run scripts/<script-name>.py`
-    - Requires scored predictions in `data/4-scored/`
+    - Requires scored predictions in `data/retrocast/4-scored/`
 
 !!! note "prediction runners moved"
 
@@ -34,18 +34,18 @@ RetroCast includes a suite of analysis scripts designed for rigorous statistical
 These scripts rely on the standard RetroCast data directory structure:
 
 ```
-data/
+data/retrocast/
 ├── 1-benchmarks/
 │   ├── definitions/     # *.json.gz benchmark definitions
-│   └── stocks/          # *.txt stock files (one SMILES per line)
+│   └── stocks/          # *.csv.gz stock files
 ├── 4-scored/            # Scored predictions (output of `retrocast score`)
 │   └── <benchmark>/<model>/<stock>/evaluation.json.gz
-└── 6-comparisons/       # Output directory for visualizations
+└── 5-results/           # Output directory for analysis reports
 ```
 
 !!! warning "Required before running workflows"
 
-    You must run `retrocast score` before using these analysis scripts. They require `data/4-scored/` to exist.
+    You must run `retrocast score` before using these analysis scripts. They require `data/retrocast/4-scored/` to exist.
 
 ## General Model Comparison
 

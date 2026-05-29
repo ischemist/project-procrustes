@@ -6,7 +6,7 @@ from hypothesis import strategies as st
 
 from retrocast.chem import (
     NO_STEREO_PLACEHOLDER,
-    InchiKeyLevel,
+    InChIKeyLevel,
     canonicalize_smiles,
     get_chiral_center_count,
     get_heavy_atom_count,
@@ -14,7 +14,7 @@ from retrocast.chem import (
     get_molecular_weight,
     reduce_inchikey,
 )
-from retrocast.exceptions import InvalidInchiKeyError, InvalidSmilesError, RetroCastException
+from retrocast.exceptions import ChemRuntimeError, InvalidInchiKeyError, InvalidSmilesError, RetroCastException
 
 # ============================================================================
 # canonicalization
@@ -109,7 +109,7 @@ def test_canonicalize_isomeric_false_strips_stereo(smiles: str) -> None:
     assert "@" not in non_isomeric
 
     # InChI key should have NO_STEREO placeholder
-    key = get_inchi_key(non_isomeric, InchiKeyLevel.FULL)
+    key = get_inchi_key(non_isomeric, InChIKeyLevel.FULL)
     assert NO_STEREO_PLACEHOLDER in key
 
 
@@ -130,16 +130,16 @@ def test_get_inchi_key_levels() -> None:
     s = "C[C@H](O)C(=O)O"
 
     # full: has stereo layer
-    full = get_inchi_key(s, InchiKeyLevel.FULL)
+    full = get_inchi_key(s, InChIKeyLevel.FULL)
     assert "UHFFFAOYSA" not in full
 
     # no_stereo: stereo layer replaced by standard null
-    ns = get_inchi_key(s, InchiKeyLevel.NO_STEREO)
+    ns = get_inchi_key(s, InChIKeyLevel.NO_STEREO)
     assert "UHFFFAOYSA" in ns
     assert len(ns) == 27
 
     # connectivity: truncated
-    conn = get_inchi_key(s, InchiKeyLevel.CONNECTIVITY)
+    conn = get_inchi_key(s, InChIKeyLevel.CONNECTIVITY)
     assert len(conn) == 14
     assert "-" not in conn
     assert full.startswith(conn)
@@ -160,8 +160,8 @@ def test_achiral_molecules_stereo_handling(smiles: str) -> None:
     achiral molecules should produce NO_STEREO keys with the standard placeholder,
     even when generated with FULL level (because rdkit sees no stereo to encode).
     """
-    full = get_inchi_key(smiles, InchiKeyLevel.FULL)
-    no_stereo = get_inchi_key(smiles, InchiKeyLevel.NO_STEREO)
+    full = get_inchi_key(smiles, InChIKeyLevel.FULL)
+    no_stereo = get_inchi_key(smiles, InChIKeyLevel.NO_STEREO)
 
     # both should have the NO_STEREO_PLACEHOLDER
     assert NO_STEREO_PLACEHOLDER in full
@@ -174,9 +174,9 @@ def test_achiral_molecules_stereo_handling(smiles: str) -> None:
 @pytest.mark.unit
 @given(
     smiles=st.sampled_from(["C", "CCO", "c1ccccc1", "C[C@H](O)C"]),
-    level=st.sampled_from([InchiKeyLevel.FULL, InchiKeyLevel.NO_STEREO]),
+    level=st.sampled_from([InChIKeyLevel.FULL, InChIKeyLevel.NO_STEREO]),
 )
-def test_inchikey_format_structure(smiles: str, level: InchiKeyLevel) -> None:
+def test_inchikey_format_structure(smiles: str, level: InChIKeyLevel) -> None:
     """
     invariant: all 27-char InChI keys must have format:
     - 14 alphanumeric chars
@@ -208,12 +208,12 @@ def test_reduce_inchikey_prevent_upscaling() -> None:
 
     # prevent 14 -> 27
     with pytest.raises(InvalidInchiKeyError, match="cannot upscale") as exc_info:
-        reduce_inchikey(conn_key, InchiKeyLevel.FULL)
+        reduce_inchikey(conn_key, InChIKeyLevel.FULL)
     assert exc_info.value.code == "chem.inchikey_upscale"
     assert exc_info.value.context == {"inchikey": conn_key, "target_level": "full"}
 
     with pytest.raises(InvalidInchiKeyError, match="cannot upscale") as exc_info:
-        reduce_inchikey(conn_key, InchiKeyLevel.NO_STEREO)
+        reduce_inchikey(conn_key, InChIKeyLevel.NO_STEREO)
     assert exc_info.value.code == "chem.inchikey_upscale"
     assert exc_info.value.context == {"inchikey": conn_key, "target_level": "no_stereo"}
 
@@ -234,9 +234,9 @@ def test_generation_reduction_consistency(smiles: str) -> None:
 
     ensures rdkit's '-SNon' flag aligns with our string surgery.
     """
-    direct = get_inchi_key(smiles, level=InchiKeyLevel.NO_STEREO)
-    full = get_inchi_key(smiles, level=InchiKeyLevel.FULL)
-    reduced = reduce_inchikey(full, level=InchiKeyLevel.NO_STEREO)
+    direct = get_inchi_key(smiles, level=InChIKeyLevel.NO_STEREO)
+    full = get_inchi_key(smiles, level=InChIKeyLevel.FULL)
+    reduced = reduce_inchikey(full, level=InChIKeyLevel.NO_STEREO)
 
     assert direct == reduced
 
@@ -257,12 +257,12 @@ def test_stereo_saturation_collapse() -> None:
     ]
 
     # 1. verify we actually have distinct input isomers (chem check)
-    full_keys = {get_inchi_key(s, InchiKeyLevel.FULL) for s in isomers}
+    full_keys = {get_inchi_key(s, InChIKeyLevel.FULL) for s in isomers}
     # we expect multiple distinct full keys (some might be meso/dup, but >1)
     assert len(full_keys) > 1
 
     # 2. verify absolute collapse
-    ns_keys = {get_inchi_key(s, InchiKeyLevel.NO_STEREO) for s in isomers}
+    ns_keys = {get_inchi_key(s, InChIKeyLevel.NO_STEREO) for s in isomers}
     assert len(ns_keys) == 1
 
     # 3. verify structure of the collapse
@@ -288,14 +288,14 @@ def test_inchikey_reduction_transitivity(smiles: str) -> None:
     invariant: reduction is transitive. FULL->CONN should equal FULL->NS->CONN.
     ensures our string surgery doesn't create inconsistent states.
     """
-    full = get_inchi_key(smiles, InchiKeyLevel.FULL)
+    full = get_inchi_key(smiles, InChIKeyLevel.FULL)
 
     # path 1: direct
-    conn_direct = reduce_inchikey(full, InchiKeyLevel.CONNECTIVITY)
+    conn_direct = reduce_inchikey(full, InChIKeyLevel.CONNECTIVITY)
 
     # path 2: via NO_STEREO
-    ns = reduce_inchikey(full, InchiKeyLevel.NO_STEREO)
-    conn_via_ns = reduce_inchikey(ns, InchiKeyLevel.CONNECTIVITY)
+    ns = reduce_inchikey(full, InChIKeyLevel.NO_STEREO)
+    conn_via_ns = reduce_inchikey(ns, InChIKeyLevel.CONNECTIVITY)
 
     assert conn_direct == conn_via_ns
 
@@ -317,10 +317,10 @@ def test_connectivity_divergence_implies_chirality() -> None:
     s_lactic = "C[C@@H](O)C(=O)O"
 
     # same connectivity
-    assert get_inchi_key(r_lactic, InchiKeyLevel.CONNECTIVITY) == get_inchi_key(s_lactic, InchiKeyLevel.CONNECTIVITY)
+    assert get_inchi_key(r_lactic, InChIKeyLevel.CONNECTIVITY) == get_inchi_key(s_lactic, InChIKeyLevel.CONNECTIVITY)
 
     # different FULL
-    assert get_inchi_key(r_lactic, InchiKeyLevel.FULL) != get_inchi_key(s_lactic, InchiKeyLevel.FULL)
+    assert get_inchi_key(r_lactic, InChIKeyLevel.FULL) != get_inchi_key(s_lactic, InChIKeyLevel.FULL)
 
     # therefore: chiral centers must exist
     assert get_chiral_center_count(r_lactic) > 0
@@ -345,7 +345,7 @@ def test_stereo_round_trip_invariant() -> None:
     assert stripped[0] == stripped[1]
 
     # and identical NO_STEREO keys
-    keys = [get_inchi_key(s, InchiKeyLevel.NO_STEREO) for s in stripped]
+    keys = [get_inchi_key(s, InChIKeyLevel.NO_STEREO) for s in stripped]
     assert keys[0] == keys[1]
 
 
@@ -377,7 +377,7 @@ def test_reduce_inchikey_rejects_malformed_input(bad_key: str) -> None:
     only 14-char (connectivity) or 27-char (full) keys are valid.
     """
     with pytest.raises(InvalidInchiKeyError) as exc_info:
-        reduce_inchikey(bad_key, InchiKeyLevel.CONNECTIVITY)
+        reduce_inchikey(bad_key, InChIKeyLevel.CONNECTIVITY)
     assert exc_info.value.code == "chem.invalid_inchikey"
 
 
@@ -385,9 +385,27 @@ def test_reduce_inchikey_rejects_malformed_input(bad_key: str) -> None:
 @patch("retrocast.chem.Chem.MolToInchiKey")
 def test_rdkit_empty_result_guarded(mock_inchi) -> None:
     mock_inchi.return_value = ""
-    with pytest.raises(RetroCastException, match="Empty InchiKey") as exc_info:
+    with pytest.raises(RetroCastException, match="Empty InChIKey") as exc_info:
         get_inchi_key("C")
     assert exc_info.value.code == "chem.inchikey_empty"
+
+
+@pytest.mark.unit
+@patch("retrocast.chem.rdinchi.MolToInchi")
+def test_no_stereo_inchi_generation_failure_preserves_ret_code(mock_moltoinchi) -> None:
+    mock_moltoinchi.return_value = ("", 2, "bad", "", "")
+
+    with pytest.raises(ChemRuntimeError) as exc_info:
+        get_inchi_key("C", level=InChIKeyLevel.NO_STEREO)
+
+    assert exc_info.value.code == "chem.inchi_generation_failed"
+    assert exc_info.value.context["ret_code"] == 2
+
+
+@pytest.mark.unit
+def test_reduce_inchikey_rejects_unknown_runtime_level() -> None:
+    with pytest.raises(ValueError, match="unknown inchikey level"):
+        reduce_inchikey("UHOVQNZJYSORNB-UHFFFAOYSA-N", "bad-level")  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
@@ -398,7 +416,7 @@ def test_no_stereo_uses_snon_flag(mock_moltoinchi) -> None:
     """
     mock_moltoinchi.return_value = ("InChI=1S/C3H6O3/c1-2(4)3(5)6/h2,4H,1H3,(H,5,6)", 0, "", "", "")
 
-    get_inchi_key("C[C@H](O)C(=O)O", level=InchiKeyLevel.NO_STEREO)
+    get_inchi_key("C[C@H](O)C(=O)O", level=InChIKeyLevel.NO_STEREO)
 
     # verify it was called with the -SNon option
     mock_moltoinchi.assert_called_once()

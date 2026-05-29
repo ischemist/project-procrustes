@@ -21,7 +21,6 @@ The field of retrosynthesis evaluation is fragmented:
 ## Key Features
 
 - **Universal Adapters:** Translation layers for _AiZynthFinder_, \*Retro\**, *DirectMultiStep*, *SynPlanner*, *Syntheseus*, *ASKCOS*, *RetroChimera*, *DreamRetro*, *MultiStepTTL*, *SynLlama*, and *PaRoutes\*.
-- **Canonical Schema:** All routes cast into a strict, recursive `Molecule` / `ReactionStep` Pydantic model.
 - **Curated Benchmarks:** **Reference Series** (algorithm comparison) and **Market Series** (practical utility), stratified by route length and topology.
 - **Rigorous Statistics:** Built-in bootstrapping (95% CI), pairwise tournaments, and probabilistic ranking.
 - **Reproducibility:** Every artifact tracked via cryptographic manifests (`SHA256`).

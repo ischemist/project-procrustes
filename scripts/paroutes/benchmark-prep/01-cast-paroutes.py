@@ -13,13 +13,13 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from retrocast import adapt_single_route
-from retrocast.chem import canonicalize_smiles
+from retrocast import adapt_route, get_adapter
+from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.curation.generators import generate_pruned_routes
-from retrocast.io import create_manifest, load_raw_paroutes_list, load_stock_file, save_json_gz
-from retrocast.metrics.solvability import is_route_solved
-from retrocast.models.benchmark import create_benchmark, create_benchmark_target
-from retrocast.models.chem import TargetInput
+from retrocast.io import create_manifest, load_raw_paroutes_list, load_stock_file, save_benchmark
+from retrocast.metrics import TaskConstraintChecker
+from retrocast.models import Benchmark, Route, Target, TaskConstraints
+from retrocast.typing import InChIKeyStr, SmilesStr
 from retrocast.utils.logging import configure_script_logging, logger
 
 BASE_DIR = Path(__file__).resolve().parents[3] / "data" / "retrocast"
@@ -56,9 +56,10 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
 
     targets = {}
     failures = 0
-    unsolved = 0
+    stock_termination_failures = 0
     total_pruned_routes = 0
     targets_with_pruning = 0
+    stock_checker = TaskConstraintChecker.stock_termination(stock=stock_for_validation, stock_name=stock_name_str)
 
     for i, raw_item in tqdm(enumerate(raw_list), total=len(raw_list), desc=f"Casting {name}"):
         # Generate stable ID based on index
@@ -70,19 +71,21 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
 
         # 2. Adapt the Route
         # (We construct a temporary TargetIdentity for the adapter)
-        target_input = TargetInput(id=target_id, smiles=smiles)
-        route = adapt_single_route(raw_item, target_input, "paroutes")
+        target_input = Target(id=target_id, smiles=SmilesStr(smiles), inchikey=InChIKeyStr(get_inchi_key(smiles)))
+        route = adapt_route(raw_item, get_adapter("paroutes"), target=target_input)
 
         if not route:
             failures += 1
             continue
 
-        # Check if route is solved (only if check_buyables is enabled)
-        if check_buyables:
-            is_solved = is_route_solved(route, stock_for_validation)
-            if not is_solved:
-                unsolved += 1
-                continue
+        # Optionally filter to routes that terminate in buyables stock.
+        if check_buyables and not satisfies_stock_termination(
+            route,
+            stock_checker=stock_checker,
+            stock_name=stock_name_str,
+        ):
+            stock_termination_failures += 1
+            continue
 
         # 3. Optionally generate pruned route variants
         acceptable_routes = [route]  # Always include the original route as primary
@@ -94,37 +97,41 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
                 targets_with_pruning += 1
                 total_pruned_routes += len(pruned_variants) - 1  # Count only the additional variants
 
-        # 4. Create BenchmarkTarget using official constructor
-        # (canonicalizes SMILES and computes InChIKey)
-        target = create_benchmark_target(
+        # 4. Create Target and preserve the curation invariant that every
+        # acceptable route satisfies the benchmark's stock constraint.
+        target = Target(
             id=target_id,
-            smiles=smiles,
+            smiles=SmilesStr(smiles),
+            inchikey=InChIKeyStr(get_inchi_key(smiles)),
             acceptable_routes=acceptable_routes,
+        )
+        validate_acceptable_routes_satisfy_stock(
+            target_id=target_id,
+            routes=target.acceptable_routes,
+            stock_checker=stock_checker,
+            stock_name=stock_name_str,
         )
 
         targets[target_id] = target
 
-    # Create benchmark with validation
-    # This will validate that all acceptable routes are solvable with the stock
-    benchmark = create_benchmark(
+    benchmark = Benchmark(
         name=f"paroutes-{name}-full{suffix}",
         description=f"Full raw import of PaRoutes {name} set.",
-        stock=stock_for_validation,
-        stock_name=stock_name_str,
         targets=targets,
+        default_constraints=TaskConstraints(stock=stock_name_str),
     )
 
     logger.info(f"Created {len(benchmark.targets)} targets. {failures} failed.")
     if check_buyables:
-        logger.info(f"{unsolved} routes were unsolved and excluded.")
+        logger.info(f"{stock_termination_failures} routes failed buyables stock termination and were excluded.")
     if prune_intermediates:
         logger.info(f"{targets_with_pruning} targets have pruned variants ({total_pruned_routes} additional routes).")
-    save_json_gz(benchmark, out_path)
+    save_benchmark(benchmark, out_path)
 
     manifest_path = DEF_DIR / f"paroutes-{name}-full{suffix}.manifest.json"
     statistics: dict[str, int | float] = {"n_targets": len(benchmark.targets), "n_failures": failures}
     if check_buyables:
-        statistics["n_unsolved"] = unsolved
+        statistics["n_stock_termination_failures"] = stock_termination_failures
     if prune_intermediates:
         statistics["n_targets_with_pruning"] = targets_with_pruning
         statistics["n_total_pruned_routes"] = total_pruned_routes
@@ -147,13 +154,31 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
     logger.info(f"Manifest saved to {manifest_path}")
 
 
+def validate_acceptable_routes_satisfy_stock(
+    *,
+    target_id: str,
+    routes: list[Route],
+    stock_checker: TaskConstraintChecker,
+    stock_name: str,
+) -> None:
+    for route_index, route in enumerate(routes, start=1):
+        if not satisfies_stock_termination(route, stock_checker=stock_checker, stock_name=stock_name):
+            raise ValueError(
+                f"{target_id}: acceptable route {route_index} fails declared stock constraint '{stock_name}'"
+            )
+
+
+def satisfies_stock_termination(route: Route, *, stock_checker: TaskConstraintChecker, stock_name: str) -> bool:
+    return not stock_checker.check_route(route, TaskConstraints(stock=stock_name)).checks
+
+
 def main():
     configure_script_logging()
     parser = argparse.ArgumentParser(description="Cast raw PaRoutes data to BenchmarkSet format")
     parser.add_argument(
         "--check-buyables",
         action="store_true",
-        help="Filter routes to only include those solved by buyables stock (default: disabled)",
+        help="Filter routes to only include those terminating in buyables stock (default: disabled)",
     )
     parser.add_argument(
         "--prune-intermediates",

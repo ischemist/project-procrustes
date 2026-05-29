@@ -1,35 +1,31 @@
+from __future__ import annotations
+
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 
-from retrocast.models.benchmark import ExecutionStats
+
+@dataclass(frozen=True)
+class ExecutionStats:
+    wall_time: dict[str, float] = field(default_factory=dict)
+    cpu_time: dict[str, float] = field(default_factory=dict)
 
 
 class ExecutionTimer:
-    """
-    accumulates wall/cpu time for targets.
-    usage:
-        timer = ExecutionTimer()
-        with timer.measure("target_1"):
-             model.predict(...)
-        stats = timer.to_model()
-    """
-
     def __init__(self) -> None:
         self.wall_times: dict[str, float] = {}
         self.cpu_times: dict[str, float] = {}
 
     @contextmanager
     def measure(self, target_id: str) -> Generator[None, None, None]:
-        t_wall_start = time.perf_counter()
-        t_cpu_start = time.process_time()
+        wall_start = time.perf_counter()
+        cpu_start = time.thread_time()
         try:
             yield
         finally:
-            t_wall_end = time.perf_counter()
-            t_cpu_end = time.process_time()
-            self.wall_times[target_id] = t_wall_end - t_wall_start
-            self.cpu_times[target_id] = t_cpu_end - t_cpu_start
+            self.wall_times[target_id] = time.perf_counter() - wall_start
+            self.cpu_times[target_id] = time.thread_time() - cpu_start
 
     def to_model(self) -> ExecutionStats:
-        return ExecutionStats(wall_time=self.wall_times, cpu_time=self.cpu_times)
+        return ExecutionStats(wall_time=dict(self.wall_times), cpu_time=dict(self.cpu_times))

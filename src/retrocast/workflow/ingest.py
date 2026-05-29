@@ -1,172 +1,86 @@
-import logging
-from collections.abc import Callable
-from pathlib import Path
-from typing import Any, Literal
+from __future__ import annotations
 
-from retrocast.adapters.base_adapter import BaseAdapter
-from retrocast.curation.sampling import sample_k_by_length, sample_random_k, sample_top_k
-from retrocast.exceptions import InputError
-from retrocast.io.data import save_candidate_records, save_routes
-from retrocast.io.provenance import generate_model_hash
-from retrocast.models.benchmark import BenchmarkSet
-from retrocast.models.candidates import CandidateAuditMetadata, CandidateRecordsDict
-from retrocast.models.chem import Route, RunStatistics
-from retrocast.workflow.adapt import (
-    adapt_provider_output,
-    adapt_target_keyed_candidate_records,
-    adapt_target_keyed_provider_output,
+import logging
+from collections.abc import Callable, Iterator, Mapping
+from typing import Any
+
+from retrocast.adapters.base import Adapter, AdaptMode
+from retrocast.models.task import Target, Task
+from retrocast.workflow.adapt import adapt_candidates, adapt_routes
+from retrocast.workflow.collect import (
+    CollectedCandidates,
+    CollectedRoutes,
+    collect_candidates,
+    collect_routes,
 )
-from retrocast.workflow.collect import collect_benchmark_predictions
 
 logger = logging.getLogger(__name__)
 
-SAMPLING_STRATEGIES = {
-    "top-k": sample_top_k,
-    "random-k": sample_random_k,
-    "by-length": sample_k_by_length,
-}
 
-ProviderOutputKind = Literal["provider_output", "target_keyed_provider_output"]
-
-
-def ingest_model_predictions(
-    model_name: str,
-    benchmark: BenchmarkSet,
-    raw_data: Any,
-    adapter: BaseAdapter,
-    output_dir: Path,
-    anonymize: bool = False,
-    sampling_strategy: str | None = None,
-    sample_k: int | None = None,
-    ignore_stereo: bool = False,
-    provider_output_kind: ProviderOutputKind = "target_keyed_provider_output",
-    preserve_failed_candidates: bool | None = None,
+def ingest_routes(
+    raw_payload: Any,
+    adapter: Adapter,
+    task: Task,
+    *,
+    mode: AdaptMode = "strict",
+    max_routes: int | None = None,
     progress_callback: Callable[[], None] | None = None,
-) -> tuple[dict[str, list[Route]], Path, RunStatistics]:
-    """
-    Convert raw model outputs into benchmark-keyed routes.
-
-    The workflow is explicit:
-    raw payloads -> PredictedRoute corpus -> benchmark collection -> routes.json.gz
-    """
-    logger.info(f"Ingesting results for {model_name} on {benchmark.name}...")
-
-    sampler_fn: Callable[[list[Route], int], list[Route]] | None = None
-    sampler_k = 0
-    if sampling_strategy is not None:
-        if sampling_strategy not in SAMPLING_STRATEGIES:
-            raise InputError(
-                f"Unknown sampling strategy: {sampling_strategy}",
-                code="input.invalid_sampling_strategy",
-                context={
-                    "sampling_strategy": sampling_strategy,
-                    "available_sampling_strategies": sorted(SAMPLING_STRATEGIES.keys()),
-                },
+) -> CollectedRoutes:
+    """Adapt raw planner output into valid routes and collect them by target id."""
+    routes = []
+    for target, payload, source_key in _target_payloads(raw_payload, task):
+        routes.extend(
+            adapt_routes(
+                payload,
+                adapter,
+                mode=mode,
+                target=target,
+                source_key=source_key,
+                max_routes=max_routes,
+                progress_callback=progress_callback,
             )
-        if sample_k is None:
-            raise InputError(
-                "Must provide sample_k when using a sampling strategy",
-                code="input.missing_sample_k",
-                context={"sampling_strategy": sampling_strategy},
+        )
+    return collect_routes(routes, task)
+
+
+def ingest_candidates(
+    raw_payload: Any,
+    adapter: Adapter,
+    task: Task,
+    *,
+    mode: AdaptMode = "strict",
+    max_candidates: int | None = None,
+    progress_callback: Callable[[], None] | None = None,
+) -> CollectedCandidates:
+    """Adapt raw planner output into candidates and collect them by target id."""
+    candidates = []
+    for target, payload, source_key in _target_payloads(raw_payload, task):
+        candidates.extend(
+            adapt_candidates(
+                payload,
+                adapter,
+                mode=mode,
+                target=target,
+                source_key=source_key,
+                max_candidates=max_candidates,
+                progress_callback=progress_callback,
             )
-        sampler_fn = SAMPLING_STRATEGIES[sampling_strategy]
-        sampler_k = sample_k
-        logger.info(f"Applying sampling: {sampling_strategy} (k={sample_k})")
-
-    stats = RunStatistics()
-    candidate_records: CandidateRecordsDict | None = None
-    candidate_metadata: CandidateAuditMetadata | None = None
-    if preserve_failed_candidates is None:
-        preserve_failed_candidates = provider_output_kind == "target_keyed_provider_output"
-    if preserve_failed_candidates:
-        if provider_output_kind != "target_keyed_provider_output":
-            raise InputError(
-                "Candidate-preserving ingest currently requires target-keyed provider output.",
-                code="input.candidate_preservation_requires_target_keyed_output",
-                context={"provider_output_kind": provider_output_kind},
-            )
-        adapted_candidates = adapt_target_keyed_candidate_records(
-            raw_data,
-            benchmark,
-            adapter,
-            ignore_stereo=ignore_stereo,
-            stats=stats,
-            progress_callback=progress_callback,
         )
-        route_corpus = adapted_candidates.routes
-        candidate_records = adapted_candidates.records
-        candidate_metadata = adapted_candidates.metadata
-    elif provider_output_kind == "target_keyed_provider_output":
-        route_corpus = adapt_target_keyed_provider_output(
-            raw_data,
-            benchmark,
-            adapter,
-            ignore_stereo=ignore_stereo,
-            stats=stats,
-            progress_callback=progress_callback,
-        )
-    elif provider_output_kind == "provider_output":
-        route_corpus = adapt_provider_output(
-            raw_data,
-            adapter,
-            ignore_stereo=ignore_stereo,
-            stats=stats,
-            progress_callback=progress_callback,
-        )
-    else:
-        raise InputError(
-            f"Unknown provider output kind: {provider_output_kind}",
-            code="input.invalid_provider_output_kind",
-            context={
-                "provider_output_kind": provider_output_kind,
-                "available_provider_output_kinds": ["provider_output", "target_keyed_provider_output"],
-            },
-        )
-    collected_routes = collect_benchmark_predictions(route_corpus, benchmark)
-    processed_routes = collected_routes.routes_by_target
+    return collect_candidates(candidates, task)
 
-    if sampler_fn is not None:
-        processed_routes = {
-            target_id: sampler_fn(routes, sampler_k) if routes else [] for target_id, routes in processed_routes.items()
-        }
 
-    stats.final_unique_routes_saved = 0
-    stats.targets_with_at_least_one_route.clear()
-    stats.routes_per_target.clear()
+def _target_payloads(raw_payload: Any, task: Task) -> Iterator[tuple[Target | None, Any, str | None]]:
+    if not isinstance(raw_payload, Mapping):
+        if len(task.targets) != 1:
+            raise ValueError("Multi-target ingest requires raw_payload keyed by target id or target SMILES.")
+        target = next(iter(task.targets.values()))
+        yield target, raw_payload, None
+        return
 
-    for target_id, routes in processed_routes.items():
-        stats.final_unique_routes_saved += len(routes)
-        if routes:
-            stats.targets_with_at_least_one_route.add(target_id)
-            stats.routes_per_target[target_id] = len(routes)
-
-    # 6. Save
-    model_hash = generate_model_hash(model_name)
-    folder_name = model_hash if anonymize else model_name
-
-    save_path_dir = output_dir / benchmark.name / folder_name
-    save_path_dir.mkdir(parents=True, exist_ok=True)
-    save_file = save_path_dir / "routes.json.gz"
-
-    save_routes(processed_routes, save_file)
-    if candidate_records is not None and candidate_metadata is not None:
-        save_candidate_records(candidate_records, save_path_dir / "candidates.json.gz", candidate_metadata)
-
-    logger.info(
-        f"Ingestion complete. Adapted {stats.total_routes_in_raw_files} raw route entries. "
-        f"Adapted {len(route_corpus)} predicted routes. "
-        f"Matched {collected_routes.stats.matched_by_canonical_smiles} by smiles. "
-        f"Saved {stats.final_unique_routes_saved} valid routes. "
-        f"Duplication factor: {stats.duplication_factor}x"
-    )
-    if collected_routes.stats.unmatched_routes or collected_routes.stats.ambiguous_routes:
-        logger.info(
-            "Collection outcomes: unmatched=%s ambiguous=%s duplicate_routes_dropped=%s",
-            collected_routes.stats.unmatched_routes,
-            collected_routes.stats.ambiguous_routes,
-            collected_routes.stats.duplicate_routes_dropped,
-        )
-    if stats.failures_by_code:
-        logger.info("Ingestion failures by code: %s", dict(sorted(stats.failures_by_code.items())))
-
-    return processed_routes, save_file, stats
+    for target_id, target in task.targets.items():
+        if target_id in raw_payload:
+            yield target, raw_payload[target_id], target_id
+        elif target.smiles in raw_payload:
+            yield target, raw_payload[target.smiles], target.smiles
+        else:
+            logger.debug("target %r not found in raw payload by id or smiles; skipping", target_id)

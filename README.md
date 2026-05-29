@@ -19,7 +19,7 @@ The field of retrosynthesis is fragmented.
 ## Key Features
 
 - **Universal Adapters:** "Air-gapped" translation layers for _AiZynthFinder_, \*Retro\**, *DirectMultiStep*, *SynPlanner*, *Syntheseus*, *ASKCOS*, *RetroChimera*, *DreamRetro*, *MultiStepTTL*, *SynLlama*, and *PaRoutes\*.
-- **Canonical Schema:** All routes are cast into a strict, recursive `Molecule` / `ReactionStep` Pydantic model.
+- **Canonical Schema:** All routes are cast into a strict schema-2 `Molecule` / `Reaction` tree.
 - **Curated Benchmarks:** Includes the **Reference Series** (for algorithm comparison) and **Market Series** (for practical utility), stratified by route length and topology to eliminate statistical noise.
 - **Rigorous Statistics:** Built-in bootstrapping (95% CI), pairwise tournaments, and probabilistic ranking. No more "Model A is 0.1% better than Model B" without significance testing.
 - **Reproducibility:** Every artifact is tracked via cryptographic manifests (`SHA256`).
@@ -92,21 +92,19 @@ Have a raw output file from a model? Score it immediately.
 retrocast adapt \
     --input raw_predictions.json.gz \
     --adapter aizynthfinder \
-    --input-kind target-keyed-provider-output \
-    --benchmark data/1-benchmarks/definitions/ref-lin-600.json.gz \
-    --output route-corpus.jsonl.gz
+    --output candidates.json.gz
 
-# Align predictions to benchmark-keyed routes
+# Align predictions to benchmark-keyed candidates
 retrocast collect \
-    --input route-corpus.jsonl.gz \
-    --benchmark data/1-benchmarks/definitions/ref-lin-600.json.gz \
-    --output routes.json.gz
+    --input candidates.json.gz \
+    --benchmark data/retrocast/1-benchmarks/definitions/ref-lin-600.json.gz \
+    --output collected-candidates.json.gz
 
 # Score against a stock file
 retrocast score-file \
-    --benchmark data/1-benchmarks/definitions/ref-lin-600.json.gz \
-    --routes routes.json.gz \
-    --stock data/1-benchmarks/stocks/n5-stock.txt \
+    --benchmark data/retrocast/1-benchmarks/definitions/ref-lin-600.json.gz \
+    --candidates collected-candidates.json.gz \
+    --stock data/retrocast/1-benchmarks/stocks/n5-stock.csv.gz \
     --output scores.json.gz \
     --model-name "My-Experimental-Model"
 ```
@@ -137,17 +135,17 @@ Project mode reads raw model outputs from `data/retrocast/2-raw/<model>/<benchma
 **Run the pipeline:**
 
 ```bash
-# 1. Ingest: Standardize raw outputs from data/2-raw/
+# 1. Ingest: Standardize raw outputs from data/retrocast/2-raw/
 retrocast ingest --model dms-explorer --dataset ref-lin-600 --adapter directmultistep
 
 # 2. Score: Evaluate against the benchmark's defined stock
 retrocast score --model dms-explorer --dataset ref-lin-600
 
-# 3. Analyze: Generate bootstrap statistics and HTML plots
-retrocast analyze --model dms-explorer --dataset ref-lin-600 --make-plots
+# 3. Analyze: Generate bootstrap statistics
+retrocast analyze --model dms-explorer --dataset ref-lin-600
 ```
 
-**Output:** Interactive diagnostic plots (Solvability vs Depth, Top-K) and a Markdown report in `data/5-results/`.
+**Output:** A schema-v2 analysis report in `data/retrocast/5-results/`.
 
 ---
 
@@ -197,8 +195,8 @@ route = adapt_route(raw_output, adapter)
 if route is None:
     raise ValueError("Could not adapt route")
 
-print(f"Depth: {route.length}")
-print(f"Leaves: {[m.smiles for m in route.leaves]}")
+print(f"Depth: {route.depth()}")
+print(f"Leaves: {[m.smiles for m in route.leaves()]}")
 ```
 
 ---

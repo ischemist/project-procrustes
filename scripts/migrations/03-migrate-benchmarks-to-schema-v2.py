@@ -18,13 +18,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from retrocast.io import load_json_gz
+from retrocast.io import load_json_gz, save_benchmark
 from retrocast.io.provenance import calculate_file_hash
 from retrocast.models.provenance import FileInfo, Manifest
+from retrocast.models.route import Molecule, Reaction, Route
+from retrocast.models.task import Benchmark, Target, TaskConstraints
 from retrocast.typing import InChIKeyStr, ReactionSmilesStr, SmilesStr
 from retrocast.utils.logging import configure_script_logging, logger
-from retrocast.v2.io import save_benchmark
-from retrocast.v2.models import Benchmark, Molecule, Reaction, Route, Target, TaskConstraints
 
 LEGACY_DIRNAME = "v0.5.0"
 

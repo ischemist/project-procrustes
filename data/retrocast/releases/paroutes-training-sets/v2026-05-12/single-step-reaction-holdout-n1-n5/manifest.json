@@ -4,34 +4,40 @@
   "directives": {},
   "output_files": {
     "all": {
+      "content_hash": "7b91ed1d4ba69106a9c444f885befe6f15b93c92be7fa0ce957f7db46376889b",
+      "file_hash": "fadc97d1403908c3d88dc773238309b3988fb871178e4b0e738f3536c8f5bcce",
       "label": "all",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/single-step-reaction-holdout-n1-n5/all.jsonl.gz",
-      "sha256": "97f2fc58525a9cbf4fafd47921a13ecf825114f7bba017806a49086775f9d71b"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/single-step-reaction-holdout-n1-n5/all.jsonl.gz"
     },
     "all_rsmi": {
+      "content_hash": null,
+      "file_hash": "c2126aa5b7f391768f671e7b124defeb63bf165a0c9365da69ed0bc28d0913f3",
       "label": "all_rsmi",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/single-step-reaction-holdout-n1-n5/all.rsmi.txt.gz",
-      "sha256": "c2126aa5b7f391768f671e7b124defeb63bf165a0c9365da69ed0bc28d0913f3"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/single-step-reaction-holdout-n1-n5/all.rsmi.txt.gz"
     },
     "training": {
+      "content_hash": "009709b62ed21e0ecdfa2b5c32533726b60282f0c1734d61d0ac9eb5d4812342",
+      "file_hash": "b52a1708b6c86c94e2e8ccd9ca068da0289f22a4805ef76f45902fe7bf4b9b2a",
       "label": "training",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/single-step-reaction-holdout-n1-n5/training.jsonl.gz",
-      "sha256": "b72ee962e398424da8486aa161d02b8ca499f6f8bc3626f433668f5cd19f64e0"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/single-step-reaction-holdout-n1-n5/training.jsonl.gz"
     },
     "training_rsmi": {
+      "content_hash": null,
+      "file_hash": "28585ca060d2682047e6a25c12e96bf16edc5b1a491f82014144b852e6d23620",
       "label": "training_rsmi",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/single-step-reaction-holdout-n1-n5/training.rsmi.txt.gz",
-      "sha256": "28585ca060d2682047e6a25c12e96bf16edc5b1a491f82014144b852e6d23620"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/single-step-reaction-holdout-n1-n5/training.rsmi.txt.gz"
     },
     "validation": {
+      "content_hash": "ec7bb927c3a27798d0c98985c0b3da27de7d2ad1b2bd25e0b02db4dc48af12fd",
+      "file_hash": "a2973f7fbab61963c50e75054c33f865b4f5e557da8663d735d04b461504a54a",
       "label": "validation",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/single-step-reaction-holdout-n1-n5/validation.jsonl.gz",
-      "sha256": "6f96e5e816a72e04c74d66ccca9512464dd7c2ffa04a85c6904c4184d87a5c2c"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/single-step-reaction-holdout-n1-n5/validation.jsonl.gz"
     },
     "validation_rsmi": {
+      "content_hash": null,
+      "file_hash": "b8cfa5e5b4dbc2cf71223afc997715db87955fb17beed76b7d6fe07ab16dcc13",
       "label": "validation_rsmi",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/single-step-reaction-holdout-n1-n5/validation.rsmi.txt.gz",
-      "sha256": "b8cfa5e5b4dbc2cf71223afc997715db87955fb17beed76b7d6fe07ab16dcc13"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/single-step-reaction-holdout-n1-n5/validation.rsmi.txt.gz"
     }
   },
   "parameters": {
@@ -52,19 +58,22 @@
   },
   "release_name": "single-step-reaction-holdout-n1-n5",
   "retrocast_version": "0.5.4.dev22",
-  "schema_version": "1.1",
+  "schema_version": "2",
   "source_files": [
     {
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/training.jsonl.gz",
-      "sha256": "baf7cad9da709764d99dd9fa6e44d2e2d5ff0faef0f14681b3ab4f335676db94"
+      "content_hash": null,
+      "file_hash": "f9150f0f13bb4ca7ee3688f18bfb67d2abc7faa3b07ada3b954f9e7466b50584",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/training.jsonl.gz"
     },
     {
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/validation.jsonl.gz",
-      "sha256": "ffee611ecd0d70a3e8ddb7c2bee78b62f7ab1dada3ebd0e7cccd5be5258d7045"
+      "content_hash": null,
+      "file_hash": "0f1e12f3993f6af1bd38e18828cbd1c51996cc9496032cb4bc668536a7a14cda",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/validation.jsonl.gz"
     },
     {
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/manifest.json",
-      "sha256": "b2bbe3ef1e9f7ff1d9ab53c86e4046d3ab70c264beaf6d8734b9b33a1fcd9092"
+      "content_hash": null,
+      "file_hash": "5f7de3ce82ef7a39fc50b09a918583ee4956552be33427fea2481f7bf779dd37",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/manifest.json"
     }
   ],
   "statistics": {},
@@ -118,6 +127,9 @@
         "mapped_smiles_variants_collapsed": 1,
         "overlap_removed_from_validation": 4442
       }
-    }
+    },
+    "schema_migrations": [
+      "scripts/migrations/04-migrate-paroutes-training-release-to-schema-v2"
+    ]
   }
 }

@@ -4,19 +4,22 @@
   "directives": {},
   "output_files": {
     "all": {
+      "content_hash": "7a7a2f6696b947c6c7a9c279df88f79c77ee6af91df5e19d004f7e1737c3412d",
+      "file_hash": "e050b0f395e4bac9e04eb86260374c88336b75404f3239a37347ee3c07ce2a84",
       "label": "all",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/all.jsonl.gz",
-      "sha256": "1bd74997e530bc3caf30c9fe3c347e4ec8a7bd2feae906948e30220e3396dbfb"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/all.jsonl.gz"
     },
     "training": {
+      "content_hash": "1183eec82f4e322dc18fe033d8ebd6c56e4fd3e0fd82210ad0d171f9a8f497f6",
+      "file_hash": "9ed1510c1c4b1171f37d7add0e22f73c66fb0ad52ee2a06b987d28226284c11a",
       "label": "training",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/training.jsonl.gz",
-      "sha256": "fad292e468e1eb9bc531130a9f92e388f39797fb14e3514ede2b035fa40e6ecb"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/training.jsonl.gz"
     },
     "validation": {
+      "content_hash": "ad94f10603e95a74d1ef241c8e3fd7ead2b7ccabff2f406aac250ecda968e850",
+      "file_hash": "a4c6c94b988c079f7422160640c09b24c3218ab8f0e0378bb2d41d8e8400afea",
       "label": "validation",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/validation.jsonl.gz",
-      "sha256": "f0649d55d3285785300af7fe32020ae47d4349b1e66e3f661342ff27141c0257"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/route-holdout-n1-n5/validation.jsonl.gz"
     }
   },
   "parameters": {
@@ -37,19 +40,22 @@
   },
   "release_name": "route-holdout-n1-n5",
   "retrocast_version": "0.5.4.dev22",
-  "schema_version": "1.1",
+  "schema_version": "2",
   "source_files": [
     {
-      "path": "data/retrocast/0-assets/paroutes/all-routes.json.gz",
-      "sha256": "d504e5964af1b09632d4048f6ab81d626babc5d344dff1be00ece312716f2405"
+      "content_hash": null,
+      "file_hash": "d504e5964af1b09632d4048f6ab81d626babc5d344dff1be00ece312716f2405",
+      "path": "data/retrocast/0-assets/paroutes/all-routes.json.gz"
     },
     {
-      "path": "data/retrocast/0-assets/paroutes/n1-routes.json.gz",
-      "sha256": "49d7e209328b7cf7edc09ca827b0a21938d520a6b1d2dc0a46a65c6f392c2c89"
+      "content_hash": null,
+      "file_hash": "49d7e209328b7cf7edc09ca827b0a21938d520a6b1d2dc0a46a65c6f392c2c89",
+      "path": "data/retrocast/0-assets/paroutes/n1-routes.json.gz"
     },
     {
-      "path": "data/retrocast/0-assets/paroutes/n5-routes.json.gz",
-      "sha256": "5333b4aeb4e65a2c50e42a8f3a3701c75d76c8045280ec6cc460fbb3ebd605ad"
+      "content_hash": null,
+      "file_hash": "5333b4aeb4e65a2c50e42a8f3a3701c75d76c8045280ec6cc460fbb3ebd605ad",
+      "path": "data/retrocast/0-assets/paroutes/n5-routes.json.gz"
     }
   ],
   "statistics": {},
@@ -113,6 +119,9 @@
       "exact_route_matches_removed": 50026,
       "mapped_smiles_variants_collapsed": 82,
       "unique_reference_route_signatures": 17871
-    }
+    },
+    "schema_migrations": [
+      "scripts/migrations/04-migrate-paroutes-training-release-to-schema-v2"
+    ]
   }
 }

@@ -123,14 +123,13 @@ ReactionId = Annotated[str, AfterValidator(validate_reaction_id)]
 MoleculeId = Annotated[str, AfterValidator(validate_molecule_id)]
 ```
 
-
 ## Route Signatures
 
 `Route` signatures give us a canonical way to talk about route structure without carrying around the whole tree or comparing nested objects by hand. They are the basis for route comparison: full-route equality, reaction equality, prefix matching to depth `k`, and subtree containment. The core idea is [Merkle-like](https://en.wikipedia.org/wiki/Merkle_tree): the signature of a parent is built from its own identity plus the signatures of its children. Signatures are:
 
 - order-invariant over reactant ordering
 - preserve multiplicity when the same reactant appears more than once
-- and can be parameterized by match level when needed. 
+- and can be parameterized by match level when needed.
 
 ### Molecule Identity
 
@@ -214,7 +213,6 @@ class MoleculeView:
         return stable_hash(self.subtree_key(match_level, depth=depth))
 ```
 
-
 ### Route Identity
 
 With the primitives above, full route equality is established by the subtree signature of the target with unlimited depth. i.e. `route.signature()` is an alias for `route.molecule_at("rc:m:/").subtree_signature()`. A generic exact subtree equality is `route.molecule_at(path).subtree_signature()`.
@@ -288,13 +286,27 @@ AdaptMode = Literal["strict", "prune"]
 adapt_route(raw_route_payload, adapter, *, mode: AdaptMode = "strict") -> Route | None
 
 # for route-first inspection and ad hoc use
-adapt_routes(raw_payload, adapter, *, mode: AdaptMode = "strict") -> list[Route]
+adapt_routes(
+    raw_payload,
+    adapter,
+    *,
+    mode: AdaptMode = "strict",
+    max_routes: int | None = None,
+) -> list[Route]
 
 # for benchmarking and honest solv/tier-N metrics
-adapt_candidates(raw_payload, adapter, *, mode: AdaptMode = "strict") -> list[Candidate]
+adapt_candidates(
+    raw_payload,
+    adapter,
+    *,
+    mode: AdaptMode = "strict",
+    max_candidates: int | None = None,
+) -> list[Candidate]
 ```
 
-Which method is called through CLI is determined by the `--preserve-failed-candidates` flag.
+`max_routes` is a route-first convenience limit: failures are skipped and only successful `Route`s count toward the limit. `max_candidates` is the benchmark-safe limit: it processes the first N raw candidate slots and preserves failures, so Tier-0 validity and MRR remain honest.
+
+Benchmark CLI ingestion uses the candidate-preserving path. Route-only adaptation remains available as a library convenience for ad hoc inspection.
 
 ## 2. Collect
 
@@ -371,10 +383,12 @@ Ingest is just the convenience alias for `adapt + collect`
 
 ```python
 # when the user wants only valid canonical routes
-ingest_routes(raw_payload, adapter, task) -> CollectedRoutes
+ingest_routes(raw_payload, adapter, task, *, max_routes: int | None = None) -> CollectedRoutes
 # when the user wants an honest evaluation artifact
-ingest_candidates(raw_payload, adapter, task) -> CollectedCandidates
+ingest_candidates(raw_payload, adapter, task, *, max_candidates: int | None = None) -> CollectedCandidates
 ```
+
+`max_candidates` is applied per target during benchmark ingestion. It is intentionally first-N by raw planner rank; random candidate sampling is not part of benchmark ingestion because planner rank is part of the measured behavior.
 
 ## 4. Score
 
@@ -444,7 +458,7 @@ class ScoredCandidate(BaseModel):
 
     matches_acceptable: bool = False
     matched_acceptable_index: int | None = None
-    
+
     def has_route(self) -> bool: ...
 
     def failed_adaptation(self) -> bool: ...
@@ -480,11 +494,9 @@ class Evaluation(BaseModel):
     schema_version: str = "2"
 ```
 
-
 !!! note "An intentional violation of single-responsibility principle"
 
     In principle, Tier-0 validity should be assessed at the `score` workflow stage. The cleanest design would then be if `adapt` always returned an equivalent of `Candidate`s (or a `Route` was extended to hold the information of `Candidate`), but that would result in subpar UX for every use case outside of benchmarking. As a result, we intentionally allow for a slight leakage of responsibility between `adapt` and `score` (i.e., `adapt` without ``--preserve-failed-candidates` returns Tier-0 valid `Route`s.)
-
 
 ### Score API
 

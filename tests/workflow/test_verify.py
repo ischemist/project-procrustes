@@ -465,6 +465,23 @@ class TestVerifyManifestShallow:
         pass_count = sum(1 for e in report.issues if e.level == "PASS")
         assert pass_count >= 2
 
+    def test_manifest_paths_can_be_relative_to_project_root_when_verifying_data_dir(self, tmp_path):
+        project_root = tmp_path
+        data_dir = project_root / "data" / "retrocast"
+        release_dir = data_dir / "releases" / "tiny"
+        release_dir.mkdir(parents=True)
+        output = release_dir / "all.jsonl.gz"
+        output.write_text("{}\n", encoding="utf-8")
+
+        manifest = create_simple_manifest("release", [output], root_dir=project_root)
+        manifest_path = release_dir / "manifest.json"
+        write_manifest_to_disk(manifest, manifest_path)
+
+        report = verify_manifest(manifest_path, data_dir, deep=False)
+
+        assert report.is_valid
+        assert not any(issue.message == "File is MISSING from disk." for issue in report.issues)
+
     def test_detect_hash_mismatch_in_output_files(self, tmp_path):
         """Shallow verification should detect hash mismatch in output files."""
         data_file = tmp_path / "output.txt"

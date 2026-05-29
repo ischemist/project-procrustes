@@ -1,365 +1,151 @@
 from __future__ import annotations
 
-import logging
-from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable
+from itertools import islice
 from typing import Any
 
 from pydantic import ValidationError
 
-from retrocast.adapters.base_adapter import BaseAdapter, RawRouteEntry
-from retrocast.exceptions import AdapterError, ChemError, InputError
-from retrocast.models.benchmark import BenchmarkSet
-from retrocast.models.candidates import CandidateAuditMetadata, CandidateRecord, CandidateRecordsDict, CandidateSource
-from retrocast.models.chem import PredictedRoute, Route, RunStatistics, TargetIdentity, TargetInput
-from retrocast.models.validity import FailureRecord
-
-logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class AdaptedCandidateRecords:
-    routes: list[PredictedRoute]
-    records: CandidateRecordsDict
-    metadata: CandidateAuditMetadata
-
-
-def _target_hint_from_entry(entry: RawRouteEntry) -> TargetIdentity | None:
-    if entry.target_hint_smiles is None:
-        return None
-    return TargetInput(
-        id=entry.target_hint_id or entry.source_key or entry.target_hint_smiles,
-        smiles=entry.target_hint_smiles,
-    )
-
-
-def _record_adaptation_failure(
-    stats: RunStatistics | None,
-    entry: RawRouteEntry,
-    code: str,
-    *,
-    expected_target: TargetIdentity | None = None,
-) -> None:
-    if stats is None:
-        return
-    stats.record_failure(code, target_id=expected_target.id if expected_target is not None else entry.target_hint_id)
-
-
-def _prediction_metadata_from_entry(entry: RawRouteEntry, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
-    prediction_metadata = {
-        "source_key": entry.source_key,
-        "source_row_index": entry.source_row_index,
-        "source_record_id": entry.source_record_id,
-    }
-    prediction_metadata = {key: value for key, value in prediction_metadata.items() if value is not None}
-    prediction_metadata.update(metadata or {})
-    return prediction_metadata
-
-
-def _adapt_entry(
-    entry: RawRouteEntry,
-    adapter: BaseAdapter,
-    *,
-    expected_target: TargetIdentity | None = None,
-    ignore_stereo: bool,
-    stats: RunStatistics | None = None,
-    rank: int | None = None,
-    metadata: dict[str, Any] | None = None,
-    progress_callback: Callable[[], None] | None = None,
-) -> PredictedRoute | None:
-    if stats is not None:
-        stats.total_routes_in_raw_files += 1
-    if progress_callback is not None:
-        progress_callback()
-    target = expected_target or _target_hint_from_entry(entry)
-    try:
-        route = adapter.cast(
-            entry.payload,
-            ignore_stereo=ignore_stereo,
-            expected_target=target,
-        )
-    except ValidationError as exc:
-        logger.warning(
-            "Adapter failed for raw entry %s: %s [adapter.schema_invalid]",
-            (expected_target.id if expected_target is not None else None)
-            or entry.target_hint_id
-            or entry.source_key
-            or entry.source_row_index,
-            exc,
-        )
-        _record_adaptation_failure(stats, entry, "adapter.schema_invalid", expected_target=expected_target)
-        return None
-    except (AdapterError, ChemError) as exc:
-        logger.warning(
-            "Adapter failed for raw entry %s: %s [%s]",
-            (expected_target.id if expected_target is not None else None)
-            or entry.target_hint_id
-            or entry.source_key
-            or entry.source_row_index,
-            exc,
-            exc.code,
-        )
-        _record_adaptation_failure(stats, entry, exc.code, expected_target=expected_target)
-        return None
-
-    if stats is not None:
-        stats.successful_routes_before_dedup += 1
-    return PredictedRoute.from_route(
-        route,
-        rank=rank if rank is not None else entry.source_order,
-        metadata=_prediction_metadata_from_entry(entry, metadata=metadata),
-    )
-
-
-def _adapt_entries(
-    entries: Iterator[RawRouteEntry],
-    adapter: BaseAdapter,
-    *,
-    expected_target: TargetIdentity | None = None,
-    ignore_stereo: bool,
-    stats: RunStatistics | None = None,
-    progress_callback: Callable[[], None] | None = None,
-) -> Iterator[PredictedRoute]:
-    for entry in entries:
-        prediction = _adapt_entry(
-            entry,
-            adapter,
-            expected_target=expected_target,
-            ignore_stereo=ignore_stereo,
-            stats=stats,
-            progress_callback=progress_callback,
-        )
-        if prediction is None:
-            continue
-        yield prediction
-
-
-def iter_adapted_routes(
-    provider_output: Any,
-    adapter: BaseAdapter,
-    *,
-    ignore_stereo: bool,
-    stats: RunStatistics | None = None,
-    progress_callback: Callable[[], None] | None = None,
-) -> Iterator[PredictedRoute]:
-    yield from _adapt_entries(
-        adapter.iter_raw_entries(provider_output),
-        adapter,
-        ignore_stereo=ignore_stereo,
-        stats=stats,
-        progress_callback=progress_callback,
-    )
-
-
-def iter_target_keyed_adapted_routes(
-    target_keyed_provider_output: Mapping[Any, Any],
-    benchmark: BenchmarkSet,
-    adapter: BaseAdapter,
-    *,
-    ignore_stereo: bool,
-    stats: RunStatistics | None = None,
-    progress_callback: Callable[[], None] | None = None,
-) -> Iterator[PredictedRoute]:
-    if not isinstance(target_keyed_provider_output, Mapping):
-        raise InputError(
-            "Target-keyed provider output must be a mapping keyed by target id or target smiles.",
-            code="input.invalid_target_keyed_provider_output",
-            context={"actual_type": type(target_keyed_provider_output).__name__},
-        )
-
-    for target_id, target in benchmark.targets.items():
-        matched_key = None
-        if target_id in target_keyed_provider_output:
-            matched_key = target_id
-        elif target.smiles in target_keyed_provider_output:
-            matched_key = target.smiles
-
-        if matched_key is None:
-            continue
-
-        payload = target_keyed_provider_output[matched_key]
-        entries = adapter.iter_raw_entries(
-            payload,
-            source_key=str(matched_key),
-        )
-        yield from _adapt_entries(
-            entries,
-            adapter,
-            expected_target=target,
-            ignore_stereo=ignore_stereo,
-            stats=stats,
-            progress_callback=progress_callback,
-        )
-
-
-def adapt_target_routes(
-    adapter: BaseAdapter,
-    raw_target_data: Any,
-    target: TargetIdentity,
-    *,
-    ignore_stereo: bool = False,
-    stats: RunStatistics | None = None,
-) -> Iterator[PredictedRoute]:
-    """Adapt a target-local raw payload through the route-first adapter seam."""
-    entries = adapter.iter_raw_entries(raw_target_data, source_key=target.id)
-    yield from _adapt_entries(
-        entries,
-        adapter,
-        expected_target=target,
-        ignore_stereo=ignore_stereo,
-        stats=stats,
-    )
-
-
-def adapt_provider_output(
-    provider_output: Any,
-    adapter: BaseAdapter,
-    *,
-    ignore_stereo: bool = False,
-    stats: RunStatistics | None = None,
-    progress_callback: Callable[[], None] | None = None,
-) -> list[PredictedRoute]:
-    """Materialize canonical predicted routes from one provider output."""
-    return list(
-        iter_adapted_routes(
-            provider_output,
-            adapter,
-            ignore_stereo=ignore_stereo,
-            stats=stats,
-            progress_callback=progress_callback,
-        )
-    )
+from retrocast.adapters.base import Adapter, AdaptMode, RawRouteEntry
+from retrocast.chem import canonicalize_smiles, get_inchi_key
+from retrocast.exceptions import AdapterError, ChemError, RetroCastException
+from retrocast.models.candidates import Candidate, FailureRecord
+from retrocast.models.route import Route
+from retrocast.models.task import Target
+from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
 
 
 def adapt_route(
-    raw_route: Any,
-    adapter: BaseAdapter,
+    raw_route_payload: Any,
+    adapter: Adapter,
     *,
-    ignore_stereo: bool = False,
-    stats: RunStatistics | None = None,
+    mode: AdaptMode = "strict",
+    target: Target | None = None,
 ) -> Route | None:
-    """Return one canonical route from one raw route-like payload."""
-    prediction = adapt_prediction(raw_route, adapter, ignore_stereo=ignore_stereo, stats=stats)
-    return prediction.route if prediction is not None else None
+    """Adapt one raw route payload into one canonical route, or None on failure."""
+    try:
+        return adapter.cast(raw_route_payload, mode=mode, target=target)
+    except (AdapterError, ChemError, ValidationError):
+        return None
 
 
-def adapt_prediction(
-    raw_route: Any,
-    adapter: BaseAdapter,
+def adapt_routes(
+    raw_payload: Any,
+    adapter: Adapter,
     *,
-    ignore_stereo: bool = False,
-    rank: int | None = None,
-    metadata: dict[str, Any] | None = None,
-    stats: RunStatistics | None = None,
-) -> PredictedRoute | None:
-    """Return one canonical predicted route from one raw prediction payload."""
-    entry = RawRouteEntry(payload=raw_route)
-    return _adapt_entry(
-        entry,
-        adapter,
-        ignore_stereo=ignore_stereo,
-        stats=stats,
-        rank=rank,
-        metadata=metadata,
-    )
-
-
-def adapt_target_keyed_provider_output(
-    target_keyed_provider_output: Mapping[Any, Any],
-    benchmark: BenchmarkSet,
-    adapter: BaseAdapter,
-    *,
-    ignore_stereo: bool = False,
-    stats: RunStatistics | None = None,
+    mode: AdaptMode = "strict",
+    target: Target | None = None,
+    source_key: str | None = None,
+    max_routes: int | None = None,
     progress_callback: Callable[[], None] | None = None,
-) -> list[PredictedRoute]:
-    """Materialize canonical predicted routes from target-keyed provider output."""
-    return list(
-        iter_target_keyed_adapted_routes(
-            target_keyed_provider_output,
-            benchmark,
-            adapter,
-            ignore_stereo=ignore_stereo,
-            stats=stats,
-            progress_callback=progress_callback,
-        )
-    )
+) -> list[Route]:
+    """Adapt raw planner output into valid canonical routes.
 
+    max_routes counts successful routes. Invalid raw route records are skipped and
+    do not consume the limit; use adapt_candidates when raw prediction-slot limits
+    and failures must be preserved.
+    """
+    _validate_limit(max_routes, "max_routes")
+    if max_routes == 0:
+        return []
 
-def adapt_target_keyed_candidate_records(
-    target_keyed_provider_output: Mapping[Any, Any],
-    benchmark: BenchmarkSet,
-    adapter: BaseAdapter,
-    *,
-    ignore_stereo: bool = False,
-    stats: RunStatistics | None = None,
-    progress_callback: Callable[[], None] | None = None,
-) -> AdaptedCandidateRecords:
-    """Adapt target-keyed provider output while preserving failed rank slots."""
-    if not isinstance(target_keyed_provider_output, Mapping):
-        raise InputError(
-            "Target-keyed provider output must be a mapping keyed by target id or target smiles.",
-            code="input.invalid_target_keyed_provider_output",
-            context={"actual_type": type(target_keyed_provider_output).__name__},
-        )
-
-    run_stats = stats or RunStatistics()
-    routes: list[PredictedRoute] = []
-    records: CandidateRecordsDict = {target_id: [] for target_id in benchmark.targets}
-
-    for target_id, target in benchmark.targets.items():
-        matched_key = target_id if target_id in target_keyed_provider_output else None
-        if matched_key is None and target.smiles in target_keyed_provider_output:
-            matched_key = target.smiles
-        if matched_key is None:
-            continue
-
-        entries = adapter.iter_raw_entries(target_keyed_provider_output[matched_key], source_key=str(matched_key))
-        for rank, entry in enumerate(entries, start=1):
-            run_stats.total_routes_in_raw_files += 1
+    routes: list[Route] = []
+    for entry in adapter.iter_raw_routes(raw_payload, source_key=source_key):
+        try:
+            route = adapt_route(entry.payload, adapter, mode=mode, target=target or _target_from_entry(entry))
+            if route is not None:
+                routes.append(route)
+                if max_routes is not None and len(routes) >= max_routes:
+                    break
+        finally:
             if progress_callback is not None:
                 progress_callback()
+    return routes
 
-            source = CandidateSource(
-                key=entry.source_key,
-                row_index=entry.source_row_index,
-                record_id=entry.source_record_id,
-            )
+
+def adapt_candidates(
+    raw_payload: Any,
+    adapter: Adapter,
+    *,
+    mode: AdaptMode = "strict",
+    target: Target | None = None,
+    source_key: str | None = None,
+    max_candidates: int | None = None,
+    progress_callback: Callable[[], None] | None = None,
+) -> list[Candidate]:
+    """Adapt raw planner output while preserving failed candidate rank slots."""
+    _validate_limit(max_candidates, "max_candidates")
+    if max_candidates == 0:
+        return []
+
+    candidates: list[Candidate] = []
+    entries = adapter.iter_raw_routes(raw_payload, source_key=source_key)
+    if max_candidates is not None:
+        entries = islice(entries, max_candidates)
+    for fallback_rank, entry in enumerate(entries, start=1):
+        try:
+            rank = entry.source_order if entry.source_order is not None else fallback_rank
+            entry_target = target or _target_from_entry(entry)
             try:
-                route = adapter.cast(entry.payload, ignore_stereo=ignore_stereo, expected_target=target)
-            except ValidationError as exc:
-                run_stats.record_failure("adapter.schema_invalid", target_id=target_id)
-                records[target_id].append(
-                    CandidateRecord(
-                        rank=rank,
-                        adapter_failure=FailureRecord(code="adapter.schema_invalid", message=str(exc)),
-                        source=source,
-                    )
+                route = adapter.cast(entry.payload, mode=mode, target=entry_target)
+            except (AdapterError, ChemError, ValidationError) as exc:
+                candidates.append(
+                    Candidate(rank=rank, failure=_failure_from_exception(exc, target=entry_target, entry=entry))
                 )
                 continue
-            except (AdapterError, ChemError) as exc:
-                run_stats.record_failure(exc.code, target_id=target_id)
-                records[target_id].append(
-                    CandidateRecord(rank=rank, adapter_failure=FailureRecord.from_exception(exc), source=source)
-                )
-                continue
+            candidates.append(Candidate(rank=rank, route=route))
+        finally:
+            if progress_callback is not None:
+                progress_callback()
+    return candidates
 
-            run_stats.successful_routes_before_dedup += 1
-            prediction = PredictedRoute.from_route(
-                route,
-                rank=rank,
-                metadata=_prediction_metadata_from_entry(entry),
-            )
-            routes.append(prediction)
-            records[target_id].append(CandidateRecord(rank=rank, route=route, source=source))
 
-    n_records = sum(len(target_records) for target_records in records.values())
-    metadata = CandidateAuditMetadata(
-        preserves_failed_candidates=True,
-        candidate_denominator="complete",
-        n_raw_entries_seen=run_stats.total_routes_in_raw_files,
-        n_candidate_records_written=n_records,
-        n_routes_adapted=run_stats.successful_routes_before_dedup,
-        n_adaptation_failures=run_stats.routes_failed_transformation,
+def _validate_limit(value: int | None, name: str) -> None:
+    if value is not None and value < 0:
+        raise ValueError(f"{name} must be non-negative")
+
+
+def _target_from_entry(entry: RawRouteEntry) -> Target | None:
+    if entry.target_hint_smiles is None:
+        return None
+
+    try:
+        smiles = canonicalize_smiles(entry.target_hint_smiles)
+        inchikey = get_inchi_key(smiles)
+    except ChemError:
+        return None
+    return Target(
+        id=entry.target_hint_id or entry.source_key or smiles,
+        smiles=SmilesStr(smiles),
+        inchikey=InChIKeyStr(inchikey),
     )
-    return AdaptedCandidateRecords(routes=routes, records=records, metadata=metadata)
+
+
+def _failure_from_exception(
+    exc: AdapterError | ChemError | ValidationError,
+    *,
+    target: Target | None,
+    entry: RawRouteEntry | None,
+) -> FailureRecord:
+    """Convert a per-candidate failure into a record that keeps target identity.
+
+    Adapter and chemistry exceptions carry a stable code plus optional structured
+    context, e.g. adapter name, bad node type, or offending SMILES. Pydantic
+    validation errors do not, so they become generic adapter schema failures.
+    """
+    code = exc.code if isinstance(exc, RetroCastException) else "adapter.schema_invalid"
+    context = dict(exc.context) if isinstance(exc, RetroCastException) else {}
+    if target is not None:
+        target_id, target_smiles, target_inchikey = target.id, target.smiles, target.inchikey
+    else:
+        target_id = entry.target_hint_id if entry is not None else None
+        target_smiles = target_inchikey = None
+
+    return FailureRecord(
+        code=ErrorCode(code),
+        message=str(exc),
+        target_id=target_id,
+        target_smiles=target_smiles,
+        target_inchikey=target_inchikey,
+        context=context,
+    )

@@ -1,122 +1,75 @@
-import logging
+"""Filtering and route surgery helpers for benchmark curation.
+
+These utilities operate on already-canonical v2 ``Route`` and ``Benchmark``
+objects. They are intentionally topology-oriented: the code compares route and
+reaction signatures, removes reaction-overlap fragments, classifies route shape,
+and keeps curation pools from leaking duplicate or ambiguous targets.
+"""
+
+from __future__ import annotations
+
 from collections.abc import Callable, Hashable
-from copy import deepcopy
 from typing import Literal
 
-from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
-from retrocast.models.chem import Molecule, ReactionSignature, ReactionStep, Route
-
-logger = logging.getLogger(__name__)
+from retrocast.models.route import Molecule, Route, RoutePath
+from retrocast.models.task import Benchmark, Target
 
 RouteType = Literal["linear", "convergent"]
 
 
-def excise_reactions_from_route(
-    route: Route,
-    exclude: set[ReactionSignature],
-) -> list[Route]:
-    """
-    Remove specific reactions from a route, yielding sub-routes.
+def excise_reactions_from_route(route: Route, exclude: set[str]) -> list[Route]:
+    """Cut matching reactions out of ``route`` and return non-empty fragments.
 
-    When a reaction is in the exclusion set, the product of that reaction becomes
-    a leaf node in its parent tree. Each reactant of the excised reaction that has
-    its own synthesis path becomes the root of a new sub-route.
+    ``exclude`` contains v2 reaction signatures, i.e. values produced by
+    ``route.reaction_at(path).signature()``. When a matching reaction is found,
+    its product molecule is retained but converted to a leaf in the rebuilt
+    parent route. Any reactant branch below the cut that still contains at least
+    one reaction becomes its own returned subroute.
 
-    Args:
-        route: The route to process.
-        exclude: Set of ReactionSignatures to remove from the route.
-
-    Returns:
-        List of valid sub-routes (routes with length > 0) after excision.
-        The main route (if still valid) is first, followed by any sub-routes
-        created from excised reactants.
+    The returned routes are ordered as the rebuilt main route first, if it still
+    contains any reactions, followed by subroutes discovered during depth-first
+    traversal. Leaf-only fragments are intentionally dropped because they are not
+    useful training routes.
 
     Example:
-        Given route: R <- A1 <- A2 <- I1 <- I2 <- A3
-        Excluding: I1 <- I2 (i.e., the reaction where I2 produces I1)
-        Result:
-        - Main route: R <- A1 <- A2 <- I1 (I1 is now a leaf)
-        - Sub-route: I2 <- A3 (I2 becomes a new target)
+        Given ``R <- A1 <- A2 <- I1 <- I2 <- A3`` and excluding the reaction
+        that produces ``I1`` from ``I2``, the result is a main route ending at
+        ``I1`` as a leaf plus a subroute rooted at ``I2``.
     """
-    if route.target.is_leaf:
-        # No reactions to excise
+    if route.target.product_of is None:
         return []
 
-    sub_routes: list[Route] = []
+    subroutes = []
 
-    def _rebuild(node: Molecule) -> Molecule:
-        """Recursively rebuild tree, cutting at excluded reactions."""
-        if node.is_leaf:
-            # Leaf nodes are returned as-is
-            return Molecule(
-                smiles=node.smiles,
-                inchikey=node.inchikey,
-                metadata=deepcopy(node.metadata),
-            )
+    def rebuild(molecule: Molecule, path: RoutePath) -> Molecule:
+        reaction = molecule.product_of
+        if reaction is None:
+            return molecule.model_copy(deep=True)
 
-        # Non-leaf node has a synthesis_step
-        assert node.synthesis_step is not None
+        reaction_view = route.reaction_at(path.produced_by())
+        if reaction_view.signature() in exclude:
+            for index, reactant in enumerate(reaction.reactants):
+                if reactant.product_of is None:
+                    continue
+                rebuilt = rebuild(reactant, path.produced_by().reactant(index))
+                if rebuilt.product_of is not None:
+                    subroutes.append(Route(target=rebuilt, annotations=route.annotations.copy()))
+            return molecule.model_copy(update={"product_of": None}, deep=True)
 
-        rxn = node.synthesis_step
-        sig: ReactionSignature = (
-            frozenset(r.inchikey for r in rxn.reactants),
-            node.inchikey,
+        reactants = [
+            rebuild(reactant, path.produced_by().reactant(index)) for index, reactant in enumerate(reaction.reactants)
+        ]
+        return molecule.model_copy(
+            update={"product_of": reaction.model_copy(update={"reactants": reactants}, deep=True)},
+            deep=True,
         )
 
-        if sig in exclude:
-            # Cut here: this node becomes a leaf
-            # Each non-leaf reactant becomes a new sub-route
-            for reactant in rxn.reactants:
-                if not reactant.is_leaf:
-                    rebuilt_reactant = _rebuild(reactant)
-                    if rebuilt_reactant.synthesis_step is not None:
-                        # Reactant still has reactions, create sub-route
-                        new_route = Route(
-                            target=rebuilt_reactant,
-                            metadata=deepcopy(route.metadata),
-                        )
-                        sub_routes.append(new_route)
-
-            # Return this node as a leaf (no synthesis_step)
-            return Molecule(
-                smiles=node.smiles,
-                inchikey=node.inchikey,
-                metadata=deepcopy(node.metadata),
-            )
-        else:
-            # Keep this reaction, but recursively check reactants
-            new_reactants = [_rebuild(r) for r in rxn.reactants]
-            new_step = ReactionStep(
-                reactants=new_reactants,
-                mapped_smiles=rxn.mapped_smiles,
-                template=rxn.template,
-                reagents=list(rxn.reagents) if rxn.reagents is not None else None,
-                solvents=list(rxn.solvents) if rxn.solvents is not None else None,
-                metadata=deepcopy(rxn.metadata),
-            )
-            return Molecule(
-                smiles=node.smiles,
-                inchikey=node.inchikey,
-                synthesis_step=new_step,
-                metadata=deepcopy(node.metadata),
-            )
-
-    main_target = _rebuild(route.target)
-
-    result: list[Route] = []
-
-    # Only include main route if it still has reactions
-    if main_target.synthesis_step is not None:
-        main_route = Route(
-            target=main_target,
-            metadata=deepcopy(route.metadata),
-        )
-        result.append(main_route)
-
-    # Add sub-routes (already filtered for having reactions)
-    result.extend(sub_routes)
-
-    return result
+    rebuilt_target = rebuild(route.target, RoutePath.target())
+    routes = []
+    if rebuilt_target.product_of is not None:
+        routes.append(Route(target=rebuilt_target, annotations=route.annotations.copy()))
+    routes.extend(subroutes)
+    return routes
 
 
 def deduplicate_routes(
@@ -124,90 +77,76 @@ def deduplicate_routes(
     *,
     key: Callable[[Route], Hashable] | None = None,
 ) -> list[Route]:
+    """Return routes with duplicate identities removed, preserving first occurrence.
+
+    By default, identity is the full v2 route signature. Callers may pass
+    ``key`` to deduplicate by a broader or narrower identity, such as depth,
+    target key, or a depth-limited signature.
     """
-    Filters a list of Route objects, returning only the unique routes.
-
-    Args:
-        routes: Routes to deduplicate.
-        key: Optional identity function. Defaults to Route.get_structural_signature().
-    """
-    route_key = key or (lambda route: route.get_structural_signature())
-    seen_keys: set[Hashable] = set()
-    unique_routes = []
-
-    logger.debug(f"Deduplicating {len(routes)} routes...")
-
+    route_key = key or (lambda route: route.signature())
+    seen = set()
+    output = []
     for route in routes:
-        route_identity = route_key(route)
-
-        if route_identity not in seen_keys:
-            seen_keys.add(route_identity)
-            unique_routes.append(route)
-
-    num_removed = len(routes) - len(unique_routes)
-    if num_removed > 0:
-        logger.debug(f"Removed {num_removed} duplicate routes.")
-
-    return unique_routes
-
-
-def filter_by_route_type(benchmark: BenchmarkSet, route_type: RouteType) -> list[BenchmarkTarget]:
-    """
-    Extracts targets based on their primary acceptable route's synthesis topology.
-
-    Uses the first acceptable route (primary route) to determine convergence.
-    Targets without acceptable routes are excluded.
-
-    Args:
-        benchmark: The benchmark set to filter
-        route_type: "convergent" or "linear"
-
-    Returns:
-        List of targets matching the specified route type
-    """
-    if route_type == "convergent":
-        return [t for t in benchmark.targets.values() if t.is_convergent is True]
-    elif route_type == "linear":
-        return [t for t in benchmark.targets.values() if t.is_convergent is False]
-    else:
-        raise ValueError(f"Unknown route type: {route_type}")
-
-
-def clean_and_prioritize_pools(
-    primary: list[BenchmarkTarget], secondary: list[BenchmarkTarget]
-) -> tuple[list[BenchmarkTarget], list[BenchmarkTarget]]:
-    """
-    Cleans two pools of targets based on conflicts, but keeps them separate.
-
-    Removes duplicates based on primary acceptable route signatures and
-    identifies/removes targets with ambiguous SMILES across pools.
-
-    Returns:
-        (cleaned_primary, cleaned_secondary)
-    """
-    logger.info(f"Cleaning pools: Primary ({len(primary)}) + Secondary ({len(secondary)})")
-
-    # 1. Filter Secondary by Route Signature (remove duplicates based on primary route)
-    primary_sigs = {t.primary_route.get_structural_signature() for t in primary if t.primary_route}
-
-    secondary_unique_routes = []
-    for t in secondary:
-        if t.primary_route and t.primary_route.get_structural_signature() in primary_sigs:
+        identity = route_key(route)
+        if identity in seen:
             continue
-        secondary_unique_routes.append(t)
+        seen.add(identity)
+        output.append(route)
+    return output
 
-    # 2. Identify Ambiguous SMILES
-    primary_smiles = {t.smiles for t in primary}
-    secondary_smiles = {t.smiles for t in secondary_unique_routes}
-    ambiguous_smiles = primary_smiles.intersection(secondary_smiles)
 
-    if ambiguous_smiles:
-        logger.warning(f"  Removing {len(ambiguous_smiles)} ambiguous targets from BOTH pools.")
+def filter_by_route_type(benchmark: Benchmark, route_type: RouteType) -> list[Target]:
+    """Return benchmark targets whose primary acceptable route has the requested topology.
 
-    # 3. Construct Final Lists
-    clean_primary = [t for t in primary if t.smiles not in ambiguous_smiles]
-    clean_secondary = [t for t in secondary_unique_routes if t.smiles not in ambiguous_smiles]
+    Route type is derived from the first acceptable route for each target. Targets
+    without acceptable routes are excluded because there is no topology to
+    classify. ``linear`` means no reaction in the route has more than one
+    synthesized reactant branch; ``convergent`` means at least one reaction does.
+    """
+    if route_type not in ("linear", "convergent"):
+        raise ValueError(f"Unknown route type: {route_type}")
+    want_convergent = route_type == "convergent"
+    return [
+        target
+        for target in benchmark.targets.values()
+        if target.acceptable_routes and target.acceptable_routes[0].is_convergent() is want_convergent
+    ]
 
-    logger.info(f"Cleaned sizes: Primary {len(clean_primary)}, Secondary {len(clean_secondary)}")
 
-    return clean_primary, clean_secondary
+def clean_and_prioritize_pools(primary: list[Target], secondary: list[Target]) -> tuple[list[Target], list[Target]]:
+    """Remove route duplicates and ambiguous targets across prioritized pools.
+
+    The primary pool wins route-signature conflicts: secondary targets whose
+    first acceptable route duplicates a primary target's first acceptable route
+    are removed. After that, any target SMILES that still appears in both pools
+    is considered ambiguous and removed from both pools.
+
+    Targets without acceptable routes are kept unless they collide by SMILES,
+    because there is no route signature to compare.
+    """
+    primary_signatures = {target.acceptable_routes[0].signature() for target in primary if target.acceptable_routes}
+    secondary_without_route_dupes = [
+        target
+        for target in secondary
+        if not target.acceptable_routes or target.acceptable_routes[0].signature() not in primary_signatures
+    ]
+    ambiguous_smiles = {target.smiles for target in primary} & {
+        target.smiles for target in secondary_without_route_dupes
+    }
+    return (
+        [target for target in primary if target.smiles not in ambiguous_smiles],
+        [target for target in secondary_without_route_dupes if target.smiles not in ambiguous_smiles],
+    )
+
+
+def route_is_convergent(route: Route) -> bool:
+    """Return whether any reaction in ``route`` combines multiple synthesized branches.
+
+    A reaction with one synthesized reactant and any number of leaf reactants is
+    still considered linear. A route is convergent only when a single reaction
+    joins two or more reactants that themselves have producing reactions.
+
+    This curation-level wrapper is kept for existing callers; new code can call
+    ``Route.is_convergent()`` directly.
+    """
+    return route.is_convergent()

@@ -1,276 +1,327 @@
-"""
-In-process integration tests for CLI handlers.
-This executes the actual handler logic within the test process, ensuring coverage tracking.
-"""
+from __future__ import annotations
 
 import csv
 import gzip
 import json
+import sys
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any
 
 import pytest
 
-from retrocast.chem import get_inchi_key
-from retrocast.cli import adhoc, handlers
+from retrocast.adapters import PaRoutesAdapter
+from retrocast.chem import canonicalize_smiles, get_inchi_key
+from retrocast.cli.main import main
+from retrocast.io import (
+    load_analysis_report,
+    load_candidates,
+    load_collected_candidates,
+    load_evaluation,
+    save_analysis_report,
+    save_benchmark,
+    save_candidates,
+    save_evaluation,
+)
 from retrocast.io.blob import save_json_gz
-from retrocast.io.data import load_routes
-from retrocast.models.benchmark import BenchmarkSet, BenchmarkTarget
-from tests.helpers import _synthetic_inchikey
+from retrocast.models import Benchmark, Target, TaskConstraints
+from retrocast.models.analysis import AnalysisReport, MetricSummary
+from retrocast.models.candidates import Candidate
+from retrocast.typing import InChIKeyStr, SmilesStr
+from retrocast.workflow import adapt_candidates
 
-# --- Fixtures ---
 
-
-@pytest.fixture
-def synthetic_config(tmp_path) -> dict[str, Any]:
-    """
-    Creates a full directory structure in tmp_path and returns a valid config dict.
-    """
-    import json
-
-    base = tmp_path / "data"
-
-    # Create structure
-    (base / "1-benchmarks" / "definitions").mkdir(parents=True)
-    (base / "1-benchmarks" / "stocks").mkdir(parents=True)
-    (base / "2-raw" / "test-model" / "test-bench").mkdir(parents=True)
-    (base / "3-processed").mkdir(parents=True)
-    (base / "4-scored").mkdir(parents=True)
-    (base / "5-results").mkdir(parents=True)
-
-    # Create manifest with directives for adapter resolution
-    manifest = {
-        "schema_version": "1.1",
-        "directives": {"adapter": "paroutes", "raw_results_filename": "results.json.gz"},
-        "action": "test-setup",
-        "parameters": {},
-        "source_files": [],
-        "output_files": [],
-        "statistics": {},
-    }
-    manifest_path = base / "2-raw" / "test-model" / "test-bench" / "manifest.json"
-    with open(manifest_path, "w") as f:
-        json.dump(manifest, f)
-
+def raw_route() -> dict:
     return {
-        "data_dir": str(base),
+        "type": "mol",
+        "smiles": "CCO",
+        "children": [
+            {
+                "type": "reaction",
+                "smiles": "CCO",
+                "metadata": {"ID": "US123;1", "rsmi": "C.CC>>CCO"},
+                "children": [
+                    {"type": "mol", "smiles": "C", "in_stock": True, "children": []},
+                    {
+                        "type": "mol",
+                        "smiles": "CC",
+                        "children": [
+                            {
+                                "type": "reaction",
+                                "smiles": "CC",
+                                "metadata": {"ID": "US123;2", "rsmi": "C>>CC"},
+                                "children": [{"type": "mol", "smiles": "C", "in_stock": True, "children": []}],
+                            }
+                        ],
+                    },
+                ],
+            }
+        ],
     }
 
 
-@pytest.fixture
-def synthetic_data(synthetic_config):
-    """
-    Populates the directories with valid synthetic files.
-    """
-    base = Path(synthetic_config["data_dir"])
+def invalid_raw_route() -> dict:
+    route = raw_route()
+    route["children"][0]["children"][1]["smiles"] = "not-smiles"
+    return route
 
-    # 1. Create Benchmark
-    target = BenchmarkTarget(
-        id="t1",
-        smiles="CC",  # Ethane - matches our route target
-        inchi_key=_synthetic_inchikey("CC"),
-        is_convergent=True,  # Two reactants merge in one reaction
-        route_length=1,  # One reaction step
-        ground_truth=None,
+
+def benchmark() -> Benchmark:
+    smiles = canonicalize_smiles("CCO")
+    target = Target(id="ethanol", smiles=SmilesStr(smiles), inchikey=InChIKeyStr(get_inchi_key(smiles)))
+    return Benchmark(
+        name="small",
+        targets={target.id: target},
+        default_constraints=TaskConstraints(stock="test-stock"),
     )
-    bench = BenchmarkSet(name="test-bench", stock_name="test-stock", targets={"t1": target})
-    save_json_gz(bench, base / "1-benchmarks" / "definitions" / "test-bench.json.gz")
 
-    # 2. Create Stock
-    # Stock contains methane (C), which is the reactant in our route
-    stock_path = base / "1-benchmarks" / "stocks" / "test-stock.csv.gz"
-    with gzip.open(stock_path, "wt", newline="") as f:
-        writer = csv.writer(f)
+
+def write_stock(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(path, "wt", newline="") as handle:
+        writer = csv.writer(handle)
         writer.writerow(["SMILES", "InChIKey"])
         writer.writerow(["C", get_inchi_key("C")])
 
-    # 3. Create Raw Results
-    # ParoutesAdapter expects a molecule node with reaction children
-    # Creating a simple route: CC <- C + C (ethane from two methane molecules)
 
-    # Leaf molecules (reactants)
-    reactant1 = {"type": "mol", "smiles": "C", "in_stock": True, "children": []}
-
-    reactant2 = {"type": "mol", "smiles": "C", "in_stock": True, "children": []}
-
-    # Reaction node combining the reactants
-    reaction_node = {
-        "type": "reaction",
-        "smiles": "CC",  # Product SMILES
-        "metadata": {"ID": "US2020123456A1;example-rxn", "rsmi": "C.C>>CC"},
-        "children": [reactant1, reactant2],
-    }
-
-    # Root molecule (target) with the reaction as a child
-    raw_route_tree = {"type": "mol", "smiles": "CC", "in_stock": False, "children": [reaction_node]}
-
-    # Map target_id -> Single Route Dict (not list)
-    raw_data_map = {"t1": raw_route_tree}
-
-    save_json_gz(raw_data_map, base / "2-raw" / "test-model" / "test-bench" / "results.json.gz")
-
-    return bench
+def run_cli(monkeypatch, *args: str) -> None:
+    monkeypatch.setattr(sys, "argv", ["retrocast", *args])
+    main()
 
 
-# --- Tests ---
+def test_v2_config_cli_reports_resolved_data_dir(tmp_path, monkeypatch, capsys) -> None:
+    data_dir = tmp_path / "data"
+
+    run_cli(monkeypatch, "--data-dir", str(data_dir), "config")
+
+    output = capsys.readouterr().out
+    assert "RetroCast Schema V2 Configuration" in output
+    assert str(data_dir.resolve()) in output.replace("\n", "")
+    assert "benchmarks" in output
+    assert "processed" in output
 
 
-@pytest.mark.integration
-class TestCLIHandlerIntegration:
-    """Integration tests for the full CLI handler workflow.
+def test_v2_config_cli_reports_malformed_yaml_as_cli_error(tmp_path, monkeypatch, caplog) -> None:
+    config_path = tmp_path / "retrocast-config.yaml"
+    config_path.write_text("data_dir: [unterminated", encoding="utf-8")
 
-    Tests the complete pipeline: ingest -> score -> analyze
-    using synthetic data with tmp_path.
-    """
+    with pytest.raises(SystemExit) as exc_info:
+        run_cli(monkeypatch, "--config", str(config_path), "config")
 
-    def test_ingest_flow(self, synthetic_config, synthetic_data):
-        """Test handle_ingest -> creates processed routes."""
+    assert exc_info.value.code == 1
+    assert "Failed to parse config file" in caplog.text
 
-        # Mock CLI args
-        args = SimpleNamespace(
-            model="test-model",
-            dataset="test-bench",
-            all_models=False,
-            all_datasets=False,
-            sampling_strategy=None,
-            k=None,
-            anonymize=False,
-            adapter=None,  # Will be resolved from manifest
-            ignore_stereo=False,
-        )
 
-        # RUN
-        handlers.handle_ingest(args, synthetic_config)
+def test_v2_list_adapters_cli_reports_canonical_names_and_aliases(monkeypatch, capsys) -> None:
+    run_cli(monkeypatch, "list-adapters")
 
-        # VERIFY
-        base = Path(synthetic_config["data_dir"])
-        expected_file = base / "3-processed" / "test-bench" / "test-model" / "routes.json.gz"
-        assert expected_file.exists()
+    output = capsys.readouterr().out
+    assert "paroutes" in output
+    assert "retro-star -> retrostar" in output
 
-        # Check manifest exists
-        assert (expected_file.parent / "manifest.json").exists()
 
-    def test_ingest_matches_adapt_then_collect(self, synthetic_config, synthetic_data):
-        """Project ingest should write the same routes as adhoc adapt followed by collect."""
-        base = Path(synthetic_config["data_dir"])
-        raw_path = base / "2-raw" / "test-model" / "test-bench" / "results.json.gz"
-        benchmark_path = base / "1-benchmarks" / "definitions" / "test-bench.json.gz"
-        route_corpus_path = base / "route-corpus.jsonl.gz"
-        collected_path = base / "routes-col.json.gz"
+def test_v2_list_cli_reports_raw_manifests(tmp_path, monkeypatch, capsys) -> None:
+    data_dir = tmp_path / "data"
+    write_raw_job(data_dir, model="test-model", dataset="small")
 
-        adhoc.handle_adapt(
-            SimpleNamespace(
-                input=str(raw_path),
-                output=str(route_corpus_path),
-                adapter="paroutes",
-                benchmark=str(benchmark_path),
-                input_kind="target-keyed-provider-output",
-                no_progress=True,
-            )
-        )
-        adhoc.handle_collect(
-            SimpleNamespace(
-                input=str(route_corpus_path),
-                benchmark=str(benchmark_path),
-                output=str(collected_path),
-            )
-        )
+    run_cli(monkeypatch, "--data-dir", str(data_dir), "list")
 
-        handlers.handle_ingest(
-            SimpleNamespace(
-                model="test-model",
-                dataset="test-bench",
-                all_models=False,
-                all_datasets=False,
-                sampling_strategy=None,
-                k=None,
-                anonymize=False,
-                adapter="paroutes",
-                input_kind="target-keyed-provider-output",
-                ignore_stereo=False,
-                no_progress=True,
+    output = capsys.readouterr().out
+    assert "test-model" in output
+    assert "small" in output
+    assert "paroutes" in output
+
+
+def test_v2_compare_pareto_frontier_uses_analysis_reports(tmp_path, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    for model_name, value in [("model-a", 0.75), ("model-b", 0.5)]:
+        analysis_path = data_dir / "5-results" / "small" / model_name / "test-stock" / "analysis.json.gz"
+        save_analysis_report(
+            AnalysisReport(
+                metrics={
+                    "solv_0[test-stock]_rate": MetricSummary(
+                        value=value,
+                        count=4,
+                        ci_low=max(0.0, value - 0.1),
+                        ci_high=min(1.0, value + 0.1),
+                    )
+                }
             ),
-            synthetic_config,
+            analysis_path,
         )
 
-        ingest_path = base / "3-processed" / "test-bench" / "test-model" / "routes.json.gz"
-        assert load_routes(ingest_path) == load_routes(collected_path)
+    config_path = tmp_path / "compare.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "benchmark: small",
+                "stock: test-stock",
+                "metric: solv_0[test-stock]_rate",
+                "output_dir: comparisons",
+                "output_file: solv0",
+                "sources:",
+                f"  - root: {data_dir}",
+                "    models:",
+                "      - name: model-a",
+                "        hourly_cost: 1.0",
+                "        legend: Model A",
+                "      - name: model-b",
+                "        hourly_cost: 0.5",
+                "        legend: Model B",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
 
-    def test_score_flow(self, synthetic_config, synthetic_data):
-        """Test handle_score -> creates evaluation file."""
+    run_cli(monkeypatch, "compare", "pareto-frontier", str(config_path), "--no-open")
 
-        # Pre-requisite: Run ingest first
-        self.test_ingest_flow(synthetic_config, synthetic_data)
+    html_path = tmp_path / "comparisons" / "solv0-cost.html"
+    assert html_path.exists()
+    html = html_path.read_text(encoding="utf-8")
+    assert "Model A" in html
+    assert "solv_0[test-stock]_rate" in html
 
-        args = SimpleNamespace(
-            model="test-model", dataset="test-bench", all_models=False, all_datasets=False, stock=None
-        )
 
-        # RUN
-        handlers.handle_score(args, synthetic_config)
+def test_v2_adapt_cli_writes_candidates_and_manifest(tmp_path, monkeypatch) -> None:
+    raw_path = tmp_path / "raw.json.gz"
+    output_path = tmp_path / "candidates.json.gz"
+    save_json_gz({"ok": raw_route(), "bad": invalid_raw_route()}, raw_path)
 
-        # VERIFY
-        base = Path(synthetic_config["data_dir"])
-        expected_file = base / "4-scored" / "test-bench" / "test-model" / "test-stock" / "evaluation.json.gz"
-        assert expected_file.exists()
+    run_cli(
+        monkeypatch,
+        "adapt",
+        "--input",
+        str(raw_path),
+        "--output",
+        str(output_path),
+        "--adapter",
+        "paroutes",
+    )
 
-        # Load check
-        with gzip.open(expected_file, "rt") as f:
-            data = json.load(f)
-            # t1 should be solvable because stock has "C" and route uses C as reactants
-            assert data["results"]["t1"]["has_stock_terminated_route"] is True
+    candidates = load_candidates(output_path)
+    assert len(candidates) == 2
+    assert any(candidate.failure is not None for candidate in candidates)
+    manifest = json.loads((tmp_path / "candidates.manifest.json").read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == "2"
+    assert manifest["statistics"]["failures_by_code"]
 
-    def test_analyze_flow(self, synthetic_config, synthetic_data):
-        """Test handle_analyze -> creates report and plots."""
 
-        # Pre-requisite: Run scoring first
-        self.test_score_flow(synthetic_config, synthetic_data)
+def test_v2_collect_cli_writes_collected_candidates_and_manifest(tmp_path, monkeypatch) -> None:
+    candidates_path = tmp_path / "candidates.json.gz"
+    benchmark_path = tmp_path / "small.json.gz"
+    output_path = tmp_path / "collected.json.gz"
+    candidates = load_candidates_from_raw(raw_route())
+    save_candidates(candidates, candidates_path)
+    save_benchmark(benchmark(), benchmark_path)
 
-        args = SimpleNamespace(
-            model="test-model",
-            dataset="test-bench",
-            all_models=False,
-            all_datasets=False,
-            stock=None,
-            make_plots=False,
-            top_k=[1, 5, 10],
-        )
+    run_cli(
+        monkeypatch,
+        "collect",
+        "--input",
+        str(candidates_path),
+        "--benchmark",
+        str(benchmark_path),
+        "--output",
+        str(output_path),
+    )
 
-        # RUN
-        handlers.handle_analyze(args, synthetic_config)
+    collected = load_collected_candidates(output_path)
+    assert list(collected) == ["ethanol"]
+    assert len(collected["ethanol"]) == 1
+    manifest = json.loads((tmp_path / "collected.manifest.json").read_text(encoding="utf-8"))
+    assert manifest["action"] == "[cli]collect"
 
-        # VERIFY
-        base = Path(synthetic_config["data_dir"])
-        results_dir = base / "5-results" / "test-bench" / "test-model" / "test-stock"
 
-        assert (results_dir / "statistics.json.gz").exists()
-        assert (results_dir / "report.md").exists()
+def test_v2_project_cli_ingest_score_analyze(tmp_path, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    (data_dir / "1-benchmarks" / "definitions").mkdir(parents=True)
+    write_stock(data_dir / "1-benchmarks" / "stocks" / "test-stock.csv.gz")
 
-    def test_missing_file_handling(self, synthetic_config, synthetic_data, caplog):
-        """Ensure handlers fail gracefully when raw files are missing."""
+    save_benchmark(benchmark(), data_dir / "1-benchmarks" / "definitions" / "small.json.gz")
+    write_raw_job(data_dir, model="test-model", dataset="small")
 
-        # FIX: Added synthetic_data fixture above so the benchmark definition exists.
-        # Now we manually delete the raw file to test that specific failure mode.
+    run_cli(monkeypatch, "--data-dir", str(data_dir), "ingest", "--model", "test-model", "--dataset", "small")
+    candidates_path = data_dir / "3-processed" / "small" / "test-model" / "candidates.json.gz"
+    assert len(load_collected_candidates(candidates_path)["ethanol"]) == 1
+    assert (candidates_path.parent / "manifest.json").exists()
 
-        base = Path(synthetic_config["data_dir"])
-        raw_file = base / "2-raw" / "test-model" / "test-bench" / "results.json.gz"
-        if raw_file.exists():
-            raw_file.unlink()
+    score_file_path = tmp_path / "score-file-evaluation.json.gz"
+    run_cli(
+        monkeypatch,
+        "score-file",
+        "--benchmark",
+        str(data_dir / "1-benchmarks" / "definitions" / "small.json.gz"),
+        "--candidates",
+        str(candidates_path),
+        "--stock",
+        str(data_dir / "1-benchmarks" / "stocks" / "test-stock.csv.gz"),
+        "--output",
+        str(score_file_path),
+        "--model-name",
+        "test-model",
+    )
+    assert load_evaluation(score_file_path).targets["ethanol"].candidates[0].satisfies_task()
+    assert (tmp_path / "score-file-evaluation.manifest.json").exists()
 
-        args = SimpleNamespace(
-            model="test-model",
-            dataset="test-bench",
-            all_models=False,
-            all_datasets=False,
-            sampling_strategy=None,
-            k=None,
-            anonymize=False,
-            adapter=None,
-            ignore_stereo=False,
-        )
+    run_cli(monkeypatch, "--data-dir", str(data_dir), "score", "--model", "test-model", "--dataset", "small")
+    evaluation_path = data_dir / "4-scored" / "small" / "test-model" / "test-stock" / "evaluation.json.gz"
+    evaluation = load_evaluation(evaluation_path)
+    assert evaluation.schema_version == "2"
+    assert evaluation.targets["ethanol"].candidates[0].satisfies_task()
+    assert evaluation.targets["ethanol"].wall_time == 12.5
+    assert evaluation.targets["ethanol"].cpu_time == 3.25
 
-        # Should simply return/log warning, not raise FileNotFoundError
-        handlers.handle_ingest(args, synthetic_config)
+    stale_targets = {"ethanol": evaluation.targets["ethanol"].model_copy(update={"wall_time": None, "cpu_time": None})}
+    save_evaluation(evaluation.model_copy(update={"targets": stale_targets}), evaluation_path)
 
-        assert "File not found" in caplog.text or "Skipping" in caplog.text
+    run_cli(
+        monkeypatch,
+        "--data-dir",
+        str(data_dir),
+        "analyze",
+        "--model",
+        "test-model",
+        "--dataset",
+        "small",
+        "--n-boot",
+        "10",
+    )
+    analysis_path = data_dir / "5-results" / "small" / "test-model" / "test-stock" / "analysis.json.gz"
+    report = load_analysis_report(analysis_path)
+    assert report.metrics["solv_0[test-stock]_rate"].value == 1.0
+    assert report.runtime.total_wall_time == 12.5
+    assert report.runtime.total_cpu_time == 3.25
+    assert (analysis_path.parent / "report.md").exists()
+    manifest_path = analysis_path.parent / "manifest.json"
+    assert manifest_path.exists()
+
+    run_cli(monkeypatch, "--data-dir", str(data_dir), "verify", "--target", str(manifest_path))
+
+
+def test_v2_ingest_cli_discovers_all_models_and_datasets(tmp_path, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    (data_dir / "1-benchmarks" / "definitions").mkdir(parents=True)
+    save_benchmark(benchmark(), data_dir / "1-benchmarks" / "definitions" / "small.json.gz")
+    write_raw_job(data_dir, model="model-a", dataset="small")
+    write_raw_job(data_dir, model="model-b", dataset="small")
+
+    run_cli(monkeypatch, "--data-dir", str(data_dir), "ingest", "--all-models", "--all-datasets", "--no-progress")
+
+    assert (data_dir / "3-processed" / "small" / "model-a" / "candidates.json.gz").exists()
+    assert (data_dir / "3-processed" / "small" / "model-b" / "candidates.json.gz").exists()
+
+
+def load_candidates_from_raw(raw: dict) -> list[Candidate]:
+    return adapt_candidates({"ethanol": raw}, PaRoutesAdapter(), target=benchmark().targets["ethanol"])
+
+
+def write_raw_job(data_dir: Path, *, model: str, dataset: str) -> None:
+    raw_dir = data_dir / "2-raw" / model / dataset
+    raw_dir.mkdir(parents=True)
+    save_json_gz({"ethanol": raw_route()}, raw_dir / "results.json.gz")
+    save_json_gz({"wall_time": {"ethanol": 12.5}, "cpu_time": {"ethanol": 3.25}}, raw_dir / "execution_stats.json.gz")
+    (raw_dir / "manifest.json").write_text(
+        json.dumps(
+            {"schema_version": "2", "directives": {"adapter": "paroutes", "raw_results_filename": "results.json.gz"}}
+        ),
+        encoding="utf-8",
+    )

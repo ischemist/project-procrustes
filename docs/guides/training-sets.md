@@ -96,18 +96,11 @@ When a real download happens in an interactive terminal, RetroCast shows a progr
 
 ## Public Imports
 
-The stable public import path for training-set models and helpers is `retrocast.datasets`:
+The stable public import path for training-set download helpers is `retrocast.datasets`:
 
 ```python
-from retrocast.datasets import (
-    TrainingReactionRecord,
-    TrainingRouteRecord,
-    download_training_set,
-    resolve_latest_training_set_release,
-)
+from retrocast.datasets import download_training_set, resolve_latest_training_set_release
 ```
-
-You do not need to import these models from `retrocast.curation.training`.
 
 ## Artifact Matrix
 

@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 from rich.console import Console
 
+from retrocast.adapters import AiZynthFinderAdapter
 from retrocast.cli.progress import create_cli_progress, quiet_info_logs
-from retrocast.io import load_json_gz, load_stock_file
+from retrocast.io import load_benchmark, load_json_gz, load_stock_file
+from retrocast.metrics import TaskConstraintChecker
 from retrocast.utils.logging import configure_script_logging, logger
-from retrocast.v2.adapters import AiZynthFinderAdapter
-from retrocast.v2.io import load_benchmark
-from retrocast.v2.metrics import TaskConstraintChecker
-from retrocast.v2.workflow import (
+from retrocast.workflow import (
     adapt_candidates,
     adapt_routes,
     analyze,
@@ -27,13 +27,14 @@ STOCKS_DIR = Path("data/retrocast/1-benchmarks/stocks")
 
 
 def main() -> None:
+    args = parse_args()
     configure_script_logging()
 
     console = Console()
-    raw_payload = load_json_gz(RAW_PATH)
-    task = load_benchmark(BENCHMARK_PATH)
+    raw_payload = load_json_gz(args.raw_path)
+    task = load_benchmark(args.benchmark_path)
     stock_name = task.default_constraints.stock
-    stock = load_stock_file(STOCKS_DIR / f"{stock_name}.csv.gz") if stock_name is not None else set()
+    stock = load_stock_file(args.stocks_dir / f"{stock_name}.csv.gz") if stock_name is not None else set()
     adapter = AiZynthFinderAdapter()
     logger.info("loaded raw payload and benchmark: targets=%s", len(task.targets))
 
@@ -70,7 +71,7 @@ def main() -> None:
         collected_candidates,
         task,
         tier_checkers=[],
-        constraint_checker=TaskConstraintChecker.stock_termination(stock=stock, stock_name=stock_name),
+        constraint_checker=TaskConstraintChecker(stock=stock, stock_name=stock_name),
     )
     report = analyze(evaluation, ks=(1, 10))
     logger.info("score: targets=%s", len(evaluation.targets))
@@ -100,6 +101,14 @@ def main() -> None:
                 ci_high,
                 metric.count,
             )
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the library API example against local schema-2 artifacts.")
+    parser.add_argument("--raw-path", type=Path, default=RAW_PATH)
+    parser.add_argument("--benchmark-path", type=Path, default=BENCHMARK_PATH)
+    parser.add_argument("--stocks-dir", type=Path, default=STOCKS_DIR)
+    return parser.parse_args()
 
 
 if __name__ == "__main__":

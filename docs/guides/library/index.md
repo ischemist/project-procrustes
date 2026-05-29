@@ -4,62 +4,65 @@ icon: lucide/cable
 
 # Python Library
 
-RetroCast is a modular Python library for standardizing retrosynthesis planner outputs, collecting routes onto benchmarks, scoring predictions, and analyzing model performance without depending on the CLI directory layout.
+RetroCast can be used as a normal Python library. The public schema-2 workflow is the same one used by the CLI:
 
-!!! tip "When to use the Python API"
+```text
+adapt -> collect -> score -> analyze
+```
 
-    - Interactive notebooks and exploratory analysis
-    - Custom evaluation loops
-    - Integration with existing research pipelines
-    - Programmatic access to metrics without file I/O
+Use the library API when you want to run RetroCast inside notebooks, custom model loops, training-set curation scripts, or your own file layout.
 
-## Installation
+## Minimal Example
 
-=== "uv (recommended)"
+```python
+from retrocast import get_adapter
+from retrocast.io import load_benchmark
+from retrocast.metrics.constraints import TaskConstraintChecker
+from retrocast.workflow import analyze, ingest_candidates, score
 
-    ```bash
-    uv add retrocast
-    ```
+task = load_benchmark(benchmark_path)
+adapter = get_adapter("paroutes")
 
-    For visualization support:
+predictions = ingest_candidates(raw_payload, adapter, task)
+evaluation = score(
+    predictions,
+    task,
+    constraint_checker=TaskConstraintChecker(stocks={"buyables": stock_inchikeys}),
+)
+report = analyze(evaluation)
+```
 
-    ```bash
-    uv add retrocast[viz]
-    ```
+## Main Objects
 
-=== "pip"
-
-    ```bash
-    pip install retrocast
-    ```
-
-    For visualization support:
-
-    ```bash
-    pip install retrocast[viz]
-    ```
+| Object | Role |
+| --- | --- |
+| `Route` | Canonical chemistry tree: `Molecule -> Reaction -> Molecule`. |
+| `Candidate` | One ranked prediction slot: either a valid `Route` or a `FailureRecord`. |
+| `Task` / `Benchmark` | Targets plus task constraints. |
+| `ScoredCandidate` | A ranked candidate with validity, constraint, and acceptable-route annotations. |
+| `Evaluation` | Scored candidates grouped by target for one task. |
+| `AnalysisReport` | Solv-N, MRR@Solv-N, acceptable-route reconstruction, and confidence intervals. |
 
 ## Choose A Guide
 
-| Task                                                    | Start here                        |
-| ------------------------------------------------------- | --------------------------------- |
-| Choose the right standardization path for your use case | [Adaptation](adaptation.md)       |
-| Convert raw planner output into canonical predictions   | [Adaptation](adaptation.md)       |
-| Score benchmark-keyed routes against stock              | [Evaluation](evaluation.md)       |
-| Compute confidence intervals and aggregate metrics      | [Statistics](statistics.md)       |
-| Plot model diagnostics and comparisons                  | [Visualization](visualization.md) |
-| Look up public functions quickly                        | [Reference](reference.md)         |
+| Task | Start here |
+| --- | --- |
+| Choose between route-only and candidate-preserving adaptation | [Adaptation](adaptation.md) |
+| Score collected candidates and inspect validity results | [Evaluation](evaluation.md) |
+| Compute and interpret metric summaries | [Statistics](statistics.md) |
+| Make plots from reports or legacy statistics objects | [Visualization](visualization.md) |
+| Look up public functions quickly | [Reference](reference.md) |
 
-## v0.6 Mental Model
+## Mental Model
 
-Before v0.6, RetroCast's public mental model centered on `ingest`: take raw predictions, adapt them, and write benchmark-keyed `routes.json.gz`. That is still useful, but it hides two different operations.
+`Route` is chemistry only. It does not know its planner rank, benchmark target, stock result, or validity status.
 
-In v0.6, those operations are exposed as separate library workflows:
+`Candidate` is the evaluation accounting object. It keeps planner rank and contains either a route or a typed adaptation failure. Use candidates whenever failed prediction slots should count toward Solv-0 and MRR.
 
-| Workflow | Input | Output | Requires benchmark targets? |
-| --- | --- | --- | --- |
-| Single-route adaptation | One raw route-like payload | `Route` or `PredictedRoute` | No |
-| Provider-output adaptation | Raw provider output | `list[PredictedRoute]` | No |
-| Benchmark collection | `PredictedRoute` objects plus a benchmark | Target-keyed route mapping | Yes |
+`Evaluation` stores scoring results without changing the route tree. Tier validity and task-constraint satisfaction are separate so Solv-N stays explicit:
 
-Use adaptation when you want the general library promise: "give me whatever the planner emitted and I will give you standard RetroCast objects." Use benchmark collection only when you need the `routes.json.gz` shape for benchmark scoring or aggregate target-level statistics. The [Adaptation guide](adaptation.md#choose-a-workflow) has the decision table.
+```text
+Solv-i[task] = Tier-i route validity + task constraint satisfaction
+```
+
+For the deeper data-model rationale, see [Schema Design](/rationale/schema-design).
