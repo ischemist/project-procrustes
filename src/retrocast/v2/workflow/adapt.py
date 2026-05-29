@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import ValidationError
@@ -34,13 +35,18 @@ def adapt_routes(
     mode: AdaptMode = "strict",
     target: Target | None = None,
     source_key: str | None = None,
+    progress_callback: Callable[[], None] | None = None,
 ) -> list[Route]:
     """Adapt raw planner output into valid canonical routes."""
     routes: list[Route] = []
     for entry in adapter.iter_raw_routes(raw_payload, source_key=source_key):
-        route = adapt_route(entry.payload, adapter, mode=mode, target=target or _target_from_entry(entry))
-        if route is not None:
-            routes.append(route)
+        try:
+            route = adapt_route(entry.payload, adapter, mode=mode, target=target or _target_from_entry(entry))
+            if route is not None:
+                routes.append(route)
+        finally:
+            if progress_callback is not None:
+                progress_callback()
     return routes
 
 
@@ -51,20 +57,25 @@ def adapt_candidates(
     mode: AdaptMode = "strict",
     target: Target | None = None,
     source_key: str | None = None,
+    progress_callback: Callable[[], None] | None = None,
 ) -> list[Candidate]:
     """Adapt raw planner output while preserving failed candidate rank slots."""
     candidates: list[Candidate] = []
     for fallback_rank, entry in enumerate(adapter.iter_raw_routes(raw_payload, source_key=source_key), start=1):
-        rank = entry.source_order if entry.source_order is not None else fallback_rank
-        entry_target = target or _target_from_entry(entry)
         try:
-            route = adapter.cast(entry.payload, mode=mode, target=entry_target)
-        except (AdapterError, ChemError, ValidationError) as exc:
-            candidates.append(
-                Candidate(rank=rank, failure=_failure_from_exception(exc, target=entry_target, entry=entry))
-            )
-            continue
-        candidates.append(Candidate(rank=rank, route=route))
+            rank = entry.source_order if entry.source_order is not None else fallback_rank
+            entry_target = target or _target_from_entry(entry)
+            try:
+                route = adapter.cast(entry.payload, mode=mode, target=entry_target)
+            except (AdapterError, ChemError, ValidationError) as exc:
+                candidates.append(
+                    Candidate(rank=rank, failure=_failure_from_exception(exc, target=entry_target, entry=entry))
+                )
+                continue
+            candidates.append(Candidate(rank=rank, route=route))
+        finally:
+            if progress_callback is not None:
+                progress_callback()
     return candidates
 
 

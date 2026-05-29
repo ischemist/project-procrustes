@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
 from retrocast.v2.adapters.base import Adapter, AdaptMode
@@ -20,11 +20,21 @@ def ingest_routes(
     task: Task,
     *,
     mode: AdaptMode = "strict",
+    progress_callback: Callable[[], None] | None = None,
 ) -> CollectedRoutes:
     """Adapt raw planner output into valid routes and collect them by target id."""
     routes = []
     for target, payload, source_key in _target_payloads(raw_payload, task):
-        routes.extend(adapt_routes(payload, adapter, mode=mode, target=target, source_key=source_key))
+        routes.extend(
+            adapt_routes(
+                payload,
+                adapter,
+                mode=mode,
+                target=target,
+                source_key=source_key,
+                progress_callback=progress_callback,
+            )
+        )
     return collect_routes(routes, task)
 
 
@@ -34,11 +44,21 @@ def ingest_candidates(
     task: Task,
     *,
     mode: AdaptMode = "strict",
+    progress_callback: Callable[[], None] | None = None,
 ) -> CollectedCandidates:
     """Adapt raw planner output into candidates and collect them by target id."""
     candidates = []
     for target, payload, source_key in _target_payloads(raw_payload, task):
-        candidates.extend(adapt_candidates(payload, adapter, mode=mode, target=target, source_key=source_key))
+        candidates.extend(
+            adapt_candidates(
+                payload,
+                adapter,
+                mode=mode,
+                target=target,
+                source_key=source_key,
+                progress_callback=progress_callback,
+            )
+        )
     return collect_candidates(candidates, task)
 
 

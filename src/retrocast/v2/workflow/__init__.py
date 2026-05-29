@@ -16,11 +16,13 @@ from retrocast.v2.workflow.score import (
     score_candidate,
     score_target,
 )
+from retrocast.v2.workflow.stats import CandidateRunStatistics, candidate_statistics, collected_candidate_statistics
 
 __all__ = [
     "CollectedCandidates",
     "CollectedRoutes",
     "ConstraintChecker",
+    "CandidateRunStatistics",
     "TierChecker",
     "adapt_candidates",
     "adapt_route",
@@ -28,6 +30,8 @@ __all__ = [
     "analyze",
     "collect_candidates",
     "collect_routes",
+    "candidate_statistics",
+    "collected_candidate_statistics",
     "ingest_candidates",
     "ingest_routes",
     "score",
