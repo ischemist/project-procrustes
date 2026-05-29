@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Protocol
+from typing import Protocol, cast
 
 from retrocast.exceptions import UnsupportedValidityTierError
 from retrocast.v2.models.candidates import Candidate
@@ -52,9 +52,7 @@ def score_candidate(
             constraints=ConstraintResult(status=CheckStatus.NOT_EVALUATED),
         )
 
-    if candidate.route is None:
-        raise ValueError("Candidate route/failure invariant was violated.")
-    route = candidate.route
+    route = cast(Route, candidate.route)
     _check_route_validity(route, tier_checkers, validity)
     constraints_result = constraint_checker.check_route(route, constraints)
     matched_index = _acceptable_match_index(route, target.acceptable_routes, acceptable_match_level)
