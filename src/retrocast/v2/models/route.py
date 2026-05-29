@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
@@ -200,6 +201,15 @@ class Route(BaseModel):
     ) -> str:
         return _stable_hash(self.key(match_level, depth=depth))
 
+    def leaves(self) -> list[MoleculeView]:
+        return list(self.iter_leaves())
+
+    def iter_leaves(self) -> Iterator[MoleculeView]:
+        yield from self.molecule_at(RoutePath.target()).iter_leaves()
+
+    def depth(self) -> int:
+        return self.molecule_at(RoutePath.target()).depth()
+
 
 class ReactionView(BaseModel):
     route: Route
@@ -244,6 +254,34 @@ class MoleculeView(BaseModel):
         if self.value.product_of is None:
             return None
         return ReactionView(route=self.route, path=self.path.produced_by(), value=self.value.product_of)
+
+    def leaves(self) -> list[MoleculeView]:
+        return list(self.iter_leaves())
+
+    def iter_leaves(self) -> Iterator[MoleculeView]:
+        reaction = self.produced_by()
+        if reaction is None:
+            yield self
+            return
+
+        for reactant in reaction.reactants():
+            yield from reactant.iter_leaves()
+
+    def depth(self) -> int:
+        max_depth = 0
+        stack: list[tuple[MoleculeView, int]] = [(self, 0)]
+        while stack:
+            molecule, depth = stack.pop()
+            reaction = molecule.produced_by()
+            if reaction is None:
+                max_depth = max(max_depth, depth)
+                continue
+            if not reaction.value.reactants:
+                max_depth = max(max_depth, depth + 1)
+                continue
+            for reactant in reaction.reactants():
+                stack.append((reactant, depth + 1))
+        return max_depth
 
     def subtree_key(
         self,

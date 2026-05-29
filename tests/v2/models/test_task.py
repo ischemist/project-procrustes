@@ -47,6 +47,13 @@ def test_task_rejects_target_key_mismatch() -> None:
 
 
 @pytest.mark.unit
+def test_task_constraints_derive_required_leaf_inchikeys_from_smiles() -> None:
+    constraints = TaskConstraints(required_leaves_smiles=[SmilesStr("CCO")])
+
+    assert constraints.required_leaf_inchikeys == (get_inchi_key("CCO"),)
+
+
+@pytest.mark.unit
 def test_benchmark_is_a_task_with_description() -> None:
     benchmark = Benchmark(name="bench", description="small", targets={})
 

@@ -336,6 +336,9 @@ class TaskConstraints(BaseModel):
     required_leaves_smiles: list[SmilesStr] | None = None
     route_depth: int | Literal["short", "medium", "long"] | None = None
 
+    @cached_property
+    def required_leaf_inchikeys(self) -> tuple[InChIKeyStr, ...]: ...
+
 
 class Task(BaseModel):
     name: str
@@ -350,6 +353,12 @@ class Benchmark(Task):
     name: str
     description: str
 ```
+
+`route_depth` integers are inclusive maximum depths. Named depth constraints are ranges:
+
+- `short`: depth 1-3
+- `medium`: depth 4-6
+- `long`: depth 7+
 
 One benchmark is a `Task`. One daedalus query is also a `Task`, usually with one target.
 

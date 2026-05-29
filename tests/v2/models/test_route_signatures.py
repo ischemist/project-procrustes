@@ -87,8 +87,20 @@ def test_leaf_route_has_target_but_no_root_reaction() -> None:
 
     assert route.molecule_at("rc:m:/").value.inchikey == KEY_A
     assert route.molecule_at("rc:m:/").produced_by() is None
+    assert [leaf.id() for leaf in route.leaves()] == ["rc:m:/"]
+    assert [leaf.id() for leaf in route.iter_leaves()] == ["rc:m:/"]
+    assert route.depth() == 0
     with pytest.raises(KeyError):
         route.reaction_at("rc:r:/")
+
+
+@pytest.mark.unit
+def test_route_leaves_and_depth_use_route_paths() -> None:
+    route = two_step_route()
+
+    assert [leaf.id() for leaf in route.leaves()] == ["rc:m:/0/0", "rc:m:/1"]
+    assert [leaf.id() for leaf in route.iter_leaves()] == ["rc:m:/0/0", "rc:m:/1"]
+    assert route.depth() == 2
 
 
 @pytest.mark.unit

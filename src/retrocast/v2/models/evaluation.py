@@ -1,0 +1,105 @@
+from __future__ import annotations
+
+from enum import IntEnum, StrEnum
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, model_validator
+
+from retrocast.v2.models.candidates import FailureRecord
+from retrocast.v2.models.route import ReactionId, Route
+from retrocast.v2.models.task import Target, Task, TaskConstraints
+
+
+class CheckStatus(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    NOT_EVALUATED = "not_evaluated"
+
+
+class Tier(IntEnum):
+    ZERO = 0
+    ONE = 1
+    TWO = 2
+    THREE = 3
+
+
+class CheckResult(BaseModel):
+    code: str
+    status: CheckStatus = CheckStatus.FAIL
+    message: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class TierResult(BaseModel):
+    status: CheckStatus
+    checks: list[CheckResult] = Field(default_factory=list)
+
+
+class ReactionValidity(BaseModel):
+    reaction_id: ReactionId
+    tiers: dict[Tier, TierResult] = Field(default_factory=dict)
+
+
+class RouteValidity(BaseModel):
+    tiers: dict[Tier, TierResult] = Field(default_factory=dict)
+    reactions: list[ReactionValidity] = Field(default_factory=list)
+
+
+class ConstraintResult(BaseModel):
+    status: CheckStatus
+    checks: list[CheckResult] = Field(default_factory=list)
+
+
+class ScoredCandidate(BaseModel):
+    rank: int
+    route: Route | None = None
+    failure: FailureRecord | None = None
+    validity: RouteValidity = Field(default_factory=RouteValidity)
+    constraints: ConstraintResult = Field(default_factory=lambda: ConstraintResult(status=CheckStatus.NOT_EVALUATED))
+    matches_acceptable: bool = False
+    matched_acceptable_index: int | None = None
+
+    @model_validator(mode="after")
+    def _require_route_or_failure(self) -> ScoredCandidate:
+        if self.route is None and self.failure is None:
+            raise ValueError("ScoredCandidate requires route or failure.")
+        if self.route is not None and self.failure is not None:
+            raise ValueError("ScoredCandidate cannot contain both route and failure.")
+        return self
+
+    def has_route(self) -> bool:
+        return self.route is not None
+
+    def failed_adaptation(self) -> bool:
+        return self.failure is not None
+
+    def tier_result(self, tier: Tier) -> TierResult:
+        return self.validity.tiers.get(tier, TierResult(status=CheckStatus.NOT_EVALUATED))
+
+    def reaction_tier_result(self, reaction_id: ReactionId, tier: Tier) -> TierResult | None:
+        for reaction in self.validity.reactions:
+            if reaction.reaction_id == reaction_id:
+                return reaction.tiers.get(tier)
+        return None
+
+    def satisfies_validity(self, tier: Tier) -> bool:
+        return self.tier_result(tier).status == CheckStatus.PASS
+
+    def satisfies_task(self) -> bool:
+        return self.constraints.status == CheckStatus.PASS
+
+    def satisfies_solv(self, tier: Tier) -> bool:
+        return self.satisfies_validity(tier) and self.satisfies_task()
+
+
+class TargetResult(BaseModel):
+    target: Target
+    effective_constraints: TaskConstraints
+    candidates: list[ScoredCandidate] = Field(default_factory=list)
+
+
+class Evaluation(BaseModel):
+    task: Task
+    tiers: list[Tier] = Field(default_factory=list)
+    targets: dict[str, TargetResult] = Field(default_factory=dict)
+    schema_version: Literal["2"] = "2"
