@@ -40,12 +40,24 @@ def create_analysis_table(report: AnalysisReport, *, title: str = "Analysis Resu
         for name, metric, match in top_k_metrics:
             table.add_row(_top_k_label(match), _format_value(name, metric), _format_ci(name, metric), str(metric.count))
 
+    runtime_rows = _runtime_rows(report)
+    if runtime_rows:
+        table.add_section()
+        table.add_row("[dim]Runtime[/]", "", "", "")
+        for label, value in runtime_rows:
+            table.add_row(label, value, "", str(report.runtime.timed_target_count))
+
     return table
 
 
 def generate_markdown_report(report: AnalysisReport, *, title: str = "Evaluation Report") -> str:
     lines = [f"# {title}", "", "## Overall", ""]
     lines.extend(_markdown_metric_table(report.metrics))
+    runtime_rows = _runtime_rows(report, rich=False)
+    if runtime_rows:
+        lines.extend(["", "## Runtime", "", "| Metric | Seconds | Timed Targets |", "| --- | ---: | ---: |"])
+        for label, value in runtime_rows:
+            lines.append(f"| {label} | {value} | {report.runtime.timed_target_count} |")
     if report.by_stratum:
         lines.extend(["", "## By Stratum", ""])
         for stratum in sorted(report.by_stratum):
@@ -63,6 +75,25 @@ def _markdown_metric_table(metrics: dict[str, MetricSummary]) -> list[str]:
             f"{_format_ci(name, metric, rich=False)} | {metric.count} |"
         )
     return lines
+
+
+def _runtime_rows(report: AnalysisReport, *, rich: bool = True) -> list[tuple[str, str]]:
+    runtime = report.runtime
+    rows = []
+    if runtime.total_wall_time is not None:
+        rows.append(("Total wall time", _format_seconds(runtime.total_wall_time, rich=rich)))
+    if runtime.mean_wall_time is not None:
+        rows.append(("Mean wall time", _format_seconds(runtime.mean_wall_time, rich=rich)))
+    if runtime.total_cpu_time is not None:
+        rows.append(("Total CPU time", _format_seconds(runtime.total_cpu_time, rich=rich)))
+    if runtime.mean_cpu_time is not None:
+        rows.append(("Mean CPU time", _format_seconds(runtime.mean_cpu_time, rich=rich)))
+    return rows
+
+
+def _format_seconds(value: float, *, rich: bool) -> str:
+    formatted = f"{value:.2f}s"
+    return f"[green]{formatted}[/]" if rich else formatted
 
 
 def _ordered_metrics(metrics: dict[str, MetricSummary]) -> list[tuple[str, MetricSummary, re.Match[str]]]:

@@ -71,7 +71,10 @@ def estimate_raw_route_entries(
         payload_count = _route_collection_len(payload)
         if payload_count is None:
             return None
-        total += _capped_len(payload_count, max_entries_per_target)
+        capped_count = _capped_len(payload_count, max_entries_per_target)
+        if capped_count is None:
+            return None
+        total += capped_count
     return total
 
 

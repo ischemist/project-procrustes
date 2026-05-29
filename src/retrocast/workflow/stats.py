@@ -93,6 +93,14 @@ def evaluation_statistics(evaluation: Evaluation) -> dict[str, object]:
         "n_candidates": len(candidates),
         "n_failed_candidates": sum(1 for candidate in candidates if candidate.failed_adaptation()),
     }
+    wall_times = [target.wall_time for target in evaluation.targets.values() if target.wall_time is not None]
+    cpu_times = [target.cpu_time for target in evaluation.targets.values() if target.cpu_time is not None]
+    if wall_times:
+        stats["total_wall_time_seconds"] = round(sum(wall_times), 6)
+        stats["mean_wall_time_seconds"] = round(sum(wall_times) / len(wall_times), 6)
+    if cpu_times:
+        stats["total_cpu_time_seconds"] = round(sum(cpu_times), 6)
+        stats["mean_cpu_time_seconds"] = round(sum(cpu_times) / len(cpu_times), 6)
     for tier in evaluation.tiers:
         key = int(tier)
         stats[f"n_solv_{key}"] = sum(

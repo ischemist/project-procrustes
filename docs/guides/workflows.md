@@ -40,7 +40,7 @@ data/
 │   └── stocks/          # *.txt stock files (one SMILES per line)
 ├── 4-scored/            # Scored predictions (output of `retrocast score`)
 │   └── <benchmark>/<model>/<stock>/evaluation.json.gz
-└── 6-comparisons/       # Output directory for visualizations
+└── 5-results/           # Output directory for analysis reports
 ```
 
 !!! warning "Required before running workflows"

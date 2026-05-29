@@ -28,6 +28,7 @@ from retrocast.io import (
     load_candidates,
     load_collected_candidates,
     load_evaluation,
+    load_execution_stats,
     save_analysis_report,
     save_candidates,
     save_collected_candidates,
@@ -36,6 +37,7 @@ from retrocast.io import (
 from retrocast.io.blob import load_json_artifact
 from retrocast.io.data import load_stock_file
 from retrocast.metrics.constraints import TaskConstraintChecker
+from retrocast.models.evaluation import Evaluation
 from retrocast.models.provenance import VerificationReport
 from retrocast.models.route import InChIKeyLevel
 from retrocast.models.task import Benchmark
@@ -50,6 +52,7 @@ from retrocast.paths import (
 )
 from retrocast.typing import InChIKeyStr
 from retrocast.utils.logging import configure_script_logging
+from retrocast.utils.timing import ExecutionStats
 from retrocast.workflow import (
     adapt_candidates,
     analyze,
@@ -440,12 +443,16 @@ def _score_one(model_name: str, benchmark_name: str, paths: dict[str, Path], arg
             match_level=match_level,
         ),
         acceptable_match_level=match_level,
+        execution_stats=_load_execution_stats_if_present(_execution_stats_path(paths, model_name, benchmark_name)),
     )
 
     output_dir = paths["scored"] / benchmark_name / model_name / output_label
     output_path = output_dir / "evaluation.json.gz"
     save_evaluation(evaluation, output_path)
+    execution_stats_path = _execution_stats_path(paths, model_name, benchmark_name)
     sources = [task_path, candidates_path, *stock_paths]
+    if execution_stats_path.exists():
+        sources.append(execution_stats_path)
     write_manifest(
         output_dir / "manifest.json",
         action="score:v2",
@@ -482,6 +489,10 @@ def _analyze_one(model_name: str, benchmark_name: str, paths: dict[str, Path], a
             logger.warning("Skipping missing evaluation %s", evaluation_path)
             continue
         evaluation = load_evaluation(evaluation_path)
+        execution_stats_path = _execution_stats_path(paths, model_name, benchmark_name)
+        execution_stats = _load_execution_stats_if_present(execution_stats_path)
+        if execution_stats is not None:
+            evaluation = _evaluation_with_execution_stats(evaluation, execution_stats)
         report = analyze(evaluation, ks=args.top_k, n_boot=args.n_boot)
         output_dir = paths["results"] / benchmark_name / model_name / stock_name
         analysis_path = output_dir / "analysis.json.gz"
@@ -493,10 +504,13 @@ def _analyze_one(model_name: str, benchmark_name: str, paths: dict[str, Path], a
             ),
             encoding="utf-8",
         )
+        sources = [evaluation_path]
+        if execution_stats is not None:
+            sources.append(execution_stats_path)
         write_manifest(
             output_dir / "manifest.json",
             action="analyze:v2",
-            sources=[evaluation_path],
+            sources=sources,
             outputs=[analysis_path, markdown_path],
             root_dir=paths["raw"].parent.resolve(),
             parameters={
@@ -512,6 +526,36 @@ def _analyze_one(model_name: str, benchmark_name: str, paths: dict[str, Path], a
             create_analysis_table(report, title=f"Analysis Results: {model_name} / {benchmark_name} / {stock_name}")
         )
         console.print(f"\n[dim]Full report saved to: {output_dir}[/]\n")
+
+
+def _execution_stats_path(paths: dict[str, Path], model_name: str, benchmark_name: str) -> Path:
+    return paths["raw"] / model_name / benchmark_name / "execution_stats.json.gz"
+
+
+def _load_execution_stats_if_present(path: Path) -> ExecutionStats | None:
+    if not path.exists():
+        return None
+    return load_execution_stats(path)
+
+
+def _evaluation_with_execution_stats(evaluation: Evaluation, execution_stats: ExecutionStats) -> Evaluation:
+    targets = {}
+    changed = False
+    for target_id, target_result in evaluation.targets.items():
+        wall_time = target_result.wall_time
+        cpu_time = target_result.cpu_time
+        if wall_time is None:
+            wall_time = execution_stats.wall_time.get(target_id)
+        if cpu_time is None:
+            cpu_time = execution_stats.cpu_time.get(target_id)
+        if wall_time == target_result.wall_time and cpu_time == target_result.cpu_time:
+            targets[target_id] = target_result
+            continue
+        targets[target_id] = target_result.model_copy(update={"wall_time": wall_time, "cpu_time": cpu_time})
+        changed = True
+    if not changed:
+        return evaluation
+    return evaluation.model_copy(update={"targets": targets})
 
 
 def handle_config(config: dict[str, Any]) -> None:

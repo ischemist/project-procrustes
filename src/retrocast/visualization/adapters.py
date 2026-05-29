@@ -65,7 +65,9 @@ def stats_to_diagnostic_series(stats: Any) -> list[PlotSeries]:
 def stats_to_comparison_series(models_stats: list[Any], metric_type: str, k: int = 1) -> list[PlotSeries]:
     series = []
     for stats in models_stats:
-        metric = _solvability_metric(stats) if metric_type == "Solvability" else getattr(stats, "top_k_accuracy", {}).get(k)
+        metric = (
+            _solvability_metric(stats) if metric_type == "Solvability" else getattr(stats, "top_k_accuracy", {}).get(k)
+        )
         if metric is None:
             continue
         series.append(_create_depth_series(metric, stats.model_name, get_model_color(stats.model_name), "scatter"))
@@ -133,7 +135,9 @@ def stats_to_heatmap_matrix(models_stats: list[Any]) -> SplitHeatmapData:
     )
 
 
-def stats_to_stability_data(results_map: dict[str, dict[str, MetricSummary]], metric_key: str, color: str) -> StabilityData:
+def stats_to_stability_data(
+    results_map: dict[str, dict[str, MetricSummary]], metric_key: str, color: str
+) -> StabilityData:
     import numpy as np
 
     seeds = sorted(results_map, key=lambda seed: int(seed) if seed.isdigit() else seed)
@@ -148,7 +152,9 @@ def stats_to_stability_data(results_map: dict[str, dict[str, MetricSummary]], me
         errors_plus.append(ci_high * 100 - value)
         errors_minus.append(value - ci_low * 100)
     raw = np.array(values)
-    return StabilityData(metric_key, seeds, values, errors_plus, errors_minus, float(np.mean(raw)), float(np.std(raw)), color)
+    return StabilityData(
+        metric_key, seeds, values, errors_plus, errors_minus, float(np.mean(raw)), float(np.std(raw)), color
+    )
 
 
 def _create_depth_series(metric: Any, name: str, color: str, mode: str) -> PlotSeries:
@@ -171,7 +177,11 @@ def _create_depth_series(metric: Any, name: str, color: str, mode: str) -> PlotS
 
 
 def _solvability_metric(stats: Any) -> Any:
-    return getattr(stats, "solv_0", None) or getattr(stats, "stock_termination", None) or getattr(stats, "tier_0_validity", None)
+    return (
+        getattr(stats, "solv_0", None)
+        or getattr(stats, "stock_termination", None)
+        or getattr(stats, "tier_0_validity", None)
+    )
 
 
 def _overall_metric(metric: Any) -> MetricSummary | None:
@@ -181,7 +191,10 @@ def _overall_metric(metric: Any) -> MetricSummary | None:
 
 
 def _metric_ci(metric: MetricSummary) -> tuple[float, float]:
-    return (metric.ci_low if metric.ci_low is not None else metric.value, metric.ci_high if metric.ci_high is not None else metric.value)
+    return (
+        metric.ci_low if metric.ci_low is not None else metric.value,
+        metric.ci_high if metric.ci_high is not None else metric.value,
+    )
 
 
 def _reliability_code(metric: MetricSummary) -> str:

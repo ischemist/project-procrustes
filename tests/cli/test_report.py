@@ -3,7 +3,7 @@ from __future__ import annotations
 from rich.console import Console
 
 from retrocast.cli.report import create_analysis_table, generate_markdown_report
-from retrocast.models.analysis import AnalysisReport, MetricSummary
+from retrocast.models.analysis import AnalysisReport, MetricSummary, RuntimeSummary
 
 
 def report_with_all_metric_groups() -> AnalysisReport:
@@ -41,3 +41,28 @@ def test_create_analysis_table_renders_top_k_without_ci() -> None:
     assert "Benchmark route reconstruction" in output
     assert "Top-3" in output
     assert "75.0%" in output
+
+
+def test_reports_render_runtime_summary() -> None:
+    report = report_with_all_metric_groups().model_copy(
+        update={
+            "runtime": RuntimeSummary(
+                total_wall_time=12.0,
+                mean_wall_time=3.0,
+                total_cpu_time=4.0,
+                mean_cpu_time=1.0,
+                timed_target_count=4,
+            )
+        }
+    )
+
+    markdown = generate_markdown_report(report, title="Small Run")
+    assert "## Runtime" in markdown
+    assert "| Total wall time | 12.00s | 4 |" in markdown
+
+    console = Console(record=True, width=120)
+    console.print(create_analysis_table(report))
+    output = console.export_text()
+    assert "Runtime" in output
+    assert "Total wall time" in output
+    assert "12.00s" in output

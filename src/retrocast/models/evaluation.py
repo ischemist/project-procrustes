@@ -96,6 +96,8 @@ class TargetResult(BaseModel):
     target: Target
     effective_constraints: TaskConstraints
     candidates: list[ScoredCandidate] = Field(default_factory=list)
+    wall_time: float | None = None
+    cpu_time: float | None = None
 
 
 class Evaluation(BaseModel):

@@ -36,12 +36,7 @@ def test_download_training_set_resolves_latest_and_verifies_files(tmp_path: Path
     )
 
     assert path == (
-        tmp_path
-        / "cache"
-        / "paroutes"
-        / "v2026-05-12"
-        / "single-step-reaction-holdout-n1-n5"
-        / "training.rsmi.txt.gz"
+        tmp_path / "cache" / "paroutes" / "v2026-05-12" / "single-step-reaction-holdout-n1-n5" / "training.rsmi.txt.gz"
     )
     assert path.exists()
     assert (path.parent / "manifest.json").exists()

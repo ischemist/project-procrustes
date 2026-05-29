@@ -18,6 +18,15 @@ class MetricSummary(BaseModel):
     reliability: ReliabilityFlag | None = None
 
 
+class RuntimeSummary(BaseModel):
+    total_wall_time: float | None = None
+    mean_wall_time: float | None = None
+    total_cpu_time: float | None = None
+    mean_cpu_time: float | None = None
+    timed_target_count: int = 0
+
+
 class AnalysisReport(BaseModel):
     metrics: dict[str, MetricSummary] = Field(default_factory=dict)
     by_stratum: dict[str, dict[str, MetricSummary]] = Field(default_factory=dict)
+    runtime: RuntimeSummary = Field(default_factory=RuntimeSummary)

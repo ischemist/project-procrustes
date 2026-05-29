@@ -123,14 +123,13 @@ ReactionId = Annotated[str, AfterValidator(validate_reaction_id)]
 MoleculeId = Annotated[str, AfterValidator(validate_molecule_id)]
 ```
 
-
 ## Route Signatures
 
 `Route` signatures give us a canonical way to talk about route structure without carrying around the whole tree or comparing nested objects by hand. They are the basis for route comparison: full-route equality, reaction equality, prefix matching to depth `k`, and subtree containment. The core idea is [Merkle-like](https://en.wikipedia.org/wiki/Merkle_tree): the signature of a parent is built from its own identity plus the signatures of its children. Signatures are:
 
 - order-invariant over reactant ordering
 - preserve multiplicity when the same reactant appears more than once
-- and can be parameterized by match level when needed. 
+- and can be parameterized by match level when needed.
 
 ### Molecule Identity
 
@@ -213,7 +212,6 @@ class MoleculeView:
     def subtree_signature(self, match_level=InChIKeyLevel.FULL, *, depth=None):
         return stable_hash(self.subtree_key(match_level, depth=depth))
 ```
-
 
 ### Route Identity
 
@@ -460,7 +458,7 @@ class ScoredCandidate(BaseModel):
 
     matches_acceptable: bool = False
     matched_acceptable_index: int | None = None
-    
+
     def has_route(self) -> bool: ...
 
     def failed_adaptation(self) -> bool: ...
@@ -496,11 +494,9 @@ class Evaluation(BaseModel):
     schema_version: str = "2"
 ```
 
-
 !!! note "An intentional violation of single-responsibility principle"
 
     In principle, Tier-0 validity should be assessed at the `score` workflow stage. The cleanest design would then be if `adapt` always returned an equivalent of `Candidate`s (or a `Route` was extended to hold the information of `Candidate`), but that would result in subpar UX for every use case outside of benchmarking. As a result, we intentionally allow for a slight leakage of responsibility between `adapt` and `score` (i.e., `adapt` without ``--preserve-failed-candidates` returns Tier-0 valid `Route`s.)
-
 
 ### Score API
 

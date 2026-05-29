@@ -169,9 +169,12 @@ def write_training_reaction_release(
         release_name=result.release_name,
         keyed_output_files=True,
     )
-    manifest.output_files["all"].content_hash = reaction_records_content_hash(result.records)
-    manifest.output_files["training"].content_hash = reaction_records_content_hash(training)
-    manifest.output_files["validation"].content_hash = reaction_records_content_hash(validation)
+    output_files = manifest.output_files
+    if not isinstance(output_files, dict):
+        raise TypeError("training reaction release manifest must use keyed output files")
+    output_files["all"].content_hash = reaction_records_content_hash(result.records)
+    output_files["training"].content_hash = reaction_records_content_hash(training)
+    output_files["validation"].content_hash = reaction_records_content_hash(validation)
     manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
 
 

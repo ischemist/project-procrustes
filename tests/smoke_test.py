@@ -42,9 +42,7 @@ def test_installed_package_runs_minimal_v2_workflow() -> None:
                                     "type": "reaction",
                                     "smiles": "CC",
                                     "metadata": {"ID": "US123;2", "rsmi": "C>C>CC"},
-                                    "children": [
-                                        {"type": "mol", "smiles": "C", "in_stock": True, "children": []}
-                                    ],
+                                    "children": [{"type": "mol", "smiles": "C", "in_stock": True, "children": []}],
                                 }
                             ],
                         },

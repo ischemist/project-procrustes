@@ -38,7 +38,9 @@ def plot_comparison(models_stats: list[Any], metric_type: str = "Top-K", k: int 
         all_x.update(series.x)
         _render_series(fig, series, x_offset=offsets[index])
     title_suffix = f" (k={k})" if metric_type == "Top-K" else ""
-    theme.apply_layout(fig, title=f"Model Comparison: {metric_type}{title_suffix}", x_title="Route Depth", y_title="Percentage (%)")
+    theme.apply_layout(
+        fig, title=f"Model Comparison: {metric_type}{title_suffix}", x_title="Route Depth", y_title="Percentage (%)"
+    )
     if all_x:
         depths = sorted(all_x)
         fig.update_xaxes(tickmode="array", tickvals=depths, ticktext=[f"Depth {int(depth)}" for depth in depths])
@@ -130,12 +132,16 @@ def plot_ranking(ranking: list[Any], metric_name: str):
             ygap=1,
         )
     )
-    theme.apply_layout(fig, title=f"Probabilistic Ranking: {metric_name}", x_title="Rank", y_title="Model", legend_top=False)
+    theme.apply_layout(
+        fig, title=f"Probabilistic Ranking: {metric_name}", x_title="Rank", y_title="Model", legend_top=False
+    )
     return fig
 
 
 def plot_pairwise_matrix(comparisons: list[Any], metric_name: str):
-    models = sorted({comparison.model_a for comparison in comparisons} | {comparison.model_b for comparison in comparisons})
+    models = sorted(
+        {comparison.model_a for comparison in comparisons} | {comparison.model_b for comparison in comparisons}
+    )
     model_map = {model: index for index, model in enumerate(models)}
     n_models = len(models)
     z_values = [[None] * n_models for _ in range(n_models)]
@@ -234,7 +240,9 @@ def plot_pareto_frontier(
         accuracy = metric.value * 100
         ci_low = (metric.ci_low if metric.ci_low is not None else metric.value) * 100
         ci_high = (metric.ci_high if metric.ci_high is not None else metric.value) * 100
-        config = model_config.get(model_name, {"legend": model_name, "short": model_name[:10], "color": theme.get_model_color(model_name)})
+        config = model_config.get(
+            model_name, {"legend": model_name, "short": model_name[:10], "color": theme.get_model_color(model_name)}
+        )
         pareto_points.append((x_value, accuracy))
         fig.add_trace(
             go.Scatter(
@@ -284,7 +292,13 @@ def _render_series(fig: Any, series: PlotSeries, x_offset: float = 0.0) -> None:
     x_values = [value + x_offset if isinstance(value, int | float) else value for value in series.x]
     error_y = None
     if series.y_err_upper:
-        error_y = {"type": "data", "symmetric": False, "array": series.y_err_upper, "arrayminus": series.y_err_lower, "visible": True}
+        error_y = {
+            "type": "data",
+            "symmetric": False,
+            "array": series.y_err_upper,
+            "arrayminus": series.y_err_lower,
+            "visible": True,
+        }
     common_args = {
         "name": series.name,
         "x": x_values,
@@ -298,7 +312,9 @@ def _render_series(fig: Any, series: PlotSeries, x_offset: float = 0.0) -> None:
         return
     if error_y is not None:
         error_y = {**error_y, "width": 4, "thickness": 1.5}
-    fig.add_trace(go.Scatter(**common_args, mode="markers", error_y=error_y, marker={"color": series.color, "size": 10}))
+    fig.add_trace(
+        go.Scatter(**common_args, mode="markers", error_y=error_y, marker={"color": series.color, "size": 10})
+    )
 
 
 def _calculate_offsets(n_items: int, width: float = 0.6) -> list[float]:

@@ -57,9 +57,9 @@ This is measured by mean-reverse rank (MRR@Solv-N) metric.
 
 ## Acceptable Route Reconstruction
 
-In the absence of automated Tier-2 validity checks, as a temporary proxy of full chemical validity we test whether a model can reconstruct an existing, experimentally-verified route for a novel target. 
+In the absence of automated Tier-2 validity checks, as a temporary proxy of full chemical validity we test whether a model can reconstruct an existing, experimentally-verified route for a novel target.
 
-Top-K accuracy measures if an experimentally verified `Route` is present within first `k` `Routes` returned by the model. 
+Top-K accuracy measures if an experimentally verified `Route` is present within first `k` `Routes` returned by the model.
 
 As proposed in the original [RetroCast preprint](https://arxiv.org/abs/2512.07079), we utilize a user-centric evaluation approach. As such, the ranking is performed **after** Routes are filtered for satisfaction of the problem scope (because Routes that do not satisfy them are of no interest to the user).
 

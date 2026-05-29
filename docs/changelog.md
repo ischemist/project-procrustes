@@ -12,6 +12,23 @@ Practically speaking, you should treat `2-raw` (or wherever you store the raw pl
 
 For most use cases, this should not be a problem since the full pipeline of ingest, score, and analyze is decently fast. If you are using (or planning to use) RetroCast in production pipelines that will handle large volumes of data, please feel free [to get in touch](ischemist.com/contact).
 
+## v0.7.0 (in development, not yet released on PyPi)
+
+v0.7.0 updates RetroCast to new [schema design](/rationale/schema-design), check that page for the full mental model.
+
+### Highlights
+
+- Promoted the schema-2 models, adapters, workflow, metrics, IO, and CLI into the main `retrocast` package.
+- Replaced the old prediction-wrapper path with `Candidate`, which preserves either a successful `Route` or a `FailureRecord` for benchmark accounting.
+- Split the workflow around the schema-2 path: `adapt -> collect -> score -> analyze`.
+- Kept route-local node ids derived from tree position rather than serialized into `Molecule` or `Reaction` objects.
+- Added route signatures for full-route, prefix-depth, reaction, and subtree comparison.
+- Implemented [Solv-N scoring](/rationale/solv-n-evaluation): Tier-N route validity plus task-constraint satisfaction.
+
+### Migration Notes
+
+This is a hard pre-1.0 schema break. Processed, scored, and result artifacts produced by older schema-1 workflows should be regenerated from raw planner payloads.
+
 ## v0.6.0
 
 v0.6.0 makes RetroCast more useful as a general route-standardization library, not only as a benchmark runner. The main design change is the split between adapting provider output into canonical predictions and collecting those predictions onto benchmark targets for scoring.

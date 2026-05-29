@@ -21,6 +21,7 @@ from retrocast.models import (
     TierResult,
 )
 from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
+from retrocast.utils.timing import ExecutionStats
 from retrocast.workflow.score import score, score_candidate
 
 
@@ -223,3 +224,20 @@ def test_score_records_metric_label_from_task() -> None:
     )
 
     assert evaluation.metric_label == "buyables+depth"
+
+
+def test_score_carries_execution_stats_to_target_results() -> None:
+    benchmark_target = target()
+    execution_stats = ExecutionStats(wall_time={"ethanol": 12.5}, cpu_time={"ethanol": 3.25})
+
+    evaluation = score(
+        {"ethanol": [Candidate(rank=1, route=route())]},
+        task(benchmark_target),
+        tier_checkers=[],
+        constraint_checker=FixedConstraintChecker(),
+        execution_stats=execution_stats,
+    )
+
+    target_result = evaluation.targets["ethanol"]
+    assert target_result.wall_time == 12.5
+    assert target_result.cpu_time == 3.25

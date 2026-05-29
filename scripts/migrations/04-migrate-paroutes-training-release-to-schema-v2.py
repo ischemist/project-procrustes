@@ -188,7 +188,9 @@ def convert_reaction_record(
     row: Mapping[str, Any], reaction_ids_by_route: Mapping[str, list[str]]
 ) -> TrainingReactionRecord:
     payload = dict(row)
-    payload["sources"] = [convert_reaction_source(source, reaction_ids_by_route, row["id"]) for source in row["sources"]]
+    payload["sources"] = [
+        convert_reaction_source(source, reaction_ids_by_route, row["id"]) for source in row["sources"]
+    ]
     return TrainingReactionRecord.model_validate(payload)
 
 
@@ -252,7 +254,9 @@ def refresh_reaction_content_hashes(output_files: Mapping[str, dict[str, Any]], 
         file_info = output_files.get(label)
         if file_info is None:
             continue
-        records = [TrainingReactionRecord.model_validate(row) for row in iter_jsonl_gz(project_root / file_info["path"])]
+        records = [
+            TrainingReactionRecord.model_validate(row) for row in iter_jsonl_gz(project_root / file_info["path"])
+        ]
         file_info["content_hash"] = reaction_records_content_hash(records)
 
 

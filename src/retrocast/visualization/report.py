@@ -53,7 +53,9 @@ def create_tournament_table(comparisons: list[Any], model_names: list[str]) -> T
     return table
 
 
-def create_stability_table(metrics_summary: dict[str, dict[str, float]], seed_deviations: list[tuple]) -> tuple[Table, Table]:
+def create_stability_table(
+    metrics_summary: dict[str, dict[str, float]], seed_deviations: list[tuple]
+) -> tuple[Table, Table]:
     stats_table = Table(title="Stability Statistics", header_style="bold cyan")
     stats_table.add_column("Metric")
     stats_table.add_column("Mean (%)", justify="right")
@@ -68,7 +70,9 @@ def create_stability_table(metrics_summary: dict[str, dict[str, float]], seed_de
     ranking_table.add_column("Z-Scores (Top1, Solv, Top10)", justify="right")
     for index, values in enumerate(seed_deviations[:5], 1):
         seed, deviation, z_top1, z_solv, z_top10 = values
-        ranking_table.add_row(str(index), str(seed), f"{deviation:.4f}", f"({z_top1:+.1f}, {z_solv:+.1f}, {z_top10:+.1f})")
+        ranking_table.add_row(
+            str(index), str(seed), f"{deviation:.4f}", f"({z_top1:+.1f}, {z_solv:+.1f}, {z_top10:+.1f})"
+        )
     return stats_table, ranking_table
 
 

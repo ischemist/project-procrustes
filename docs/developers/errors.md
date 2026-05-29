@@ -4,7 +4,9 @@ icon: lucide/triangle-alert
 
 # Error Handling
 
-RetroCast treats expected boundary failures as typed exceptions with stable codes. Messages are for humans; codes and context are the contract.
+At CLI, I/O, adapter, workflow, and benchmark boundaries, RetroCast raises `RetroCastException` subclasses with stable `code` values. Human-readable messages can change; callers should record or branch on `code` and `context`.
+
+Use these exceptions when the caller can do something specific with the failure: abort a command, skip one raw route record, preserve a failed prediction slot, or continue a batch. Inside local implementation code, ordinary `ValueError`, `TypeError`, and `RuntimeError` are fine.
 
 !!! info "Codes are the public contract"
 
@@ -51,14 +53,14 @@ except ValidationError as exc:
 Handle failures by class and code, not by message text:
 
 ```python
-from retrocast.workflow.adapt import adapt_target_routes
+from retrocast.workflow.adapt import adapt_candidates
 from retrocast.exceptions import AdapterError, ChemError
 
 try:
-    routes = list(adapt_target_routes(adapter, raw_payload, target))
+    candidates = adapt_candidates(raw_payload, adapter)
 except (AdapterError, ChemError) as exc:
     stats.record_failure(exc.code, target_id=target_id)
-    routes = []
+    candidates = []
 ```
 
 ## Taxonomy
@@ -67,7 +69,7 @@ except (AdapterError, ChemError) as exc:
 | --- | --- | --- | --- |
 | `input.*` | `InputError` | `input.invalid` | External CLI/config input is invalid |
 | `security.*` | `SecurityError` | `security.path_invalid`, `security.path_traversal` | Path, filename, or filesystem boundary input is unsafe |
-| `config.*` | `ConfigurationError` | `config.invalid_color` | Config values cannot be interpreted safely |
+| `config.*` | `ConfigurationError` | `config.invalid_value` | Config values cannot be interpreted safely |
 | `chem.*` | `ChemError` | `chem.invalid_smiles`, `chem.runtime_error` | Chemistry parsing, identity, or backend failure |
 | `schema.*` | `SchemaLogicError` | `schema.logic_error` | Data is structurally valid but logically impossible |
 | `benchmark.*` | `BenchmarkError` | `benchmark.validation_failed` | Benchmark construction or uniqueness contract failed |
@@ -75,11 +77,12 @@ except (AdapterError, ChemError) as exc:
 | `io.*` | `DataIOError` | `io.not_found`, `io.decode_failed`, `io.invalid_artifact_shape`, `io.unsupported_format`, `io.write_failed` | Artifact read, decode, shape, format, or write failure |
 | `serialization.*` | `RetroCastSerializationError` | `serialization.syntheseus_failed` | Conversion to external route formats failed |
 | `workflow.*` | `WorkflowError` | `workflow.error` | Orchestration failed at a workflow boundary |
-| `validity.*` | `InputError`, `UnsupportedValidityTierError` | `validity.unknown_tier`, `validity.unsupported_tier` | Requested validity tier is unknown or has no implemented validator |
+| `dataset.*` | `DatasetError` | `dataset.resolution_failed`, `dataset.download_failed`, `dataset.verification_failed` | Hosted dataset resolution, download, or integrity check failed |
+| `validity.*` | `WorkflowError`, `UnsupportedValidityTierError` | `validity.unsupported_tier` | Requested validity tier has no implemented validator |
 
 ## Adapter Policy
 
-Adapter schema errors are fatal for one raw payload or entry and counted by the workflow. Individual route transform errors may be logged and skipped when the adapter can keep processing the rest of the input artifact.
+Adapter schema errors are fatal for one raw payload or entry and counted by the workflow. Individual route transform errors may be recorded as failed candidates when the adapter can keep processing the rest of the input artifact.
 
 Route root mismatches should use `adapter.target_mismatch`; malformed raw payloads should use `adapter.schema_invalid`.
 
@@ -87,7 +90,7 @@ Route root mismatches should use `adapter.target_mismatch`; malformed raw payloa
 
 Batch workflows that continue after expected failures must count them by stable code.
 
-For `ingest`, `ingest_model_predictions()` logs the sorted failure summary and returns `stats`. The ingest CLI path then writes `stats.to_manifest_dict()` into the manifest `statistics` block, so counts land under `statistics.failures_by_code`.
+For `ingest`, candidate statistics are written into the manifest `statistics` block, so failure counts land under `statistics.failures_by_code`.
 
 ```json
 {
@@ -99,8 +102,6 @@ For `ingest`, `ingest_model_predictions()` logs the sorted failure summary and r
   }
 }
 ```
-
-Training-set curation preserves the adaptation summary shape instead of using the ingest `statistics` block. In those release manifests, the counts live under `summary.adaptation....failures_by_code`.
 
 ## CLI Policy
 

@@ -56,7 +56,9 @@ def _build_provenance_graph(start_path: Path, root_dir: Path, report: Verificati
     return graph
 
 
-def _verify_logical_chain(graph: dict[Path, Manifest], report: VerificationReport, root_dir: Path | None = None) -> None:
+def _verify_logical_chain(
+    graph: dict[Path, Manifest], report: VerificationReport, root_dir: Path | None = None
+) -> None:
     """Phase 1: Check for hash consistency between parent and child manifests."""
     report.add("INFO", report.manifest_path, "Phase 1 - Verifying manifest chain consistency", category="header")
 

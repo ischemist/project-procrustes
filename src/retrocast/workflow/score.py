@@ -18,6 +18,7 @@ from retrocast.models.evaluation import (
 )
 from retrocast.models.route import InChIKeyLevel, Route
 from retrocast.models.task import Target, Task, TaskConstraints
+from retrocast.utils.timing import ExecutionStats
 
 
 class TierChecker(Protocol):
@@ -74,6 +75,8 @@ def score_target(
     tier_checkers: Sequence[TierChecker],
     constraint_checker: ConstraintChecker,
     acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    wall_time: float | None = None,
+    cpu_time: float | None = None,
 ) -> TargetResult:
     scored_candidates = []
     for candidate in candidates:
@@ -91,6 +94,8 @@ def score_target(
         target=target,
         effective_constraints=constraints,
         candidates=scored_candidates,
+        wall_time=wall_time,
+        cpu_time=cpu_time,
     )
 
 
@@ -101,6 +106,7 @@ def score(
     tier_checkers: Sequence[TierChecker] = (),
     constraint_checker: ConstraintChecker,
     acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    execution_stats: ExecutionStats | None = None,
 ) -> Evaluation:
     tiers = [Tier.ZERO, *sorted({checker.tier for checker in tier_checkers})]
     target_results = {}
@@ -113,6 +119,8 @@ def score(
             tier_checkers=tier_checkers,
             constraint_checker=constraint_checker,
             acceptable_match_level=acceptable_match_level,
+            wall_time=execution_stats.wall_time.get(target_id) if execution_stats is not None else None,
+            cpu_time=execution_stats.cpu_time.get(target_id) if execution_stats is not None else None,
         )
     return Evaluation(task=task, tiers=tiers, metric_label=task.derived_metric_label(), targets=target_results)
 

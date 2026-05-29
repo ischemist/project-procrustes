@@ -19,6 +19,7 @@ from retrocast.io import (
     save_analysis_report,
     save_benchmark,
     save_candidates,
+    save_evaluation,
 )
 from retrocast.io.blob import save_json_gz
 from retrocast.models import Benchmark, Target, TaskConstraints
@@ -266,6 +267,11 @@ def test_v2_project_cli_ingest_score_analyze(tmp_path, monkeypatch) -> None:
     evaluation = load_evaluation(evaluation_path)
     assert evaluation.schema_version == "2"
     assert evaluation.targets["ethanol"].candidates[0].satisfies_task()
+    assert evaluation.targets["ethanol"].wall_time == 12.5
+    assert evaluation.targets["ethanol"].cpu_time == 3.25
+
+    stale_targets = {"ethanol": evaluation.targets["ethanol"].model_copy(update={"wall_time": None, "cpu_time": None})}
+    save_evaluation(evaluation.model_copy(update={"targets": stale_targets}), evaluation_path)
 
     run_cli(
         monkeypatch,
@@ -282,6 +288,8 @@ def test_v2_project_cli_ingest_score_analyze(tmp_path, monkeypatch) -> None:
     analysis_path = data_dir / "5-results" / "small" / "test-model" / "test-stock" / "analysis.json.gz"
     report = load_analysis_report(analysis_path)
     assert report.metrics["solv_0[test-stock]_rate"].value == 1.0
+    assert report.runtime.total_wall_time == 12.5
+    assert report.runtime.total_cpu_time == 3.25
     assert (analysis_path.parent / "report.md").exists()
     manifest_path = analysis_path.parent / "manifest.json"
     assert manifest_path.exists()
@@ -310,6 +318,7 @@ def write_raw_job(data_dir: Path, *, model: str, dataset: str) -> None:
     raw_dir = data_dir / "2-raw" / model / dataset
     raw_dir.mkdir(parents=True)
     save_json_gz({"ethanol": raw_route()}, raw_dir / "results.json.gz")
+    save_json_gz({"wall_time": {"ethanol": 12.5}, "cpu_time": {"ethanol": 3.25}}, raw_dir / "execution_stats.json.gz")
     (raw_dir / "manifest.json").write_text(
         json.dumps(
             {"schema_version": "2", "directives": {"adapter": "paroutes", "raw_results_filename": "results.json.gz"}}

@@ -92,6 +92,22 @@ def result(benchmark_target: Target, candidates: list[ScoredCandidate]) -> Targe
     return TargetResult(target=benchmark_target, effective_constraints=TaskConstraints(), candidates=candidates)
 
 
+def timed_result(
+    benchmark_target: Target,
+    candidates: list[ScoredCandidate],
+    *,
+    wall_time: float | None = None,
+    cpu_time: float | None = None,
+) -> TargetResult:
+    return TargetResult(
+        target=benchmark_target,
+        effective_constraints=TaskConstraints(),
+        candidates=candidates,
+        wall_time=wall_time,
+        cpu_time=cpu_time,
+    )
+
+
 def test_solv_rate_denominator_includes_failed_candidates() -> None:
     report = analyze(
         evaluation(
@@ -187,3 +203,20 @@ def test_analyze_stratifies_by_route_depth_constraint_when_no_acceptable_route_e
     )
 
     assert report.by_stratum["depth 3"]["solv_0[task]_rate"].value == 1.0
+
+
+def test_analyze_aggregates_runtime_statistics() -> None:
+    report = analyze(
+        evaluation(
+            {
+                "a": timed_result(target("a"), [solved_candidate(1)], wall_time=10.0, cpu_time=4.0),
+                "b": timed_result(target("b"), [solved_candidate(1)], wall_time=2.0, cpu_time=1.0),
+            }
+        )
+    )
+
+    assert report.runtime.total_wall_time == approx(12.0)
+    assert report.runtime.mean_wall_time == approx(6.0)
+    assert report.runtime.total_cpu_time == approx(5.0)
+    assert report.runtime.mean_cpu_time == approx(2.5)
+    assert report.runtime.timed_target_count == 2

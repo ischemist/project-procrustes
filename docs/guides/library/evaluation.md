@@ -4,198 +4,149 @@ icon: lucide/clipboard-check
 
 # Evaluation
 
-Evaluation scores benchmark-keyed routes or candidate records against a stock file. Route chemistry stays unchanged; scoring writes evaluation annotations into `ScoredCandidate` records.
+Evaluation scores collected `Candidate`s against a `Task`. It does not mutate route chemistry. Instead, scoring returns `ScoredCandidate`s inside an `Evaluation` artifact.
 
 ## Tracking Runtime
 
-```python title="Measure inference time"
+Model runtime is target-level data, not route chemistry. Use `ExecutionTimer` around model inference and pass the resulting `ExecutionStats` to `score(...)`. The timing values are copied onto each `TargetResult`, and `analyze(...)` summarizes them in the `AnalysisReport`.
+
+```python
 from retrocast.utils import ExecutionTimer
 
 timer = ExecutionTimer()
+raw_by_target = {}
 
-for target in benchmark.targets.values():
-    with timer.measure(target.id):
-        raw_output = model.predict(target.smiles)
+for target_id, target in task.targets.items():
+    with timer.measure(target_id):
+        raw_by_target[target_id] = model.predict(target.smiles)
 
-    # ... adapt/store results ...
-
-exec_stats = timer.to_model()
+execution_stats = timer.to_model()
 ```
 
-## Score Predictions
+Then pass `execution_stats` when scoring:
 
-```python title="Evaluate routes against stock"
-from retrocast.api import load_benchmark, load_stock_file, score_predictions
-
-benchmark = load_benchmark("data/1-benchmarks/definitions/mkt-cnv-160.json.gz")
-stock = load_stock_file("data/1-benchmarks/stocks/buyables-stock.txt")
-
-# dict[target_id, list[Route]]
-predictions = {"target-001": [route1, route2], "target-002": [route3]}
-
-results = score_predictions(
-    benchmark=benchmark,
-    predictions=predictions,
-    stock=stock,
-    model_name="Experimental-Model-V1",
+```python
+evaluation = score(
+    predictions,
+    task,
+    constraint_checker=TaskConstraintChecker(stocks={"buyables": stock_inchikeys}),
+    execution_stats=execution_stats,
 )
 
-for target_id, evaluation in results.results.items():
-    print(f"\nTarget: {target_id}")
-    print(f"  First Tier-0 rank: {evaluation.first_valid_rank(tier=0)}")
-    print(f"  First Solv-0[STR] rank: {evaluation.first_solv_rank(tier=0, scope='stock')}")
-    print(f"  Benchmark reconstruction rank: {evaluation.reconstruction_rank(scope='stock')}")
-
-    for candidate in evaluation.candidates:
-        tier_0 = candidate.satisfies_validity(tier=0)
-        solv_0 = candidate.satisfies_solv(tier=0, scope="stock")
-        print(f"  rank {candidate.rank}: tier-0={tier_0}, solv-0[str]={solv_0}")
+report = analyze(evaluation)
+print(report.runtime.total_wall_time)
+print(report.runtime.mean_cpu_time)
 ```
 
-Predictions must be keyed by benchmark target ID. Each route is evaluated for Tier-0 validity, stock termination, and benchmark-reference matching.
+The CLI report prints runtime when the loaded `Evaluation` contains per-target `wall_time` or `cpu_time` values.
 
-`Solv-0[STR]` means Tier-0 validity plus the default stock-termination scope. It is not the same as benchmark route reconstruction.
+## Score Collected Candidates
 
-## Inspect Scored Candidates
+```python
+from retrocast.metrics.constraints import TaskConstraintChecker
+from retrocast.workflow import score
 
-The Python API keeps typed tier dictionaries, while saved artifacts use readable labels such as `"tier 0"`.
-
-```python title="Route-level validity and Solv-N"
-target_eval = results.results["target-001"]
-candidate = target_eval.candidates[0]
-
-print(candidate.rank)
-print(candidate.satisfies_validity(tier=0))
-print(candidate.satisfies_constraints(scope="stock"))
-print(candidate.satisfies_solv(tier=0, scope="stock"))
-
-tier_0 = candidate.validity.tiers[0]
-print(tier_0.status)
+evaluation = score(
+    predictions,
+    task,
+    constraint_checker=TaskConstraintChecker(stocks={"buyables": stock_inchikeys}),
+)
 ```
 
-Failed adaptation slots are still candidates. They have no route, but they keep their raw rank and carry a typed failure record:
+`predictions` is `dict[target_id, list[Candidate]]`, usually produced by `collect_candidates(...)` or `ingest_candidates(...)`.
 
-```python title="Handle failed candidates"
-for candidate in target_eval.candidates:
-    if candidate.route is None:
-        print(candidate.rank, candidate.adapter_failure.code)
-        continue
+The default scoring path always includes Tier-0 validity. A candidate with a route passes Tier-0 adaptation validity. A candidate with a `FailureRecord` fails Tier-0.
 
-    print(candidate.rank, candidate.route.length)
-```
+## Solv-N Separation
 
-## Reaction-Level Failures
-
-Tier validity is route-level only when every reaction passes that tier. Reaction annotations show where a route failed.
-
-```python title="Find failing reactions"
-for candidate in target_eval.candidates:
-    if candidate.route is None:
-        continue
-
-    for annotation in candidate.validity.reactions:
-        if annotation.satisfies_validity(tier=0):
-            continue
-
-        route_reaction = candidate.route.get_reaction_by_id(annotation.reaction_id)
-        failure_codes = [check.code for check in annotation.tiers[0].checks]
-        print(
-            annotation.reaction_id,
-            route_reaction.product.smiles,
-            failure_codes,
-        )
-```
-
-## Stored Shape
-
-`evaluation.json.gz` stores chemistry once, on the route. Validity annotations point back to reactions by route-local path id.
-
-```json title="Candidate validity artifact"
-{
-  "validity": {
-    "tier 0": {
-      "status": "pass"
-    },
-    "reactions": [
-      {
-        "reaction_id": "rc:r:_",
-        "validity": {
-          "tier 0": {
-            "status": "fail",
-            "checks": [{ "code": "tier0.empty_reactants" }]
-          }
-        }
-      }
-    ]
-  }
-}
-```
-
-Passing tiers omit `checks`. Failing checks may include `message` and `details` when the evaluator has useful context.
-
-Reaction ids are route-local path ids:
+Solv-N is defined as:
 
 ```text
-rc:r:_    reaction producing the target molecule
-rc:r:0    reaction producing the first reactant of the target reaction
-rc:r:0.1  reaction producing the second reactant under rc:r:0
+Solv-i[task] = Tier-i route validity + task constraint satisfaction
 ```
 
-The matching molecule id uses the same path with `m` instead of `r`, e.g. `rc:m:0.1`. See [Route Node IDs](../../developers/route-node-ids.md) for the full grammar.
+That separation appears directly in the model:
 
-## Target-Level Ranks
-
-Target-level ranks answer three different questions:
-
-```python title="Rank diagnostics"
-print(target_eval.first_valid_rank(tier=0))
-print(target_eval.first_solv_rank(tier=0, scope="stock"))
-print(target_eval.reconstruction_rank(scope="stock"))
+```python
+candidate.validity      # RouteValidity
+candidate.constraints   # ConstraintResult
 ```
 
-- `first_valid_rank(tier=0)` is the raw rank of the first Tier-0-valid route.
-- `first_solv_rank(tier=0, scope="stock")` is the raw rank of the first route that is Tier-0-valid and stock-terminated.
-- `reconstruction_rank(scope="stock")` is the effective benchmark-reference rank after filtering to the stock scope.
+Use the convenience methods on `ScoredCandidate`:
 
-## Complete Evaluation Sketch
+```python
+scored = evaluation.targets["target-001"].candidates[0]
 
-```python title="Adapt, collect, score"
-from retrocast import adapt_provider_output, collect_benchmark_predictions, load_benchmark
-from retrocast.adapters import AiZynthFinderAdapter
-from retrocast.api import load_stock_file, score_predictions
+print(scored.satisfies_validity(Tier.ZERO))
+print(scored.satisfies_task())
+print(scored.satisfies_solv(Tier.ZERO))
+```
 
-benchmark = load_benchmark("benchmark.json.gz")
-stock = load_stock_file("stock.txt")
-adapter = AiZynthFinderAdapter()
+## Inspect Failed Adaptation Slots
 
-predictions = adapt_provider_output(raw_provider_output, adapter)
-collected = collect_benchmark_predictions(predictions, benchmark)
+Failed adaptation slots stay in the ranked list.
 
-results = score_predictions(
-    benchmark=benchmark,
-    predictions=collected.routes_by_target,
-    stock=stock,
-    model_name="my-model",
+```python
+for scored in evaluation.targets["target-001"].candidates:
+    if scored.failed_adaptation():
+        print(scored.rank, scored.failure.code)
+        continue
+
+    print(scored.rank, scored.route.target.smiles)
+```
+
+Failed candidates have `route=None`, carry the original `FailureRecord`, and fail Tier-0 validity.
+
+## Reaction-Level Validity
+
+External Tier checkers can report route-level and reaction-level validity.
+
+```python
+for scored in evaluation.targets["target-001"].candidates:
+    if not scored.has_route():
+        continue
+
+    for reaction in scored.validity.reactions:
+        tier_1 = reaction.tiers.get(Tier.ONE)
+        if tier_1 is None:
+            continue
+        print(reaction.reaction_id, tier_1.status)
+```
+
+Reaction ids are route-local path ids such as `rc:r:/` and `rc:r:/1/0`. See [Route Node IDs](../../developers/route-node-ids.md).
+
+## Custom Tier Checkers
+
+Tier-0 is reserved for adaptation validity. Additional Tier checkers implement the `TierChecker` protocol.
+
+```python
+class MyTierOneChecker:
+    tier = Tier.ONE
+    name = "my-tier-one"
+
+    def check_route(self, route: Route) -> RouteValidity:
+        ...
+
+
+evaluation = score(
+    predictions,
+    task,
+    tier_checkers=[MyTierOneChecker()],
+    constraint_checker=TaskConstraintChecker(stocks={"buyables": stock_inchikeys}),
 )
 ```
 
-## Candidate-Preserving Scoring
+## Convenience API
 
-When you need raw-rank diagnostics over failed adaptation slots, preserve candidates before scoring:
+For simple use, `retrocast.api.score_predictions(...)` builds a stock constraint checker for you.
 
-```python title="Preserve failed candidates"
-from retrocast.workflow.adapt import adapt_target_keyed_candidate_records
-from retrocast.workflow.score import score_candidate_records
+```python
+from retrocast.api import score_predictions
 
-adapted = adapt_target_keyed_candidate_records(raw_by_target, benchmark, adapter)
-
-results = score_candidate_records(
-    benchmark=benchmark,
-    candidates=adapted.records,
-    stock=stock,
-    stock_name="buyables-stock",
-    model_name="my-model",
+evaluation = score_predictions(
+    predictions,
+    task,
+    stock=stock_inchikeys,
+    stock_name="buyables",
 )
 ```
-
-Failed candidates have `route=None`, `adapter_failure` set, and a failed Tier-0 result after scoring. This is what keeps `MRR Tier-0` and `MRR Solv-0[STR]` honest for sequence-style planners.

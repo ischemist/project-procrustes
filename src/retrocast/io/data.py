@@ -24,6 +24,7 @@ from retrocast.models.evaluation import Evaluation, TargetResult
 from retrocast.models.route import Route
 from retrocast.models.task import Benchmark, Task
 from retrocast.typing import InChIKeyStr, SmilesStr
+from retrocast.utils.timing import ExecutionStats
 from retrocast.workflow.collect import CollectedCandidates, CollectedRoutes
 
 _TASK_ADAPTER = TypeAdapter(Task)
@@ -35,6 +36,7 @@ _COLLECTED_CANDIDATES_ADAPTER = TypeAdapter(CollectedCandidates)
 _EVALUATION_ADAPTER = TypeAdapter(Evaluation)
 _ANALYSIS_REPORT_ADAPTER = TypeAdapter(AnalysisReport)
 _RAW_PAROUTES_LIST_ADAPTER = TypeAdapter(list[dict])
+_EXECUTION_STATS_ADAPTER = TypeAdapter(ExecutionStats)
 
 T = TypeVar("T")
 
@@ -247,6 +249,10 @@ def save_evaluation(evaluation: Evaluation, path: Path) -> None:
     _save_model(evaluation, path, _EVALUATION_ADAPTER, artifact="evaluation")
 
 
+def load_execution_stats(path: Path) -> ExecutionStats:
+    return _load_model(path, _EXECUTION_STATS_ADAPTER, artifact="execution_stats")
+
+
 def load_analysis_report(path: Path) -> AnalysisReport:
     return _load_model(path, _ANALYSIS_REPORT_ADAPTER, artifact="analysis_report")
 
@@ -263,7 +269,9 @@ def load_stock_file(path: Path, return_as: Literal["inchikey"] = "inchikey") -> 
 def load_stock_file(path: Path, return_as: Literal["smiles"]) -> set[SmilesStr]: ...
 
 
-def load_stock_file(path: Path, return_as: Literal["inchikey", "smiles"] = "inchikey") -> set[InChIKeyStr] | set[SmilesStr]:
+def load_stock_file(
+    path: Path, return_as: Literal["inchikey", "smiles"] = "inchikey"
+) -> set[InChIKeyStr] | set[SmilesStr]:
     if return_as not in ("inchikey", "smiles"):
         raise ValueError(f"invalid return_as parameter: {return_as!r}")
     if not path.exists():

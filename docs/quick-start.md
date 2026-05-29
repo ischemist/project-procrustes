@@ -4,14 +4,13 @@ icon: lucide/rocket
 
 # Quick Start
 
-This guide gets you from raw model output to a rigorous statistical report in under 5 minutes.
+This guide gets you from raw planner output to a RetroCast analysis report.
 
 !!! tip "What you'll learn"
 
     - Install RetroCast and inspect the data directory layout
-    - Place raw model output where project-mode commands expect it
-    - Run the `ingest` → `score` → `analyze` pipeline
-    - Generate statistical reports with confidence intervals
+    - Place raw planner output where project-mode commands expect it
+    - Run the `ingest` -> `score` -> `analyze` pipeline
 
 ## 1. Install
 
@@ -49,7 +48,7 @@ Project-mode commands use a structured data directory. Inspect the resolved layo
 retrocast config
 ```
 
-By default, RetroCast uses `data/retrocast/` with subdirectories for benchmarks, raw model outputs, processed routes, scored results, and reports. The directories are created as commands write artifacts.
+By default, RetroCast uses `data/retrocast/` with subdirectories for benchmarks, raw planner outputs, processed candidates, scored evaluations, and analysis reports. The directories are created as commands write artifacts.
 
 !!! tip "Custom data directory"
 
@@ -61,7 +60,13 @@ By default, RetroCast uses `data/retrocast/` with subdirectories for benchmarks,
 
     Run `retrocast config` to see the resolved paths.
 
-### Choose Your Adapter
+## 3. Choose An Adapter
+
+Adapters cast planner-specific raw output into schema-2 `Route`s. List supported adapters:
+
+```bash
+retrocast list-adapters
+```
 
 For one-off runs, pass the adapter directly to `ingest`:
 
@@ -69,130 +74,176 @@ For one-off runs, pass the adapter directly to `ingest`:
 retrocast ingest --model my-new-model --dataset mkt-cnv-160 --adapter aizynthfinder
 ```
 
-For repeatable raw-data folders, put a `manifest.json` next to the raw results file with `directives.adapter` and, when needed, `directives.raw_results_filename`. If no filename is declared, project-mode ingest reads `results.json.gz`.
+For repeatable raw-data folders, put a `manifest.json` next to the raw results file:
 
-## 3. The Workflow (Ingest → Score → Analyze)
+```json
+{
+  "directives": {
+    "adapter": "aizynthfinder",
+    "raw_results_filename": "predictions.json.gz"
+  }
+}
+```
 
-RetroCast enforces a structured workflow to ensure reproducibility:
+If no filename is declared, project-mode ingest reads `results.json.gz`.
+
+To see examples of runner scripts for different planners that we use for benchmarking, take a look at the [ischemist/project-pandora repo](https://github.com/ischemist/project-pandora).
+
+## 4. The Workflow
+
+The project-mode workflow is:
 
 ```mermaid
 graph LR
-    A[Place Raw Data<br/>2-raw/] --> B[Ingest<br/>Standardize]
-    B --> C[Score<br/>Evaluate]
-    C --> D[Analyze<br/>Statistics]
+    A[Place Raw Data<br/>2-raw/] --> B[Ingest<br/>adapt + collect]
+    B --> C[Score<br/>validity + constraints]
+    C --> D[Analyze<br/>metrics + report]
 
     B -.-> E[3-processed/]
     C -.-> F[4-scored/]
     D -.-> G[5-results/]
-
 ```
 
-All paths are relative to your data directory (default: `data/retrocast/`).
+All paths are relative to your data directory.
 
 ### Step A: Place Raw Data
 
-Put your model's raw output file in the `2-raw/` directory (within your data directory) following this structure:
+Put your model's raw output file in `2-raw/`:
 
-```
+```text
 <data-dir>/2-raw/<model-name>/<benchmark-name>/<filename>
 ```
 
-**Example:**
+Example:
 
 ```bash
 mkdir -p data/retrocast/2-raw/my-new-model/mkt-cnv-160
-cp predictions.json data/retrocast/2-raw/my-new-model/mkt-cnv-160/
+cp predictions.json.gz data/retrocast/2-raw/my-new-model/mkt-cnv-160/
 ```
 
 !!! info "Available benchmarks"
 
-    See [Benchmarks Guide](guides/benchmarks.md) for details on evaluation sets:
-
-    - **Market Series** (`mkt-*`): Practical utility with commercial stock
-    - **Reference Series** (`ref-*`): Algorithm comparison with ground-truth stock
+    See [Benchmarks Guide](guides/benchmarks.md) for details on evaluation sets.
 
 ### Step B: Ingest
 
-Convert raw output into benchmark-keyed routes for scoring. Under the hood, `ingest` first adapts raw payloads into prediction envelopes around canonical routes, then collects those routes onto the benchmark.
+`ingest` adapts raw planner output and collects the resulting rank-preserving `Candidate`s onto benchmark targets.
 
 ```bash
-retrocast ingest --model my-new-model --dataset mkt-cnv-160
+retrocast ingest --model my-new-model --dataset mkt-cnv-160 --adapter aizynthfinder
 ```
 
-**Output:** `data/retrocast/3-processed/my-new-model/mkt-cnv-160/routes.json.gz`
+Output:
+
+```text
+data/retrocast/3-processed/mkt-cnv-160/my-new-model/candidates.json.gz
+```
 
 ### Step C: Score
 
-Evaluate routes against the benchmark's defined stock.
+`score` applies Tier-N validity checks and task constraints, producing an `Evaluation`.
 
 ```bash
 retrocast score --model my-new-model --dataset mkt-cnv-160
 ```
 
-**Output:** `data/retrocast/4-scored/my-new-model/mkt-cnv-160/scores.json.gz`
+Output:
+
+```text
+data/retrocast/4-scored/mkt-cnv-160/my-new-model/<stock>/evaluation.json.gz
+```
 
 ### Step D: Analyze
 
-Generate final report with bootstrapped confidence intervals and visualization plots.
+`analyze` summarizes the evaluation into Solv-N rates, MRR@Solv-N, confidence intervals, and acceptable-route reconstruction metrics when available.
 
 ```bash
 retrocast analyze --model my-new-model --dataset mkt-cnv-160
 ```
 
-**Output:** `data/retrocast/5-results/mkt-cnv-160/my-new-model/`
+Outputs:
 
-- `report.md` - Statistical summary
-- `*.html` - Interactive plots (add `--make-plots` arg and make sure to install `viz` dep group, i.e. `uv tool install "retrocast[viz]"`)
+```text
+data/retrocast/5-results/mkt-cnv-160/my-new-model/<stock>/analysis.json.gz
+data/retrocast/5-results/mkt-cnv-160/my-new-model/<stock>/report.md
+```
 
-!!! success "You're done!"
+!!! success "You're done"
 
-    Check `data/retrocast/5-results/mkt-cnv-160/my-new-model/report.md` for your results!
+    Open the generated `report.md` for the benchmark summary.
 
-## Alternative: Quick Evaluation
+## Alternative: Explicit Files
 
-!!! tip "Just want to score one file?"
+If you do not want to use the project directory layout, run the explicit-file commands:
 
-    If you don't want to set up a full project structure, use the `score-file` command:
+```bash
+retrocast adapt \
+  --adapter paroutes \
+  --input raw.json.gz \
+  --output candidates.json.gz
 
-    ```bash
-    retrocast score-file \
-      --benchmark data/retrocast/1-benchmarks/definitions/mkt-cnv-160.json.gz \
-      --routes my_predictions.json.gz \
-      --stock data/retrocast/1-benchmarks/stocks/buyables-stock.txt \
-      --output scores.json.gz \
-      --model-name "Quick-Check"
-    ```
+retrocast collect \
+  --input candidates.json.gz \
+  --benchmark benchmark.json.gz \
+  --output collected.json.gz
 
-    This skips the config setup and directly evaluates a single predictions file.
+retrocast score-file \
+  --benchmark benchmark.json.gz \
+  --candidates collected.json.gz \
+  --stock buyables-stock.txt \
+  --output evaluation.json.gz
+```
+
+This is useful for small experiments, notebooks, or custom pipelines where you do not want RetroCast to manage `2-raw` through `5-results`.
 
 ## Choose A Path
 
 RetroCast has three common entry points depending on what you are trying to do:
 
-| Goal | Use this | Details |
-| --- | --- | --- |
-| Standardize raw payloads inside your own Python code | `adapt_route(...)`, `adapt_prediction(...)`, or `adapt_provider_output(...)` | [Library adaptation guide](guides/library/adaptation.md#choose-a-workflow) |
-| Prepare model results for a benchmark | `adapt_provider_output(...)` or `adapt_target_keyed_provider_output(...)`, then `collect_benchmark_predictions(...)` | [Collect for a benchmark](guides/library/adaptation.md#collect-for-a-benchmark) |
-| Run the managed file-based benchmark workflow | `retrocast ingest` → `retrocast score` → `retrocast analyze` | This quick start |
+| Goal | Use this | Result |
+| --- | --- | --- | --- |
+| Cast one raw route-like record inside Python | `adapt_route(...)` | `Route | None` |
+| Inspect only valid routes from a raw artifact | `adapt_routes(...)` | `list[Route]` |
+| Preserve benchmark prediction slots, including failures | `adapt_candidates(...)` or `ingest_candidates(...)` | `Candidate`s with `Route` or `FailureRecord` |
+| Run the managed file-based benchmark workflow | `retrocast ingest` -> `retrocast score` -> `retrocast analyze` | `candidates.json.gz`, `evaluation.json.gz`, `analysis.json.gz`, `report.md` |
 
-If you are not sure which layer you need, start with the [adaptation decision table](guides/library/adaptation.md#choose-a-workflow). It explains the difference between single-route adaptation, provider-output adaptation, and benchmark collection.
+If you are evaluating a model, use the candidate-preserving path. If you are just inspecting chemistry, route-only adaptation is usually simpler.
+
+## Python API
+
+The same workflows are available from Python:
+
+```python
+from retrocast import get_adapter
+from retrocast.io import load_benchmark
+from retrocast.workflow import ingest_candidates
+
+task = load_benchmark(benchmark_path)
+adapter = get_adapter("paroutes")
+predictions = ingest_candidates(raw_payload, adapter, task)
+```
+
+Use `adapt_route(...)` or `adapt_routes(...)` for route-first inspection. Use `adapt_candidates(...)` or `ingest_candidates(...)` when failed prediction slots must remain visible for evaluation.
 
 ## Next Steps
 
 **Learn the Concepts**  
-Read [Concepts](concepts.md) to understand why we use adapters and manifests.
+Read [Concepts](concepts.md) to understand the schema-2 model and workflow.
 
-**Use the Python API** Want to use RetroCast inside your own scripts? See the [Library Guide](guides/library/).
+**Understand Schema Design**  
+Read [Schema Design](/rationale/schema-design) for the deeper data-model rationale.
 
-**Migrating from v0.5.x** See the [Changelog](changelog.md) for the v0.6 adapter workflow split.
+**Use the Python API**  
+Use the `retrocast.workflow` functions when integrating RetroCast into your own scripts.
 
-**Write Custom Adapters** Need to support a new output format? Learn how to write an [Adapter](developers/adapters.md).
+**Write Custom Adapters**  
+Need to support a new output format? See [Writing a Custom Adapter](developers/adapters.md).
 
 **Full CLI Reference**  
 See all available commands in the [CLI Reference](guides/cli.md).
 
 **Explore Benchmarks**  
-Learn about stratified evaluation sets in the [Benchmarks Guide](guides/benchmarks.md).
+Learn about evaluation sets in the [Benchmarks Guide](guides/benchmarks.md).
 
 **From isChemist: Structure precedes quantity.**  
 Essays and software that make better scientific questions possible. Subscribe at [ischemist.com/newsletter](https://ischemist.com/newsletter), or check [service status](https://status.ischemist.com) if hosted RetroCast resources or SynthArena look off.
