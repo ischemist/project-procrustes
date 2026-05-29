@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -88,10 +87,7 @@ def main() -> None:
                 handle_analyze(args, config)
     except RetroCastException as exc:
         logger.error("Command failed: %s", exc, exc_info=True)
-        sys.exit(1)
-    except Exception as exc:
-        logger.error("Command failed: %s", exc, exc_info=True)
-        sys.exit(1)
+        raise SystemExit(1) from exc
 
 
 def _build_parser() -> argparse.ArgumentParser:

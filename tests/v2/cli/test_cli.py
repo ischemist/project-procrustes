@@ -9,6 +9,7 @@ from pathlib import Path
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.io.blob import save_json_gz
 from retrocast.typing import InChIKeyStr, SmilesStr
+from retrocast.v2.adapters import PaRoutesAdapter
 from retrocast.v2.cli.main import main
 from retrocast.v2.io import (
     load_analysis_report,
@@ -16,8 +17,11 @@ from retrocast.v2.io import (
     load_collected_candidates,
     load_evaluation,
     save_benchmark,
+    save_candidates,
 )
 from retrocast.v2.models import Benchmark, Target, TaskConstraints
+from retrocast.v2.models.candidates import Candidate
+from retrocast.v2.workflow import adapt_candidates
 
 
 def raw_route() -> dict:
@@ -102,6 +106,32 @@ def test_v2_adapt_cli_writes_candidates_and_manifest(tmp_path, monkeypatch) -> N
     assert manifest["statistics"]["failures_by_code"]
 
 
+def test_v2_collect_cli_writes_collected_candidates_and_manifest(tmp_path, monkeypatch) -> None:
+    candidates_path = tmp_path / "candidates.json.gz"
+    benchmark_path = tmp_path / "small.json.gz"
+    output_path = tmp_path / "collected.json.gz"
+    candidates = load_candidates_from_raw(raw_route())
+    save_candidates(candidates, candidates_path)
+    save_benchmark(benchmark(), benchmark_path)
+
+    run_cli(
+        monkeypatch,
+        "collect",
+        "--input",
+        str(candidates_path),
+        "--benchmark",
+        str(benchmark_path),
+        "--output",
+        str(output_path),
+    )
+
+    collected = load_collected_candidates(output_path)
+    assert list(collected) == ["ethanol"]
+    assert len(collected["ethanol"]) == 1
+    manifest = json.loads((tmp_path / "collected.manifest.json").read_text(encoding="utf-8"))
+    assert manifest["action"] == "[cli:v2]collect"
+
+
 def test_v2_project_cli_ingest_score_analyze(tmp_path, monkeypatch) -> None:
     data_dir = tmp_path / "data"
     raw_dir = data_dir / "2-raw" / "test-model" / "small"
@@ -146,3 +176,7 @@ def test_v2_project_cli_ingest_score_analyze(tmp_path, monkeypatch) -> None:
     assert report.metrics["solv_0[test-stock]_rate"].value == 1.0
     assert (analysis_path.parent / "report.md").exists()
     assert (analysis_path.parent / "manifest.json").exists()
+
+
+def load_candidates_from_raw(raw: dict) -> list[Candidate]:
+    return adapt_candidates({"ethanol": raw}, PaRoutesAdapter(), target=benchmark().targets["ethanol"])
