@@ -470,13 +470,7 @@ def _load_stock_registry(
         stock_registry[stock_name] = set(load_stock_file(stock_path, return_as="inchikey"))
         stock_paths.append(stock_path)
 
-    if not stock_names:
-        output_label = "task"
-    elif len(stock_names) == 1:
-        output_label = next(iter(stock_names))
-    else:
-        output_label = "mixed-stock"
-    return stock_registry, stock_paths, output_label
+    return stock_registry, stock_paths, task.derived_metric_label()
 
 
 def _effective_stock_names(task: Benchmark) -> set[str]:

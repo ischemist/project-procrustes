@@ -81,7 +81,7 @@ def test_task_metric_label_overrides_derived_metric_label() -> None:
 
 
 @pytest.mark.unit
-def test_task_metric_label_marks_multiple_stocks_as_mixed() -> None:
+def test_task_metric_label_marks_multiple_stocks_as_stocks() -> None:
     t1 = Target(id="t1", smiles=SmilesStr("CCO"), inchikey=get_inchi_key("CCO"))
     t2 = Target(id="t2", smiles=SmilesStr("CC"), inchikey=get_inchi_key("CC"))
     task = Task(
@@ -93,7 +93,23 @@ def test_task_metric_label_marks_multiple_stocks_as_mixed() -> None:
         },
     )
 
-    assert task.derived_metric_label() == "mixed-stock"
+    assert task.derived_metric_label() == "stocks"
+
+
+@pytest.mark.unit
+def test_task_metric_label_without_stock_uses_leaf_and_depth_constraints() -> None:
+    t1 = Target(id="t1", smiles=SmilesStr("CCO"), inchikey=get_inchi_key("CCO"))
+    t2 = Target(id="t2", smiles=SmilesStr("CC"), inchikey=get_inchi_key("CC"))
+    task = Task(
+        name="bidirectional",
+        targets={"t1": t1, "t2": t2},
+        constraints={
+            "t1": TaskConstraints(required_leaves_smiles=[SmilesStr("C")]),
+            "t2": TaskConstraints(route_depth=2),
+        },
+    )
+
+    assert task.derived_metric_label() == "leaf+depth"
 
 
 @pytest.mark.unit
