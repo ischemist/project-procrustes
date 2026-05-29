@@ -10,10 +10,16 @@ from retrocast.io import (
     load_benchmark,
     load_collected_candidates,
     load_collected_routes,
+    load_json_artifact,
+    load_stock_file,
     load_task,
     save_benchmark,
     save_collected_candidates,
     save_collected_routes,
+    save_csv_gz,
+    save_json_gz,
+    save_jsonl_gz,
+    save_lines_gz,
     save_stock_files,
     save_task,
 )
@@ -77,6 +83,83 @@ def test_stock_file_writes_are_deterministic(tmp_path) -> None:
 
     assert left_csv.read_bytes() == right_csv.read_bytes()
     assert left_txt.read_bytes() == right_txt.read_bytes()
+
+
+def test_load_json_artifact_dispatches_supported_formats_and_reports_jsonl_rows(tmp_path) -> None:
+    plain_json = tmp_path / "artifact.json"
+    gzip_json = tmp_path / "artifact.json.gz"
+    plain_jsonl = tmp_path / "artifact.jsonl"
+    gzip_jsonl = tmp_path / "artifact.jsonl.gz"
+    invalid_jsonl = tmp_path / "invalid.jsonl"
+    unsupported = tmp_path / "artifact.txt"
+
+    plain_json.write_text('{"kind": "plain"}', encoding="utf-8")
+    save_json_gz({"kind": "gzip"}, gzip_json)
+    plain_jsonl.write_text('{"row": 1}\n\n{"row": 2}\n', encoding="utf-8")
+    save_jsonl_gz([{"row": 3}, {"row": 4}], gzip_jsonl)
+    invalid_jsonl.write_text('{"ok": true}\nnot-json\n', encoding="utf-8")
+    unsupported.write_text("{}", encoding="utf-8")
+
+    assert load_json_artifact(plain_json) == {"kind": "plain"}
+    assert load_json_artifact(gzip_json) == {"kind": "gzip"}
+    assert load_json_artifact(plain_jsonl) == [{"row": 1}, {"row": 2}]
+    assert load_json_artifact(gzip_jsonl) == [{"row": 3}, {"row": 4}]
+    with pytest.raises(ArtifactDecodeError) as row_error:
+        load_json_artifact(invalid_jsonl)
+    assert row_error.value.context["line_number"] == 2
+    with pytest.raises(ArtifactDecodeError) as suffix_error:
+        load_json_artifact(unsupported)
+    assert suffix_error.value.code == "io.decode_failed"
+
+
+def test_load_stock_file_reads_columns_and_rejects_bad_inputs(tmp_path) -> None:
+    stock = {
+        InChIKeyStr(get_inchi_key("C")): SmilesStr("C"),
+        InChIKeyStr(get_inchi_key("CO")): SmilesStr("CO"),
+    }
+    csv_path, _, _ = save_stock_files(stock, "tiny", tmp_path / "stocks")
+    wrong_suffix = tmp_path / "stock.csv"
+    missing_column = tmp_path / "missing-column.csv.gz"
+    corrupt = tmp_path / "corrupt.csv.gz"
+
+    wrong_suffix.write_text("SMILES,InChIKey\n", encoding="utf-8")
+    with gzip.open(missing_column, "wt", encoding="utf-8") as handle:
+        handle.write("SMILES\nC\n")
+    corrupt.write_bytes(b"not gzip")
+
+    assert load_stock_file(csv_path) == set(stock)
+    assert load_stock_file(csv_path, return_as="smiles") == set(stock.values())
+    with pytest.raises(ValueError):
+        load_stock_file(csv_path, return_as="bad")
+    with pytest.raises(ArtifactNotFoundError):
+        load_stock_file(tmp_path / "missing.csv.gz")
+    with pytest.raises(ArtifactFormatError):
+        load_stock_file(wrong_suffix)
+    with pytest.raises(ArtifactFormatError) as column_error:
+        load_stock_file(missing_column)
+    assert column_error.value.context["required_column"] == "InChIKey"
+    with pytest.raises(ArtifactDecodeError):
+        load_stock_file(corrupt)
+
+
+@pytest.mark.parametrize(
+    ("writer", "rows", "filename"),
+    [
+        (save_jsonl_gz, [{"row": 1}], "rows.jsonl.gz"),
+        (save_lines_gz, ["line"], "lines.txt.gz"),
+        (save_csv_gz, [["cell"]], "rows.csv.gz"),
+    ],
+)
+def test_stream_writers_wrap_parent_directory_failures(tmp_path, writer, rows, filename) -> None:
+    parent_file = tmp_path / "not-a-dir"
+    parent_file.write_text("occupied", encoding="utf-8")
+    path = parent_file / filename
+
+    with pytest.raises(ArtifactWriteError) as exc_info:
+        writer(rows, path)
+
+    assert exc_info.value.code == "io.write_failed"
+    assert exc_info.value.context["path"] == str(path)
 
 
 def test_benchmark_round_trips(tmp_path) -> None:

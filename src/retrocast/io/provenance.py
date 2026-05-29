@@ -40,11 +40,6 @@ def calculate_file_hash(path: Path) -> str:
         return "error-hashing-file"
 
 
-def generate_model_hash(model_name: str) -> str:
-    full_hash = hashlib.sha256(model_name.encode()).hexdigest()
-    return f"retrocasted-model-{full_hash[:8]}"
-
-
 def create_manifest(
     action: str,
     sources: list[Path],

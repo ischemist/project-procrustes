@@ -72,10 +72,10 @@ def save_json_gz(data: Any, path: Path) -> None:
 def save_jsonl_gz(rows: Iterable[Any], path: Path) -> int:
     """Serializes JSON rows to a deterministic gzipped JSONL file."""
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
 
     n_rows = 0
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as raw_f, gzip.GzipFile(filename="", mode="wb", fileobj=raw_f, mtime=0) as gz_f:
             for row in rows:
                 if isinstance(row, BaseModel):
@@ -99,10 +99,10 @@ def save_jsonl_gz(rows: Iterable[Any], path: Path) -> int:
 def save_lines_gz(lines: Iterable[str], path: Path) -> int:
     """Writes newline-delimited text lines to a deterministic gzip file."""
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
 
     n_lines = 0
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as raw_f, gzip.GzipFile(filename="", mode="wb", fileobj=raw_f, mtime=0) as gz_f:
             for line in lines:
                 gz_f.write(line.encode("utf-8"))
@@ -121,10 +121,10 @@ def save_lines_gz(lines: Iterable[str], path: Path) -> int:
 def save_csv_gz(rows: Iterable[Iterable[Any]], path: Path) -> int:
     """Writes CSV rows to a deterministic gzip file."""
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
 
     n_rows = 0
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         with (
             open(path, "wb") as raw_f,
             gzip.GzipFile(filename="", mode="wb", fileobj=raw_f, mtime=0) as gz_f,
@@ -176,12 +176,8 @@ def _iter_jsonl(path: Path, *, compressed: bool, skip_empty: bool = True) -> Ite
     _ensure_exists(path)
 
     try:
-        if compressed:
-            handle_context = gzip.open(path, "rt", encoding="utf-8")
-        else:
-            handle_context = open(path, encoding="utf-8")
-
-        with handle_context as handle:
+        opener = gzip.open if compressed else open
+        with opener(path, "rt", encoding="utf-8") as handle:
             for line_number, line in enumerate(handle, start=1):
                 line_text = line.strip()
                 if not line_text:
