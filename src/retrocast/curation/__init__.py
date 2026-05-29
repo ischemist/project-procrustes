@@ -8,8 +8,11 @@ This module provides utilities for:
 """
 
 from retrocast.curation.generators import generate_pruned_routes, get_stock_intermediates
+from retrocast.curation.sampling import sample_random, sample_stratified_priority
 
 __all__ = [
     "generate_pruned_routes",
     "get_stock_intermediates",
+    "sample_random",
+    "sample_stratified_priority",
 ]

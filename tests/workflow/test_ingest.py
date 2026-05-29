@@ -62,6 +62,15 @@ def test_ingest_candidates_is_adapt_plus_collect() -> None:
     assert collected["ethanol"][1].failure.code == ErrorCode("chem.invalid_smiles")
 
 
+def test_ingest_candidates_max_candidates_applies_per_target() -> None:
+    raw_payload = [{"smiles": "CCO"}, {"smiles": "not-a-smiles"}, {"smiles": "CCO"}]
+
+    collected = ingest_candidates(raw_payload, SmilesAdapter(), task(), max_candidates=2)
+
+    assert [candidate.rank for candidate in collected["ethanol"]] == [1, 2]
+    assert collected["ethanol"][1].failure is not None
+
+
 def test_ingest_candidates_handles_target_keyed_payloads() -> None:
     raw_payload = {"ethanol": [{"smiles": "CCO"}, {"smiles": "not-a-smiles"}]}
 

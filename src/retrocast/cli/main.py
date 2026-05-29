@@ -4,7 +4,7 @@ import argparse
 import gzip
 import json
 import logging
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -38,7 +38,7 @@ from retrocast.io.data import load_stock_file
 from retrocast.metrics.constraints import TaskConstraintChecker
 from retrocast.models.provenance import VerificationReport
 from retrocast.models.route import InChIKeyLevel
-from retrocast.models.task import Benchmark, TaskConstraints
+from retrocast.models.task import Benchmark
 from retrocast.paths import (
     DEFAULT_DATA_DIR,
     ENV_VAR_NAME,
@@ -129,6 +129,7 @@ def _build_parser() -> argparse.ArgumentParser:
     adapt.add_argument("--output", required=True, type=Path)
     adapt.add_argument("--adapter", required=True)
     adapt.add_argument("--mode", choices=["strict", "prune"], default="strict")
+    adapt.add_argument("--max-candidates", type=_non_negative_int, help="Adapt only the first N raw candidate slots")
 
     collect = subparsers.add_parser("collect", help="Collect v2 candidates by benchmark target")
     collect.add_argument("--input", required=True, type=Path)
@@ -155,6 +156,9 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_model_dataset_args(ingest)
     ingest.add_argument("--adapter", help="Override adapter from raw manifest")
     ingest.add_argument("--mode", choices=["strict", "prune"], default="strict")
+    ingest.add_argument(
+        "--max-candidates", type=_non_negative_int, help="Ingest only the first N raw candidate slots per target"
+    )
     ingest.add_argument("--no-progress", action="store_true", help="Disable progress bars during ingestion")
 
     score_parser = subparsers.add_parser("score", help="Score v2 processed candidates")
@@ -175,6 +179,13 @@ def _build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("--strict", action="store_true", help="Treat missing files as failures")
 
     return parser
+
+
+def _non_negative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be non-negative")
+    return parsed
 
 
 def _add_model_dataset_args(parser: argparse.ArgumentParser) -> None:
@@ -205,7 +216,7 @@ def handle_adapt(args: argparse.Namespace) -> None:
     raw_payload = load_json_artifact(args.input)
     mode: AdaptMode = args.mode
     root_dir = args.output.parent.resolve()
-    candidates = adapt_candidates(raw_payload, adapter, mode=mode)
+    candidates = adapt_candidates(raw_payload, adapter, mode=mode, max_candidates=args.max_candidates)
     save_candidates(candidates, args.output)
     stats = candidate_statistics(candidates).to_manifest_dict()
 
@@ -218,6 +229,7 @@ def handle_adapt(args: argparse.Namespace) -> None:
         parameters={
             "adapter": normalize_adapter_slug(args.adapter),
             "mode": mode,
+            "max_candidates": args.max_candidates,
         },
         statistics=stats,
     )
@@ -363,6 +375,7 @@ def _ingest_one(
         raw_payload,
         input_kind="target-keyed-provider-output",
         benchmark_targets=task.targets,
+        max_entries_per_target=args.max_candidates,
     )
 
     with _route_progress(
@@ -375,6 +388,7 @@ def _ingest_one(
             adapter=adapter,
             task=task,
             mode=args.mode,
+            max_candidates=args.max_candidates,
             progress_callback=advance_progress,
         )
 
@@ -393,6 +407,7 @@ def _ingest_one(
             "benchmark": benchmark_name,
             "adapter": normalize_adapter_slug(adapter_name),
             "mode": args.mode,
+            "max_candidates": args.max_candidates,
         },
         statistics=stats,
     )

@@ -87,6 +87,24 @@ def test_adapt_routes_filters_failed_raw_routes() -> None:
     assert routes[0].target.smiles == "CC(=O)O"
 
 
+def test_adapt_routes_max_routes_counts_successful_routes_only() -> None:
+    progress_calls = []
+    routes = adapt_routes(
+        [
+            {"rank": 1, "smiles": "not-a-smiles"},
+            valid_route(rank=2),
+            valid_route(rank=3),
+        ],
+        TreeAdapter(),
+        target=make_target(),
+        max_routes=1,
+        progress_callback=lambda: progress_calls.append(None),
+    )
+
+    assert len(routes) == 1
+    assert len(progress_calls) == 2
+
+
 def test_adapt_candidates_preserves_rank_and_failed_candidate() -> None:
     candidates = adapt_candidates(
         [valid_route(rank=7), {"rank": 8, "smiles": "not-a-smiles"}],
@@ -100,6 +118,21 @@ def test_adapt_candidates_preserves_rank_and_failed_candidate() -> None:
     assert candidates[1].route is None
     assert candidates[1].failure is not None
     assert candidates[1].failure.code == "chem.invalid_smiles"
+
+
+def test_adapt_candidates_max_candidates_counts_raw_slots() -> None:
+    progress_calls = []
+    candidates = adapt_candidates(
+        [valid_route(rank=7), {"rank": 8, "smiles": "not-a-smiles"}, valid_route(rank=9)],
+        TreeAdapter(),
+        target=make_target(),
+        max_candidates=2,
+        progress_callback=lambda: progress_calls.append(None),
+    )
+
+    assert [candidate.rank for candidate in candidates] == [7, 8]
+    assert candidates[1].failure is not None
+    assert len(progress_calls) == 2
 
 
 def test_adapt_candidates_records_failed_target_identity_from_entry_hint() -> None:

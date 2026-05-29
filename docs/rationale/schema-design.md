@@ -288,13 +288,27 @@ AdaptMode = Literal["strict", "prune"]
 adapt_route(raw_route_payload, adapter, *, mode: AdaptMode = "strict") -> Route | None
 
 # for route-first inspection and ad hoc use
-adapt_routes(raw_payload, adapter, *, mode: AdaptMode = "strict") -> list[Route]
+adapt_routes(
+    raw_payload,
+    adapter,
+    *,
+    mode: AdaptMode = "strict",
+    max_routes: int | None = None,
+) -> list[Route]
 
 # for benchmarking and honest solv/tier-N metrics
-adapt_candidates(raw_payload, adapter, *, mode: AdaptMode = "strict") -> list[Candidate]
+adapt_candidates(
+    raw_payload,
+    adapter,
+    *,
+    mode: AdaptMode = "strict",
+    max_candidates: int | None = None,
+) -> list[Candidate]
 ```
 
-Which method is called through CLI is determined by the `--preserve-failed-candidates` flag.
+`max_routes` is a route-first convenience limit: failures are skipped and only successful `Route`s count toward the limit. `max_candidates` is the benchmark-safe limit: it processes the first N raw candidate slots and preserves failures, so Tier-0 validity and MRR remain honest.
+
+Benchmark CLI ingestion uses the candidate-preserving path. Route-only adaptation remains available as a library convenience for ad hoc inspection.
 
 ## 2. Collect
 
@@ -371,10 +385,12 @@ Ingest is just the convenience alias for `adapt + collect`
 
 ```python
 # when the user wants only valid canonical routes
-ingest_routes(raw_payload, adapter, task) -> CollectedRoutes
+ingest_routes(raw_payload, adapter, task, *, max_routes: int | None = None) -> CollectedRoutes
 # when the user wants an honest evaluation artifact
-ingest_candidates(raw_payload, adapter, task) -> CollectedCandidates
+ingest_candidates(raw_payload, adapter, task, *, max_candidates: int | None = None) -> CollectedCandidates
 ```
+
+`max_candidates` is applied per target during benchmark ingestion. It is intentionally first-N by raw planner rank; random candidate sampling is not part of benchmark ingestion because planner rank is part of the measured behavior.
 
 ## 4. Score
 

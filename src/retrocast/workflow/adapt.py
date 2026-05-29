@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from itertools import islice
 from typing import Any
 
 from pydantic import ValidationError
@@ -35,15 +36,22 @@ def adapt_routes(
     mode: AdaptMode = "strict",
     target: Target | None = None,
     source_key: str | None = None,
+    max_routes: int | None = None,
     progress_callback: Callable[[], None] | None = None,
 ) -> list[Route]:
     """Adapt raw planner output into valid canonical routes."""
+    _validate_limit(max_routes, "max_routes")
+    if max_routes == 0:
+        return []
+
     routes: list[Route] = []
     for entry in adapter.iter_raw_routes(raw_payload, source_key=source_key):
         try:
             route = adapt_route(entry.payload, adapter, mode=mode, target=target or _target_from_entry(entry))
             if route is not None:
                 routes.append(route)
+                if max_routes is not None and len(routes) >= max_routes:
+                    break
         finally:
             if progress_callback is not None:
                 progress_callback()
@@ -57,11 +65,19 @@ def adapt_candidates(
     mode: AdaptMode = "strict",
     target: Target | None = None,
     source_key: str | None = None,
+    max_candidates: int | None = None,
     progress_callback: Callable[[], None] | None = None,
 ) -> list[Candidate]:
     """Adapt raw planner output while preserving failed candidate rank slots."""
+    _validate_limit(max_candidates, "max_candidates")
+    if max_candidates == 0:
+        return []
+
     candidates: list[Candidate] = []
-    for fallback_rank, entry in enumerate(adapter.iter_raw_routes(raw_payload, source_key=source_key), start=1):
+    entries = adapter.iter_raw_routes(raw_payload, source_key=source_key)
+    if max_candidates is not None:
+        entries = islice(entries, max_candidates)
+    for fallback_rank, entry in enumerate(entries, start=1):
         try:
             rank = entry.source_order if entry.source_order is not None else fallback_rank
             entry_target = target or _target_from_entry(entry)
@@ -77,6 +93,11 @@ def adapt_candidates(
             if progress_callback is not None:
                 progress_callback()
     return candidates
+
+
+def _validate_limit(value: int | None, name: str) -> None:
+    if value is not None and value < 0:
+        raise ValueError(f"{name} must be non-negative")
 
 
 def _target_from_entry(entry: RawRouteEntry) -> Target | None:

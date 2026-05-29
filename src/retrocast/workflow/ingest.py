@@ -20,6 +20,7 @@ def ingest_routes(
     task: Task,
     *,
     mode: AdaptMode = "strict",
+    max_routes: int | None = None,
     progress_callback: Callable[[], None] | None = None,
 ) -> CollectedRoutes:
     """Adapt raw planner output into valid routes and collect them by target id."""
@@ -32,6 +33,7 @@ def ingest_routes(
                 mode=mode,
                 target=target,
                 source_key=source_key,
+                max_routes=max_routes,
                 progress_callback=progress_callback,
             )
         )
@@ -44,6 +46,7 @@ def ingest_candidates(
     task: Task,
     *,
     mode: AdaptMode = "strict",
+    max_candidates: int | None = None,
     progress_callback: Callable[[], None] | None = None,
 ) -> CollectedCandidates:
     """Adapt raw planner output into candidates and collect them by target id."""
@@ -56,6 +59,7 @@ def ingest_candidates(
                 mode=mode,
                 target=target,
                 source_key=source_key,
+                max_candidates=max_candidates,
                 progress_callback=progress_callback,
             )
         )

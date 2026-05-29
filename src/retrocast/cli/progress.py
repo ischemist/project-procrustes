@@ -51,9 +51,10 @@ def estimate_raw_route_entries(
     *,
     input_kind: str,
     benchmark_targets: Mapping[str, Any] | None = None,
+    max_entries_per_target: int | None = None,
 ) -> int | None:
     if input_kind in {"provider_output", "provider-output"}:
-        return _route_collection_len(raw_data)
+        return _capped_len(_route_collection_len(raw_data), max_entries_per_target)
 
     if not isinstance(raw_data, Mapping) or benchmark_targets is None:
         return None
@@ -70,8 +71,16 @@ def estimate_raw_route_entries(
         payload_count = _route_collection_len(payload)
         if payload_count is None:
             return None
-        total += payload_count
+        total += _capped_len(payload_count, max_entries_per_target)
     return total
+
+
+def _capped_len(value: int | None, limit: int | None) -> int | None:
+    if value is None:
+        return None
+    if limit is None:
+        return value
+    return min(value, limit)
 
 
 def _route_collection_len(payload: Any) -> int | None:
