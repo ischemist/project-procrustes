@@ -5,7 +5,7 @@ from rdkit import Chem, rdBase
 from rdkit.Chem import rdinchi, rdMolDescriptors
 
 from retrocast.exceptions import ChemRuntimeError, InvalidInchiKeyError, InvalidSmilesError, RetroCastException
-from retrocast.typing import InchiKeyStr, SmilesStr
+from retrocast.typing import InChIKeyStr, SmilesStr
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ rdBase.DisableLog("rdApp.*")
 NO_STEREO_PLACEHOLDER = "UHFFFAOYSA"
 
 
-class InchiKeyLevel(StrEnum):
+class InChIKeyLevel(StrEnum):
     """
     Levels of InChI key specificity for chemical comparison.
 
@@ -112,7 +112,7 @@ def canonicalize_smiles(smiles: str, remove_mapping: bool = False, ignore_stereo
         ) from e
 
 
-def get_inchi_key(smiles: str, level: InchiKeyLevel = InchiKeyLevel.FULL) -> InchiKeyStr:
+def get_inchi_key(smiles: str, level: InChIKeyLevel = InChIKeyLevel.FULL) -> InChIKeyStr:
     """
     Generates an InChIKey from a SMILES string with configurable specificity.
 
@@ -137,15 +137,15 @@ def get_inchi_key(smiles: str, level: InchiKeyLevel = InchiKeyLevel.FULL) -> Inc
     Examples:
         >>> get_inchi_key("C[C@H](O)CC")  # Full key with stereo
         'BTANRVKWQNVYAZ-BYPYZUCNSA-N'
-        >>> get_inchi_key("C[C@H](O)CC", level=InchiKeyLevel.NO_STEREO)  # No stereo
+        >>> get_inchi_key("C[C@H](O)CC", level=InChIKeyLevel.NO_STEREO)  # No stereo
         'BTANRVKWQNVYAZ-UHFFFAOYSA-N'
-        >>> get_inchi_key("C[C@H](O)CC", level=InchiKeyLevel.CONNECTIVITY)
+        >>> get_inchi_key("C[C@H](O)CC", level=InChIKeyLevel.CONNECTIVITY)
         'BTANRVKWQNVYAZ'
     """
     try:
         mol = _get_mol(smiles, "get_inchi_key")
 
-        if level == InchiKeyLevel.NO_STEREO:
+        if level == InChIKeyLevel.NO_STEREO:
             # Use -SNon to generate InChI without stereochemistry
             # MolToInchi returns (inchi, ret_code, message, log, aux_info)
             inchi, ret_code, _, _, _ = rdinchi.MolToInchi(mol, options="-SNon")
@@ -161,15 +161,15 @@ def get_inchi_key(smiles: str, level: InchiKeyLevel = InchiKeyLevel.FULL) -> Inc
 
         if not key:
             raise ChemRuntimeError(
-                f"Empty InchiKey generated for '{smiles}'",
+                f"Empty InChIKey generated for '{smiles}'",
                 code="chem.inchikey_empty",
                 context={"smiles": smiles, "level": level.value},
             )
 
-        if level == InchiKeyLevel.CONNECTIVITY:
-            return InchiKeyStr(key.split("-")[0])
+        if level == InChIKeyLevel.CONNECTIVITY:
+            return InChIKeyStr(key.split("-")[0])
 
-        return InchiKeyStr(key)
+        return InChIKeyStr(key)
 
     except (InvalidSmilesError, RetroCastException):
         raise
@@ -181,7 +181,7 @@ def get_inchi_key(smiles: str, level: InchiKeyLevel = InchiKeyLevel.FULL) -> Inc
         ) from e
 
 
-def reduce_inchikey(inchikey: str, level: InchiKeyLevel) -> InchiKeyStr:
+def reduce_inchikey(inchikey: str, level: InChIKeyLevel) -> InChIKeyStr:
     """
     Reduces an existing InChI key to a lower specificity level (destructive).
 
@@ -196,16 +196,16 @@ def reduce_inchikey(inchikey: str, level: InchiKeyLevel) -> InchiKeyStr:
             - FULL: Returns the key unchanged
             - NO_STEREO: Replaces the stereo block with the standard no-stereo
               placeholder "UHFFFAOYSA", returning a valid 27-char InChI key.
-              This matches the output of `get_inchi_key(smiles, level=InchiKeyLevel.NO_STEREO)`.
+              This matches the output of `get_inchi_key(smiles, level=InChIKeyLevel.NO_STEREO)`.
             - CONNECTIVITY: Returns first 14 chars only (molecular skeleton)
 
     Returns:
         The normalized InChI key at the specified level.
 
     Example:
-        >>> reduce_inchikey("BQJCRHHNABKAKU-KBQPJGBKSA-N", InchiKeyLevel.NO_STEREO)
+        >>> reduce_inchikey("BQJCRHHNABKAKU-KBQPJGBKSA-N", InChIKeyLevel.NO_STEREO)
         'BQJCRHHNABKAKU-UHFFFAOYSA-N'
-        >>> reduce_inchikey("BQJCRHHNABKAKU-KBQPJGBKSA-N", InchiKeyLevel.CONNECTIVITY)
+        >>> reduce_inchikey("BQJCRHHNABKAKU-KBQPJGBKSA-N", InChIKeyLevel.CONNECTIVITY)
         'BQJCRHHNABKAKU'
     """
     # Standard no-stereo placeholder used by InChI when stereo is not encoded
@@ -214,7 +214,7 @@ def reduce_inchikey(inchikey: str, level: InchiKeyLevel) -> InchiKeyStr:
     # basic validation: 14 chars (1 part) or 27 chars (3 parts)
     if len(parts) not in (1, 3):
         raise InvalidInchiKeyError(
-            f"malformed inchikey structure: {inchikey}",
+            f"malformed InChIKey structure: {inchikey}",
             code="chem.invalid_inchikey",
             context={"inchikey": inchikey, "target_level": level.value},
         )
@@ -228,7 +228,7 @@ def reduce_inchikey(inchikey: str, level: InchiKeyLevel) -> InchiKeyStr:
         )
 
     current_is_partial = len(parts) == 1
-    target_is_full = level in (InchiKeyLevel.FULL, InchiKeyLevel.NO_STEREO)
+    target_is_full = level in (InChIKeyLevel.FULL, InChIKeyLevel.NO_STEREO)
 
     # prevent upscaling (14 -> 25)
     if current_is_partial and target_is_full:
@@ -238,16 +238,16 @@ def reduce_inchikey(inchikey: str, level: InchiKeyLevel) -> InchiKeyStr:
             context={"inchikey": inchikey, "target_level": level.value},
         )
 
-    if level == InchiKeyLevel.FULL:
+    if level == InChIKeyLevel.FULL:
         # note: it is chemically impossible to detect if a 27-char key is "no_stereo" or just "a molecule with no stereo centers" just by looking at the string. so NO_STEREO -> FULL is allowed to pass through as an identity operation, which is pragmatically fine.
-        return InchiKeyStr(inchikey)
+        return InChIKeyStr(inchikey)
 
-    if level == InchiKeyLevel.CONNECTIVITY:
-        return InchiKeyStr(parts[0])
+    if level == InChIKeyLevel.CONNECTIVITY:
+        return InChIKeyStr(parts[0])
 
-    if level == InchiKeyLevel.NO_STEREO:
+    if level == InChIKeyLevel.NO_STEREO:
         # we already checked we have 3 parts above
-        return InchiKeyStr(f"{parts[0]}-{NO_STEREO_PLACEHOLDER}-{parts[2]}")
+        return InChIKeyStr(f"{parts[0]}-{NO_STEREO_PLACEHOLDER}-{parts[2]}")
 
     raise ValueError(f"unknown inchikey level: {level}")
 

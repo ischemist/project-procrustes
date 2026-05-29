@@ -1,218 +1,265 @@
-import logging
-from typing import Any, Protocol
+from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
+
+from retrocast.adapters.base import AdaptMode
 from retrocast.adapters.errors import adapter_cycle_error, adapter_node_type_error
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.models.chem import Molecule, ReactionStep
+from retrocast.exceptions import AdapterLogicError, InvalidSmilesError
+from retrocast.models.route import Molecule, Reaction
 from retrocast.typing import SmilesStr
 
-logger = logging.getLogger(__name__)
-
-PrecursorMap = dict[SmilesStr, list[SmilesStr]]
-
-
-# --- pattern a: bipartite graph recursor ---
+ReactionAnnotations = Mapping[SmilesStr, Mapping[str, Any]]
+ReactionFields = Mapping[str, Any]
+MoleculeAnnotations = Mapping[str, Any]
 
 
-class BipartiteMolNode(Protocol):
-    """
-    a protocol defining the shape of a raw molecule node from bipartite-graph-style outputs.
-
-    note: we use `@property` to define the members, making them read-only (covariant).
-    this allows concrete pydantic models with more specific types (e.g., `Literal['mol']`)
-    to correctly match the protocol's `type: str` without mypy raising an invariance error.
-    """
-
-    @property
-    def type(self) -> str: ...
-
-    @property
-    def smiles(self) -> str: ...
-
-    @property
-    def children(self) -> list[Any]: ...
-
-    @property
-    def in_stock(self) -> bool: ...
-
-
-class BipartiteRxnNode(Protocol):
-    """
-    a protocol defining the shape of a raw reaction node from bipartite-graph-style outputs.
-    see `BipartiteMolNode` docstring for explanation of `@property` usage.
-    """
-
-    @property
-    def type(self) -> str: ...
-
-    @property
-    def children(self) -> list[BipartiteMolNode]: ...
-
-    @property
-    def metadata(self) -> dict[str, Any]: ...
-
-
-# --- pattern b: precursor map recursor ---
-
-# --- Schema Helpers (Route/Molecule/ReactionStep) ---
+# SECTION: Precursor Map Traversal
 
 
 def build_molecule_from_precursor_map(
-    smiles: SmilesStr,
-    precursor_map: PrecursorMap,
-    visited: set[SmilesStr] | None = None,
-    ignore_stereo: bool = False,
+    smiles: str,
+    precursor_map: Mapping[SmilesStr, Sequence[str]],
     *,
-    adapter: str = "common",
-) -> Molecule:
-    """
-    Recursively builds a `Molecule` from a precursor map, with cycle detection.
-    This is the new schema version for models like retro*, dreamretro, etc.
+    adapter: str,
+    mode: AdaptMode,
+    reaction_annotations: ReactionAnnotations | None = None,
+) -> Molecule | None:
+    return _build_molecule_from_precursor_map(
+        smiles,
+        precursor_map,
+        adapter=adapter,
+        mode=mode,
+        visited=set(),
+        reaction_annotations=reaction_annotations,
+    )
 
-    Args:
-        smiles: The SMILES string of the current molecule.
-        precursor_map: A dict mapping product SMILES to list of reactant SMILES.
-        visited: Set of SMILES already visited (for cycle detection).
-        ignore_stereo: If True, stereochemistry is stripped during SMILES canonicalization.
-            Defaults to False.
 
-    Returns:
-        A Molecule object representing this node and its synthesis tree.
-    """
-    if visited is None:
-        visited = set()
+def _build_molecule_from_precursor_map(
+    smiles: str,
+    precursor_map: Mapping[SmilesStr, Sequence[str]],
+    *,
+    adapter: str,
+    mode: AdaptMode,
+    visited: set[SmilesStr],
+    reaction_annotations: ReactionAnnotations | None,
+) -> Molecule | None:
+    try:
+        canon_smiles = canonicalize_smiles(smiles)
+    except InvalidSmilesError:
+        if mode == "prune":
+            return None
+        raise
 
-    canon_smiles = canonicalize_smiles(smiles, ignore_stereo=ignore_stereo)
     if canon_smiles in visited:
         raise adapter_cycle_error(adapter, canon_smiles)
 
-    new_visited = visited | {canon_smiles}
-    reactant_smiles_list = precursor_map.get(canon_smiles)
-    if reactant_smiles_list is None:
-        reactant_smiles_list = precursor_map.get(smiles)
-    is_leaf = reactant_smiles_list is None
+    reactant_smiles = precursor_map.get(canon_smiles)
+    if reactant_smiles is None:
+        return Molecule(smiles=canon_smiles, inchikey=get_inchi_key(canon_smiles))
 
-    if is_leaf:
-        # This is a starting material (leaf node)
-        return Molecule(
-            smiles=canon_smiles,
-            inchikey=get_inchi_key(canon_smiles),
-            synthesis_step=None,
-            metadata={},
-        )
-
-    # Build reactants recursively
-    reactant_molecules: list[Molecule] = []
-
-    for reactant_smi in reactant_smiles_list:
-        reactant_mol = build_molecule_from_precursor_map(
-            smiles=reactant_smi,
-            precursor_map=precursor_map,
-            visited=new_visited,
-            ignore_stereo=ignore_stereo,
+    reactants: list[Molecule] = []
+    for reactant in reactant_smiles:
+        reactant_molecule = _build_molecule_from_precursor_map(
+            reactant,
+            precursor_map,
             adapter=adapter,
+            mode=mode,
+            visited=visited | {canon_smiles},
+            reaction_annotations=reaction_annotations,
         )
-        reactant_molecules.append(reactant_mol)
+        if reactant_molecule is not None:
+            reactants.append(reactant_molecule)
 
-    # Create the reaction step
-    synthesis_step = ReactionStep(
-        reactants=reactant_molecules,
-        mapped_smiles=None,
-        reagents=None,
-        solvents=None,
-        metadata={},
-    )
+    if not reactants:
+        if mode == "prune":
+            return None
+        raise AdapterLogicError(
+            f"{adapter} reaction has no reactants",
+            code="adapter.reaction_empty",
+            context={"adapter": adapter, "smiles": canon_smiles},
+        )
 
-    # Create the molecule with its synthesis step
+    annotations = dict(reaction_annotations.get(canon_smiles, {})) if reaction_annotations is not None else {}
     return Molecule(
         smiles=canon_smiles,
         inchikey=get_inchi_key(canon_smiles),
-        synthesis_step=synthesis_step,
-        metadata={},
+        product_of=Reaction(reactants=reactants, annotations=annotations),
     )
 
 
-def build_molecule_from_bipartite_node(
-    raw_mol_node: BipartiteMolNode,
-    ignore_stereo: bool = False,
+# SECTION: Bipartite Molecule-Reaction Traversal
+
+
+def build_bipartite_molecule(
+    node: Any,
     *,
-    visited: set[SmilesStr] | None = None,
-    adapter: str = "common",
-) -> Molecule:
-    """
-    Recursively builds a `Molecule` from a raw, validated bipartite graph node.
-    This is the new schema version for models like aizynthfinder, synplanner, etc.
+    adapter: str,
+    mode: AdaptMode,
+    reaction_fields: Callable[[Any], ReactionFields] | None = None,
+    remove_mapping: bool = False,
+) -> Molecule | None:
+    return _build_bipartite_molecule(
+        node,
+        adapter=adapter,
+        mode=mode,
+        reaction_fields=reaction_fields,
+        remove_mapping=remove_mapping,
+        visited=set(),
+    )
 
-    Args:
-        raw_mol_node: A raw molecule node following the BipartiteMolNode protocol.
-        ignore_stereo: If True, stereochemistry is stripped during SMILES canonicalization.
-            Defaults to False.
 
-    Returns:
-        A Molecule object representing this node and its synthesis tree.
-    """
-    if raw_mol_node.type != "mol":
-        raise adapter_node_type_error(adapter, expected="mol", actual=raw_mol_node.type, role="molecule")
+def _build_bipartite_molecule(
+    node: Any,
+    *,
+    adapter: str,
+    mode: AdaptMode,
+    reaction_fields: Callable[[Any], ReactionFields] | None,
+    remove_mapping: bool,
+    visited: set[SmilesStr],
+) -> Molecule | None:
+    if getattr(node, "type", None) != "mol":
+        actual = getattr(node, "type", type(node).__name__)
+        raise adapter_node_type_error(adapter, expected="mol", actual=actual, role="molecule")
 
-    if visited is None:
-        visited = set()
+    try:
+        canon_smiles = canonicalize_smiles(node.smiles, remove_mapping=remove_mapping)
+    except InvalidSmilesError:
+        if mode == "prune":
+            return None
+        raise
 
-    canon_smiles = canonicalize_smiles(raw_mol_node.smiles, ignore_stereo=ignore_stereo)
     if canon_smiles in visited:
         raise adapter_cycle_error(adapter, canon_smiles)
 
-    new_visited = visited | {canon_smiles}
-    is_leaf = raw_mol_node.in_stock or not bool(raw_mol_node.children)
+    if getattr(node, "in_stock", False) or not node.children:
+        return Molecule(smiles=canon_smiles, inchikey=get_inchi_key(canon_smiles))
 
-    if is_leaf:
-        return Molecule(
-            smiles=canon_smiles,
-            inchikey=get_inchi_key(canon_smiles),
-            synthesis_step=None,
-            metadata={},
+    if len(node.children) > 1:
+        raise AdapterLogicError(
+            f"{adapter} route is not a tree: molecule has multiple child reactions",
+            code="adapter.route_not_tree",
+            context={"adapter": adapter, "smiles": canon_smiles, "child_reaction_count": len(node.children)},
         )
 
-    # In a valid tree, a molecule has at most one reaction leading to it
-    if len(raw_mol_node.children) > 1:
-        logger.warning(
-            f"Molecule {canon_smiles} has multiple child reactions in raw output; only the first is used in a tree."
-        )
+    reaction_node = node.children[0]
+    if getattr(reaction_node, "type", None) != "reaction":
+        actual = getattr(reaction_node, "type", type(reaction_node).__name__)
+        raise adapter_node_type_error(adapter, expected="reaction", actual=actual, role="molecule child")
 
-    raw_reaction_node: BipartiteRxnNode = raw_mol_node.children[0]
-    if raw_reaction_node.type != "reaction":
-        raise adapter_node_type_error(
-            adapter, expected="reaction", actual=raw_reaction_node.type, role="molecule child"
-        )
-
-    # Build reactants recursively
-    reactant_molecules: list[Molecule] = []
-    for reactant_mol_input in raw_reaction_node.children:
-        reactant_mol = build_molecule_from_bipartite_node(
-            raw_mol_node=reactant_mol_input,
-            ignore_stereo=ignore_stereo,
-            visited=new_visited,
+    reactants: list[Molecule] = []
+    for child in reaction_node.children:
+        if getattr(child, "type", None) != "mol":
+            actual = getattr(child, "type", type(child).__name__)
+            raise adapter_node_type_error(adapter, expected="mol", actual=actual, role="reaction child")
+        reactant = _build_bipartite_molecule(
+            child,
             adapter=adapter,
+            mode=mode,
+            reaction_fields=reaction_fields,
+            remove_mapping=remove_mapping,
+            visited=visited | {canon_smiles},
         )
-        reactant_molecules.append(reactant_mol)
+        if reactant is not None:
+            reactants.append(reactant)
 
-    # Extract template and mapped_smiles from metadata if available
-    rxn_metadata = raw_reaction_node.metadata
-    template = rxn_metadata.get("template") if rxn_metadata else None
-    mapped_smiles = rxn_metadata.get("mapped_reaction_smiles") if rxn_metadata else None
+    if not reactants:
+        if mode == "prune":
+            return None
+        raise AdapterLogicError(
+            f"{adapter} reaction has no reactants",
+            code="adapter.reaction_empty",
+            context={"adapter": adapter, "smiles": canon_smiles},
+        )
 
-    # Create the reaction step
-    synthesis_step = ReactionStep(
-        reactants=reactant_molecules,
-        mapped_smiles=mapped_smiles,
-        template=template,
-        reagents=None,
-        solvents=None,
-        metadata=rxn_metadata if rxn_metadata else {},
-    )
-
+    fields = dict(reaction_fields(reaction_node)) if reaction_fields is not None else {}
     return Molecule(
         smiles=canon_smiles,
         inchikey=get_inchi_key(canon_smiles),
-        synthesis_step=synthesis_step,
-        metadata={},
+        product_of=Reaction(reactants=reactants, **fields),
+    )
+
+
+# SECTION: Plain Molecule Tree Traversal
+
+
+def build_plain_tree_molecule(
+    node: Any,
+    *,
+    adapter: str,
+    mode: AdaptMode,
+    get_smiles: Callable[[Any], str],
+    get_children: Callable[[Any], Sequence[Any]],
+    get_molecule_annotations: Callable[[Any], MoleculeAnnotations] | None = None,
+    get_reaction_fields: Callable[[Any], ReactionFields] | None = None,
+) -> Molecule | None:
+    return _build_plain_tree_molecule(
+        node,
+        adapter=adapter,
+        mode=mode,
+        get_smiles=get_smiles,
+        get_children=get_children,
+        get_molecule_annotations=get_molecule_annotations,
+        get_reaction_fields=get_reaction_fields,
+        visited=set(),
+    )
+
+
+def _build_plain_tree_molecule(
+    node: Any,
+    *,
+    adapter: str,
+    mode: AdaptMode,
+    get_smiles: Callable[[Any], str],
+    get_children: Callable[[Any], Sequence[Any]],
+    get_molecule_annotations: Callable[[Any], MoleculeAnnotations] | None,
+    get_reaction_fields: Callable[[Any], ReactionFields] | None,
+    visited: set[SmilesStr],
+) -> Molecule | None:
+    try:
+        canon_smiles = canonicalize_smiles(get_smiles(node))
+    except InvalidSmilesError:
+        if mode == "prune":
+            return None
+        raise
+
+    if canon_smiles in visited:
+        raise adapter_cycle_error(adapter, canon_smiles)
+
+    annotations = dict(get_molecule_annotations(node)) if get_molecule_annotations is not None else {}
+    children = list(get_children(node))
+    if not children:
+        return Molecule(smiles=canon_smiles, inchikey=get_inchi_key(canon_smiles), annotations=annotations)
+
+    reactants: list[Molecule] = []
+    for child in children:
+        reactant = _build_plain_tree_molecule(
+            child,
+            adapter=adapter,
+            mode=mode,
+            get_smiles=get_smiles,
+            get_children=get_children,
+            get_molecule_annotations=get_molecule_annotations,
+            get_reaction_fields=get_reaction_fields,
+            visited=visited | {canon_smiles},
+        )
+        if reactant is not None:
+            reactants.append(reactant)
+
+    if not reactants:
+        if mode == "prune":
+            return None
+        raise AdapterLogicError(
+            f"{adapter} reaction has no reactants",
+            code="adapter.reaction_empty",
+            context={"adapter": adapter, "smiles": canon_smiles},
+        )
+
+    fields = dict(get_reaction_fields(node)) if get_reaction_fields is not None else {}
+    return Molecule(
+        smiles=canon_smiles,
+        inchikey=get_inchi_key(canon_smiles),
+        product_of=Reaction(reactants=reactants, **fields),
+        annotations=annotations,
     )

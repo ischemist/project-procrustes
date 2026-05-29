@@ -8,7 +8,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, Field
 
-from retrocast.chem import InchiKeyLevel as InChIKeyLevel
+from retrocast.chem import InChIKeyLevel
 from retrocast.chem import reduce_inchikey
 from retrocast.typing import InChIKeyStr, ReactionSmilesStr, SmilesStr
 
