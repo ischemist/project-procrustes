@@ -138,6 +138,7 @@ class TestPaRoutesAdapterContract(AdapterContractSuite):
         route = adapter.cast(raw_paroutes_route, target=target_for(raw_paroutes_route, "paroutes-ex-1"))
 
         assert route.annotations["patent_id"] == "US123"
+        assert route.target.product_of is not None
         assert len(route.target.product_of.reactants) == 2
 
 
