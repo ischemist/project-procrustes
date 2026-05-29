@@ -4,19 +4,22 @@
   "directives": {},
   "output_files": {
     "all": {
+      "content_hash": "34e57bee64580d3a6bcc4a0e36a54b1a9b8ecfa231a36294cb7f56ea2eb65929",
+      "file_hash": "fcf89172cb3a4d8b8649326703572da9d6f7c24c017442ad95707fa48288246e",
       "label": "all",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/all.jsonl.gz",
-      "sha256": "3221de6a77246535618614f61e517c9e5493221d4647cc0d0ac114e38f452563"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/all.jsonl.gz"
     },
     "training": {
+      "content_hash": "712fa60d49334449ceb9b549882b881812339507385df30b865b8ef966e4978a",
+      "file_hash": "f9150f0f13bb4ca7ee3688f18bfb67d2abc7faa3b07ada3b954f9e7466b50584",
       "label": "training",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/training.jsonl.gz",
-      "sha256": "baf7cad9da709764d99dd9fa6e44d2e2d5ff0faef0f14681b3ab4f335676db94"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/training.jsonl.gz"
     },
     "validation": {
+      "content_hash": "ea4740a944180b4a07c4d276f96a55ce14eeaf4fa55d6f2f35334c67ae5f9954",
+      "file_hash": "0f1e12f3993f6af1bd38e18828cbd1c51996cc9496032cb4bc668536a7a14cda",
       "label": "validation",
-      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/validation.jsonl.gz",
-      "sha256": "ffee611ecd0d70a3e8ddb7c2bee78b62f7ab1dada3ebd0e7cccd5be5258d7045"
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-05-12/reaction-holdout-n1-n5/validation.jsonl.gz"
     }
   },
   "parameters": {
@@ -37,19 +40,22 @@
   },
   "release_name": "reaction-holdout-n1-n5",
   "retrocast_version": "0.5.4.dev22",
-  "schema_version": "1.1",
+  "schema_version": "2",
   "source_files": [
     {
-      "path": "data/retrocast/0-assets/paroutes/all-routes.json.gz",
-      "sha256": "d504e5964af1b09632d4048f6ab81d626babc5d344dff1be00ece312716f2405"
+      "content_hash": null,
+      "file_hash": "d504e5964af1b09632d4048f6ab81d626babc5d344dff1be00ece312716f2405",
+      "path": "data/retrocast/0-assets/paroutes/all-routes.json.gz"
     },
     {
-      "path": "data/retrocast/0-assets/paroutes/n1-routes.json.gz",
-      "sha256": "49d7e209328b7cf7edc09ca827b0a21938d520a6b1d2dc0a46a65c6f392c2c89"
+      "content_hash": null,
+      "file_hash": "49d7e209328b7cf7edc09ca827b0a21938d520a6b1d2dc0a46a65c6f392c2c89",
+      "path": "data/retrocast/0-assets/paroutes/n1-routes.json.gz"
     },
     {
-      "path": "data/retrocast/0-assets/paroutes/n5-routes.json.gz",
-      "sha256": "5333b4aeb4e65a2c50e42a8f3a3701c75d76c8045280ec6cc460fbb3ebd605ad"
+      "content_hash": null,
+      "file_hash": "5333b4aeb4e65a2c50e42a8f3a3701c75d76c8045280ec6cc460fbb3ebd605ad",
+      "path": "data/retrocast/0-assets/paroutes/n5-routes.json.gz"
     }
   ],
   "statistics": {},
@@ -119,6 +125,9 @@
         "unique_reference_reaction_signatures": 56657
       },
       "unique_reference_route_signatures": 17871
-    }
+    },
+    "schema_migrations": [
+      "scripts/migrations/04-migrate-paroutes-training-release-to-schema-v2"
+    ]
   }
 }

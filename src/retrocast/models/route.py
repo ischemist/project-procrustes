@@ -206,6 +206,27 @@ class Route(BaseModel):
     def iter_leaves(self) -> Iterator[MoleculeView]:
         yield from self.molecule_at(RoutePath.target()).iter_leaves()
 
+    def reactions(self) -> list[ReactionView]:
+        return list(self.iter_reactions())
+
+    def iter_reactions(self) -> Iterator[ReactionView]:
+        stack = [RoutePath.root_reaction()]
+        while stack:
+            path = stack.pop()
+            try:
+                reaction = self.reaction_at(path)
+            except KeyError:
+                continue
+            yield reaction
+            stack.extend(
+                reactant.path.produced_by()
+                for reactant in reaction.reactants()
+                if reactant.value.product_of is not None
+            )
+
+    def reaction_signatures(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> set[str]:
+        return {reaction.signature(match_level) for reaction in self.iter_reactions()}
+
     def depth(self) -> int:
         return self.molecule_at(RoutePath.target()).depth()
 

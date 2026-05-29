@@ -50,13 +50,13 @@ Implementation:
 
 The route release has two modes.
 
-`route-holdout-n1-n5` removes every candidate route whose `Route.get_structural_signature()` appears in `n1 ∪ n5`.
+`route-holdout-n1-n5` removes every candidate route whose schema-2 `Route.signature()` appears in `n1 ∪ n5`.
 
 `reaction-holdout-n1-n5` first removes exact holdout routes, then removes holdout reactions from surviving routes. If a route still has valid fragments after excision, those fragments remain candidates.
 
 During adaptation, RetroCast sanity-checks PaRoutes `reaction_hash` values against `ReactionSignature`. PaRoutes `reaction_hash` is reaction SMILES represented with InChIKeys, so it should describe the same identity as RetroCast's reactant/product InChIKey signature. If the check passes, `reaction_hash` is not carried through the release pipeline.
 
-PaRoutes condition slots stay in step metadata. We do not populate structured `solvents` or `reagents` fields because the slot is not reliably one or the other; it can also contain material that should have been modeled as a reactant. RetroCast tries to canonicalize the slot into `condition_slot_smiles`, but keeps the raw `condition_slot` when parsing fails or when the raw text may still help an end user.
+PaRoutes condition slots stay in reaction annotations. We do not populate structured `solvents` or `reagents` fields because the slot is not reliably one or the other; it can also contain material that should have been modeled as a reactant. RetroCast tries to canonicalize the slot into `condition_slot_smiles`, but keeps the raw `condition_slot` when parsing fails or when the raw text may still help an end user.
 
 ## Route Deduplication
 
@@ -67,7 +67,7 @@ Routes are deduplicated twice:
 
 The second pass groups by route structural signature plus per-step condition identity. Condition identity is `condition_slot_smiles` when available and `condition_slot` otherwise.
 
-When mapped variants collapse, the kept mapped profile is chosen by source support, then lexicographic order, then raw route hash. Non-kept mapped reactions are preserved in step metadata as `alternative_mapped_smiles`.
+When mapped variants collapse, the kept mapped profile is chosen by source support, then lexicographic order, then raw route hash. Non-kept mapped reactions are preserved in reaction annotations as `alternative_mapped_smiles`.
 
 Merged route provenance stays in `sources`. Released route metadata drops the single-source `patent_id` and writes `source_patent_ids` at materialization.
 
@@ -123,4 +123,4 @@ Single-step release behavior lives in:
 
 PaRoutes adaptation behavior lives in:
 
-- `src/retrocast/adapters/paroutes_adapter.py`
+- `src/retrocast/adapters/paroutes.py`
