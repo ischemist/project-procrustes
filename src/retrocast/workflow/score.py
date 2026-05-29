@@ -42,6 +42,7 @@ def score_candidate(
     tier_checkers: Sequence[TierChecker],
     constraint_checker: ConstraintChecker,
     acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    _acceptable_signatures: Sequence[str] | None = None,
 ) -> ScoredCandidate:
     """Score one candidate while preserving failed adaptation slots."""
     validity = _tier_zero_validity(candidate)
@@ -56,7 +57,12 @@ def score_candidate(
     route = cast(Route, candidate.route)
     _check_route_validity(route, tier_checkers, validity)
     constraints_result = constraint_checker.check_route(route, constraints)
-    matched_index = _acceptable_match_index(route, target.acceptable_routes, acceptable_match_level)
+    acceptable_signatures = (
+        _acceptable_signatures
+        if _acceptable_signatures is not None
+        else _acceptable_route_signatures(target.acceptable_routes, acceptable_match_level)
+    )
+    matched_index = _acceptable_match_index(route, acceptable_signatures, acceptable_match_level)
     return ScoredCandidate(
         rank=candidate.rank,
         route=route,
@@ -79,6 +85,7 @@ def score_target(
     cpu_time: float | None = None,
 ) -> TargetResult:
     scored_candidates = []
+    acceptable_signatures = _acceptable_route_signatures(target.acceptable_routes, acceptable_match_level)
     for candidate in candidates:
         scored_candidate = score_candidate(
             candidate,
@@ -87,6 +94,7 @@ def score_target(
             tier_checkers=tier_checkers,
             constraint_checker=constraint_checker,
             acceptable_match_level=acceptable_match_level,
+            _acceptable_signatures=acceptable_signatures,
         )
         scored_candidates.append(scored_candidate)
 
@@ -167,11 +175,15 @@ def _check_route_validity(route: Route, tier_checkers: Sequence[TierChecker], va
 
 def _acceptable_match_index(
     route: Route,
-    acceptable_routes: Sequence[Route],
+    acceptable_signatures: Sequence[str],
     match_level: InChIKeyLevel,
 ) -> int | None:
     route_signature = route.signature(match_level)
-    for index, acceptable_route in enumerate(acceptable_routes):
-        if route_signature == acceptable_route.signature(match_level):
+    for index, acceptable_signature in enumerate(acceptable_signatures):
+        if route_signature == acceptable_signature:
             return index
     return None
+
+
+def _acceptable_route_signatures(acceptable_routes: Sequence[Route], match_level: InChIKeyLevel) -> list[str]:
+    return [route.signature(match_level) for route in acceptable_routes]

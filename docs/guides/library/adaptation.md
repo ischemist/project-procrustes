@@ -58,7 +58,7 @@ adapter = get_adapter("paroutes")
 routes = adapt_routes(raw_payload, adapter, max_routes=50)
 ```
 
-`max_routes` counts successful routes. Malformed raw route records do not consume the limit.
+`max_routes` counts successful routes because a `Route` is, by definition, a valid adapted route. Malformed raw route records are skipped and do not consume the limit. Use `adapt_candidates(..., max_candidates=N)` when you need to bound the first N raw prediction slots or preserve failures for evaluation.
 
 ## Preserve Candidate Slots
 

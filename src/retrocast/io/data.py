@@ -144,9 +144,9 @@ def _target_route_depth_stratum(target: TargetResult) -> str | None:
     if acceptable_routes:
         return f"depth {acceptable_routes[0].depth()}"
     route_depth = target.effective_constraints.route_depth
-    if isinstance(route_depth, int):
-        return f"depth {route_depth}"
-    return None
+    if route_depth is None:
+        return None
+    return f"depth {route_depth}"
 
 
 def load_raw_paroutes_list(path: Path) -> list[dict]:

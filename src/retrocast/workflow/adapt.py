@@ -39,7 +39,12 @@ def adapt_routes(
     max_routes: int | None = None,
     progress_callback: Callable[[], None] | None = None,
 ) -> list[Route]:
-    """Adapt raw planner output into valid canonical routes."""
+    """Adapt raw planner output into valid canonical routes.
+
+    max_routes counts successful routes. Invalid raw route records are skipped and
+    do not consume the limit; use adapt_candidates when raw prediction-slot limits
+    and failures must be preserved.
+    """
     _validate_limit(max_routes, "max_routes")
     if max_routes == 0:
         return []

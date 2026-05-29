@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 from dataclasses import asdict
+from typing import Literal
 
 import pytest
 
@@ -277,6 +278,16 @@ def test_benchmark_results_loader_exposes_evaluation_sequence_and_statistics(tmp
     assert stats[0].top_k_accuracy[1].by_stratum["depth 1"].count == 1
 
 
+def test_benchmark_results_loader_keeps_named_route_depth_strata(tmp_path) -> None:
+    data_dir = tmp_path / "retrocast"
+    evaluation_path = data_dir / "4-scored" / "small" / "model-a" / "stock-a" / "evaluation.json.gz"
+    save_evaluation(scored_evaluation(route_depth="short"), evaluation_path)
+
+    stats = BenchmarkResultsLoader(tmp_path).load_statistics("small", ["model-a"], "stock-a")
+
+    assert stats[0].top_k_accuracy[1].by_stratum["depth short"].count == 1
+
+
 def test_missing_benchmark_raises_io_error(tmp_path) -> None:
     with pytest.raises(ArtifactNotFoundError):
         load_benchmark(tmp_path / "missing.json.gz")
@@ -317,7 +328,7 @@ def test_save_failure_raises_write_error(tmp_path) -> None:
         save_benchmark(benchmark(), parent_file / "benchmark.json.gz")
 
 
-def scored_evaluation() -> Evaluation:
+def scored_evaluation(route_depth: int | Literal["short", "medium", "long"] = 1) -> Evaluation:
     benchmark_target = target()
     task = Task(name="small-task", targets={benchmark_target.id: benchmark_target})
     scored = ScoredCandidate(
@@ -329,7 +340,7 @@ def scored_evaluation() -> Evaluation:
     )
     target_result = TargetResult(
         target=benchmark_target,
-        effective_constraints=TaskConstraints(route_depth=1),
+        effective_constraints=TaskConstraints(route_depth=route_depth),
         candidates=[scored],
         wall_time=1.0,
         cpu_time=0.5,
