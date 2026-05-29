@@ -1,6 +1,7 @@
 """Schema v2 workflow APIs."""
 
 from retrocast.v2.workflow.adapt import adapt_candidates, adapt_route, adapt_routes
+from retrocast.v2.workflow.analyze import analyze
 from retrocast.v2.workflow.collect import (
     CollectedCandidates,
     CollectedRoutes,
@@ -24,6 +25,7 @@ __all__ = [
     "adapt_candidates",
     "adapt_route",
     "adapt_routes",
+    "analyze",
     "collect_candidates",
     "collect_routes",
     "ingest_candidates",

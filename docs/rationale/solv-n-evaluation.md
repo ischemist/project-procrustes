@@ -24,6 +24,8 @@ Fundamentally, Solv-N combines two key concepts:
 Solv-i[task] = Tier-i validity + satisfying task constraints
 ```
 
+The bracketed metric label should name the task semantics, not every per-target value. For example, stock termination against a purchasable set is `Solv-i[buyables]`; adding target-specific route-depth constraints gives `Solv-i[buyables+depth]`; adding target-specific required leaves gives `Solv-i[buyables+leaf]`. Exact constraint values remain in the task artifact.
+
 ### Tier-N Chemical Validity
 
 As a refresher (consult [Syntax of Matter](https://ischemist.com/syntax-of-matter) for more details):

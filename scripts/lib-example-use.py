@@ -10,10 +10,10 @@ from retrocast.utils.logging import configure_script_logging, logger
 from retrocast.v2.adapters import AiZynthFinderAdapter
 from retrocast.v2.io import load_benchmark
 from retrocast.v2.metrics import TaskConstraintChecker
-from retrocast.v2.models import Tier
 from retrocast.v2.workflow import (
     adapt_candidates,
     adapt_routes,
+    analyze,
     collect_candidates,
     collect_routes,
     ingest_candidates,
@@ -72,26 +72,34 @@ def main() -> None:
         tier_checkers=[],
         constraint_checker=TaskConstraintChecker.stock_termination(stock=stock, stock_name=stock_name),
     )
-    target_count = len(evaluation.targets)
-    tier_zero_count = 0
-    solv_zero_count = 0
-    top_one_count = 0
-    top_ten_count = 0
-    for target_result in evaluation.targets.values():
-        candidates = target_result.candidates
-        if any(candidate.satisfies_validity(Tier.ZERO) for candidate in candidates):
-            tier_zero_count += 1
-        if any(candidate.satisfies_solv(Tier.ZERO) for candidate in candidates):
-            solv_zero_count += 1
-        if any(candidate.matches_acceptable for candidate in candidates[:1]):
-            top_one_count += 1
-        if any(candidate.matches_acceptable for candidate in candidates[:10]):
-            top_ten_count += 1
-
-    logger.info("score: tier_zero_targets=%s/%s", tier_zero_count, target_count)
-    logger.info("score: solv_zero_targets=%s/%s", solv_zero_count, target_count)
-    logger.info("score: top_one_targets=%s/%s", top_one_count, target_count)
-    logger.info("score: top_ten_targets=%s/%s", top_ten_count, target_count)
+    report = analyze(evaluation, ks=(1, 10))
+    logger.info("score: targets=%s", len(evaluation.targets))
+    for name, metric in report.metrics.items():
+        ci_low = "n/a" if metric.ci_low is None else f"{metric.ci_low:.3f}"
+        ci_high = "n/a" if metric.ci_high is None else f"{metric.ci_high:.3f}"
+        logger.info(
+            "analyze: %s=%.3f ci95=[%s, %s] count=%s",
+            name,
+            metric.value,
+            ci_low,
+            ci_high,
+            metric.count,
+        )
+    if not report.by_stratum:
+        logger.info("analyze: no stratified metrics")
+    for stratum, metrics in report.by_stratum.items():
+        for name, metric in metrics.items():
+            ci_low = "n/a" if metric.ci_low is None else f"{metric.ci_low:.3f}"
+            ci_high = "n/a" if metric.ci_high is None else f"{metric.ci_high:.3f}"
+            logger.info(
+                "analyze: stratum=%s metric=%s value=%.3f ci95=[%s, %s] count=%s",
+                stratum,
+                name,
+                metric.value,
+                ci_low,
+                ci_high,
+                metric.count,
+            )
 
 
 if __name__ == "__main__":

@@ -51,7 +51,7 @@ class ConstraintResult(BaseModel):
 
 
 class ScoredCandidate(BaseModel):
-    rank: int
+    rank: int = Field(ge=1)
     route: Route | None = None
     failure: FailureRecord | None = None
     validity: RouteValidity = Field(default_factory=RouteValidity)
@@ -101,5 +101,6 @@ class TargetResult(BaseModel):
 class Evaluation(BaseModel):
     task: Task
     tiers: list[Tier] = Field(default_factory=list)
+    metric_label: str = "task"
     targets: dict[str, TargetResult] = Field(default_factory=dict)
     schema_version: Literal["2"] = "2"

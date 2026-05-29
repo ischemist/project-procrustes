@@ -1,5 +1,5 @@
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, TypeVar
 
 import numpy as np
@@ -210,7 +210,7 @@ def compute_paired_difference(
 
 
 def get_bootstrap_distribution(
-    targets: list[TargetEvaluation], extractor: Callable[[TargetEvaluation], float], n_boot: int = 10000, seed: int = 42
+    targets: Sequence[T], extractor: Callable[[T], float], n_boot: int = 10000, seed: int = 42
 ) -> np.ndarray:
     """
     Returns the raw array of bootstrap means. Shape: (n_boot,)

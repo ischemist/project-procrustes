@@ -105,7 +105,7 @@ def score(
     tiers = [Tier.ZERO, *sorted({checker.tier for checker in tier_checkers})]
     target_results = {}
     for target_id, target in task.targets.items():
-        constraints = task.constraints.get(target_id, task.default_constraints)
+        constraints = task.effective_constraints(target_id)
         target_results[target_id] = score_target(
             predictions.get(target_id, []),
             target=target,
@@ -114,7 +114,7 @@ def score(
             constraint_checker=constraint_checker,
             acceptable_match_level=acceptable_match_level,
         )
-    return Evaluation(task=task, tiers=tiers, targets=target_results)
+    return Evaluation(task=task, tiers=tiers, metric_label=task.derived_metric_label(), targets=target_results)
 
 
 def _tier_zero_validity(candidate: Candidate) -> RouteValidity:

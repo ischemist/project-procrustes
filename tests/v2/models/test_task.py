@@ -54,6 +54,49 @@ def test_task_constraints_derive_required_leaf_inchikeys_from_smiles() -> None:
 
 
 @pytest.mark.unit
+def test_task_derives_metric_label_from_effective_constraints() -> None:
+    t1 = Target(id="t1", smiles=SmilesStr("CCO"), inchikey=get_inchi_key("CCO"))
+    t2 = Target(id="t2", smiles=SmilesStr("CC"), inchikey=get_inchi_key("CC"))
+    task = Task(
+        name="constrained",
+        targets={"t1": t1, "t2": t2},
+        default_constraints=TaskConstraints(stock="buyables", route_depth=3),
+        constraints={"t2": TaskConstraints(stock="buyables", required_leaves_smiles=[SmilesStr("C")])},
+    )
+
+    assert task.derived_metric_label() == "buyables+leaf+depth"
+
+
+@pytest.mark.unit
+def test_task_metric_label_overrides_derived_metric_label() -> None:
+    target = Target(id="ethanol", smiles=SmilesStr("CCO"), inchikey=get_inchi_key("CCO"))
+    task = Task(
+        name="custom",
+        targets={target.id: target},
+        default_constraints=TaskConstraints(stock="buyables"),
+        metric_label="bidirectional",
+    )
+
+    assert task.derived_metric_label() == "bidirectional"
+
+
+@pytest.mark.unit
+def test_task_metric_label_marks_multiple_stocks_as_mixed() -> None:
+    t1 = Target(id="t1", smiles=SmilesStr("CCO"), inchikey=get_inchi_key("CCO"))
+    t2 = Target(id="t2", smiles=SmilesStr("CC"), inchikey=get_inchi_key("CC"))
+    task = Task(
+        name="mixed",
+        targets={"t1": t1, "t2": t2},
+        constraints={
+            "t1": TaskConstraints(stock="buyables"),
+            "t2": TaskConstraints(stock="enamine"),
+        },
+    )
+
+    assert task.derived_metric_label() == "mixed-stock"
+
+
+@pytest.mark.unit
 def test_benchmark_is_a_task_with_description() -> None:
     benchmark = Benchmark(name="bench", description="small", targets={})
 
