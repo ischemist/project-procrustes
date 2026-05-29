@@ -306,7 +306,7 @@ def load_stock_file(
                     context={"path": str(path), "required_column": required_column, "columns": reader.fieldnames},
                 )
             for row in reader:
-                value = row.get(required_column, "").strip()
+                value = (row.get(required_column) or "").strip()
                 if value:
                     values.add(InChIKeyStr(value) if return_as == "inchikey" else SmilesStr(value))
     except OSError as exc:

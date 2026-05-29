@@ -74,6 +74,8 @@ def load_targets(data_dir: Path, benchmark: str, model: str, stock: str) -> list
 
 def infer_stock_label(data_dir: Path, benchmark: str, model: str) -> str:
     scored_dir = data_dir / "4-scored" / benchmark / model
+    if not scored_dir.exists():
+        raise FileNotFoundError(f"scored directory not found: {scored_dir}")
     labels = sorted(path.name for path in scored_dir.iterdir() if path.is_dir())
     if len(labels) != 1:
         raise ValueError(f"--stock is required when {scored_dir} contains {len(labels)} result labels")

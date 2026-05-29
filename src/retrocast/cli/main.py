@@ -763,8 +763,23 @@ def _resolve_benchmarks(args: argparse.Namespace, paths: dict[str, Path]) -> lis
 def _manifest_directive(path: Path, key: str) -> str | None:
     if not path.exists():
         return None
-    with open(path) as handle:
-        payload = json.load(handle)
+    try:
+        with open(path, encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except json.JSONDecodeError as exc:
+        raise ConfigurationError(
+            f"invalid manifest JSON: {path}",
+            code="cli.invalid_manifest",
+            context={"path": str(path), "directive": key},
+        ) from exc
+    except OSError as exc:
+        raise ConfigurationError(
+            f"could not read manifest: {path}",
+            code="cli.manifest_read_failed",
+            context={"path": str(path), "directive": key},
+        ) from exc
+    if not isinstance(payload, dict):
+        return None
     value = payload.get("directives", {}).get(key)
     return str(value) if value is not None else None
 

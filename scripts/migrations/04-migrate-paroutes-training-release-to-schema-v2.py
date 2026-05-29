@@ -215,7 +215,11 @@ def convert_reaction_source(
 def refresh_manifest(manifest_path: Path, *, project_root: Path) -> None:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["schema_version"] = "2"
-    migrations = manifest.setdefault("summary", {}).setdefault("schema_migrations", [])
+    summary = manifest.get("summary")
+    if not isinstance(summary, dict):
+        summary = {}
+        manifest["summary"] = summary
+    migrations = summary.setdefault("schema_migrations", [])
     if MIGRATION_NAME not in migrations:
         migrations.append(MIGRATION_NAME)
     refresh_file_infos(manifest.get("source_files", []), project_root=project_root)
