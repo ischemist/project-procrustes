@@ -4,6 +4,7 @@ import csv
 import gzip
 from collections.abc import Iterator
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar, overload
 
@@ -63,6 +64,10 @@ class ModelStatistics:
     total_cpu_time: float | None = None
     mean_cpu_time: float | None = None
 
+    def __post_init__(self) -> None:
+        if self.solv_0 is None:
+            self.solv_0 = self.stock_termination
+
 
 @dataclass(frozen=True)
 class LoadedEvaluation:
@@ -73,13 +78,17 @@ class LoadedEvaluation:
         return self.evaluation.targets
 
     def __iter__(self) -> Iterator[TargetResult]:
-        return iter(self.evaluation.targets.values())
+        return iter(self._targets)
 
     def __len__(self) -> int:
         return len(self.evaluation.targets)
 
     def __getitem__(self, index: int) -> TargetResult:
-        return list(self.evaluation.targets.values())[index]
+        return self._targets[index]
+
+    @cached_property
+    def _targets(self) -> list[TargetResult]:
+        return list(self.evaluation.targets.values())
 
 
 class BenchmarkResultsLoader:
@@ -124,7 +133,6 @@ class BenchmarkResultsLoader:
                     benchmark=benchmark,
                     stock=stock,
                     stock_termination=solvability,
-                    solv_0=solvability,
                     top_k_accuracy=top_k_accuracy,
                 )
             )

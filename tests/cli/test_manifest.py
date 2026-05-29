@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from retrocast.cli.manifest import manifest_sidecar_path, write_manifest
 
 
@@ -29,3 +31,17 @@ def test_write_manifest_keeps_absolute_paths_outside_root(tmp_path) -> None:
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert payload["source_files"][0]["path"] == str(outside.resolve())
     assert payload["output_files"][0]["path"] == "out.txt"
+
+
+def test_write_manifest_rejects_missing_sources(tmp_path) -> None:
+    output = tmp_path / "out.txt"
+    output.write_text("output", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError, match="manifest source file not found"):
+        write_manifest(
+            tmp_path / "manifest.json",
+            action="test:v2",
+            sources=[tmp_path / "missing.txt"],
+            outputs=[output],
+            root_dir=tmp_path,
+        )

@@ -35,9 +35,9 @@ def calculate_file_hash(path: Path) -> str:
             while chunk := handle.read(8192):
                 sha256.update(chunk)
         return sha256.hexdigest()
-    except OSError as exc:
-        logger.warning("could not hash file %s: %s", path, exc)
-        return "error-hashing-file"
+    except OSError:
+        logger.exception("could not hash file %s", path)
+        raise
 
 
 def create_manifest(
@@ -52,11 +52,7 @@ def create_manifest(
     release_name: str | None = None,
     keyed_output_files: bool = False,
 ) -> Manifest:
-    source_infos = [
-        FileInfo(path=_relative_path(path, root_dir), file_hash=calculate_file_hash(path))
-        for path in sources
-        if path.exists()
-    ]
+    source_infos = [_required_file_info(path, root_dir) for path in sources]
 
     output_infos = []
     for output in outputs:
@@ -123,6 +119,12 @@ def _relative_path(path: Path, root_dir: Path) -> str:
     except ValueError:
         logger.warning("path %s is not inside root %s; storing absolute path", resolved_path, resolved_root)
         return str(resolved_path)
+
+
+def _required_file_info(path: Path, root_dir: Path) -> FileInfo:
+    if not path.exists():
+        raise FileNotFoundError(f"manifest source file not found: {path}")
+    return FileInfo(path=_relative_path(path, root_dir), file_hash=calculate_file_hash(path))
 
 
 def _content_hash(obj: Any, content_type: ContentType) -> str | None:

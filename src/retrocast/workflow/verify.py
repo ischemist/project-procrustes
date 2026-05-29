@@ -2,6 +2,7 @@
 Core logic for manifest and data integrity verification using a two-phase audit.
 """
 
+from collections import deque
 from pathlib import Path
 
 from retrocast.io.provenance import calculate_file_hash
@@ -14,13 +15,13 @@ PRIMARY_ARTIFACT_DIRS = {"0-assets", "1-benchmarks", "2-raw", "tmp"}
 def _build_provenance_graph(start_path: Path, root_dir: Path, report: VerificationReport) -> dict[Path, Manifest]:
     """Recursively discover and load all manifests in the dependency graph."""
     graph: dict[Path, Manifest] = {}
-    queue = [start_path]
+    queue = deque([start_path])
     visited: set[Path] = set()
 
     report.add("INFO", start_path, "Graph Discovery", category="header")
 
     while queue:
-        manifest_path = queue.pop(0)
+        manifest_path = queue.popleft()
         resolved_manifest_path = _resolve_tracked_path(manifest_path, root_dir)
         if resolved_manifest_path in visited:
             continue
@@ -154,7 +155,11 @@ def _verify_physical_integrity(
             report.add(level, relative_path, "File is MISSING from disk.", category="phase2")
             continue
 
-        actual_hash = calculate_file_hash(absolute_path)
+        try:
+            actual_hash = calculate_file_hash(absolute_path)
+        except OSError as exc:
+            report.add("FAIL", relative_path, f"Could not hash file: {exc}", category="phase2")
+            continue
         if actual_hash != expected_hash:
             # Hash mismatches are ALWAYS failures - indicates corruption
             report.add("FAIL", relative_path, "HASH MISMATCH (Disk vs. Manifest).", category="phase2")

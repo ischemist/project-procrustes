@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
@@ -12,6 +13,8 @@ from retrocast.workflow.collect import (
     collect_candidates,
     collect_routes,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def ingest_routes(
@@ -79,3 +82,5 @@ def _target_payloads(raw_payload: Any, task: Task) -> Iterator[tuple[Target | No
             yield target, raw_payload[target_id], target_id
         elif target.smiles in raw_payload:
             yield target, raw_payload[target.smiles], target.smiles
+        else:
+            logger.debug("target %r not found in raw payload by id or smiles; skipping", target_id)

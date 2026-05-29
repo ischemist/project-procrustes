@@ -49,6 +49,13 @@ class InvalidTierZeroRouteChecker(FixedTierChecker):
     name = "invalid-tier-zero"
 
 
+class InvalidReturnedTierZeroRouteChecker(FixedTierChecker):
+    name = "invalid-returned-tier-zero"
+
+    def check_route(self, route: Route) -> RouteValidity:
+        return RouteValidity(tiers={Tier.ZERO: TierResult(status=CheckStatus.FAIL)})
+
+
 class FixedTierTwoChecker(FixedTierChecker):
     tier = Tier.TWO
 
@@ -171,6 +178,19 @@ def test_route_tier_checker_cannot_claim_tier_zero() -> None:
         )
     assert exc_info.value.code == "validity.unsupported_tier"
     assert exc_info.value.context == {"tier": 0, "checker": "invalid-tier-zero"}
+
+
+def test_route_tier_checker_cannot_return_tier_zero() -> None:
+    with pytest.raises(UnsupportedValidityTierError) as exc_info:
+        score_candidate(
+            Candidate(rank=1, route=route()),
+            target=target(),
+            constraints=TaskConstraints(),
+            tier_checkers=[InvalidReturnedTierZeroRouteChecker()],
+            constraint_checker=FixedConstraintChecker(),
+        )
+    assert exc_info.value.code == "validity.unsupported_tier"
+    assert exc_info.value.context == {"tier": 0, "checker": "invalid-returned-tier-zero"}
 
 
 def test_reaction_validity_merges_results_from_multiple_tier_checkers() -> None:

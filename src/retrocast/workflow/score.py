@@ -149,6 +149,11 @@ def _check_route_validity(route: Route, tier_checkers: Sequence[TierChecker], va
                 context={"tier": int(checker.tier), "checker": checker.name},
             )
         result = checker.check_route(route)
+        if Tier.ZERO in result.tiers:
+            raise UnsupportedValidityTierError(
+                "Tier-0 route validity is reserved for candidate adaptation validity.",
+                context={"tier": int(Tier.ZERO), "checker": checker.name},
+            )
         validity.tiers.update(result.tiers)
         for reaction in result.reactions:
             existing = reactions_by_id.get(reaction.reaction_id)

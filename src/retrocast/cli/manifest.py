@@ -26,7 +26,7 @@ def write_manifest(
         created_at=datetime.now(UTC),
         action=action,
         parameters=parameters or {},
-        source_files=[_file_info(source, root_dir) for source in sources if source.exists()],
+        source_files=[_required_file_info(source, root_dir) for source in sources],
         output_files=[_file_info(output, root_dir) for output in outputs],
         statistics=statistics or {},
         summary=summary or {},
@@ -44,6 +44,12 @@ def manifest_sidecar_path(output_path: Path) -> Path:
 
 def _file_info(path: Path, root_dir: Path) -> FileInfo:
     return FileInfo(path=_relative_path(path, root_dir), file_hash=calculate_file_hash(path))
+
+
+def _required_file_info(path: Path, root_dir: Path) -> FileInfo:
+    if not path.exists():
+        raise FileNotFoundError(f"manifest source file not found: {path}")
+    return _file_info(path, root_dir)
 
 
 def _relative_path(path: Path, root_dir: Path) -> str:

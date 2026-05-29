@@ -12,6 +12,7 @@ from retrocast.models.analysis import MetricSummary, ReliabilityFlag
 from retrocast.models.evaluation import TargetResult, Tier
 
 T = TypeVar("T")
+BOOTSTRAP_CHUNK_SIZE = 1000
 
 
 @dataclass(frozen=True)
@@ -116,5 +117,9 @@ def _bootstrap_mean(values: npt.NDArray[np.float64], *, n_boot: int, seed: int) 
         return np.zeros(n_boot, dtype=np.float64)
 
     rng = np.random.default_rng(seed)
-    indices = rng.integers(0, len(values), (n_boot, len(values)))
-    return np.mean(values[indices], axis=1)
+    means = np.empty(n_boot, dtype=np.float64)
+    for start in range(0, n_boot, BOOTSTRAP_CHUNK_SIZE):
+        stop = min(start + BOOTSTRAP_CHUNK_SIZE, n_boot)
+        indices = rng.integers(0, len(values), (stop - start, len(values)))
+        means[start:stop] = np.mean(values[indices], axis=1)
+    return means
