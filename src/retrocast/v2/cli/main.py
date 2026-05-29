@@ -119,7 +119,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
     score_parser = subparsers.add_parser("score", help="Score v2 processed candidates")
     _add_model_dataset_args(score_parser)
-    score_parser.add_argument("--stock", help="Override stock name")
     score_parser.add_argument("--ignore-stereo", action="store_true", help="Use stereo-agnostic stock matching")
 
     analyze_parser = subparsers.add_parser("analyze", help="Analyze v2 evaluation artifacts")
@@ -293,7 +292,7 @@ def _score_one(model_name: str, benchmark_name: str, paths: dict[str, Path], arg
 
     predictions = load_collected_candidates(candidates_path)
     task = load_benchmark(task_path)
-    stock_registry, stock_paths, output_label = _load_stock_registry(task, paths, stock_override=args.stock)
+    stock_registry, stock_paths, output_label = _load_stock_registry(task, paths)
     match_level = InChIKeyLevel.NO_STEREO if args.ignore_stereo else InChIKeyLevel.FULL
     evaluation = score(
         predictions=predictions,
@@ -447,16 +446,8 @@ def _manifest_directive(path: Path, key: str) -> str | None:
 def _load_stock_registry(
     task: Benchmark,
     paths: dict[str, Path],
-    *,
-    stock_override: str | None,
 ) -> tuple[dict[str, set[InChIKeyStr]], list[Path], str]:
     stock_names = _effective_stock_names(task)
-    if stock_override is not None:
-        stock_path = paths["stocks"] / f"{stock_override}.csv.gz"
-        stock = set(load_stock_file(stock_path, return_as="inchikey"))
-        registry_names = stock_names or {stock_override}
-        return {stock_name: stock for stock_name in registry_names}, [stock_path], stock_override
-
     stock_paths = []
     stock_registry = {}
     for stock_name in sorted(stock_names):
