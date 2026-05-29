@@ -345,6 +345,7 @@ class Task(BaseModel):
     targets: dict[str, Target]
     default_constraints: TaskConstraints = Field(default_factory=TaskConstraints)
     constraints: dict[str, TaskConstraints] = Field(default_factory=dict)
+    metric_label: str | None = None
     annotations: dict[str, Any] = Field(default_factory=dict)
     schema_version: str = "2"
 
@@ -361,6 +362,8 @@ class Benchmark(Task):
 - `long`: depth 7+
 
 One benchmark is a `Task`. One daedalus query is also a `Task`, usually with one target.
+
+`metric_label` controls the bracketed task name in Solv-N metrics, e.g. `Solv-0[buyables]`. If unset, the label is derived from effective target constraints in fixed order: stock label, `leaf`, `depth`. For example, stock termination plus per-target route-depth constraints becomes `buyables+depth`; stock termination plus per-target required leaves becomes `buyables+leaf`.
 
 ## 3. Ingest
 

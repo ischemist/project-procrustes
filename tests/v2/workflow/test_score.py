@@ -205,3 +205,21 @@ def test_score_preserves_candidate_rank_and_records_acceptable_match() -> None:
     assert scored.rank == 7
     assert scored.matches_acceptable
     assert scored.matched_acceptable_index == 1
+
+
+def test_score_records_metric_label_from_task() -> None:
+    benchmark_target = target()
+    benchmark_task = Task(
+        name="scoped",
+        targets={benchmark_target.id: benchmark_target},
+        default_constraints=TaskConstraints(stock="buyables", route_depth=3),
+    )
+
+    evaluation = score(
+        {"ethanol": [Candidate(rank=1, route=route())]},
+        benchmark_task,
+        tier_checkers=[],
+        constraint_checker=FixedConstraintChecker(),
+    )
+
+    assert evaluation.metric_label == "buyables+depth"

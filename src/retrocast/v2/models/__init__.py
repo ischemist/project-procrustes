@@ -1,5 +1,6 @@
 """Schema v2 models."""
 
+from retrocast.v2.models.analysis import AnalysisReport, MetricSummary
 from retrocast.v2.models.candidates import Candidate, FailureRecord
 from retrocast.v2.models.evaluation import (
     CheckResult,
@@ -29,6 +30,7 @@ from retrocast.v2.models.route import (
 from retrocast.v2.models.task import Benchmark, Target, Task, TaskConstraints
 
 __all__ = [
+    "AnalysisReport",
     "Benchmark",
     "Candidate",
     "CheckResult",
@@ -40,6 +42,7 @@ __all__ = [
     "Molecule",
     "MoleculeId",
     "MoleculeView",
+    "MetricSummary",
     "Reaction",
     "ReactionId",
     "ReactionValidity",
