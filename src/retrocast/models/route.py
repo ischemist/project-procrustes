@@ -8,8 +8,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, Field
 
-from retrocast.chem import InChIKeyLevel
-from retrocast.chem import reduce_inchikey
+from retrocast.chem import InChIKeyLevel, reduce_inchikey
 from retrocast.typing import InChIKeyStr, ReactionSmilesStr, SmilesStr
 
 RouteNodeKind = Literal["m", "r"]
@@ -209,6 +208,20 @@ class Route(BaseModel):
 
     def depth(self) -> int:
         return self.molecule_at(RoutePath.target()).depth()
+
+    def is_convergent(self) -> bool:
+        """Return whether any reaction joins multiple synthesized branches."""
+        stack = [self.target]
+        while stack:
+            molecule = stack.pop()
+            reaction = molecule.product_of
+            if reaction is None:
+                continue
+            synthesized_reactants = [reactant for reactant in reaction.reactants if reactant.product_of is not None]
+            if len(synthesized_reactants) > 1:
+                return True
+            stack.extend(reaction.reactants)
+        return False
 
 
 class ReactionView(BaseModel):
