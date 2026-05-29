@@ -9,6 +9,7 @@ import numpy as np
 import numpy.typing as npt
 
 from retrocast.models.analysis import MetricSummary, ReliabilityFlag
+from retrocast.models.evaluation import TargetResult, Tier
 
 T = TypeVar("T")
 
@@ -81,6 +82,19 @@ def compute_metric_with_ci(
         for index, (stratum, values) in enumerate(strata.items()):
             by_stratum[stratum] = summarize_values(values, n_boot=n_boot, seed=seed + index + 1)
     return StratifiedMetricSummary(metric_name=metric_name, overall=overall, by_stratum=by_stratum)
+
+
+def get_is_solvable(target: TargetResult) -> float:
+    return 1.0 if any(candidate.satisfies_solv(Tier.ZERO) for candidate in target.candidates) else 0.0
+
+
+def make_get_top_k(k: int) -> Callable[[TargetResult], float]:
+    def get_top_k(target: TargetResult) -> float:
+        ranked = sorted(target.candidates, key=lambda candidate: candidate.rank)
+        candidates = [candidate for candidate in ranked if candidate.satisfies_task()]
+        return 1.0 if any(candidate.matches_acceptable for candidate in candidates[:k]) else 0.0
+
+    return get_top_k
 
 
 def get_bootstrap_distribution(

@@ -3,8 +3,9 @@ from __future__ import annotations
 import csv
 import gzip
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Protocol, TypeVar, overload
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypeVar, overload
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -19,7 +20,7 @@ from retrocast.io.blob import (
 from retrocast.io.provenance import create_manifest
 from retrocast.models.analysis import AnalysisReport
 from retrocast.models.candidates import Candidate
-from retrocast.models.evaluation import Evaluation
+from retrocast.models.evaluation import Evaluation, TargetResult
 from retrocast.models.route import Route
 from retrocast.models.task import Benchmark, Task
 from retrocast.typing import InChIKeyStr, SmilesStr
@@ -37,9 +38,105 @@ _RAW_PAROUTES_LIST_ADAPTER = TypeAdapter(list[dict])
 
 T = TypeVar("T")
 
+if TYPE_CHECKING:
+    from retrocast.metrics.bootstrap import StratifiedMetricSummary
+
 
 class ManifestStatistics(Protocol):
     def to_manifest_dict(self) -> dict[str, Any]: ...
+
+
+@dataclass
+class ModelStatistics:
+    model_name: str
+    benchmark: str
+    stock: str
+    stock_termination: StratifiedMetricSummary
+    top_k_accuracy: dict[int, StratifiedMetricSummary]
+    solv_0: StratifiedMetricSummary | None = None
+    tier_0_validity: StratifiedMetricSummary | None = None
+    mrr_solv_0: StratifiedMetricSummary | None = None
+    total_wall_time: float | None = None
+    mean_wall_time: float | None = None
+    total_cpu_time: float | None = None
+    mean_cpu_time: float | None = None
+
+
+@dataclass(frozen=True)
+class LoadedEvaluation:
+    evaluation: Evaluation
+
+    @property
+    def results(self) -> dict[str, TargetResult]:
+        return self.evaluation.targets
+
+    def __iter__(self) -> Iterator[TargetResult]:
+        return iter(self.evaluation.targets.values())
+
+    def __len__(self) -> int:
+        return len(self.evaluation.targets)
+
+    def __getitem__(self, index: int) -> TargetResult:
+        return list(self.evaluation.targets.values())[index]
+
+
+class BenchmarkResultsLoader:
+    def __init__(self, data_dir: Path) -> None:
+        root = Path(data_dir)
+        self.data_dir = root / "retrocast" if (root / "retrocast").exists() else root
+
+    def load_evaluation(self, benchmark: str, model: str, stock: str) -> LoadedEvaluation | None:
+        path = self.data_dir / "4-scored" / benchmark / model / stock / "evaluation.json.gz"
+        try:
+            return LoadedEvaluation(load_evaluation(path))
+        except (ArtifactNotFoundError, ArtifactFormatError, ArtifactDecodeError):
+            return None
+
+    def load_statistics(self, benchmark: str, models: list[str], stock: str) -> list[ModelStatistics]:
+        from retrocast.metrics.bootstrap import compute_metric_with_ci, get_is_solvable, make_get_top_k
+
+        stats = []
+        for model in models:
+            loaded = self.load_evaluation(benchmark, model, stock)
+            if loaded is None:
+                continue
+            targets = list(loaded.results.values())
+            solvability = compute_metric_with_ci(
+                targets,
+                get_is_solvable,
+                "solv_0",
+                stratify_by=_target_route_depth_stratum,
+            )
+            top_k_accuracy = {
+                k: compute_metric_with_ci(
+                    targets,
+                    make_get_top_k(k),
+                    f"top_{k}",
+                    stratify_by=_target_route_depth_stratum,
+                )
+                for k in (1, 2, 3, 4, 5, 10, 20, 50)
+            }
+            stats.append(
+                ModelStatistics(
+                    model_name=model,
+                    benchmark=benchmark,
+                    stock=stock,
+                    stock_termination=solvability,
+                    solv_0=solvability,
+                    top_k_accuracy=top_k_accuracy,
+                )
+            )
+        return stats
+
+
+def _target_route_depth_stratum(target: TargetResult) -> str | None:
+    acceptable_routes = target.target.acceptable_routes
+    if acceptable_routes:
+        return f"depth {acceptable_routes[0].depth()}"
+    route_depth = target.effective_constraints.route_depth
+    if isinstance(route_depth, int):
+        return f"depth {route_depth}"
+    return None
 
 
 def load_raw_paroutes_list(path: Path) -> list[dict]:
