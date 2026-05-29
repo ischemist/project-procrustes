@@ -26,6 +26,7 @@ from retrocast.paths import (
     validate_directory_name,
     validate_filename,
 )
+from retrocast.typing import InChIKeyStr
 from retrocast.utils.logging import configure_script_logging
 from retrocast.v2.adapters import ADAPTER_TYPES, DEPRECATED_ADAPTER_SLUGS, get_adapter, normalize_adapter_slug
 from retrocast.v2.adapters.base import AdaptMode
@@ -297,23 +298,26 @@ def _score_one(model_name: str, benchmark_name: str, paths: dict[str, Path], arg
 
     predictions = load_collected_candidates(candidates_path)
     task = load_benchmark(task_path)
-    stock_name = _resolve_stock_name(task, args.stock) or "task"
-    stock: set[Any] = set()
+    stock_name = _resolve_stock_name(task, args.stock)
+    stock: set[InChIKeyStr] = set()
     stock_path: Path | None = None
-    if stock_name != "task":
+    if stock_name is not None:
         stock_path = paths["stocks"] / f"{stock_name}.csv.gz"
         stock = set(load_stock_file(stock_path, return_as="inchikey"))
     match_level = InChIKeyLevel.NO_STEREO if args.ignore_stereo else InChIKeyLevel.FULL
     evaluation = score(
-        predictions,
-        task,
+        predictions=predictions,
+        task=task,
         constraint_checker=TaskConstraintChecker(
-            stock=stock, stock_name=None if stock_name == "task" else stock_name, match_level=match_level
+            stock=stock,
+            stock_name=stock_name,
+            match_level=match_level,
         ),
         acceptable_match_level=match_level,
     )
 
-    output_dir = paths["scored"] / benchmark_name / model_name / stock_name
+    output_label = stock_name or "task"
+    output_dir = paths["scored"] / benchmark_name / model_name / output_label
     output_path = output_dir / "evaluation.json.gz"
     save_evaluation(evaluation, output_path)
     sources = [task_path, candidates_path] + ([stock_path] if stock_path is not None else [])
@@ -326,12 +330,12 @@ def _score_one(model_name: str, benchmark_name: str, paths: dict[str, Path], arg
         parameters={
             "model": model_name,
             "benchmark": benchmark_name,
-            "stock": stock_name,
+            "stock": output_label,
             "ignore_stereo": args.ignore_stereo,
         },
         statistics=evaluation_statistics(evaluation),
     )
-    logger.info("Scored %s/%s using %s to %s", model_name, benchmark_name, stock_name, output_path)
+    logger.info("Scored %s/%s using %s to %s", model_name, benchmark_name, output_label, output_path)
 
 
 def handle_analyze(args: argparse.Namespace, config: dict[str, Any]) -> None:
