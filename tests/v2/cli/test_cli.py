@@ -6,6 +6,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.io.blob import save_json_gz
 from retrocast.typing import InChIKeyStr, SmilesStr
@@ -92,6 +94,17 @@ def test_v2_config_cli_reports_resolved_data_dir(tmp_path, monkeypatch, capsys) 
     assert str(data_dir.resolve()) in output.replace("\n", "")
     assert "benchmarks" in output
     assert "processed" in output
+
+
+def test_v2_config_cli_reports_malformed_yaml_as_cli_error(tmp_path, monkeypatch, caplog) -> None:
+    config_path = tmp_path / "retrocast-config.yaml"
+    config_path.write_text("data_dir: [unterminated", encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_cli(monkeypatch, "--config", str(config_path), "config")
+
+    assert exc_info.value.code == 1
+    assert "Failed to parse config file" in caplog.text
 
 
 def test_v2_list_adapters_cli_reports_canonical_names_and_aliases(monkeypatch, capsys) -> None:

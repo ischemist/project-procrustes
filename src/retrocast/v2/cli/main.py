@@ -13,7 +13,7 @@ from rich.console import Console
 
 from retrocast import __version__
 from retrocast.cli.progress import create_cli_progress, estimate_raw_route_entries, quiet_info_logs
-from retrocast.exceptions import RetroCastException
+from retrocast.exceptions import ConfigurationError, RetroCastException
 from retrocast.io.blob import load_json_artifact
 from retrocast.io.data import load_stock_file
 from retrocast.paths import (
@@ -142,8 +142,15 @@ def _add_model_dataset_args(parser: argparse.ArgumentParser) -> None:
 def _load_config(config_path: Path) -> dict[str, Any]:
     if not config_path.exists():
         return {}
-    with open(config_path) as handle:
-        return yaml.safe_load(handle) or {}
+    try:
+        with open(config_path, encoding="utf-8") as handle:
+            return yaml.safe_load(handle) or {}
+    except yaml.YAMLError as exc:
+        raise ConfigurationError(
+            f"Failed to parse config file {config_path}",
+            code="config.parse_error",
+            context={"config_path": str(config_path)},
+        ) from exc
 
 
 def handle_adapt(args: argparse.Namespace) -> None:
@@ -350,7 +357,10 @@ def _analyze_one(model_name: str, benchmark_name: str, paths: dict[str, Path], a
         markdown_path = output_dir / "report.md"
         save_analysis_report(report, analysis_path)
         markdown_path.write_text(
-            generate_markdown_report(report, title=f"Evaluation Report: {model_name} / {benchmark_name} / {stock_name}")
+            generate_markdown_report(
+                report, title=f"Evaluation Report: {model_name} / {benchmark_name} / {stock_name}"
+            ),
+            encoding="utf-8",
         )
         write_manifest(
             output_dir / "manifest.json",
@@ -411,13 +421,13 @@ def _resolve_models(args: argparse.Namespace, paths: dict[str, Path], *, stage: 
         return []
 
     models = set()
-    for benchmark_dir in base.iterdir():
-        if not benchmark_dir.is_dir():
+    for top_level_dir in base.iterdir():
+        if not top_level_dir.is_dir():
             continue
         if stage == "ingest":
-            models.add(benchmark_dir.name)
+            models.add(top_level_dir.name)
         else:
-            for model_dir in benchmark_dir.iterdir():
+            for model_dir in top_level_dir.iterdir():
                 if model_dir.is_dir():
                     models.add(model_dir.name)
     return sorted(validate_directory_name(model, param_name="model") for model in models)
