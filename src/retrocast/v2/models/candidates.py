@@ -18,7 +18,7 @@ class FailureRecord(BaseModel):
 
 
 class Candidate(BaseModel):
-    rank: int
+    rank: int = Field(ge=1)
     route: Route | None = None
     failure: FailureRecord | None = None
 

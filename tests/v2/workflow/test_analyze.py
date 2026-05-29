@@ -127,7 +127,7 @@ def test_mrr_uses_first_solv_satisfying_candidate() -> None:
 def test_top_k_reconstruction_is_omitted_without_acceptable_routes() -> None:
     report = analyze(evaluation({"ethanol": result(target("ethanol"), [solved_candidate(1)])}))
 
-    assert "acceptable_reconstruction_top_1" not in report.metrics
+    assert "acceptable_reconstruction_top_1[task]" not in report.metrics
 
 
 def test_top_k_reconstruction_ranks_after_task_satisfaction_filtering() -> None:
@@ -148,8 +148,8 @@ def test_top_k_reconstruction_ranks_after_task_satisfaction_filtering() -> None:
         ks=(1, 2),
     )
 
-    assert report.metrics["acceptable_reconstruction_top_1"].value == 0.0
-    assert report.metrics["acceptable_reconstruction_top_2"].value == 1.0
+    assert report.metrics["acceptable_reconstruction_top_1[task]"].value == 0.0
+    assert report.metrics["acceptable_reconstruction_top_2[task]"].value == 1.0
 
 
 def test_analyze_stratifies_by_primary_acceptable_route_depth() -> None:

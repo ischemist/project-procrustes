@@ -27,7 +27,7 @@ def summarize_targets(
     reconstruction_targets = [target for target in targets if target.target.acceptable_routes]
     if reconstruction_targets:
         for k in sorted(set(ks)):
-            metrics[f"acceptable_reconstruction_top_{k}"] = _top_k_reconstruction(
+            metrics[f"acceptable_reconstruction_top_{k}[{metric_label}]"] = _top_k_reconstruction(
                 reconstruction_targets,
                 k,
                 n_boot=n_boot,

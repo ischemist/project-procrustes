@@ -51,7 +51,7 @@ class ConstraintResult(BaseModel):
 
 
 class ScoredCandidate(BaseModel):
-    rank: int
+    rank: int = Field(ge=1)
     route: Route | None = None
     failure: FailureRecord | None = None
     validity: RouteValidity = Field(default_factory=RouteValidity)

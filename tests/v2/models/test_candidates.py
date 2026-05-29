@@ -50,3 +50,9 @@ def test_candidate_rejects_both_route_and_failure() -> None:
 
     with pytest.raises(ValidationError):
         Candidate(rank=1, route=one_step_route(), failure=failure)
+
+
+@pytest.mark.unit
+def test_candidate_rejects_non_positive_rank() -> None:
+    with pytest.raises(ValidationError):
+        Candidate(rank=0, route=one_step_route())
