@@ -4,6 +4,8 @@ import argparse
 import json
 import logging
 import sys
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -245,18 +247,18 @@ def _ingest_one(
         benchmark_targets=task.targets,
     )
 
-    if show_route_progress:
-        with create_cli_progress(console=console, unit="routes") as progress, quiet_info_logs("retrocast"):
-            task_id = progress.add_task(f"Ingesting {model_name}/{benchmark_name}", total=progress_total)
-            collected = ingest_candidates(
-                raw_payload,
-                adapter,
-                task,
-                mode=args.mode,
-                progress_callback=lambda: progress.advance(task_id),
-            )
-    else:
-        collected = ingest_candidates(raw_payload, adapter, task, mode=args.mode)
+    with _route_progress(
+        enabled=show_route_progress,
+        description=f"Ingesting {model_name}/{benchmark_name}",
+        total=progress_total,
+    ) as advance_progress:
+        collected = ingest_candidates(
+            raw_payload=raw_payload,
+            adapter=adapter,
+            task=task,
+            mode=args.mode,
+            progress_callback=advance_progress,
+        )
 
     output_path = output_dir / "candidates.json.gz"
     save_collected_candidates(collected, output_path)
@@ -462,6 +464,22 @@ def _resolve_stock_name(task: Benchmark, stock_override: str | None) -> str | No
     if len(stock_names) == 1:
         return next(iter(stock_names))
     return None
+
+
+@contextmanager
+def _route_progress(
+    *,
+    enabled: bool,
+    description: str,
+    total: int | None,
+) -> Iterator[Callable[[], None] | None]:
+    if not enabled:
+        yield None
+        return
+
+    with create_cli_progress(console=console, unit="routes") as progress, quiet_info_logs("retrocast"):
+        task_id = progress.add_task(description, total=total)
+        yield lambda: progress.advance(task_id)
 
 
 def _flatten_candidates(candidates_by_target: dict[str, list[Candidate]]) -> list[Candidate]:
