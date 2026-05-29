@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +27,7 @@ from retrocast.paths import (
 )
 from retrocast.utils.logging import configure_script_logging
 from retrocast.v2.adapters import ADAPTER_TYPES, DEPRECATED_ADAPTER_SLUGS, get_adapter, normalize_adapter_slug
-from retrocast.v2.adapters.base import AdaptMode
+from retrocast.v2.adapters.base import Adapter, AdaptMode
 from retrocast.v2.cli.manifest import manifest_sidecar_path, write_manifest
 from retrocast.v2.cli.report import create_analysis_table, generate_markdown_report
 from retrocast.v2.io import (
@@ -163,8 +164,7 @@ def handle_adapt(args: argparse.Namespace) -> None:
         if args.benchmark is None:
             raise ValueError("--benchmark is required for target-keyed provider output")
         task = load_benchmark(args.benchmark)
-        collected = ingest_candidates(raw_payload, adapter, task, mode=mode)
-        candidates = _flatten_candidates(collected)
+        candidates = _adapt_target_keyed_candidates(raw_payload, adapter, task, mode=mode)
         save_candidates(candidates, args.output)
         stats = candidate_statistics(candidates).to_manifest_dict()
         sources = [args.input, args.benchmark]
@@ -481,6 +481,27 @@ def _resolve_stock_name(task: Benchmark, stock_override: str | None) -> str | No
     if len(stock_names) == 1:
         return next(iter(stock_names))
     return None
+
+
+def _adapt_target_keyed_candidates(
+    raw_payload: Any, adapter: Adapter, task: Benchmark, *, mode: AdaptMode
+) -> list[Candidate]:
+    if not isinstance(raw_payload, Mapping):
+        raise ValueError("target-keyed provider output requires a mapping keyed by target id or target SMILES")
+
+    candidates = []
+    for target_id, target in task.targets.items():
+        if target_id in raw_payload:
+            candidates.extend(
+                adapt_candidates(raw_payload[target_id], adapter, mode=mode, target=target, source_key=target_id)
+            )
+        elif target.smiles in raw_payload:
+            candidates.extend(
+                adapt_candidates(
+                    raw_payload[target.smiles], adapter, mode=mode, target=target, source_key=target.smiles
+                )
+            )
+    return candidates
 
 
 def _flatten_candidates(candidates_by_target: dict[str, list[Candidate]]) -> list[Candidate]:
