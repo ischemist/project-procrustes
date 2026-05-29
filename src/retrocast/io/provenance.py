@@ -37,7 +37,7 @@ def calculate_file_hash(path: Path) -> str:
         return sha256.hexdigest()
     except OSError:
         logger.exception("could not hash file %s", path)
-        raise
+        return "error-hashing-file"
 
 
 def create_manifest(
