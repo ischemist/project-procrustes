@@ -58,6 +58,28 @@ def test_stock_constraint_fails_clearly_without_stock_keys() -> None:
     assert result.checks[0].code == "constraint.stock_termination.no_stock_keys"
 
 
+def test_stock_constraint_selects_stock_by_task_constraint_name() -> None:
+    checker = TaskConstraintChecker(
+        stocks={
+            "stock-a": stock_for("C"),
+            "stock-b": stock_for("C", "CO"),
+        }
+    )
+
+    assert checker.check_route(route(), TaskConstraints(stock="stock-a")).status == CheckStatus.FAIL
+    assert checker.check_route(route(), TaskConstraints(stock="stock-b")).status == CheckStatus.PASS
+
+
+def test_stock_constraint_fails_clearly_when_named_stock_is_missing() -> None:
+    result = TaskConstraintChecker(stocks={"stock-a": stock_for("C", "CO")}).check_route(
+        route(), TaskConstraints(stock="stock-b")
+    )
+
+    assert result.status == CheckStatus.FAIL
+    assert result.checks[0].code == "constraint.stock_termination.no_stock_keys"
+    assert result.checks[0].details == {"stock": "stock-b"}
+
+
 def test_required_leaf_constraint_fails_when_required_leaf_is_missing() -> None:
     result = TaskConstraintChecker().check_route(route(), TaskConstraints(required_leaves_smiles=[SmilesStr("CC")]))
 

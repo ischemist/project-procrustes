@@ -8,6 +8,12 @@ from retrocast.v2.adapters.dreamretro import DreamRetroErAdapter
 from retrocast.v2.adapters.molbuilder import MolBuilderAdapter
 from retrocast.v2.adapters.multistepttl import MultiStepTTLAdapter
 from retrocast.v2.adapters.paroutes import PaRoutesAdapter
+from retrocast.v2.adapters.registry import (
+    ADAPTER_TYPES,
+    DEPRECATED_ADAPTER_SLUGS,
+    get_adapter,
+    normalize_adapter_slug,
+)
 from retrocast.v2.adapters.retrochimera import RetroChimeraAdapter
 from retrocast.v2.adapters.retrostar import RetroStarAdapter
 from retrocast.v2.adapters.synllama import SynLlamaAdapter
@@ -17,9 +23,11 @@ from retrocast.v2.adapters.ursa import UrsaAdapter
 
 __all__ = [
     "Adapter",
+    "ADAPTER_TYPES",
     "AdaptMode",
     "AiZynthFinderAdapter",
     "AskcosAdapter",
+    "DEPRECATED_ADAPTER_SLUGS",
     "DirectMultiStepAdapter",
     "DreamRetroErAdapter",
     "MolBuilderAdapter",
@@ -32,4 +40,6 @@ __all__ = [
     "SynPlannerAdapter",
     "SyntheseusAdapter",
     "UrsaAdapter",
+    "get_adapter",
+    "normalize_adapter_slug",
 ]

@@ -20,7 +20,7 @@ Homepage = "https://github.com/ischemist/project-procrustes"
 Issues = "https://github.com/ischemist/project-procrustes/issues"
 
 [project.scripts]
-retrocast = "retrocast.cli.main:main"
+retrocast = "retrocast.v2.cli.main:main"
 
 [project.optional-dependencies]
 viz = ["ischemist>=0.2.0", "kaleido>=1.1.0", "plotly>=6.3.0"]

@@ -80,7 +80,7 @@ class Task(BaseModel):
         if len(stocks) == 1:
             parts.append(next(iter(stocks)))
         elif len(stocks) > 1:
-            parts.append("mixed-stock")
+            parts.append("stocks")
         if has_leaf:
             parts.append("leaf")
         if has_depth:

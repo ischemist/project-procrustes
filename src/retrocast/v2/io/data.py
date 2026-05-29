@@ -7,13 +7,21 @@ from typing import TypeVar
 from pydantic import TypeAdapter, ValidationError
 
 from retrocast.exceptions import ArtifactDecodeError, ArtifactFormatError, ArtifactNotFoundError, ArtifactWriteError
+from retrocast.v2.models.analysis import AnalysisReport
+from retrocast.v2.models.candidates import Candidate
+from retrocast.v2.models.evaluation import Evaluation
+from retrocast.v2.models.route import Route
 from retrocast.v2.models.task import Benchmark, Task
 from retrocast.v2.workflow.collect import CollectedCandidates, CollectedRoutes
 
 _TASK_ADAPTER = TypeAdapter(Task)
 _BENCHMARK_ADAPTER = TypeAdapter(Benchmark)
+_ROUTE_LIST_ADAPTER = TypeAdapter(list[Route])
+_CANDIDATE_LIST_ADAPTER = TypeAdapter(list[Candidate])
 _COLLECTED_ROUTES_ADAPTER = TypeAdapter(CollectedRoutes)
 _COLLECTED_CANDIDATES_ADAPTER = TypeAdapter(CollectedCandidates)
+_EVALUATION_ADAPTER = TypeAdapter(Evaluation)
+_ANALYSIS_REPORT_ADAPTER = TypeAdapter(AnalysisReport)
 
 T = TypeVar("T")
 
@@ -34,6 +42,22 @@ def save_benchmark(benchmark: Benchmark, path: Path) -> None:
     _save_model(benchmark, path, _BENCHMARK_ADAPTER, artifact="benchmark")
 
 
+def load_routes(path: Path) -> list[Route]:
+    return _load_model(path, _ROUTE_LIST_ADAPTER, artifact="routes")
+
+
+def save_routes(routes: list[Route], path: Path) -> None:
+    _save_model(routes, path, _ROUTE_LIST_ADAPTER, artifact="routes")
+
+
+def load_candidates(path: Path) -> list[Candidate]:
+    return _load_model(path, _CANDIDATE_LIST_ADAPTER, artifact="candidates")
+
+
+def save_candidates(candidates: list[Candidate], path: Path) -> None:
+    _save_model(candidates, path, _CANDIDATE_LIST_ADAPTER, artifact="candidates")
+
+
 def load_collected_routes(path: Path) -> CollectedRoutes:
     return _load_model(path, _COLLECTED_ROUTES_ADAPTER, artifact="collected_routes")
 
@@ -48,6 +72,22 @@ def load_collected_candidates(path: Path) -> CollectedCandidates:
 
 def save_collected_candidates(candidates: CollectedCandidates, path: Path) -> None:
     _save_model(candidates, path, _COLLECTED_CANDIDATES_ADAPTER, artifact="collected_candidates")
+
+
+def load_evaluation(path: Path) -> Evaluation:
+    return _load_model(path, _EVALUATION_ADAPTER, artifact="evaluation")
+
+
+def save_evaluation(evaluation: Evaluation, path: Path) -> None:
+    _save_model(evaluation, path, _EVALUATION_ADAPTER, artifact="evaluation")
+
+
+def load_analysis_report(path: Path) -> AnalysisReport:
+    return _load_model(path, _ANALYSIS_REPORT_ADAPTER, artifact="analysis_report")
+
+
+def save_analysis_report(report: AnalysisReport, path: Path) -> None:
+    _save_model(report, path, _ANALYSIS_REPORT_ADAPTER, artifact="analysis_report")
 
 
 def _load_model(path: Path, adapter: TypeAdapter[T], *, artifact: str) -> T:

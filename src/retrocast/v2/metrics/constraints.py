@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Protocol
 
 from retrocast.chem import reduce_inchikey
@@ -30,6 +30,7 @@ class TaskConstraintChecker:
         *,
         stock: set[InChIKeyStr] | None = None,
         stock_name: str | None = None,
+        stocks: Mapping[str, set[InChIKeyStr]] | None = None,
         match_level: InChIKeyLevel = InChIKeyLevel.FULL,
         checks: Sequence[ConstraintCheck] | None = None,
     ) -> None:
@@ -37,7 +38,7 @@ class TaskConstraintChecker:
             list(checks)
             if checks is not None
             else [
-                StockTerminationCheck(stock=stock, stock_name=stock_name, match_level=match_level),
+                StockTerminationCheck(stock=stock, stock_name=stock_name, stocks=stocks, match_level=match_level),
                 RequiredLeavesCheck(match_level=match_level),
                 RouteDepthCheck(),
             ]
@@ -49,9 +50,12 @@ class TaskConstraintChecker:
         *,
         stock: set[InChIKeyStr] | None = None,
         stock_name: str | None = None,
+        stocks: Mapping[str, set[InChIKeyStr]] | None = None,
         match_level: InChIKeyLevel = InChIKeyLevel.FULL,
     ) -> TaskConstraintChecker:
-        return cls(checks=[StockTerminationCheck(stock=stock, stock_name=stock_name, match_level=match_level)])
+        return cls(
+            checks=[StockTerminationCheck(stock=stock, stock_name=stock_name, stocks=stocks, match_level=match_level)]
+        )
 
     def check_route(self, route: Route, constraints: TaskConstraints) -> ConstraintResult:
         checks = []
@@ -69,28 +73,45 @@ class StockTerminationCheck:
         *,
         stock: set[InChIKeyStr] | None = None,
         stock_name: str | None = None,
+        stocks: Mapping[str, set[InChIKeyStr]] | None = None,
         match_level: InChIKeyLevel = InChIKeyLevel.FULL,
     ) -> None:
         self.stock_name = stock_name
         self.match_level = match_level
         self._stock_keys = {str(reduce_inchikey(inchikey, match_level)) for inchikey in stock or set()}
+        self._stock_keys_by_name = (
+            {
+                stock_name: {str(reduce_inchikey(inchikey, match_level)) for inchikey in stock_values}
+                for stock_name, stock_values in stocks.items()
+            }
+            if stocks is not None
+            else None
+        )
 
     def check_route(self, route: Route, constraints: TaskConstraints) -> list[CheckResult]:
         if constraints.stock is None:
             return []
+        if self._stock_keys_by_name is not None:
+            stock_keys = self._stock_keys_by_name.get(constraints.stock, set())
+            if not stock_keys:
+                return [self._no_stock_keys_check(constraints.stock)]
+            return self._check_stock(route, stock_keys=stock_keys)
         if not self._stock_keys:
-            return [
-                CheckResult(
-                    code="constraint.stock_termination.no_stock_keys",
-                    status=CheckStatus.FAIL,
-                    details={"stock": constraints.stock},
-                )
-            ]
+            return [self._no_stock_keys_check(constraints.stock)]
         return self._check_stock(route, constraints.stock)
 
-    def _check_stock(self, route: Route, expected_stock: str) -> list[CheckResult]:
+    def _no_stock_keys_check(self, stock_name: str) -> CheckResult:
+        return CheckResult(
+            code="constraint.stock_termination.no_stock_keys",
+            status=CheckStatus.FAIL,
+            details={"stock": stock_name},
+        )
+
+    def _check_stock(
+        self, route: Route, expected_stock: str | None = None, *, stock_keys: set[str] | None = None
+    ) -> list[CheckResult]:
         checks = []
-        if self.stock_name is not None and expected_stock != self.stock_name:
+        if expected_stock is not None and self.stock_name is not None and expected_stock != self.stock_name:
             checks.append(
                 CheckResult(
                     code="constraint.stock_termination.stock_mismatch",
@@ -99,9 +120,10 @@ class StockTerminationCheck:
                 )
             )
 
+        active_stock_keys = self._stock_keys if stock_keys is None else stock_keys
         missing_leaves = []
         for leaf in route.iter_leaves():
-            if leaf.key(self.match_level) not in self._stock_keys:
+            if leaf.key(self.match_level) not in active_stock_keys:
                 missing_leaves.append(leaf.value.inchikey)
         missing_leaves = sorted(set(missing_leaves))
         if missing_leaves:
