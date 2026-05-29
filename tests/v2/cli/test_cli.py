@@ -82,6 +82,26 @@ def run_cli(monkeypatch, *args: str) -> None:
     main()
 
 
+def test_v2_config_cli_reports_resolved_data_dir(tmp_path, monkeypatch, capsys) -> None:
+    data_dir = tmp_path / "data"
+
+    run_cli(monkeypatch, "--data-dir", str(data_dir), "config")
+
+    output = capsys.readouterr().out
+    assert "RetroCast Schema V2 Configuration" in output
+    assert str(data_dir.resolve()) in output.replace("\n", "")
+    assert "benchmarks" in output
+    assert "processed" in output
+
+
+def test_v2_list_adapters_cli_reports_canonical_names_and_aliases(monkeypatch, capsys) -> None:
+    run_cli(monkeypatch, "list-adapters")
+
+    output = capsys.readouterr().out
+    assert "paroutes" in output
+    assert "retro-star -> retrostar" in output
+
+
 def test_v2_adapt_cli_writes_candidates_and_manifest(tmp_path, monkeypatch) -> None:
     raw_path = tmp_path / "raw.json.gz"
     output_path = tmp_path / "candidates.json.gz"
@@ -134,19 +154,11 @@ def test_v2_collect_cli_writes_collected_candidates_and_manifest(tmp_path, monke
 
 def test_v2_project_cli_ingest_score_analyze(tmp_path, monkeypatch) -> None:
     data_dir = tmp_path / "data"
-    raw_dir = data_dir / "2-raw" / "test-model" / "small"
-    raw_dir.mkdir(parents=True)
     (data_dir / "1-benchmarks" / "definitions").mkdir(parents=True)
     write_stock(data_dir / "1-benchmarks" / "stocks" / "test-stock.csv.gz")
 
     save_benchmark(benchmark(), data_dir / "1-benchmarks" / "definitions" / "small.json.gz")
-    save_json_gz({"ethanol": raw_route()}, raw_dir / "results.json.gz")
-    (raw_dir / "manifest.json").write_text(
-        json.dumps(
-            {"schema_version": "2", "directives": {"adapter": "paroutes", "raw_results_filename": "results.json.gz"}}
-        ),
-        encoding="utf-8",
-    )
+    write_raw_job(data_dir, model="test-model", dataset="small")
 
     run_cli(monkeypatch, "--data-dir", str(data_dir), "ingest", "--model", "test-model", "--dataset", "small")
     candidates_path = data_dir / "3-processed" / "small" / "test-model" / "candidates.json.gz"
@@ -178,5 +190,30 @@ def test_v2_project_cli_ingest_score_analyze(tmp_path, monkeypatch) -> None:
     assert (analysis_path.parent / "manifest.json").exists()
 
 
+def test_v2_ingest_cli_discovers_all_models_and_datasets(tmp_path, monkeypatch) -> None:
+    data_dir = tmp_path / "data"
+    (data_dir / "1-benchmarks" / "definitions").mkdir(parents=True)
+    save_benchmark(benchmark(), data_dir / "1-benchmarks" / "definitions" / "small.json.gz")
+    write_raw_job(data_dir, model="model-a", dataset="small")
+    write_raw_job(data_dir, model="model-b", dataset="small")
+
+    run_cli(monkeypatch, "--data-dir", str(data_dir), "ingest", "--all-models", "--all-datasets", "--no-progress")
+
+    assert (data_dir / "3-processed" / "small" / "model-a" / "candidates.json.gz").exists()
+    assert (data_dir / "3-processed" / "small" / "model-b" / "candidates.json.gz").exists()
+
+
 def load_candidates_from_raw(raw: dict) -> list[Candidate]:
     return adapt_candidates({"ethanol": raw}, PaRoutesAdapter(), target=benchmark().targets["ethanol"])
+
+
+def write_raw_job(data_dir: Path, *, model: str, dataset: str) -> None:
+    raw_dir = data_dir / "2-raw" / model / dataset
+    raw_dir.mkdir(parents=True)
+    save_json_gz({"ethanol": raw_route()}, raw_dir / "results.json.gz")
+    (raw_dir / "manifest.json").write_text(
+        json.dumps(
+            {"schema_version": "2", "directives": {"adapter": "paroutes", "raw_results_filename": "results.json.gz"}}
+        ),
+        encoding="utf-8",
+    )
