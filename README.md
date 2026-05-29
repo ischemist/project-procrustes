@@ -97,14 +97,14 @@ retrocast adapt \
 # Align predictions to benchmark-keyed candidates
 retrocast collect \
     --input candidates.json.gz \
-    --benchmark data/1-benchmarks/definitions/ref-lin-600.json.gz \
+    --benchmark data/retrocast/1-benchmarks/definitions/ref-lin-600.json.gz \
     --output collected-candidates.json.gz
 
 # Score against a stock file
 retrocast score-file \
-    --benchmark data/1-benchmarks/definitions/ref-lin-600.json.gz \
+    --benchmark data/retrocast/1-benchmarks/definitions/ref-lin-600.json.gz \
     --candidates collected-candidates.json.gz \
-    --stock data/1-benchmarks/stocks/n5-stock.csv.gz \
+    --stock data/retrocast/1-benchmarks/stocks/n5-stock.csv.gz \
     --output scores.json.gz \
     --model-name "My-Experimental-Model"
 ```
@@ -135,17 +135,17 @@ Project mode reads raw model outputs from `data/retrocast/2-raw/<model>/<benchma
 **Run the pipeline:**
 
 ```bash
-# 1. Ingest: Standardize raw outputs from data/2-raw/
+# 1. Ingest: Standardize raw outputs from data/retrocast/2-raw/
 retrocast ingest --model dms-explorer --dataset ref-lin-600 --adapter directmultistep
 
 # 2. Score: Evaluate against the benchmark's defined stock
 retrocast score --model dms-explorer --dataset ref-lin-600
 
-# 3. Analyze: Generate bootstrap statistics and HTML plots
-retrocast analyze --model dms-explorer --dataset ref-lin-600 --make-plots
+# 3. Analyze: Generate bootstrap statistics
+retrocast analyze --model dms-explorer --dataset ref-lin-600
 ```
 
-**Output:** Interactive diagnostic plots (Solvability vs Depth, Top-K) and a Markdown report in `data/5-results/`.
+**Output:** A schema-v2 analysis report in `data/retrocast/5-results/`.
 
 ---
 
@@ -195,8 +195,8 @@ route = adapt_route(raw_output, adapter)
 if route is None:
     raise ValueError("Could not adapt route")
 
-print(f"Depth: {route.length}")
-print(f"Leaves: {[m.smiles for m in route.leaves]}")
+print(f"Depth: {route.depth()}")
+print(f"Leaves: {[m.smiles for m in route.leaves()]}")
 ```
 
 ---

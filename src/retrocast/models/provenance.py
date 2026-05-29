@@ -31,7 +31,7 @@ class Manifest(BaseModel):
     # manifests may carry extra fields from older scripts or newer producers; keep them round-trippable.
     model_config = ConfigDict(extra="allow")
 
-    schema_version: str = "1.1"
+    schema_version: str = "2"
     retrocast_version: str = Field(default_factory=lambda: __version__)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

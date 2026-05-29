@@ -118,7 +118,7 @@ Example:
 
 ```bash
 mkdir -p data/retrocast/2-raw/my-new-model/mkt-cnv-160
-cp predictions.json.gz data/retrocast/2-raw/my-new-model/mkt-cnv-160/
+cp results.json.gz data/retrocast/2-raw/my-new-model/mkt-cnv-160/
 ```
 
 !!! info "Available benchmarks"
@@ -128,6 +128,8 @@ cp predictions.json.gz data/retrocast/2-raw/my-new-model/mkt-cnv-160/
 ### Step B: Ingest
 
 `ingest` adapts raw planner output and collects the resulting rank-preserving `Candidate`s onto benchmark targets.
+
+By default, project-mode ingest reads `results.json.gz`. If your raw file uses a different name, add a `manifest.json` in the same directory with a `raw_results_filename` directive.
 
 ```bash
 retrocast ingest --model my-new-model --dataset mkt-cnv-160 --adapter aizynthfinder
