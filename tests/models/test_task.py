@@ -2,8 +2,8 @@ import pytest
 from pydantic import ValidationError
 
 from retrocast.chem import get_inchi_key
+from retrocast.models.task import Benchmark, Target, Task, TaskConstraints
 from retrocast.typing import SmilesStr
-from retrocast.v2.models.task import Benchmark, Target, Task, TaskConstraints
 
 
 @pytest.mark.unit

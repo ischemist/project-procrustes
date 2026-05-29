@@ -7,8 +7,8 @@ from pydantic import BaseModel, Field, model_validator
 
 from retrocast.chem import get_inchi_key
 from retrocast.exceptions import ChemError
+from retrocast.models.route import Route
 from retrocast.typing import InChIKeyStr, SmilesStr
-from retrocast.v2.models.route import Route
 
 
 class Target(BaseModel):

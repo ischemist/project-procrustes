@@ -1,9 +1,9 @@
 import pytest
 from pydantic import ValidationError
 
+from retrocast.models.candidates import Candidate, FailureRecord
+from retrocast.models.route import Molecule, Reaction, Route
 from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
-from retrocast.v2.models.candidates import Candidate, FailureRecord
-from retrocast.v2.models.route import Molecule, Reaction, Route
 
 
 def one_step_route() -> Route:

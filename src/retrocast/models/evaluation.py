@@ -1,90 +1,106 @@
 from __future__ import annotations
 
-from typing import Any
+from enum import IntEnum, StrEnum
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from retrocast.models.chem import Route
-from retrocast.models.validity import ConstraintResult, FailureRecord, MetricScope, RouteValidity, ScopeId, ValidityTier
+from retrocast.models.candidates import FailureRecord
+from retrocast.models.route import ReactionId, Route
+from retrocast.models.task import Target, Task, TaskConstraints
 
 
-def tier_rank_key(tier: ValidityTier) -> str:
-    return f"tier {tier}"
+class CheckStatus(StrEnum):
+    PASS = "pass"
+    FAIL = "fail"
+    NOT_EVALUATED = "not_evaluated"
+
+
+class Tier(IntEnum):
+    ZERO = 0
+    ONE = 1
+    TWO = 2
+    THREE = 3
+
+
+class CheckResult(BaseModel):
+    code: str
+    status: CheckStatus = CheckStatus.FAIL
+    message: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class TierResult(BaseModel):
+    status: CheckStatus
+    checks: list[CheckResult] = Field(default_factory=list)
+
+
+class ReactionValidity(BaseModel):
+    reaction_id: ReactionId
+    tiers: dict[Tier, TierResult] = Field(default_factory=dict)
+
+
+class RouteValidity(BaseModel):
+    tiers: dict[Tier, TierResult] = Field(default_factory=dict)
+    reactions: list[ReactionValidity] = Field(default_factory=list)
+
+
+class ConstraintResult(BaseModel):
+    status: CheckStatus
+    checks: list[CheckResult] = Field(default_factory=list)
 
 
 class ScoredCandidate(BaseModel):
-    rank: int
+    rank: int = Field(ge=1)
     route: Route | None = None
+    failure: FailureRecord | None = None
     validity: RouteValidity = Field(default_factory=RouteValidity)
-    constraint_results: dict[str, ConstraintResult] = Field(default_factory=dict)
+    constraints: ConstraintResult = Field(default_factory=lambda: ConstraintResult(status=CheckStatus.NOT_EVALUATED))
     matches_acceptable: bool = False
     matched_acceptable_index: int | None = None
-    adapter_failure: FailureRecord | None = None
 
     @model_validator(mode="after")
     def _require_route_or_failure(self) -> ScoredCandidate:
-        if self.route is None and self.adapter_failure is None:
-            raise ValueError("ScoredCandidate requires route or adapter_failure.")
-        if self.route is not None and self.adapter_failure is not None:
-            raise ValueError("ScoredCandidate cannot contain both route and adapter_failure.")
+        if self.route is None and self.failure is None:
+            raise ValueError("ScoredCandidate requires route or failure.")
+        if self.route is not None and self.failure is not None:
+            raise ValueError("ScoredCandidate cannot contain both route and failure.")
         return self
 
-    def satisfies_validity(self, tier: ValidityTier = 0) -> bool:
-        return self.validity.satisfies_validity(tier=tier)
+    def has_route(self) -> bool:
+        return self.route is not None
 
-    def satisfies_constraints(self, scope: ScopeId = "stock") -> bool:
-        constraint_result = self.constraint_results.get(scope)
-        return constraint_result is not None and constraint_result.status == "pass"
+    def failed_adaptation(self) -> bool:
+        return self.failure is not None
 
-    def satisfies_solv(self, tier: ValidityTier = 0, scope: ScopeId = "stock") -> bool:
-        return self.satisfies_validity(tier=tier) and self.satisfies_constraints(scope=scope)
+    def tier_result(self, tier: Tier) -> TierResult:
+        return self.validity.tiers.get(tier, TierResult(status=CheckStatus.NOT_EVALUATED))
+
+    def reaction_tier_result(self, reaction_id: ReactionId, tier: Tier) -> TierResult | None:
+        for reaction in self.validity.reactions:
+            if reaction.reaction_id == reaction_id:
+                return reaction.tiers.get(tier)
+        return None
+
+    def satisfies_validity(self, tier: Tier) -> bool:
+        return self.tier_result(tier).status == CheckStatus.PASS
+
+    def satisfies_task(self) -> bool:
+        return self.constraints.status == CheckStatus.PASS
+
+    def satisfies_solv(self, tier: Tier) -> bool:
+        return self.satisfies_validity(tier) and self.satisfies_task()
 
 
-class TargetEvaluation(BaseModel):
-    """
-    The result of evaluating one target against one stock.
-    """
-
-    target_id: str
-
+class TargetResult(BaseModel):
+    target: Target
+    effective_constraints: TaskConstraints
     candidates: list[ScoredCandidate] = Field(default_factory=list)
 
-    has_stock_terminated_route: bool = False
-    first_valid_ranks: dict[str, int | None] = Field(default_factory=dict)
-    first_solv_ranks: dict[ScopeId, dict[str, int | None]] = Field(default_factory=dict)
-    first_reconstruction_ranks: dict[ScopeId, int | None] = Field(default_factory=dict)
 
-    # Properties used for stratification (route length, convergence)
-    stratification_length: int | None = None
-    stratification_is_convergent: bool | None = None
-
-    # Runtime metrics for this target (in seconds)
-    wall_time: float | None = None
-    cpu_time: float | None = None
-
-    def first_valid_rank(self, tier: ValidityTier = 0) -> int | None:
-        return self.first_valid_ranks.get(tier_rank_key(tier))
-
-    def first_solv_rank(self, tier: ValidityTier = 0, scope: ScopeId = "stock") -> int | None:
-        return self.first_solv_ranks.get(scope, {}).get(tier_rank_key(tier))
-
-    def reconstruction_rank(self, scope: ScopeId = "stock") -> int | None:
-        return self.first_reconstruction_ranks.get(scope)
-
-
-class EvaluationResults(BaseModel):
-    """
-    The complete dump of a scoring run.
-    """
-
-    model_name: str
-    benchmark_name: str
-    stock_name: str
-    has_acceptable_routes: bool  # Whether the benchmark has acceptable routes (not whether model found them)
-    metric_scopes: list[MetricScope] = Field(default_factory=list)
-
-    # Map target_id -> Evaluation
-    results: dict[str, TargetEvaluation] = Field(default_factory=dict)
-
-    # Provenance
-    metadata: dict[str, Any] = Field(default_factory=dict)
+class Evaluation(BaseModel):
+    task: Task
+    tiers: list[Tier] = Field(default_factory=list)
+    metric_label: str = "task"
+    targets: dict[str, TargetResult] = Field(default_factory=dict)
+    schema_version: Literal["2"] = "2"

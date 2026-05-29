@@ -5,7 +5,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
-from retrocast.v2.models.route import MoleculeId, ReactionId, RouteNodeKind, RoutePath
+from retrocast.models.route import MoleculeId, ReactionId, RouteNodeKind, RoutePath
 
 
 @pytest.mark.unit
