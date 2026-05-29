@@ -142,7 +142,14 @@ def _target_route_depth_stratum(target: TargetResult) -> str | None:
 
 
 def load_raw_paroutes_list(path: Path) -> list[dict]:
-    return _RAW_PAROUTES_LIST_ADAPTER.validate_python(load_json_gz(path))
+    try:
+        return _RAW_PAROUTES_LIST_ADAPTER.validate_python(load_json_gz(path))
+    except ValidationError as exc:
+        raise ArtifactFormatError(
+            f"Invalid raw PaRoutes JSON format in {path}: {exc}",
+            code="io.invalid_artifact_shape",
+            context={"path": str(path), "artifact": "raw_paroutes"},
+        ) from exc
 
 
 def load_training_route_records(path: Path):

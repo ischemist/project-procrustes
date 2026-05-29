@@ -22,11 +22,20 @@ from retrocast.curation.training import (
 )
 from retrocast.curation.training.audit import (
     RouteReleaseFiles,
+    SingleStepReleaseFiles,
     audit_route_release_sanity,
     audit_single_step_release_if_present,
+    build_route_release_split_audit,
+    duplicate_count,
+    exact_reaction_record_key,
+    load_holdout_reference,
+    reaction_record_identity_key,
+    render_route_release_split_audit_markdown,
+    render_sanity_checks_markdown,
+    render_single_step_sanity_markdown,
 )
 from retrocast.exceptions import TrainingReleaseError
-from retrocast.io import load_training_route_records, save_jsonl_gz, save_lines_gz
+from retrocast.io import load_training_route_records, save_json_gz, save_jsonl_gz, save_lines_gz
 from retrocast.models import Molecule, Reaction, Route
 from retrocast.typing import InChIKeyStr, ReactionSmilesStr, SmilesStr
 
@@ -130,6 +139,31 @@ def test_route_audit_allows_condition_distinct_same_structure() -> None:
         files=RouteReleaseFiles(all=records, training=records, validation=[]),
         holdout={},
     )
+
+
+def test_route_split_audit_markdown_summarizes_depth_and_convergence(tmp_path: Path) -> None:
+    records = [
+        route_record("train", one_step_route("C.C>>CC"), split="training"),
+        route_record("val", two_step_route(), split="validation"),
+    ]
+    save_json_gz([{"route": "n1"}], tmp_path / "n1-routes.json.gz")
+
+    audit = build_route_release_split_audit(release_name="route-holdout-n1-n5", route_records=records)
+    markdown = render_route_release_split_audit_markdown(release_root_name="v1", audits=[audit])
+
+    assert load_holdout_reference(tmp_path) == {"n1": 1, "n5": 0}
+    assert audit["total"] == 2
+    assert "| route-holdout-n1-n5 | 2 | 1 | 1 | 50.0000% |" in markdown
+    assert "| false |" in markdown
+    assert "| true |" in markdown
+
+
+def test_route_sanity_markdown_reports_success_counts() -> None:
+    checks = {"route": {"all_count": 2, "training_count": 1, "validation_count": 1, "holdout_count": 3}}
+
+    markdown = render_sanity_checks_markdown(checks)
+
+    assert "| route | 2 | 1 | 1 | 3 |" in markdown
 
 
 def test_route_audit_rejects_release_identity_failures() -> None:
@@ -289,6 +323,53 @@ def test_single_step_audit_rejects_release_identity_failures(tmp_path: Path) -> 
     assert failures["rsmi_count_mismatches"] == {"all": 1, "training": 0, "validation": 0}
     assert failures["cross_split_reaction_identity_overlap"] == 1
     assert failures["missing_parent_route_sources"] == 1
+
+
+def test_single_step_audit_success_absent_release_and_identity_helpers(tmp_path: Path) -> None:
+    assert audit_single_step_release_if_present(release_root=tmp_path, parent_route_ids=set()) is None
+
+    release_dir = tmp_path / "single-step-reaction-holdout-n1-n5"
+    training = reaction_record("train", "route-train", split="training")
+    validation = reaction_record("validation", "route-validation", split="validation").model_copy(
+        update={"product": SmilesStr(canonicalize_smiles("CO")), "mapped_smiles": ReactionSmilesStr("C.O>>CO")}
+    )
+    save_jsonl_gz([training, validation], release_dir / "all.jsonl.gz")
+    save_jsonl_gz([training], release_dir / "training.jsonl.gz")
+    save_jsonl_gz([validation], release_dir / "validation.jsonl.gz")
+    save_lines_gz([training.to_rsmi_line(), validation.to_rsmi_line()], release_dir / "all.rsmi.txt.gz")
+    save_lines_gz([training.to_rsmi_line()], release_dir / "training.rsmi.txt.gz")
+    save_lines_gz([validation.to_rsmi_line()], release_dir / "validation.rsmi.txt.gz")
+
+    result = audit_single_step_release_if_present(
+        release_root=tmp_path, parent_route_ids={"route-train", "route-validation"}
+    )
+
+    assert result == {
+        "release_name": "single-step-reaction-holdout-n1-n5",
+        "records": 2,
+        "training": 1,
+        "validation": 1,
+        "parent_routes": 2,
+    }
+    assert "| single-step-reaction-holdout-n1-n5 | 2 | 1 | 1 | 2 |" in render_single_step_sanity_markdown(result)
+    assert duplicate_count([1, 1, 2]) == 1
+    assert exact_reaction_record_key(training) == ("C.C>>CC", ("O",), None)
+    assert reaction_record_identity_key(training) == (("C", "C"), "CC", ("O",))
+
+
+def test_single_step_release_files_dataclass_preserves_rsmi_counts() -> None:
+    record = reaction_record("train", "route-train", split="training")
+
+    files = SingleStepReleaseFiles(
+        all=[record],
+        training=[record],
+        validation=[],
+        all_rsmi_count=1,
+        training_rsmi_count=1,
+        validation_rsmi_count=0,
+    )
+
+    assert files.all_rsmi_count == len(files.all)
 
 
 def test_training_release_builders_are_single_use() -> None:

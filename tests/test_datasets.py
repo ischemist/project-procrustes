@@ -10,13 +10,28 @@ import pytest
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.datasets import (
+    build_hosted_data_url,
+    build_training_set_url,
     download_benchmark,
     download_benchmark_assets,
     download_stock,
     download_training_set,
+    load_sha256sums,
+    resolve_expected_hash,
+    resolve_hosted_data_root,
     resolve_latest_training_set_release,
+    resolve_training_set_filename,
+    resolve_training_set_root,
+    should_show_download_progress,
+    validate_training_dataset_request,
+    write_response_with_progress,
 )
-from retrocast.exceptions import ConfigurationError, DatasetVerificationError
+from retrocast.exceptions import (
+    ArtifactFormatError,
+    ConfigurationError,
+    DatasetResolutionError,
+    DatasetVerificationError,
+)
 from retrocast.io import save_benchmark
 from retrocast.models import Benchmark, Target, TaskConstraints
 from retrocast.typing import InChIKeyStr, SmilesStr
@@ -54,6 +69,34 @@ def test_download_training_set_rejects_unsupported_format(tmp_path: Path) -> Non
             base_url=(tmp_path / "remote").resolve().as_uri(),
             cache_dir=tmp_path / "cache",
         )
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "code"),
+    [
+        (
+            {"dataset": "bad", "artifact": "reaction-holdout-n1-n5", "split": "training", "format": "jsonl"},
+            "dataset.unsupported_dataset",
+        ),
+        (
+            {"dataset": "paroutes", "artifact": "bad", "split": "training", "format": "jsonl"},
+            "dataset.unsupported_artifact",
+        ),
+        (
+            {"dataset": "paroutes", "artifact": "reaction-holdout-n1-n5", "split": "bad", "format": "jsonl"},
+            "dataset.unsupported_split",
+        ),
+        (
+            {"dataset": "paroutes", "artifact": "reaction-holdout-n1-n5", "split": "training", "format": "bad"},
+            "dataset.unsupported_format",
+        ),
+    ],
+)
+def test_training_dataset_request_reports_specific_invalid_field(kwargs: dict[str, str], code: str) -> None:
+    with pytest.raises(ConfigurationError) as exc_info:
+        validate_training_dataset_request(**kwargs)
+
+    assert exc_info.value.code == code
 
 
 def test_download_training_set_redownloads_after_cached_corruption(tmp_path: Path) -> None:
@@ -111,6 +154,31 @@ def test_download_benchmark_stock_and_assets(tmp_path: Path) -> None:
     assert assets.stock_path.exists()
 
 
+def test_download_benchmark_and_stock_include_manifests_when_requested(tmp_path: Path) -> None:
+    remote_root = tmp_path / "remote-data"
+    write_hosted_data(remote_root, include_manifests=True)
+
+    download_benchmark(
+        "small", base_url=remote_root.resolve().as_uri(), cache_dir=tmp_path / "cache", include_manifest=True
+    )
+    download_stock(
+        "test-stock", base_url=remote_root.resolve().as_uri(), cache_dir=tmp_path / "cache", include_manifest=True
+    )
+
+    assert (tmp_path / "cache" / "1-benchmarks" / "definitions" / "small.manifest.json").exists()
+    assert (tmp_path / "cache" / "1-benchmarks" / "stocks" / "test-stock.manifest.json").exists()
+
+
+def test_download_benchmark_assets_allows_benchmark_without_single_stock(tmp_path: Path) -> None:
+    remote_root = tmp_path / "remote-data"
+    write_hosted_data(remote_root, benchmark_value=benchmark_without_stock())
+
+    assets = download_benchmark_assets("small", base_url=remote_root.resolve().as_uri(), cache_dir=tmp_path / "cache")
+
+    assert assets.benchmark_path.exists()
+    assert assets.stock_path is None
+
+
 def test_download_detects_hash_mismatch(tmp_path: Path) -> None:
     remote_root = tmp_path / "remote-data"
     write_hosted_data(remote_root)
@@ -123,6 +191,118 @@ def test_download_detects_hash_mismatch(tmp_path: Path) -> None:
             base_url=remote_root.resolve().as_uri(),
             cache_dir=tmp_path / "cache",
         )
+
+
+def test_latest_release_rejects_invalid_metadata_payloads(tmp_path: Path) -> None:
+    remote_root = tmp_path / "remote"
+    latest_path = remote_root / "paroutes" / "latest.json"
+    latest_path.parent.mkdir(parents=True)
+
+    latest_path.write_text(json.dumps({"dataset": "other", "latest_release": "v1"}), encoding="utf-8")
+    with pytest.raises(DatasetResolutionError) as mismatch:
+        resolve_latest_training_set_release("paroutes", base_url=remote_root.resolve().as_uri())
+    assert mismatch.value.code == "dataset.latest_dataset_mismatch"
+
+    latest_path.write_text(json.dumps({"dataset": "paroutes"}), encoding="utf-8")
+    with pytest.raises(ArtifactFormatError) as invalid:
+        resolve_latest_training_set_release("paroutes", base_url=remote_root.resolve().as_uri())
+    assert invalid.value.code == "dataset.invalid_latest_payload"
+
+
+def test_checksum_resolution_refreshes_stale_cache_and_reports_missing_key(tmp_path: Path) -> None:
+    checksums_path = tmp_path / "cache" / "SHA256SUMS"
+    remote_checksums = tmp_path / "remote" / "SHA256SUMS"
+    checksums_path.parent.mkdir()
+    remote_checksums.parent.mkdir()
+    checksums_path.write_text("0" * 64 + " stale.txt\n", encoding="utf-8")
+    remote_checksums.write_text("1" * 64 + " wanted.txt\n", encoding="utf-8")
+
+    resolved = resolve_expected_hash(
+        checksums_path=checksums_path,
+        checksums_url=remote_checksums.resolve().as_uri(),
+        checksum_key="wanted.txt",
+        missing_message="missing wanted",
+        missing_context={"name": "wanted.txt"},
+    )
+    assert resolved == "1" * 64
+
+    with pytest.raises(DatasetResolutionError) as exc_info:
+        resolve_expected_hash(
+            checksums_path=checksums_path,
+            checksums_url=remote_checksums.resolve().as_uri(),
+            checksum_key="absent.txt",
+            missing_message="missing absent",
+            missing_context={"name": "absent.txt"},
+        )
+    assert exc_info.value.code == "dataset.file_not_published"
+
+
+def test_dataset_url_root_filename_and_checksum_helpers_are_explicit(tmp_path: Path) -> None:
+    checksums = tmp_path / "SHA256SUMS"
+    checksums.write_text("\nabc file.txt\n", encoding="utf-8")
+
+    assert (
+        resolve_training_set_filename(artifact="single-step-reaction-holdout-n1-n5", split="validation", format="rsmi")
+        == "validation.rsmi.txt.gz"
+    )
+    assert (
+        resolve_training_set_root(dataset="paroutes", release="v1", cache_dir=tmp_path / "cache", output_dir=None)
+        == tmp_path / "cache" / "paroutes" / "v1"
+    )
+    assert (
+        resolve_training_set_root(dataset="paroutes", release="v1", cache_dir=None, output_dir=tmp_path / "out")
+        == tmp_path / "out" / "v1"
+    )
+    assert resolve_hosted_data_root(cache_dir=tmp_path / "cache", output_dir=None) == tmp_path / "cache"
+    assert resolve_hosted_data_root(cache_dir=None, output_dir=tmp_path / "out") == tmp_path / "out"
+    assert (
+        build_training_set_url(
+            base_url="https://example.test/root/",
+            dataset="pa routes",
+            release="v 1",
+            artifact="art",
+            filename="x.json.gz",
+        )
+        == "https://example.test/root/pa%20routes/v%201/art/x.json.gz"
+    )
+    assert (
+        build_hosted_data_url(base_url="https://example.test/root/", relative_path=Path("a b/file.json.gz"))
+        == "https://example.test/root/a%20b/file.json.gz"
+    )
+    assert load_sha256sums(checksums) == {"file.txt": "abc"}
+
+    checksums.write_text("not-enough-fields\n", encoding="utf-8")
+    with pytest.raises(ArtifactFormatError):
+        load_sha256sums(checksums)
+
+
+def test_progress_visibility_and_writer_handle_non_tty_and_unknown_lengths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class BrokenStderr:
+        def isatty(self) -> bool:
+            raise OSError("no tty")
+
+    class Response:
+        headers = {"Content-Length": "not-an-int"}
+
+        def __init__(self) -> None:
+            self._chunks = [b"abc", b""]
+
+        def read(self, _size: int) -> bytes:
+            return self._chunks.pop(0)
+
+    monkeypatch.setattr("retrocast.datasets.sys.stderr", BrokenStderr())
+    assert should_show_download_progress(None) is False
+    monkeypatch.undo()
+
+    destination = tmp_path / "download.bin"
+    with destination.open("wb") as handle:
+        write_response_with_progress(response=Response(), handle=handle, description="download")
+
+    assert should_show_download_progress(False) is False
+    assert should_show_download_progress(True) is True
+    assert destination.read_bytes() == b"abc"
 
 
 def write_training_release(remote_root: Path) -> None:
@@ -146,23 +326,37 @@ def write_training_release(remote_root: Path) -> None:
     )
 
 
-def write_hosted_data(remote_root: Path) -> None:
+def write_hosted_data(
+    remote_root: Path, *, include_manifests: bool = False, benchmark_value: Benchmark | None = None
+) -> None:
     benchmark_path = remote_root / "1-benchmarks" / "definitions" / "small.json.gz"
     stock_path = remote_root / "1-benchmarks" / "stocks" / "test-stock.csv.gz"
     benchmark_path.parent.mkdir(parents=True)
     stock_path.parent.mkdir(parents=True)
-    save_benchmark(benchmark(), benchmark_path)
+    save_benchmark(benchmark_value or benchmark(), benchmark_path)
     with gzip.open(stock_path, "wt", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(["SMILES", "InChIKey"])
         writer.writerow(["C", get_inchi_key("C")])
+    paths = [
+        Path("1-benchmarks/definitions/small.json.gz"),
+        Path("1-benchmarks/stocks/test-stock.csv.gz"),
+    ]
+    if include_manifests:
+        benchmark_manifest = remote_root / "1-benchmarks" / "definitions" / "small.manifest.json"
+        stock_manifest = remote_root / "1-benchmarks" / "stocks" / "test-stock.manifest.json"
+        benchmark_manifest.write_text('{"artifact":"benchmark"}', encoding="utf-8")
+        stock_manifest.write_text('{"artifact":"stock"}', encoding="utf-8")
+        paths.extend(
+            [
+                Path("1-benchmarks/definitions/small.manifest.json"),
+                Path("1-benchmarks/stocks/test-stock.manifest.json"),
+            ]
+        )
     write_sha256sums(
         remote_root / "SHA256SUMS",
         root=remote_root,
-        paths=[
-            Path("1-benchmarks/definitions/small.json.gz"),
-            Path("1-benchmarks/stocks/test-stock.csv.gz"),
-        ],
+        paths=paths,
     )
 
 
@@ -174,6 +368,12 @@ def benchmark() -> Benchmark:
         targets={target.id: target},
         default_constraints=TaskConstraints(stock="test-stock"),
     )
+
+
+def benchmark_without_stock() -> Benchmark:
+    smiles = canonicalize_smiles("CCO")
+    target = Target(id="ethanol", smiles=SmilesStr(smiles), inchikey=InChIKeyStr(get_inchi_key(smiles)))
+    return Benchmark(name="small", targets={target.id: target})
 
 
 def write_sha256sums(path: Path, *, root: Path, paths: list[Path]) -> None:

@@ -14,7 +14,7 @@ from retrocast.chem import (
     get_molecular_weight,
     reduce_inchikey,
 )
-from retrocast.exceptions import InvalidInchiKeyError, InvalidSmilesError, RetroCastException
+from retrocast.exceptions import ChemRuntimeError, InvalidInchiKeyError, InvalidSmilesError, RetroCastException
 
 # ============================================================================
 # canonicalization
@@ -388,6 +388,24 @@ def test_rdkit_empty_result_guarded(mock_inchi) -> None:
     with pytest.raises(RetroCastException, match="Empty InChIKey") as exc_info:
         get_inchi_key("C")
     assert exc_info.value.code == "chem.inchikey_empty"
+
+
+@pytest.mark.unit
+@patch("retrocast.chem.rdinchi.MolToInchi")
+def test_no_stereo_inchi_generation_failure_preserves_ret_code(mock_moltoinchi) -> None:
+    mock_moltoinchi.return_value = ("", 2, "bad", "", "")
+
+    with pytest.raises(ChemRuntimeError) as exc_info:
+        get_inchi_key("C", level=InChIKeyLevel.NO_STEREO)
+
+    assert exc_info.value.code == "chem.inchi_generation_failed"
+    assert exc_info.value.context["ret_code"] == 2
+
+
+@pytest.mark.unit
+def test_reduce_inchikey_rejects_unknown_runtime_level() -> None:
+    with pytest.raises(ValueError, match="unknown inchikey level"):
+        reduce_inchikey("UHOVQNZJYSORNB-UHFFFAOYSA-N", "bad-level")  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
