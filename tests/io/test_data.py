@@ -6,8 +6,7 @@ import pytest
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import ArtifactDecodeError, ArtifactFormatError, ArtifactNotFoundError, ArtifactWriteError
-from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
-from retrocast.v2.io import (
+from retrocast.io import (
     load_benchmark,
     load_collected_candidates,
     load_collected_routes,
@@ -15,9 +14,11 @@ from retrocast.v2.io import (
     save_benchmark,
     save_collected_candidates,
     save_collected_routes,
+    save_stock_files,
     save_task,
 )
-from retrocast.v2.models import Benchmark, Candidate, FailureRecord, Molecule, Route, Target, Task, TaskConstraints
+from retrocast.models import Benchmark, Candidate, FailureRecord, Molecule, Route, Target, Task, TaskConstraints
+from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
 
 
 def target(smiles: str = "CCO", target_id: str = "ethanol") -> Target:
@@ -52,6 +53,30 @@ def test_task_round_trips(tmp_path) -> None:
     save_task(value, path)
 
     assert load_task(path) == value
+
+
+def test_schema_model_writes_are_deterministic(tmp_path) -> None:
+    left = tmp_path / "left.json.gz"
+    right = tmp_path / "right.json.gz"
+    value = task_value()
+
+    save_task(value, left)
+    save_task(value, right)
+
+    assert left.read_bytes() == right.read_bytes()
+
+
+def test_stock_file_writes_are_deterministic(tmp_path) -> None:
+    stock = {
+        InChIKeyStr(get_inchi_key("C")): SmilesStr("C"),
+        InChIKeyStr(get_inchi_key("CO")): SmilesStr("CO"),
+    }
+
+    left_csv, left_txt, _ = save_stock_files(stock, "tiny", tmp_path / "left" / "stocks")
+    right_csv, right_txt, _ = save_stock_files(stock, "tiny", tmp_path / "right" / "stocks")
+
+    assert left_csv.read_bytes() == right_csv.read_bytes()
+    assert left_txt.read_bytes() == right_txt.read_bytes()
 
 
 def test_benchmark_round_trips(tmp_path) -> None:

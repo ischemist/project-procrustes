@@ -1,7 +1,9 @@
+import csv
 import gzip
 import json
 import logging
 from collections.abc import Iterable, Iterator
+from io import TextIOWrapper
 from pathlib import Path
 from typing import Any
 
@@ -20,44 +22,12 @@ def load_json_artifact(path: Path) -> Any:
     if name.endswith((".jsonl", ".jsonl.gz")):
         if path.suffix == ".gz":
             return load_jsonl_gz(path)
-        if not path.exists():
-            raise ArtifactNotFoundError(
-                f"File not found: {path}",
-                code="io.not_found",
-                context={"path": str(path)},
-            )
-        try:
-            rows: list[Any] = []
-            with open(path, encoding="utf-8") as handle:
-                for line_number, line in enumerate(handle, start=1):
-                    line_text = line.strip()
-                    if not line_text:
-                        continue
-                    try:
-                        rows.append(json.loads(line_text))
-                    except json.JSONDecodeError as e:
-                        raise ArtifactDecodeError(
-                            f"Failed to decode JSONL row {line_number} from {path}: {e}",
-                            code="io.decode_failed",
-                            context={"path": str(path), "line_number": line_number, "line_text": line_text},
-                        ) from e
-            return rows
-        except OSError as e:
-            raise ArtifactDecodeError(
-                f"Failed to load {path}: {e}",
-                code="io.decode_failed",
-                context={"path": str(path)},
-            ) from e
+        return list(_iter_jsonl(path, compressed=False))
 
     if name.endswith((".json", ".json.gz")):
         if path.suffix == ".gz":
             return load_json_gz(path)
-        if not path.exists():
-            raise ArtifactNotFoundError(
-                f"File not found: {path}",
-                code="io.not_found",
-                context={"path": str(path)},
-            )
+        _ensure_exists(path)
         try:
             with open(path, encoding="utf-8") as handle:
                 return json.load(handle)
@@ -148,20 +118,41 @@ def save_lines_gz(lines: Iterable[str], path: Path) -> int:
         ) from e
 
 
+def save_csv_gz(rows: Iterable[Iterable[Any]], path: Path) -> int:
+    """Writes CSV rows to a deterministic gzip file."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    n_rows = 0
+    try:
+        with (
+            open(path, "wb") as raw_f,
+            gzip.GzipFile(filename="", mode="wb", fileobj=raw_f, mtime=0) as gz_f,
+            TextIOWrapper(gz_f, encoding="utf-8", newline="") as text_f,
+        ):
+            writer = csv.writer(text_f)
+            for row in rows:
+                writer.writerow(row)
+                n_rows += 1
+        logger.debug(f"Saved {n_rows} CSV rows to {path}")
+        return n_rows
+    except (OSError, AttributeError, TypeError, ValueError) as e:
+        raise ArtifactWriteError(
+            f"Failed to save {path}: {e}",
+            code="io.write_failed",
+            context={"path": str(path)},
+        ) from e
+
+
 def load_json_gz(path: Path) -> Any:
     """Loads a gzipped JSON file."""
     path = Path(path)
-    if not path.exists():
-        raise ArtifactNotFoundError(
-            f"File not found: {path}",
-            code="io.not_found",
-            context={"path": str(path)},
-        )
+    _ensure_exists(path)
 
     try:
         with gzip.open(path, "rt", encoding="utf-8") as f:
             return json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
+    except (EOFError, OSError, json.JSONDecodeError) as e:
         raise ArtifactDecodeError(
             f"Failed to load {path}: {e}",
             code="io.decode_failed",
@@ -176,18 +167,24 @@ def load_jsonl_gz(path: Path, skip_empty: bool = True) -> list[Any]:
 
 def iter_jsonl_gz(path: Path, skip_empty: bool = True) -> Iterator[Any]:
     """Streams JSON rows from a gzipped JSONL file."""
+    yield from _iter_jsonl(path, compressed=True, skip_empty=skip_empty)
+
+
+def _iter_jsonl(path: Path, *, compressed: bool, skip_empty: bool = True) -> Iterator[Any]:
+    """Streams JSONL rows from plain text or gzip while preserving row context."""
     path = Path(path)
-    if not path.exists():
-        raise ArtifactNotFoundError(
-            f"File not found: {path}",
-            code="io.not_found",
-            context={"path": str(path)},
-        )
+    _ensure_exists(path)
 
     try:
-        with gzip.open(path, "rt", encoding="utf-8") as f:
-            for line_number, line in enumerate(f, start=1):
-                if not line.strip():
+        if compressed:
+            handle_context = gzip.open(path, "rt", encoding="utf-8")
+        else:
+            handle_context = open(path, encoding="utf-8")
+
+        with handle_context as handle:
+            for line_number, line in enumerate(handle, start=1):
+                line_text = line.strip()
+                if not line_text:
                     if not skip_empty:
                         raise ArtifactDecodeError(
                             f"Empty JSONL row {line_number} in {path}",
@@ -196,14 +193,14 @@ def iter_jsonl_gz(path: Path, skip_empty: bool = True) -> Iterator[Any]:
                         )
                     continue
                 try:
-                    yield json.loads(line)
+                    yield json.loads(line_text)
                 except json.JSONDecodeError as e:
                     raise ArtifactDecodeError(
                         f"Failed to decode JSONL row {line_number} from {path}: {e}",
                         code="io.decode_failed",
-                        context={"path": str(path), "line_number": line_number},
+                        context={"path": str(path), "line_number": line_number, "line_text": line_text},
                     ) from e
-    except OSError as e:
+    except (EOFError, OSError) as e:
         raise ArtifactDecodeError(
             f"Failed to load {path}: {e}",
             code="io.decode_failed",
@@ -219,20 +216,25 @@ def load_lines_gz(path: Path) -> list[str]:
 def iter_lines_gz(path: Path) -> Iterator[str]:
     """Streams newline-delimited text lines from a gzip file."""
     path = Path(path)
-    if not path.exists():
-        raise ArtifactNotFoundError(
-            f"File not found: {path}",
-            code="io.not_found",
-            context={"path": str(path)},
-        )
+    _ensure_exists(path)
 
     try:
         with gzip.open(path, "rt", encoding="utf-8") as f:
             for line in f:
                 yield line.rstrip("\n")
-    except OSError as e:
+    except (EOFError, OSError) as e:
         raise ArtifactDecodeError(
             f"Failed to load {path}: {e}",
             code="io.decode_failed",
             context={"path": str(path)},
         ) from e
+
+
+def _ensure_exists(path: Path) -> None:
+    if path.exists():
+        return
+    raise ArtifactNotFoundError(
+        f"File not found: {path}",
+        code="io.not_found",
+        context={"path": str(path)},
+    )
