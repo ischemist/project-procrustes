@@ -298,29 +298,22 @@ def _score_one(model_name: str, benchmark_name: str, paths: dict[str, Path], arg
 
     predictions = load_collected_candidates(candidates_path)
     task = load_benchmark(task_path)
-    stock_name = _resolve_stock_name(task, args.stock)
-    stock: set[InChIKeyStr] = set()
-    stock_path: Path | None = None
-    if stock_name is not None:
-        stock_path = paths["stocks"] / f"{stock_name}.csv.gz"
-        stock = set(load_stock_file(stock_path, return_as="inchikey"))
+    stock_registry, stock_paths, output_label = _load_stock_registry(task, paths, stock_override=args.stock)
     match_level = InChIKeyLevel.NO_STEREO if args.ignore_stereo else InChIKeyLevel.FULL
     evaluation = score(
         predictions=predictions,
         task=task,
         constraint_checker=TaskConstraintChecker(
-            stock=stock,
-            stock_name=stock_name,
+            stocks=stock_registry,
             match_level=match_level,
         ),
         acceptable_match_level=match_level,
     )
 
-    output_label = stock_name or "task"
     output_dir = paths["scored"] / benchmark_name / model_name / output_label
     output_path = output_dir / "evaluation.json.gz"
     save_evaluation(evaluation, output_path)
-    sources = [task_path, candidates_path] + ([stock_path] if stock_path is not None else [])
+    sources = [task_path, candidates_path, *stock_paths]
     write_manifest(
         output_dir / "manifest.json",
         action="score:v2",
@@ -457,17 +450,42 @@ def _manifest_directive(path: Path, key: str) -> str | None:
     return str(value) if value is not None else None
 
 
-def _resolve_stock_name(task: Benchmark, stock_override: str | None) -> str | None:
+def _load_stock_registry(
+    task: Benchmark,
+    paths: dict[str, Path],
+    *,
+    stock_override: str | None,
+) -> tuple[dict[str, set[InChIKeyStr]], list[Path], str]:
+    stock_names = _effective_stock_names(task)
     if stock_override is not None:
-        return stock_override
+        stock_path = paths["stocks"] / f"{stock_override}.csv.gz"
+        stock = set(load_stock_file(stock_path, return_as="inchikey"))
+        registry_names = stock_names or {stock_override}
+        return {stock_name: stock for stock_name in registry_names}, [stock_path], stock_override
+
+    stock_paths = []
+    stock_registry = {}
+    for stock_name in sorted(stock_names):
+        stock_path = paths["stocks"] / f"{stock_name}.csv.gz"
+        stock_registry[stock_name] = set(load_stock_file(stock_path, return_as="inchikey"))
+        stock_paths.append(stock_path)
+
+    if not stock_names:
+        output_label = "task"
+    elif len(stock_names) == 1:
+        output_label = next(iter(stock_names))
+    else:
+        output_label = "mixed-stock"
+    return stock_registry, stock_paths, output_label
+
+
+def _effective_stock_names(task: Benchmark) -> set[str]:
     stock_names = set()
     for target_id in task.targets:
         stock = task.effective_constraints(target_id).stock
         if stock is not None:
             stock_names.add(stock)
-    if len(stock_names) == 1:
-        return next(iter(stock_names))
-    return None
+    return stock_names
 
 
 @contextmanager
