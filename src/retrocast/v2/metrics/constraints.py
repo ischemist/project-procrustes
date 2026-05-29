@@ -9,6 +9,12 @@ from retrocast.v2.models.evaluation import CheckResult, CheckStatus, ConstraintR
 from retrocast.v2.models.route import InChIKeyLevel, Route
 from retrocast.v2.models.task import TaskConstraints
 
+ROUTE_DEPTH_RANGES = {
+    "short": (1, 3),
+    "medium": (4, 6),
+    "long": (7, None),
+}
+
 
 class ConstraintCheck(Protocol):
     name: str
@@ -72,6 +78,14 @@ class StockTerminationCheck:
     def check_route(self, route: Route, constraints: TaskConstraints) -> list[CheckResult]:
         if constraints.stock is None:
             return []
+        if not self._stock_keys:
+            return [
+                CheckResult(
+                    code="constraint.stock_termination.no_stock_keys",
+                    status=CheckStatus.FAIL,
+                    details={"stock": constraints.stock},
+                )
+            ]
         return self._check_stock(route, constraints.stock)
 
     def _check_stock(self, route: Route, expected_stock: str) -> list[CheckResult]:
@@ -134,11 +148,14 @@ class RouteDepthCheck:
     name = "route-depth"
 
     def check_route(self, route: Route, constraints: TaskConstraints) -> list[CheckResult]:
-        if not isinstance(constraints.route_depth, int):
+        if constraints.route_depth is None:
             return []
-        return self._check_route_depth(route, constraints.route_depth)
+        if isinstance(constraints.route_depth, int):
+            return self._check_max_depth(route, constraints.route_depth)
+        min_depth, max_depth = ROUTE_DEPTH_RANGES[constraints.route_depth]
+        return self._check_depth_range(route, min_depth=min_depth, max_depth=max_depth)
 
-    def _check_route_depth(self, route: Route, max_depth: int) -> list[CheckResult]:
+    def _check_max_depth(self, route: Route, max_depth: int) -> list[CheckResult]:
         route_depth = route.depth()
         if route_depth <= max_depth:
             return []
@@ -147,5 +164,17 @@ class RouteDepthCheck:
                 code="constraint.route_depth.exceeded",
                 status=CheckStatus.FAIL,
                 details={"route_depth": route_depth, "max_depth": max_depth},
+            )
+        ]
+
+    def _check_depth_range(self, route: Route, *, min_depth: int, max_depth: int | None) -> list[CheckResult]:
+        route_depth = route.depth()
+        if route_depth >= min_depth and (max_depth is None or route_depth <= max_depth):
+            return []
+        return [
+            CheckResult(
+                code="constraint.route_depth.out_of_range",
+                status=CheckStatus.FAIL,
+                details={"route_depth": route_depth, "min_depth": min_depth, "max_depth": max_depth},
             )
         ]

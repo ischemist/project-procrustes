@@ -52,7 +52,8 @@ def score_candidate(
             constraints=ConstraintResult(status=CheckStatus.NOT_EVALUATED),
         )
 
-    assert candidate.route is not None
+    if candidate.route is None:
+        raise ValueError("Candidate route/failure invariant was violated.")
     route = candidate.route
     _check_route_validity(route, tier_checkers, validity)
     constraints_result = constraint_checker.check_route(route, constraints)

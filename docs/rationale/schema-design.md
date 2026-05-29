@@ -354,6 +354,12 @@ class Benchmark(Task):
     description: str
 ```
 
+`route_depth` integers are inclusive maximum depths. Named depth constraints are ranges:
+
+- `short`: depth 1-3
+- `medium`: depth 4-6
+- `long`: depth 7+
+
 One benchmark is a `Task`. One daedalus query is also a `Task`, usually with one target.
 
 ## 3. Ingest
