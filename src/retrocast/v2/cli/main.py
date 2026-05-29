@@ -4,7 +4,6 @@ import argparse
 import json
 import logging
 import sys
-from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -34,28 +33,21 @@ from retrocast.v2.io import (
     load_benchmark,
     load_candidates,
     load_collected_candidates,
-    load_collected_routes,
     load_evaluation,
-    load_routes,
     save_analysis_report,
     save_candidates,
     save_collected_candidates,
-    save_collected_routes,
     save_evaluation,
-    save_routes,
 )
 from retrocast.v2.metrics.constraints import TaskConstraintChecker
 from retrocast.v2.models import Candidate
-from retrocast.v2.models.route import InChIKeyLevel, Route
+from retrocast.v2.models.route import InChIKeyLevel
 from retrocast.v2.models.task import Benchmark
 from retrocast.v2.workflow import (
     adapt_candidates,
-    adapt_routes,
     analyze,
     collect_candidates,
-    collect_routes,
     ingest_candidates,
-    ingest_routes,
     score,
 )
 from retrocast.v2.workflow.stats import candidate_statistics, collected_candidate_statistics, evaluation_statistics
@@ -110,7 +102,7 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("config", help="Show resolved configuration and paths")
     subparsers.add_parser("list-adapters", help="List available schema v2 adapters")
 
-    adapt = subparsers.add_parser("adapt", help="Adapt raw planner output into v2 candidates or routes")
+    adapt = subparsers.add_parser("adapt", help="Adapt raw planner output into v2 candidates")
     adapt.add_argument("--input", required=True, type=Path)
     adapt.add_argument("--output", required=True, type=Path)
     adapt.add_argument("--adapter", required=True)
@@ -118,20 +110,17 @@ def _build_parser() -> argparse.ArgumentParser:
     adapt.add_argument(
         "--input-kind", choices=["provider-output", "target-keyed-provider-output"], default="provider-output"
     )
-    adapt.add_argument("--artifact", choices=["candidates", "routes"], default="candidates")
     adapt.add_argument("--mode", choices=["strict", "prune"], default="strict")
 
-    collect = subparsers.add_parser("collect", help="Collect v2 candidates or routes by benchmark target")
+    collect = subparsers.add_parser("collect", help="Collect v2 candidates by benchmark target")
     collect.add_argument("--input", required=True, type=Path)
     collect.add_argument("--benchmark", required=True, type=Path)
     collect.add_argument("--output", required=True, type=Path)
-    collect.add_argument("--artifact", choices=["candidates", "routes"], default="candidates")
 
     ingest = subparsers.add_parser("ingest", help="Project-mode v2 adapt plus collect")
     _add_model_dataset_args(ingest)
     ingest.add_argument("--adapter", help="Override adapter from raw manifest")
     ingest.add_argument("--mode", choices=["strict", "prune"], default="strict")
-    ingest.add_argument("--artifact", choices=["candidates", "routes"], default="candidates")
     ingest.add_argument("--no-progress", action="store_true", help="Disable progress bars during ingestion")
 
     score_parser = subparsers.add_parser("score", help="Score v2 processed candidates")
@@ -174,26 +163,15 @@ def handle_adapt(args: argparse.Namespace) -> None:
         if args.benchmark is None:
             raise ValueError("--benchmark is required for target-keyed provider output")
         task = load_benchmark(args.benchmark)
-        if args.artifact == "candidates":
-            collected = ingest_candidates(raw_payload, adapter, task, mode=mode)
-            candidates = _flatten_candidates(collected)
-            save_candidates(candidates, args.output)
-            stats = candidate_statistics(candidates).to_manifest_dict()
-        else:
-            collected_routes = ingest_routes(raw_payload, adapter, task, mode=mode)
-            routes = _flatten_collected_routes(collected_routes)
-            save_routes(routes, args.output)
-            stats = {"final_routes_saved": len(routes)}
+        collected = ingest_candidates(raw_payload, adapter, task, mode=mode)
+        candidates = _flatten_candidates(collected)
+        save_candidates(candidates, args.output)
+        stats = candidate_statistics(candidates).to_manifest_dict()
         sources = [args.input, args.benchmark]
     else:
-        if args.artifact == "candidates":
-            candidates = adapt_candidates(raw_payload, adapter, mode=mode)
-            save_candidates(candidates, args.output)
-            stats = candidate_statistics(candidates).to_manifest_dict()
-        else:
-            routes = adapt_routes(raw_payload, adapter, mode=mode)
-            save_routes(routes, args.output)
-            stats = {"final_routes_saved": len(routes)}
+        candidates = adapt_candidates(raw_payload, adapter, mode=mode)
+        save_candidates(candidates, args.output)
+        stats = candidate_statistics(candidates).to_manifest_dict()
         sources = [args.input]
 
     write_manifest(
@@ -205,24 +183,18 @@ def handle_adapt(args: argparse.Namespace) -> None:
         parameters={
             "adapter": normalize_adapter_slug(args.adapter),
             "input_kind": args.input_kind,
-            "artifact": args.artifact,
             "mode": mode,
         },
         statistics=stats,
     )
-    logger.info("Adapted v2 %s artifact to %s", args.artifact, args.output)
+    logger.info("Adapted v2 candidates to %s", args.output)
 
 
 def handle_collect(args: argparse.Namespace) -> None:
     task = load_benchmark(args.benchmark)
-    if args.artifact == "candidates":
-        collected = collect_candidates(load_candidates(args.input), task)
-        save_collected_candidates(collected, args.output)
-        stats = collected_candidate_statistics(collected).to_manifest_dict()
-    else:
-        collected_routes = collect_routes(load_routes(args.input), task)
-        save_collected_routes(collected_routes, args.output)
-        stats = {"final_routes_saved": sum(len(routes) for routes in collected_routes.values())}
+    collected = collect_candidates(load_candidates(args.input), task)
+    save_collected_candidates(collected, args.output)
+    stats = collected_candidate_statistics(collected).to_manifest_dict()
 
     write_manifest(
         manifest_sidecar_path(args.output),
@@ -230,10 +202,9 @@ def handle_collect(args: argparse.Namespace) -> None:
         sources=[args.input, args.benchmark],
         outputs=[args.output],
         root_dir=args.output.parent.resolve(),
-        parameters={"artifact": args.artifact},
         statistics=stats,
     )
-    logger.info("Collected v2 %s artifact to %s", args.artifact, args.output)
+    logger.info("Collected v2 candidates to %s", args.output)
 
 
 def handle_ingest(args: argparse.Namespace, config: dict[str, Any]) -> None:
@@ -293,18 +264,10 @@ def _ingest_one(
     )
 
     def run_ingest(progress_callback=None) -> tuple[Path, dict[str, object]]:
-        if args.artifact == "candidates":
-            collected = ingest_candidates(
-                raw_payload, adapter, task, mode=args.mode, progress_callback=progress_callback
-            )
-            output_path = output_dir / "candidates.json.gz"
-            save_collected_candidates(collected, output_path)
-            return output_path, collected_candidate_statistics(collected).to_manifest_dict()
-
-        routes = ingest_routes(raw_payload, adapter, task, mode=args.mode, progress_callback=progress_callback)
-        output_path = output_dir / "routes.json.gz"
-        save_collected_routes(routes, output_path)
-        return output_path, {"final_routes_saved": sum(len(target_routes) for target_routes in routes.values())}
+        collected = ingest_candidates(raw_payload, adapter, task, mode=args.mode, progress_callback=progress_callback)
+        output_path = output_dir / "candidates.json.gz"
+        save_collected_candidates(collected, output_path)
+        return output_path, collected_candidate_statistics(collected).to_manifest_dict()
 
     if show_route_progress:
         with create_cli_progress(console=console, unit="routes") as progress:
@@ -328,7 +291,6 @@ def _ingest_one(
             "model": model_name,
             "benchmark": benchmark_name,
             "adapter": normalize_adapter_slug(adapter_name),
-            "artifact": args.artifact,
             "mode": args.mode,
         },
         statistics=stats,
@@ -346,20 +308,11 @@ def handle_score(args: argparse.Namespace, config: dict[str, Any]) -> None:
 def _score_one(model_name: str, benchmark_name: str, paths: dict[str, Path], args: argparse.Namespace) -> None:
     task_path = paths["benchmarks"] / f"{benchmark_name}.json.gz"
     candidates_path = paths["processed"] / benchmark_name / model_name / "candidates.json.gz"
-    routes_path = paths["processed"] / benchmark_name / model_name / "routes.json.gz"
-    if candidates_path.exists():
-        predictions = load_collected_candidates(candidates_path)
-        prediction_path = candidates_path
-    elif routes_path.exists():
-        predictions = {
-            target_id: [Candidate(rank=index, route=route) for index, route in enumerate(routes, start=1)]
-            for target_id, routes in load_collected_routes(routes_path).items()
-        }
-        prediction_path = routes_path
-    else:
-        logger.warning("Skipping %s/%s: no processed candidates or routes", model_name, benchmark_name)
+    if not candidates_path.exists():
+        logger.warning("Skipping %s/%s: no processed candidates", model_name, benchmark_name)
         return
 
+    predictions = load_collected_candidates(candidates_path)
     task = load_benchmark(task_path)
     stock_name = _resolve_stock_name(task, args.stock) or "task"
     stock: set[Any] = set()
@@ -380,7 +333,7 @@ def _score_one(model_name: str, benchmark_name: str, paths: dict[str, Path], arg
     output_dir = paths["scored"] / benchmark_name / model_name / stock_name
     output_path = output_dir / "evaluation.json.gz"
     save_evaluation(evaluation, output_path)
-    sources = [task_path, prediction_path] + ([stock_path] if stock_path is not None else [])
+    sources = [task_path, candidates_path] + ([stock_path] if stock_path is not None else [])
     write_manifest(
         output_dir / "manifest.json",
         action="score:v2",
@@ -532,10 +485,6 @@ def _resolve_stock_name(task: Benchmark, stock_override: str | None) -> str | No
 
 def _flatten_candidates(candidates_by_target: dict[str, list[Candidate]]) -> list[Candidate]:
     return [candidate for candidates in candidates_by_target.values() for candidate in candidates]
-
-
-def _flatten_collected_routes(routes_by_target: Mapping[str, Sequence[Route]]) -> list[Route]:
-    return [route for routes in routes_by_target.values() for route in routes]
 
 
 if __name__ == "__main__":
