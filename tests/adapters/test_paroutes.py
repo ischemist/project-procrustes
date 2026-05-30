@@ -29,7 +29,7 @@ def target_for(raw_route: dict, target_id: str = "target") -> Target:
 
 
 def target_for_entry(entry) -> Target:
-    smiles = canonicalize_smiles(entry.payload.smiles)
+    smiles = canonicalize_smiles(entry.payload["smiles"])
     return Target(id=entry.source_key, smiles=smiles, inchikey=get_inchi_key(smiles))
 
 
@@ -195,12 +195,21 @@ def test_paroutes_iter_raw_routes_rejects_scalar_payload() -> None:
 
 @pytest.mark.contract
 def test_paroutes_iter_raw_routes_accepts_raw_route_list(raw_paroutes_route) -> None:
-    entries = list(PaRoutesAdapter().iter_raw_routes([raw_paroutes_route, {"bad": "route"}], source_key="raw-file"))
+    entries = list(PaRoutesAdapter().iter_raw_routes([raw_paroutes_route], source_key="raw-file"))
 
-    assert len(entries) == 2
-    assert [entry.source_key for entry in entries] == ["raw-file", "raw-file"]
-    assert [entry.source_row_index for entry in entries] == [1, 2]
-    assert [entry.source_order for entry in entries] == [1, 2]
+    assert len(entries) == 1
+    assert entries[0].payload == raw_paroutes_route
+    assert entries[0].source_key == "raw-file"
+    assert entries[0].source_row_index == 1
+    assert entries[0].source_order == 1
+
+
+@pytest.mark.contract
+def test_paroutes_iter_raw_routes_rejects_invalid_raw_route_list_row(raw_paroutes_route) -> None:
+    with pytest.raises(AdapterSchemaError) as exc_info:
+        list(PaRoutesAdapter().iter_raw_routes([raw_paroutes_route, {"bad": "route"}], source_key="raw-file"))
+
+    assert exc_info.value.code == "adapter.schema_invalid"
 
 
 @pytest.mark.contract

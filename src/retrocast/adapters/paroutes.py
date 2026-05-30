@@ -147,6 +147,8 @@ class PaRoutesAdapter:
     ) -> Iterator[RawRouteEntry]:
         if isinstance(raw_payload, Sequence) and not isinstance(raw_payload, str | bytes):
             for row_index, raw_route in enumerate(raw_payload, start=1):
+                target_id = source_key or f"row-{row_index}"
+                self._validate_route_root(raw_route, target_id=target_id)
                 yield RawRouteEntry(
                     payload=raw_route,
                     source_key=source_key,
@@ -164,8 +166,9 @@ class PaRoutesAdapter:
         is_route_root = raw_payload.get("type") == "mol" or "smiles" in raw_payload or "children" in raw_payload
         if is_route_root:
             target_id = source_key or "<unknown>"
+            self._validate_route_root(raw_payload, target_id=target_id)
             yield RawRouteEntry(
-                payload=self._validate_route_root(raw_payload, target_id=target_id),
+                payload=raw_payload,
                 source_key=source_key,
                 source_order=1,
             )
@@ -174,8 +177,9 @@ class PaRoutesAdapter:
         for source_order, (target_id, raw_route) in enumerate(raw_payload.items(), start=1):
             if not isinstance(target_id, str):
                 raise adapter_schema_error("paroutes", source_key or "<unknown>", "target id keys must be strings")
+            self._validate_route_root(raw_route, target_id=target_id)
             yield RawRouteEntry(
-                payload=self._validate_route_root(raw_route, target_id=target_id),
+                payload=raw_route,
                 source_key=target_id,
                 source_order=source_order,
             )

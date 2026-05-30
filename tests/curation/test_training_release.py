@@ -34,7 +34,7 @@ from retrocast.curation.training.audit import (
     render_sanity_checks_markdown,
     render_single_step_sanity_markdown,
 )
-from retrocast.exceptions import TrainingReleaseError
+from retrocast.exceptions import AdapterError, TrainingReleaseError
 from retrocast.io import load_training_route_records, save_json_gz, save_jsonl_gz, save_lines_gz
 from retrocast.models import Molecule, Reaction, Route
 from retrocast.typing import InChIKeyStr, ReactionSmilesStr, SmilesStr
@@ -412,20 +412,15 @@ def test_adaptation_rejects_ambiguous_paroutes_reaction_hashes(tmp_path: Path, m
         adapt_training_routes(raw_routes_path(tmp_path, [raw]), dataset="all", show_progress=False)
 
 
-def test_adaptation_counts_invalid_raw_routes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_adaptation_rejects_invalid_raw_route_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RETROCAST_CACHE_DIR", str(tmp_path / "cache"))
-    adaptation = adapt_training_routes(
-        raw_routes_path(tmp_path, [[], {}, {"smiles": ""}, raw_route()]),
-        dataset="all",
-        show_progress=False,
-    )
 
-    assert len(adaptation.routes) == 1
-    assert adaptation.stats.raw_routes == 4
-    assert adaptation.stats.adapted_routes == 1
-    assert adaptation.stats.skipped_routes == 3
-    assert adaptation.stats.skipped_without_error_code == 0
-    assert adaptation.stats.failures_by_code == {"adapter.schema_invalid": 3}
+    with pytest.raises(AdapterError) as exc_info:
+        adapt_training_routes(
+            raw_routes_path(tmp_path, [raw_route(), {"bad": "route"}]), dataset="all", show_progress=False
+        )
+
+    assert exc_info.value.code == "adapter.schema_invalid"
 
 
 def test_adaptation_uses_source_row_index_for_stable_route_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
