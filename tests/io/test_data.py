@@ -16,7 +16,6 @@ from retrocast.io import (
     load_evaluation,
     load_execution_stats,
     load_json_artifact,
-    load_raw_paroutes_list,
     load_routes,
     load_stock_file,
     load_task,
@@ -242,17 +241,6 @@ def test_route_candidate_evaluation_analysis_and_execution_artifacts_round_trip(
     assert load_evaluation(evaluation_path) == evaluation
     assert load_json_artifact(analysis_path) == analysis.model_dump(mode="json", exclude_none=True)
     assert load_execution_stats(execution_path) == execution
-
-
-def test_raw_paroutes_list_loader_rejects_non_list_payload(tmp_path) -> None:
-    valid_path = tmp_path / "raw.json.gz"
-    invalid_path = tmp_path / "invalid.json.gz"
-    save_json_gz([{"target": "CCO"}], valid_path)
-    save_json_gz({"target": "CCO"}, invalid_path)
-
-    assert load_raw_paroutes_list(valid_path) == [{"target": "CCO"}]
-    with pytest.raises(ArtifactFormatError):
-        load_raw_paroutes_list(invalid_path)
 
 
 def test_benchmark_results_loader_exposes_evaluation_sequence_and_statistics(tmp_path) -> None:

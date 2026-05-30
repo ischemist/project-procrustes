@@ -10,6 +10,7 @@ from retrocast.exceptions import SecurityError
 DEFAULT_DATA_DIR = Path("data/retrocast")
 LEGACY_DATA_DIR = Path("data")  # Old default for migration detection
 ENV_VAR_NAME = "RETROCAST_DATA_DIR"
+DEFAULT_CACHE_DIR = Path.home() / ".cache" / "retrocast"
 
 
 # --- Security: Path validation utilities ---
@@ -225,11 +226,18 @@ def get_data_dir_source(
     if cli_arg is not None:
         return "CLI argument (--data-dir)"
 
-    env_value = os.environ.get(ENV_VAR_NAME)
-    if env_value:
+    if os.environ.get(ENV_VAR_NAME):
         return f"environment variable ({ENV_VAR_NAME})"
 
     if config_value is not None:
         return "config file (data_dir)"
 
     return "default"
+
+
+def resolve_cache_dir(*parts: str) -> Path:
+    env_value = os.environ.get("RETROCAST_CACHE_DIR")
+    root = Path(env_value) if env_value else DEFAULT_CACHE_DIR
+    for part in parts:
+        validate_directory_name(part, "cache path segment")
+    return root.joinpath(*parts)

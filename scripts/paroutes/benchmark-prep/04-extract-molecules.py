@@ -19,7 +19,7 @@ from tqdm import tqdm
 from retrocast.adapters.paroutes import PaRoutesAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import RetroCastException
-from retrocast.io import load_benchmark, load_raw_paroutes_list
+from retrocast.io import load_benchmark, load_json_artifact
 from retrocast.models import Molecule, Target
 from retrocast.typing import InChIKeyStr, InchiKeyStr, SmilesStr
 from retrocast.utils.logging import configure_script_logging, logger
@@ -72,16 +72,18 @@ def main():
 
     # --- Step 1: Cast all routes and extract molecules ---
     logger.info(f"Loading raw PaRoutes data from {raw_path}...")
-    raw_list = load_raw_paroutes_list(raw_path)
-    logger.info(f"Loaded {len(raw_list)} raw routes.")
-
     adapter = PaRoutesAdapter()
+    raw_entries = list(adapter.iter_raw_routes(load_json_artifact(raw_path)))
+    logger.info(f"Loaded {len(raw_entries)} raw routes.")
+
     # Master dict: inchikey -> smiles
     molecules: dict[InchiKeyStr, str] = {}
     failures = 0
 
-    for i, raw_item in tqdm(enumerate(raw_list), total=len(raw_list), desc="Casting routes"):
-        target_id = f"all-{i + 1:06d}"
+    for source_order, entry in tqdm(enumerate(raw_entries, start=1), total=len(raw_entries), desc="Casting routes"):
+        raw_item = entry.payload
+        row_index = entry.source_row_index or source_order
+        target_id = f"all-{row_index:06d}"
         smiles = canonicalize_smiles(raw_item["smiles"])
 
         target_input = Target(id=target_id, smiles=SmilesStr(smiles), inchikey=InChIKeyStr(get_inchi_key(smiles)))
@@ -97,7 +99,7 @@ def main():
                 molecules[mol.inchikey] = mol.smiles
 
     logger.info(
-        f"Casting complete. {len(molecules)} unique molecules from {len(raw_list) - failures} routes ({failures} rejected)."
+        f"Casting complete. {len(molecules)} unique molecules from {len(raw_entries) - failures} routes ({failures} rejected)."
     )
 
     # --- Step 2: Build tag sets from subset benchmarks ---

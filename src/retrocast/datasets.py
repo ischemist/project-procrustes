@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sys
@@ -21,8 +20,9 @@ from retrocast.exceptions import (
     DatasetResolutionError,
     DatasetVerificationError,
 )
+from retrocast.hashing import hash_file
 from retrocast.io import load_benchmark
-from retrocast.paths import validate_filename
+from retrocast.paths import resolve_cache_dir, validate_filename
 
 TrainingDatasetName = Literal["paroutes"]
 TrainingArtifactName = Literal[
@@ -34,20 +34,14 @@ TrainingSplitName = Literal["all", "training", "validation"]
 TrainingSetFormat = Literal["jsonl", "rsmi"]
 StockFormat = Literal["csv.gz", "txt.gz", "hdf5"]
 
-DEFAULT_TRAINING_SET_BASE_URL = os.getenv(
-    "RETROCAST_TRAINING_SET_BASE_URL",
-    "https://files.ischemist.com/retrocast/training-sets",
+DEFAULT_TRAINING_SET_BASE_URL = os.environ.get(
+    "RETROCAST_TRAINING_SET_BASE_URL", "https://files.ischemist.com/retrocast/training-sets"
 )
-DEFAULT_TRAINING_SET_CACHE_DIR = Path(
-    os.getenv("RETROCAST_TRAINING_SET_CACHE_DIR", str(Path.home() / ".cache" / "retrocast" / "training-sets"))
+DEFAULT_TRAINING_SET_CACHE_SUBDIR = "training-sets"
+DEFAULT_HOSTED_DATA_BASE_URL = os.environ.get(
+    "RETROCAST_HOSTED_DATA_BASE_URL", "https://files.ischemist.com/retrocast/data"
 )
-DEFAULT_HOSTED_DATA_BASE_URL = os.getenv(
-    "RETROCAST_HOSTED_DATA_BASE_URL",
-    "https://files.ischemist.com/retrocast/data",
-)
-DEFAULT_HOSTED_DATA_CACHE_DIR = Path(
-    os.getenv("RETROCAST_HOSTED_DATA_CACHE_DIR", str(Path.home() / ".cache" / "retrocast" / "data"))
-)
+DEFAULT_HOSTED_DATA_CACHE_SUBDIR = "data"
 DEFAULT_DATASET_USER_AGENT = "retrocast/2"
 SUPPORTED_DATASETS: tuple[TrainingDatasetName, ...] = ("paroutes",)
 
@@ -338,7 +332,7 @@ def resolve_training_set_root(
         return Path(output_dir) / release
     if cache_dir is not None:
         return Path(cache_dir) / dataset / release
-    return DEFAULT_TRAINING_SET_CACHE_DIR / dataset / release
+    return resolve_cache_dir(DEFAULT_TRAINING_SET_CACHE_SUBDIR) / dataset / release
 
 
 def resolve_hosted_data_root(*, cache_dir: Path | None, output_dir: Path | None) -> Path:
@@ -346,7 +340,7 @@ def resolve_hosted_data_root(*, cache_dir: Path | None, output_dir: Path | None)
         return Path(output_dir)
     if cache_dir is not None:
         return Path(cache_dir)
-    return DEFAULT_HOSTED_DATA_CACHE_DIR
+    return resolve_cache_dir(DEFAULT_HOSTED_DATA_CACHE_SUBDIR)
 
 
 def build_training_set_url(
@@ -429,7 +423,7 @@ def download_verified_file(
         missing_message=missing_message,
         missing_context=missing_context,
     )
-    if local_path.exists() and sha256_file(local_path) == expected_hash:
+    if local_path.exists() and hash_file(local_path) == expected_hash:
         return expected_hash
 
     download_url_to_path(
@@ -438,7 +432,7 @@ def download_verified_file(
         show_progress=show_progress,
         progress_description=progress_description,
     )
-    actual_hash = sha256_file(local_path)
+    actual_hash = hash_file(local_path)
     if actual_hash != expected_hash:
         local_path.unlink(missing_ok=True)
         checksums_path.unlink(missing_ok=True)
@@ -622,14 +616,6 @@ def write_response_with_progress(*, response: Any, handle: BufferedWriter, descr
         while chunk := response.read(8192):
             handle.write(chunk)
             progress.update(task_id, advance=len(chunk))
-
-
-def sha256_file(path: Path) -> str:
-    sha256 = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(8192):
-            sha256.update(chunk)
-    return sha256.hexdigest()
 
 
 def _single_stock_name(benchmark: Any) -> str | None:

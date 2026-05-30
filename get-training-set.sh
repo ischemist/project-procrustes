@@ -5,7 +5,8 @@ VERSION="2026.05.12"
 
 main() {
     BASE_URL="${RETROCAST_TRAINING_SET_BASE_URL:-https://files.ischemist.com/retrocast/training-sets}"
-    CACHE_DIR="${RETROCAST_TRAINING_SET_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/retrocast/training-sets}"
+    CACHE_ROOT="${RETROCAST_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/retrocast}"
+    CACHE_DIR="${RETROCAST_TRAINING_SET_CACHE_DIR:-$CACHE_ROOT/training-sets}"
     OUTPUT_DIR=""
     DATASET="paroutes"
     ARTIFACT=""

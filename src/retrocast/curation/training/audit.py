@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,7 +9,7 @@ from typing import Any
 from retrocast.curation.training.records import TrainingReactionRecord
 from retrocast.curation.training.route_release import _route_transform_key
 from retrocast.exceptions import TrainingReleaseError
-from retrocast.io import iter_jsonl_gz, load_lines_gz, load_raw_paroutes_list, load_training_route_records
+from retrocast.io import iter_jsonl_gz, load_lines_gz, load_training_route_records
 
 
 @dataclass(frozen=True)
@@ -108,14 +109,12 @@ def render_route_release_split_audit_markdown(*, release_root_name: str, audits:
     return "\n".join(lines)
 
 
-def load_holdout_reference(raw_dir: Path) -> dict[str, int]:
+def load_holdout_reference(release_dir: Path) -> dict[str, int]:
+    manifest = json.loads((release_dir / "manifest.json").read_text(encoding="utf-8"))
+    adaptation = manifest["summary"]["adaptation"]
     return {
-        "n1": len(load_raw_paroutes_list(raw_dir / "n1-routes.json.gz"))
-        if (raw_dir / "n1-routes.json.gz").exists()
-        else 0,
-        "n5": len(load_raw_paroutes_list(raw_dir / "n5-routes.json.gz"))
-        if (raw_dir / "n5-routes.json.gz").exists()
-        else 0,
+        "n1": adaptation["n1"]["raw_routes"],
+        "n5": adaptation["n5"]["raw_routes"],
     }
 
 

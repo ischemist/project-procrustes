@@ -25,7 +25,6 @@ from retrocast.utils.logging import configure_script_logging, logger
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 DATA_DIR = BASE_DIR / "data" / "retrocast"
-RAW_DIR = DATA_DIR / "0-assets" / "paroutes"
 RELEASE_VERSION = "v2026-05-29"
 DEFAULT_RELEASE_ROOT = DATA_DIR / "releases" / "paroutes-training-sets" / RELEASE_VERSION
 ROUTE_RELEASE_NAMES = ("route-holdout-n1-n5", "reaction-holdout-n1-n5")
@@ -46,12 +45,6 @@ def main() -> None:
         default=None,
         help="markdown report path. default: <release-root>/release-audit.md",
     )
-    parser.add_argument(
-        "--raw-dir",
-        type=Path,
-        default=RAW_DIR,
-        help=f"raw paroutes asset directory for holdout leak checks. default: {RAW_DIR}",
-    )
     args = parser.parse_args()
     output_path = args.output_path or args.release_root / "release-audit.md"
 
@@ -63,7 +56,6 @@ def main() -> None:
     if not release_dirs:
         raise FileNotFoundError(f"no route releases found under {args.release_root}")
 
-    holdout = load_holdout_reference(args.raw_dir)
     sanity_checks = {}
     audits = []
     for release_name, release_dir in release_dirs.items():
@@ -76,7 +68,7 @@ def main() -> None:
         sanity_checks[release_name] = audit_route_release_sanity(
             release_name=release_name,
             files=files,
-            holdout=holdout,
+            holdout=load_holdout_reference(release_dir),
         )
 
     report = render_route_release_split_audit_markdown(release_root_name=args.release_root.name, audits=audits)

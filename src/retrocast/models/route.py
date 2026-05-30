@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
@@ -9,14 +7,14 @@ from typing import Annotated, Any, Literal
 from pydantic import AfterValidator, BaseModel, Field
 
 from retrocast.chem import InChIKeyLevel, reduce_inchikey
+from retrocast.hashing import hash_json
 from retrocast.typing import InChIKeyStr, ReactionSmilesStr, SmilesStr
 
 RouteNodeKind = Literal["m", "r"]
 
 
 def _stable_hash(value: Any) -> str:
-    payload = json.dumps(value, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode()).hexdigest()
+    return hash_json(value)
 
 
 def _validate_depth(depth: int | None) -> None:

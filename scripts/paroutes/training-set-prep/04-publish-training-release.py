@@ -125,7 +125,7 @@ def main() -> None:
     parser.add_argument("--dataset", default=DEFAULT_DATASET, help="dataset slug under training-sets/")
     parser.add_argument(
         "--remote-root",
-        default=os.getenv(REMOTE_ROOT_ENV_VAR),
+        default=os.environ.get(REMOTE_ROOT_ENV_VAR),
         help="remote retrocast root, e.g. icgroup:/var/www/files.ischemist.com/retrocast",
     )
     parser.add_argument("--staging-dir", type=Path, default=None, help="optional persistent local staging dir")

@@ -16,7 +16,7 @@ from tqdm import tqdm
 from retrocast import adapt_route, get_adapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.curation.generators import generate_pruned_routes
-from retrocast.io import create_manifest, load_raw_paroutes_list, load_stock_file, save_benchmark
+from retrocast.io import create_manifest, load_json_artifact, load_stock_file, save_benchmark
 from retrocast.metrics import TaskConstraintChecker
 from retrocast.models import Benchmark, Route, Target, TaskConstraints
 from retrocast.typing import InChIKeyStr, SmilesStr
@@ -43,7 +43,8 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
     out_path = DEF_DIR / f"paroutes-{name}-full{suffix}.json.gz"
 
     logger.info(f"Processing {name}... (check_buyables={check_buyables}, prune_intermediates={prune_intermediates})")
-    raw_list = load_raw_paroutes_list(raw_path)
+    adapter = get_adapter("paroutes")
+    raw_entries = list(adapter.iter_raw_routes(load_json_artifact(raw_path)))
 
     # Load the appropriate stock for this dataset
     if check_buyables:
@@ -61,10 +62,12 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
     targets_with_pruning = 0
     stock_checker = TaskConstraintChecker.stock_termination(stock=stock_for_validation, stock_name=stock_name_str)
 
-    for i, raw_item in tqdm(enumerate(raw_list), total=len(raw_list), desc=f"Casting {name}"):
+    for source_order, entry in tqdm(enumerate(raw_entries, start=1), total=len(raw_entries), desc=f"Casting {name}"):
+        raw_item = entry.payload
+        row_index = entry.source_row_index or source_order
         # Generate stable ID based on index
         # n5-00001, n5-00002...
-        target_id = f"{name}-{i + 1:05d}"
+        target_id = f"{name}-{row_index:05d}"
 
         # 1. Canonicalize SMILES
         smiles = canonicalize_smiles(raw_item["smiles"])
@@ -72,7 +75,7 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
         # 2. Adapt the Route
         # (We construct a temporary TargetIdentity for the adapter)
         target_input = Target(id=target_id, smiles=SmilesStr(smiles), inchikey=InChIKeyStr(get_inchi_key(smiles)))
-        route = adapt_route(raw_item, get_adapter("paroutes"), target=target_input)
+        route = adapt_route(raw_item, adapter, target=target_input)
 
         if not route:
             failures += 1

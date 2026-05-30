@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -9,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal, TypeAlias
 
 from retrocast._version import __version__
+from retrocast.hashing import hash_file, hash_json
 from retrocast.models.provenance import FileInfo, Manifest
 
 logger = logging.getLogger(__name__)
@@ -29,12 +28,8 @@ ManifestOutput: TypeAlias = UnlabeledManifestOutput | LabeledManifestOutput
 
 
 def calculate_file_hash(path: Path) -> str:
-    sha256 = hashlib.sha256()
     try:
-        with open(path, "rb") as handle:
-            while chunk := handle.read(8192):
-                sha256.update(chunk)
-        return sha256.hexdigest()
+        return hash_file(path)
     except OSError:
         logger.exception("could not hash file %s", path)
         return "error-hashing-file"
@@ -134,8 +129,7 @@ def _content_hash(obj: Any, content_type: ContentType) -> str | None:
         payload = sorted(obj.keys())
     else:
         payload = _jsonable(obj)
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(encoded).hexdigest()
+    return hash_json(payload)
 
 
 def _jsonable(obj: Any) -> Any:

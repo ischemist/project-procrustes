@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 from collections import defaultdict
 from collections.abc import Sequence
 from pathlib import Path
@@ -15,6 +13,7 @@ from retrocast.curation.training.records import (
     TrainingSetBuildConfig,
 )
 from retrocast.exceptions import TrainingReleaseError
+from retrocast.hashing import hash_json
 from retrocast.io import ContentType, create_manifest, save_jsonl_gz, save_lines_gz
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
@@ -186,8 +185,7 @@ def summarize_reaction_records(records: Sequence[TrainingReactionRecord]) -> dic
 
 def reaction_records_content_hash(records: Sequence[TrainingReactionRecord]) -> str:
     signatures = sorted(reaction_record_signature(record) for record in records)
-    payload = json.dumps(signatures, separators=(",", ":"))
-    return hashlib.sha256(payload.encode()).hexdigest()
+    return hash_json(signatures)
 
 
 def reaction_record_signature(record: TrainingReactionRecord) -> tuple[Any, ...]:

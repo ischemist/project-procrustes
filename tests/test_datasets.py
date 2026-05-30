@@ -276,6 +276,22 @@ def test_dataset_url_root_filename_and_checksum_helpers_are_explicit(tmp_path: P
         load_sha256sums(checksums)
 
 
+def test_default_dataset_cache_roots_use_runtime_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RETROCAST_CACHE_DIR", str(tmp_path / "cache-a"))
+    assert (
+        resolve_training_set_root(dataset="paroutes", release="v1", cache_dir=None, output_dir=None)
+        == tmp_path / "cache-a" / "training-sets" / "paroutes" / "v1"
+    )
+    assert resolve_hosted_data_root(cache_dir=None, output_dir=None) == tmp_path / "cache-a" / "data"
+
+    monkeypatch.setenv("RETROCAST_CACHE_DIR", str(tmp_path / "cache-b"))
+    assert (
+        resolve_training_set_root(dataset="paroutes", release="v1", cache_dir=None, output_dir=None)
+        == tmp_path / "cache-b" / "training-sets" / "paroutes" / "v1"
+    )
+    assert resolve_hosted_data_root(cache_dir=None, output_dir=None) == tmp_path / "cache-b" / "data"
+
+
 def test_progress_visibility_and_writer_handle_non_tty_and_unknown_lengths(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

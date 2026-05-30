@@ -34,21 +34,23 @@ from retrocast.curation.training.audit import (
     render_sanity_checks_markdown,
     render_single_step_sanity_markdown,
 )
-from retrocast.exceptions import TrainingReleaseError
+from retrocast.exceptions import AdapterError, TrainingReleaseError
 from retrocast.io import load_training_route_records, save_json_gz, save_jsonl_gz, save_lines_gz
 from retrocast.models import Molecule, Reaction, Route
 from retrocast.typing import InChIKeyStr, ReactionSmilesStr, SmilesStr
 
 
-def test_schema_v2_training_route_and_reaction_release_roundtrip(tmp_path: Path) -> None:
-    adapted, stats = adapt_training_routes(
-        [raw_route()], "all", id_width=2, collect_reactions=True, show_progress=False
-    )
+def test_schema_v2_training_route_and_reaction_release_roundtrip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("RETROCAST_CACHE_DIR", str(tmp_path / "cache"))
+    source_path = raw_routes_path(tmp_path, [raw_route()])
+    adaptation = adapt_training_routes(source_path, dataset="all", show_progress=False)
     config = TrainingSetBuildConfig(holdout_mode="route", val_fraction=0.0, show_progress=False)
 
     route_result = TrainingRouteReleaseBuilder(
-        all_routes=adapted,
-        all_adaptation=stats,
+        all_routes=adaptation.routes,
+        all_adaptation=adaptation.stats,
         holdout_routes={},
         holdout_adaptation={},
         config=config,
@@ -146,12 +148,17 @@ def test_route_split_audit_markdown_summarizes_depth_and_convergence(tmp_path: P
         route_record("train", one_step_route("C.C>>CC"), split="training"),
         route_record("val", two_step_route(), split="validation"),
     ]
-    save_json_gz([{"route": "n1"}], tmp_path / "n1-routes.json.gz")
+    release_dir = tmp_path / "route-holdout-n1-n5"
+    release_dir.mkdir()
+    (release_dir / "manifest.json").write_text(
+        json.dumps({"summary": {"adaptation": {"n1": {"raw_routes": 1}, "n5": {"raw_routes": 0}}}}),
+        encoding="utf-8",
+    )
 
     audit = build_route_release_split_audit(release_name="route-holdout-n1-n5", route_records=records)
     markdown = render_route_release_split_audit_markdown(release_root_name="v1", audits=[audit])
 
-    assert load_holdout_reference(tmp_path) == {"n1": 1, "n5": 0}
+    assert load_holdout_reference(release_dir) == {"n1": 1, "n5": 0}
     assert audit["total"] == 2
     assert "| route-holdout-n1-n5 | 2 | 1 | 1 | 50.0000% |" in markdown
     assert "| false |" in markdown
@@ -393,7 +400,8 @@ def test_training_release_builders_are_single_use() -> None:
         reaction_builder.build()
 
 
-def test_adaptation_rejects_ambiguous_paroutes_reaction_hashes() -> None:
+def test_adaptation_rejects_ambiguous_paroutes_reaction_hashes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RETROCAST_CACHE_DIR", str(tmp_path / "cache"))
     raw = raw_route()
     root_metadata = raw["children"][0]["metadata"]
     child_metadata = raw["children"][0]["children"][1]["children"][0]["metadata"]
@@ -401,18 +409,55 @@ def test_adaptation_rejects_ambiguous_paroutes_reaction_hashes() -> None:
     child_metadata["reaction_hash"] = "same-hash"
 
     with pytest.raises(TrainingReleaseError, match="reaction_hash"):
-        adapt_training_routes([raw], "all", id_width=2, collect_reactions=True, show_progress=False)
+        adapt_training_routes(raw_routes_path(tmp_path, [raw]), dataset="all", show_progress=False)
 
 
-def test_adaptation_counts_invalid_raw_routes() -> None:
-    adapted, stats = adapt_training_routes([[], {}, {"smiles": ""}, raw_route()], "all", 2, False, False)
+def test_adaptation_rejects_invalid_raw_route_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RETROCAST_CACHE_DIR", str(tmp_path / "cache"))
 
-    assert len(adapted) == 1
-    assert stats.raw_routes == 4
-    assert stats.adapted_routes == 1
-    assert stats.skipped_routes == 3
-    assert stats.skipped_without_error_code == 0
-    assert stats.failures_by_code == {"adapter.schema_invalid": 3}
+    with pytest.raises(AdapterError) as exc_info:
+        adapt_training_routes(
+            raw_routes_path(tmp_path, [raw_route(), {"bad": "route"}]), dataset="all", show_progress=False
+        )
+
+    assert exc_info.value.code == "adapter.schema_invalid"
+
+
+def test_adaptation_uses_source_row_index_for_stable_route_ids(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RETROCAST_CACHE_DIR", str(tmp_path / "cache"))
+
+    adaptation = adapt_training_routes(raw_routes_path(tmp_path, [raw_route()]), dataset="all", show_progress=False)
+
+    assert adaptation.stats.raw_routes == 1
+    assert adaptation.routes[0].source.raw_index == 0
+
+
+def test_adaptation_cache_round_trips_without_recasting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RETROCAST_CACHE_DIR", str(tmp_path / "cache"))
+    source_path = raw_routes_path(tmp_path, [raw_route()])
+    first = adapt_training_routes(source_path, dataset="all", show_progress=False)
+
+    monkeypatch.setattr(
+        "retrocast.curation.training.route_release.PaRoutesAdapter.cast",
+        lambda *_args, **_kwargs: pytest.fail("cache hit should not recast routes"),
+    )
+    second = adapt_training_routes(source_path, dataset="all", show_progress=False)
+
+    assert second == first
+
+
+def test_adaptation_cache_key_includes_source_content(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RETROCAST_CACHE_DIR", str(tmp_path / "cache"))
+    source_path = raw_routes_path(tmp_path, [raw_route()])
+    first = adapt_training_routes(source_path, dataset="all", show_progress=False)
+    changed_route = raw_route()
+    changed_route["metadata"] = {"source": "changed"}
+    save_json_gz([changed_route], source_path)
+
+    second = adapt_training_routes(source_path, dataset="all", show_progress=False)
+
+    assert first.routes[0].source.raw_route_hash != second.routes[0].source.raw_route_hash
+    assert second.routes[0].source.patent_id == "US123"
 
 
 def raw_route() -> dict:
@@ -442,6 +487,12 @@ def raw_route() -> dict:
             }
         ],
     }
+
+
+def raw_routes_path(tmp_path: Path, routes: list[object]) -> Path:
+    path = tmp_path / "raw-routes.json.gz"
+    save_json_gz(routes, path)
+    return path
 
 
 def one_step_route(
@@ -498,8 +549,6 @@ def molecule(smiles: str, *, product_of: Reaction | None = None) -> Molecule:
 def adapted_route(name: str, route: Route) -> AdaptedTrainingRoute:
     return AdaptedTrainingRoute(
         route=route,
-        structural_signature=route.signature(),
-        reaction_signatures=route.reaction_signatures(),
         source=RawRouteSource(
             dataset="all", raw_index=0, raw_route_hash=f"hash-{name}", patent_id=route.annotations.get("patent_id")
         ),

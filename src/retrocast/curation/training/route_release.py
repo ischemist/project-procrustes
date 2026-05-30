@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import random
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
@@ -10,6 +8,7 @@ from typing import Any
 
 from tqdm.auto import tqdm
 
+from retrocast._version import __version__
 from retrocast.adapters.paroutes import ConditionSlotParseStatistics, PaRoutesAdapter, analyze_condition_slots
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.curation.filtering import excise_reactions_from_route
@@ -18,49 +17,59 @@ from retrocast.curation.training.records import (
     AdaptedTrainingRoute,
     PreparedTrainingRoute,
     RawRouteSource,
+    TrainingRouteAdaptation,
     TrainingRouteRecord,
     TrainingSetBuildConfig,
     TrainingSetBuildResult,
 )
 from retrocast.exceptions import AdapterError, ChemError, TrainingReleaseError
-from retrocast.io import ContentType, create_manifest, save_jsonl_gz
+from retrocast.hashing import hash_file, hash_json
+from retrocast.io import ContentType, create_manifest, load_json_artifact, save_jsonl_gz
+from retrocast.io.cache import json_type_cache, local_cache
 from retrocast.models.route import Route, RoutePath
 from retrocast.models.task import Target
 from retrocast.typing import InChIKeyStr, SmilesStr
 
 TRAINING_RELEASE_ACTION = "scripts/paroutes/training-set-prep/create-training-release"
+PAROUTES_TRAINING_ROUTE_ID_WIDTH = 6
 
 
 def stable_raw_route_hash(raw_route: dict[str, Any]) -> str:
-    payload = json.dumps(raw_route, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode()).hexdigest()
+    return hash_json(raw_route)
 
 
+@local_cache(
+    namespace="paroutes-adapted-routes",
+    key=lambda source_path, *, dataset, **_: {
+        "retrocast_version": __version__,
+        "function": "adapt_training_routes",
+        "source_sha256": hash_file(source_path),
+        "dataset": dataset,
+    },
+    codec=json_type_cache(TrainingRouteAdaptation),
+)
 def adapt_training_routes(
-    raw_routes: Sequence[dict[str, Any]],
+    source_path: Path,
+    *,
     dataset: str,
-    id_width: int,
-    collect_reactions: bool,
     show_progress: bool = True,
-) -> tuple[list[AdaptedTrainingRoute], AdaptationStatistics]:
+) -> TrainingRouteAdaptation:
     adapter = PaRoutesAdapter()
+    entries = adapter.iter_raw_routes(load_json_artifact(source_path))
     parse_stats = ConditionSlotParseStatistics()
     adapted = []
     failures: dict[str, int] = defaultdict(int)
     reaction_hash_signature_pairs: set[tuple[str, str]] = set()
-    entries = tqdm(raw_routes, desc=f"adapt {dataset}", unit="route", leave=False) if show_progress else raw_routes
-    for index, raw_route in enumerate(entries):
-        if not isinstance(raw_route, dict):
-            failures["adapter.schema_invalid"] += 1
-            continue
-        raw_smiles = raw_route.get("smiles")
-        if not isinstance(raw_smiles, str) or not raw_smiles:
-            failures["adapter.schema_invalid"] += 1
-            continue
+    if show_progress:
+        entries = tqdm(entries, desc=f"adapt {dataset}", unit="route", leave=False)
+    raw_count = 0
+    for entry in entries:
+        assert entry.source_order is not None
+        raw_count += 1
         try:
-            target_smiles = canonicalize_smiles(raw_smiles)
+            target_smiles = canonicalize_smiles(entry.payload["smiles"])
             target = Target(
-                id=f"{dataset}-{index + 1:0{id_width}d}",
+                id=f"{dataset}-{entry.source_order:0{PAROUTES_TRAINING_ROUTE_ID_WIDTH}d}",
                 smiles=SmilesStr(target_smiles),
                 inchikey=InChIKeyStr(get_inchi_key(target_smiles)),
             )
@@ -68,37 +77,38 @@ def adapt_training_routes(
             failures[exc.code] += 1
             continue
 
-        analyze_condition_slots(raw_route, stats=parse_stats)
+        analyze_condition_slots(entry.payload, stats=parse_stats)
         try:
-            route = adapter.cast(raw_route, target=target)
+            route = adapter.cast(entry.payload, target=target)
         except (AdapterError, ChemError) as exc:
             failures[exc.code] += 1
             continue
-        collect_reaction_hash_sanity(route, raw_route, reaction_hash_signature_pairs)
+        collect_reaction_hash_sanity(route, entry.payload, reaction_hash_signature_pairs)
         patent_id = route.annotations.get("patent_id")
         adapted.append(
             AdaptedTrainingRoute(
                 route=route,
-                structural_signature=route.signature(),
-                reaction_signatures=route.reaction_signatures() if collect_reactions else set(),
                 source=RawRouteSource(
                     dataset=dataset,
-                    raw_index=index,
-                    raw_route_hash=stable_raw_route_hash(raw_route),
+                    raw_index=entry.source_order - 1,
+                    raw_route_hash=stable_raw_route_hash(entry.payload),
                     patent_id=patent_id if isinstance(patent_id, str) else None,
                 ),
             )
         )
-    skipped = len(raw_routes) - len(adapted)
+    skipped = raw_count - len(adapted)
     assert_paroutes_reaction_hash_matches_retrocast_signature(reaction_hash_signature_pairs)
     skipped_without_error_code = skipped - sum(failures.values())
-    return adapted, AdaptationStatistics(
-        raw_routes=len(raw_routes),
-        adapted_routes=len(adapted),
-        skipped_routes=skipped,
-        skipped_without_error_code=skipped_without_error_code,
-        failures_by_code=dict(failures),
-        non_fatal_condition_slot_parse=parse_stats,
+    return TrainingRouteAdaptation(
+        routes=adapted,
+        stats=AdaptationStatistics(
+            raw_routes=raw_count,
+            adapted_routes=len(adapted),
+            skipped_routes=skipped,
+            skipped_without_error_code=skipped_without_error_code,
+            failures_by_code=dict(failures),
+            non_fatal_condition_slot_parse=parse_stats,
+        ),
     )
 
 
@@ -125,14 +135,18 @@ class TrainingRouteReleaseBuilder:
         self._started = True
 
         holdout_route_signatures = {
-            route.structural_signature for routes in self.holdout_routes.values() for route in routes
+            route.route.signature() for routes in self.holdout_routes.values() for route in routes
         }
-        holdout_reaction_signatures = {
-            signature
-            for routes in self.holdout_routes.values()
-            for route in routes
-            for signature in route.reaction_signatures
-        }
+        holdout_reaction_signatures = (
+            {
+                signature
+                for routes in self.holdout_routes.values()
+                for route in routes
+                for signature in route.route.reaction_signatures()
+            }
+            if self.config.holdout_mode == "reaction"
+            else set()
+        )
 
         candidates = []
         skipped_route_holdout = 0
@@ -140,10 +154,14 @@ class TrainingRouteReleaseBuilder:
         reaction_excision_fragments = 0
         routes_fully_removed_after_excision = 0
         for route in self.all_routes:
-            if route.structural_signature in holdout_route_signatures:
+            structural_signature = route.route.signature()
+            if structural_signature in holdout_route_signatures:
                 skipped_route_holdout += 1
                 continue
-            if self.config.holdout_mode == "reaction" and route.reaction_signatures & holdout_reaction_signatures:
+            if (
+                self.config.holdout_mode == "reaction"
+                and route.route.reaction_signatures() & holdout_reaction_signatures
+            ):
                 routes_with_overlapping_reactions += 1
                 fragments = excise_reactions_from_route(route.route, holdout_reaction_signatures)
                 if not fragments:
@@ -162,7 +180,7 @@ class TrainingRouteReleaseBuilder:
             candidates.append(
                 PreparedTrainingRoute(
                     route=route.route,
-                    structural_signature=route.structural_signature,
+                    structural_signature=structural_signature,
                     sources=[route.source],
                 )
             )
@@ -264,8 +282,7 @@ def summarize_records(records: Sequence[TrainingRouteRecord]) -> dict[str, Any]:
 
 def route_records_content_hash(records: Sequence[TrainingRouteRecord]) -> str:
     signatures = sorted(record.route.signature() for record in records)
-    payload = json.dumps(signatures, separators=(",", ":"))
-    return hashlib.sha256(payload.encode()).hexdigest()
+    return hash_json(signatures)
 
 
 def collect_reaction_hash_sanity(
