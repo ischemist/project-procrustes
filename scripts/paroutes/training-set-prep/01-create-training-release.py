@@ -20,7 +20,6 @@ from retrocast.curation.training import (
     adapt_training_routes,
     write_training_release,
 )
-from retrocast.io import load_raw_paroutes_list
 from retrocast.utils.logging import configure_script_logging, logger
 
 BASE_DIR = Path(__file__).resolve().parents[3]
@@ -65,35 +64,32 @@ def main() -> None:
     source_paths = [all_path, n1_path, n5_path]
 
     show_progress = not args.no_progress
-    raw_all_routes = load_raw_paroutes_list(all_path)
-    raw_n1_routes = load_raw_paroutes_list(n1_path)
-    raw_n5_routes = load_raw_paroutes_list(n5_path)
-    logger.info("Inputs loaded:")
-    logger.info("  %s: %s routes", all_path.relative_to(BASE_DIR), f"{len(raw_all_routes):,}")
-    logger.info("  %s: %s routes", n1_path.relative_to(BASE_DIR), f"{len(raw_n1_routes):,}")
-    logger.info("  %s: %s routes", n5_path.relative_to(BASE_DIR), f"{len(raw_n5_routes):,}")
     collect_reactions = args.mode in ("reaction", "both")
     all_routes, all_adaptation = adapt_training_routes(
-        raw_all_routes,
+        all_path,
         dataset="all",
         id_width=6,
         collect_reactions=collect_reactions,
         show_progress=show_progress,
     )
     n1_routes, n1_adaptation = adapt_training_routes(
-        raw_n1_routes,
+        n1_path,
         dataset="n1",
         id_width=5,
         collect_reactions=collect_reactions,
         show_progress=show_progress,
     )
     n5_routes, n5_adaptation = adapt_training_routes(
-        raw_n5_routes,
+        n5_path,
         dataset="n5",
         id_width=5,
         collect_reactions=collect_reactions,
         show_progress=show_progress,
     )
+    logger.info("Inputs adapted:")
+    logger.info("  %s: %s routes", all_path.relative_to(BASE_DIR), f"{all_adaptation.adapted_routes:,}")
+    logger.info("  %s: %s routes", n1_path.relative_to(BASE_DIR), f"{n1_adaptation.adapted_routes:,}")
+    logger.info("  %s: %s routes", n5_path.relative_to(BASE_DIR), f"{n5_adaptation.adapted_routes:,}")
 
     modes: list[TrainingHoldoutMode] = (
         ["route", "reaction"] if args.mode == "both" else [cast(TrainingHoldoutMode, args.mode)]

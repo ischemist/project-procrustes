@@ -370,7 +370,7 @@ data/datasets/paroutes/v2026-05-12/reaction-holdout-n1-n5/training.jsonl.gz
 
 Override the shared cache with:
 
-- `RETROCAST_TRAINING_SET_CACHE_DIR` for both shell and Python
+- `RETROCAST_CACHE_DIR` for both shell and Python
 - `cache_dir=...` in Python for per-call control
 
 Use `cache_dir` when you want to relocate the shared cache root but still keep the managed `paroutes/<release>/...` structure. Use `output_dir` when you want to own the dataset root yourself.

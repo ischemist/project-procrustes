@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import random
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from pydantic import TypeAdapter, ValidationError
 from tqdm.auto import tqdm
 
+from retrocast._version import __version__
 from retrocast.adapters.paroutes import ConditionSlotParseStatistics, PaRoutesAdapter, analyze_condition_slots
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.curation.filtering import excise_reactions_from_route
@@ -23,33 +23,54 @@ from retrocast.curation.training.records import (
     TrainingSetBuildResult,
 )
 from retrocast.exceptions import AdapterError, ChemError, TrainingReleaseError
-from retrocast.io import ContentType, create_manifest, save_jsonl_gz
+from retrocast.hashing import hash_file, hash_json
+from retrocast.io import ContentType, create_manifest, iter_jsonl_gz, load_json_artifact, save_jsonl_gz
+from retrocast.io.cache import local_cache
 from retrocast.models.route import Route, RoutePath
 from retrocast.models.task import Target
 from retrocast.typing import InChIKeyStr, SmilesStr
 
 TRAINING_RELEASE_ACTION = "scripts/paroutes/training-set-prep/create-training-release"
+ADAPTED_TRAINING_ROUTE_ADAPTER = TypeAdapter(AdaptedTrainingRoute)
 
 
 def stable_raw_route_hash(raw_route: dict[str, Any]) -> str:
-    payload = json.dumps(raw_route, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode()).hexdigest()
+    return hash_json(raw_route)
 
 
+@local_cache(
+    namespace="paroutes-adapted-routes",
+    key=lambda source_path, **kwargs: {
+        "retrocast_version": __version__,
+        "function": "adapt_training_routes",
+        "source_sha256": hash_file(source_path),
+        "dataset": kwargs["dataset"],
+        "id_width": kwargs["id_width"],
+        "collect_reactions": kwargs["collect_reactions"],
+    },
+    load=lambda cache_root: load_cached_paroutes_adaptation(cache_root),
+    save=lambda cache_root, result: save_cached_paroutes_adaptation(cache_root, result),
+)
 def adapt_training_routes(
-    raw_routes: Sequence[dict[str, Any]],
+    source_path: Path,
+    *,
     dataset: str,
     id_width: int,
     collect_reactions: bool,
     show_progress: bool = True,
 ) -> tuple[list[AdaptedTrainingRoute], AdaptationStatistics]:
     adapter = PaRoutesAdapter()
+    entries = adapter.iter_raw_routes(load_json_artifact(source_path))
     parse_stats = ConditionSlotParseStatistics()
     adapted = []
     failures: dict[str, int] = defaultdict(int)
     reaction_hash_signature_pairs: set[tuple[str, str]] = set()
-    entries = tqdm(raw_routes, desc=f"adapt {dataset}", unit="route", leave=False) if show_progress else raw_routes
-    for index, raw_route in enumerate(entries):
+    raw_entries = tqdm(entries, desc=f"adapt {dataset}", unit="route", leave=False) if show_progress else entries
+    raw_count = 0
+    for entry in raw_entries:
+        raw_count += 1
+        raw_route = entry.payload
+        raw_index = entry.source_row_index - 1 if entry.source_row_index is not None else (entry.source_order or 1) - 1
         if not isinstance(raw_route, dict):
             failures["adapter.schema_invalid"] += 1
             continue
@@ -60,7 +81,7 @@ def adapt_training_routes(
         try:
             target_smiles = canonicalize_smiles(raw_smiles)
             target = Target(
-                id=f"{dataset}-{index + 1:0{id_width}d}",
+                id=f"{dataset}-{raw_index + 1:0{id_width}d}",
                 smiles=SmilesStr(target_smiles),
                 inchikey=InChIKeyStr(get_inchi_key(target_smiles)),
             )
@@ -83,23 +104,48 @@ def adapt_training_routes(
                 reaction_signatures=route.reaction_signatures() if collect_reactions else set(),
                 source=RawRouteSource(
                     dataset=dataset,
-                    raw_index=index,
+                    raw_index=raw_index,
                     raw_route_hash=stable_raw_route_hash(raw_route),
                     patent_id=patent_id if isinstance(patent_id, str) else None,
                 ),
             )
         )
-    skipped = len(raw_routes) - len(adapted)
+    skipped = raw_count - len(adapted)
     assert_paroutes_reaction_hash_matches_retrocast_signature(reaction_hash_signature_pairs)
     skipped_without_error_code = skipped - sum(failures.values())
     return adapted, AdaptationStatistics(
-        raw_routes=len(raw_routes),
+        raw_routes=raw_count,
         adapted_routes=len(adapted),
         skipped_routes=skipped,
         skipped_without_error_code=skipped_without_error_code,
         failures_by_code=dict(failures),
         non_fatal_condition_slot_parse=parse_stats,
     )
+
+
+def load_cached_paroutes_adaptation(cache_root: Path) -> tuple[list[AdaptedTrainingRoute], AdaptationStatistics]:
+    stats = AdaptationStatistics.model_validate_json((cache_root / "stats.json").read_text(encoding="utf-8"))
+    try:
+        routes = [
+            ADAPTED_TRAINING_ROUTE_ADAPTER.validate_python(row) for row in iter_jsonl_gz(cache_root / "routes.jsonl.gz")
+        ]
+    except ValidationError as exc:
+        raise ValueError("invalid cached adapted route") from exc
+    if len(routes) != stats.adapted_routes:
+        raise ValueError("cached route count does not match stats")
+    return routes, stats
+
+
+def save_cached_paroutes_adaptation(
+    cache_root: Path,
+    result: tuple[list[AdaptedTrainingRoute], AdaptationStatistics],
+) -> None:
+    routes, stats = result
+    save_jsonl_gz(
+        (ADAPTED_TRAINING_ROUTE_ADAPTER.dump_python(route, mode="json") for route in routes),
+        cache_root / "routes.jsonl.gz",
+    )
+    (cache_root / "stats.json").write_text(stats.model_dump_json(indent=2), encoding="utf-8")
 
 
 class TrainingRouteReleaseBuilder:
@@ -264,8 +310,7 @@ def summarize_records(records: Sequence[TrainingRouteRecord]) -> dict[str, Any]:
 
 def route_records_content_hash(records: Sequence[TrainingRouteRecord]) -> str:
     signatures = sorted(record.route.signature() for record in records)
-    payload = json.dumps(signatures, separators=(",", ":"))
-    return hashlib.sha256(payload.encode()).hexdigest()
+    return hash_json(signatures)
 
 
 def collect_reaction_hash_sanity(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -145,9 +145,21 @@ class PaRoutesAdapter:
         *,
         source_key: str | None = None,
     ) -> Iterator[RawRouteEntry]:
+        if isinstance(raw_payload, Sequence) and not isinstance(raw_payload, str | bytes):
+            for row_index, raw_route in enumerate(raw_payload, start=1):
+                yield RawRouteEntry(
+                    payload=raw_route,
+                    source_key=source_key,
+                    source_row_index=row_index,
+                    source_order=row_index,
+                )
+            return
+
         if not isinstance(raw_payload, Mapping):
             target_id = source_key or "<unknown>"
-            raise adapter_schema_error("paroutes", target_id, "expected route root or mapping of target ids to routes")
+            raise adapter_schema_error(
+                "paroutes", target_id, "expected route root, route list, or target route mapping"
+            )
 
         is_route_root = raw_payload.get("type") == "mol" or "smiles" in raw_payload or "children" in raw_payload
         if is_route_root:

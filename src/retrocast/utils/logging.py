@@ -18,7 +18,7 @@ def configure_script_logging(use_rich: bool = True, log_level: str = "INFO") -> 
     Configures logging for CLI scripts/applications.
     Call this at the start of your `main()` functions.
     """
-    log_level = os.getenv("RETROCAST_LOG", log_level).upper()
+    log_level = os.environ.get("RETROCAST_LOG", log_level).upper()
 
     if use_rich:
         from rich.console import Console

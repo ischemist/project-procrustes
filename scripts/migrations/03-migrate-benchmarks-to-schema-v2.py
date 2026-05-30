@@ -13,11 +13,10 @@ schema v2 benchmarks and refreshed manifests at the original paths.
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 from pathlib import Path
 from typing import Any
 
+from retrocast.hashing import hash_json
 from retrocast.io import load_json_gz, save_benchmark
 from retrocast.io.provenance import calculate_file_hash
 from retrocast.models.provenance import FileInfo, Manifest
@@ -97,8 +96,7 @@ def parse_args() -> argparse.Namespace:
 
 def benchmark_content_hash(benchmark: Benchmark) -> str:
     payload = benchmark.model_dump(mode="json", exclude_none=True, exclude_computed_fields=True)
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(encoded).hexdigest()
+    return hash_json(payload)
 
 
 def convert_benchmark(data: dict[str, Any]) -> Benchmark:
