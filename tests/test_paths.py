@@ -14,6 +14,7 @@ from retrocast.paths import (
     ensure_path_within_root,
     get_data_dir_source,
     get_paths,
+    resolve_cache_dir,
     resolve_data_dir,
     validate_directory_name,
     validate_filename,
@@ -297,6 +298,21 @@ class TestValidateDirectoryName:
         """Should use the provided param_name in error."""
         with pytest.raises(SecurityError, match="model"):
             validate_directory_name("../etc", param_name="model")
+
+
+@pytest.mark.unit
+class TestResolveCacheDir:
+    def test_uses_retrocast_cache_dir_at_call_time(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("RETROCAST_CACHE_DIR", str(tmp_path / "cache-a"))
+        assert resolve_cache_dir("training-sets") == tmp_path / "cache-a" / "training-sets"
+
+        monkeypatch.setenv("RETROCAST_CACHE_DIR", str(tmp_path / "cache-b"))
+        assert resolve_cache_dir("training-sets") == tmp_path / "cache-b" / "training-sets"
+
+    @pytest.mark.parametrize("part", ["..", ".", "../outside", "nested/path", r"nested\\path"])
+    def test_rejects_unsafe_segments(self, part):
+        with pytest.raises(SecurityError):
+            resolve_cache_dir(part)
 
 
 @pytest.mark.unit

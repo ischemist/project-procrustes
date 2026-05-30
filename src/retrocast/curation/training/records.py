@@ -87,7 +87,7 @@ class AdaptedTrainingRoute:
     source: RawRouteSource
 
 
-@dataclass(frozen=True)
+@dataclass
 class TrainingRouteAdaptation:
     routes: list[AdaptedTrainingRoute]
     stats: AdaptationStatistics

@@ -37,11 +37,11 @@ StockFormat = Literal["csv.gz", "txt.gz", "hdf5"]
 DEFAULT_TRAINING_SET_BASE_URL = os.environ.get(
     "RETROCAST_TRAINING_SET_BASE_URL", "https://files.ischemist.com/retrocast/training-sets"
 )
-DEFAULT_TRAINING_SET_CACHE_DIR = resolve_cache_dir("training-sets")
+DEFAULT_TRAINING_SET_CACHE_SUBDIR = "training-sets"
 DEFAULT_HOSTED_DATA_BASE_URL = os.environ.get(
     "RETROCAST_HOSTED_DATA_BASE_URL", "https://files.ischemist.com/retrocast/data"
 )
-DEFAULT_HOSTED_DATA_CACHE_DIR = resolve_cache_dir("data")
+DEFAULT_HOSTED_DATA_CACHE_SUBDIR = "data"
 DEFAULT_DATASET_USER_AGENT = "retrocast/2"
 SUPPORTED_DATASETS: tuple[TrainingDatasetName, ...] = ("paroutes",)
 
@@ -332,7 +332,7 @@ def resolve_training_set_root(
         return Path(output_dir) / release
     if cache_dir is not None:
         return Path(cache_dir) / dataset / release
-    return DEFAULT_TRAINING_SET_CACHE_DIR / dataset / release
+    return resolve_cache_dir(DEFAULT_TRAINING_SET_CACHE_SUBDIR) / dataset / release
 
 
 def resolve_hosted_data_root(*, cache_dir: Path | None, output_dir: Path | None) -> Path:
@@ -340,7 +340,7 @@ def resolve_hosted_data_root(*, cache_dir: Path | None, output_dir: Path | None)
         return Path(output_dir)
     if cache_dir is not None:
         return Path(cache_dir)
-    return DEFAULT_HOSTED_DATA_CACHE_DIR
+    return resolve_cache_dir(DEFAULT_HOSTED_DATA_CACHE_SUBDIR)
 
 
 def build_training_set_url(

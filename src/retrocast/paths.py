@@ -238,4 +238,6 @@ def get_data_dir_source(
 def resolve_cache_dir(*parts: str) -> Path:
     env_value = os.environ.get("RETROCAST_CACHE_DIR")
     root = Path(env_value) if env_value else DEFAULT_CACHE_DIR
+    for part in parts:
+        validate_directory_name(part, "cache path segment")
     return root.joinpath(*parts)

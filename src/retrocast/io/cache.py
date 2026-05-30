@@ -49,7 +49,7 @@ def local_cache(
     def decorate(compute: Callable[..., T]) -> Callable[..., T]:
         @functools.wraps(compute)
         def cached(*args: Any, **kwargs: Any) -> T:
-            cache_key = {"namespace": namespace, **dict(key(*args, **kwargs))}
+            cache_key = _validate_cache_key({"namespace": namespace, **dict(key(*args, **kwargs))})
             cache_parent = resolve_cache_dir(namespace)
             cache_root = _cache_root(cache_parent, cache_key)
             cached_value = _load(cache_root, cache_key, codec.load)
@@ -73,7 +73,7 @@ def _load(cache_root: Path, cache_key: CacheKey, load: Callable[[Path], T]) -> T
         return None
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest.get("cache_key") != dict(cache_key):
+        if not isinstance(manifest, dict) or manifest.get("cache_key") != dict(cache_key):
             raise ValueError("cache key mismatch")
         return load(cache_root)
     except (OSError, ValueError, ValidationError, RetroCastException) as exc:
@@ -91,3 +91,10 @@ def _write(cache_root: Path, cache_key: CacheKey, save: Callable[[Path, T], None
 def _cache_root(cache_dir: Path, cache_key: CacheKey) -> Path:
     digest = hash_json(cache_key)
     return cache_dir / digest[:16]
+
+
+def _validate_cache_key(cache_key: CacheKey) -> dict[str, Any]:
+    try:
+        return json.loads(json.dumps(dict(cache_key), sort_keys=True, separators=(",", ":")))
+    except TypeError as exc:
+        raise TypeError("cache key must be JSON-serializable") from exc
