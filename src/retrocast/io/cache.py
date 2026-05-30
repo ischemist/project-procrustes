@@ -8,8 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
+from retrocast.exceptions import RetroCastException
 from retrocast.hashing import hash_json
 from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.paths import resolve_cache_dir
@@ -75,7 +76,7 @@ def _load(cache_root: Path, cache_key: CacheKey, load: Callable[[Path], T]) -> T
         if manifest.get("cache_key") != dict(cache_key):
             raise ValueError("cache key mismatch")
         return load(cache_root)
-    except Exception as exc:
+    except (OSError, ValueError, ValidationError, RetroCastException) as exc:
         logger.warning("ignoring invalid cache at %s: %s", cache_root, exc)
         return None
 

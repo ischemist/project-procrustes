@@ -186,11 +186,21 @@ def test_paroutes_iter_raw_routes_accepts_single_route_root(raw_paroutes_route) 
 
 
 @pytest.mark.contract
-def test_paroutes_iter_raw_routes_rejects_non_mapping_payload() -> None:
+def test_paroutes_iter_raw_routes_rejects_scalar_payload() -> None:
     with pytest.raises(AdapterSchemaError) as exc_info:
-        list(PaRoutesAdapter().iter_raw_routes(["not", "a", "payload"], source_key="bad"))
+        list(PaRoutesAdapter().iter_raw_routes(42, source_key="bad"))
 
     assert exc_info.value.code == "adapter.schema_invalid"
+
+
+@pytest.mark.contract
+def test_paroutes_iter_raw_routes_accepts_raw_route_list(raw_paroutes_route) -> None:
+    entries = list(PaRoutesAdapter().iter_raw_routes([raw_paroutes_route, {"bad": "route"}], source_key="raw-file"))
+
+    assert len(entries) == 2
+    assert [entry.source_key for entry in entries] == ["raw-file", "raw-file"]
+    assert [entry.source_row_index for entry in entries] == [1, 2]
+    assert [entry.source_order for entry in entries] == [1, 2]
 
 
 @pytest.mark.contract
