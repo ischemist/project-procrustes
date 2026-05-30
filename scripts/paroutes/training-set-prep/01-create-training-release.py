@@ -64,32 +64,25 @@ def main() -> None:
     source_paths = [all_path, n1_path, n5_path]
 
     show_progress = not args.no_progress
-    collect_reactions = args.mode in ("reaction", "both")
-    all_routes, all_adaptation = adapt_training_routes(
+    all_adaptation = adapt_training_routes(
         all_path,
         dataset="all",
-        id_width=6,
-        collect_reactions=collect_reactions,
         show_progress=show_progress,
     )
-    n1_routes, n1_adaptation = adapt_training_routes(
+    n1_adaptation = adapt_training_routes(
         n1_path,
         dataset="n1",
-        id_width=5,
-        collect_reactions=collect_reactions,
         show_progress=show_progress,
     )
-    n5_routes, n5_adaptation = adapt_training_routes(
+    n5_adaptation = adapt_training_routes(
         n5_path,
         dataset="n5",
-        id_width=5,
-        collect_reactions=collect_reactions,
         show_progress=show_progress,
     )
     logger.info("Inputs adapted:")
-    logger.info("  %s: %s routes", all_path.relative_to(BASE_DIR), f"{all_adaptation.adapted_routes:,}")
-    logger.info("  %s: %s routes", n1_path.relative_to(BASE_DIR), f"{n1_adaptation.adapted_routes:,}")
-    logger.info("  %s: %s routes", n5_path.relative_to(BASE_DIR), f"{n5_adaptation.adapted_routes:,}")
+    logger.info("  %s: %s routes", all_path.relative_to(BASE_DIR), f"{all_adaptation.stats.adapted_routes:,}")
+    logger.info("  %s: %s routes", n1_path.relative_to(BASE_DIR), f"{n1_adaptation.stats.adapted_routes:,}")
+    logger.info("  %s: %s routes", n5_path.relative_to(BASE_DIR), f"{n5_adaptation.stats.adapted_routes:,}")
 
     modes: list[TrainingHoldoutMode] = (
         ["route", "reaction"] if args.mode == "both" else [cast(TrainingHoldoutMode, args.mode)]
@@ -103,10 +96,10 @@ def main() -> None:
         )
 
         result = TrainingRouteReleaseBuilder(
-            all_routes=all_routes,
-            all_adaptation=all_adaptation,
-            holdout_routes={"n1": n1_routes, "n5": n5_routes},
-            holdout_adaptation={"n1": n1_adaptation, "n5": n5_adaptation},
+            all_routes=all_adaptation.routes,
+            all_adaptation=all_adaptation.stats,
+            holdout_routes={"n1": n1_adaptation.routes, "n5": n5_adaptation.routes},
+            holdout_adaptation={"n1": n1_adaptation.stats, "n5": n5_adaptation.stats},
             config=config,
         ).build()
         write_training_release(

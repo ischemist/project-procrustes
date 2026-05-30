@@ -84,9 +84,13 @@ class TrainingSetBuildConfig:
 @dataclass(frozen=True)
 class AdaptedTrainingRoute:
     route: Route
-    structural_signature: str
-    reaction_signatures: set[str]
     source: RawRouteSource
+
+
+@dataclass(frozen=True)
+class TrainingRouteAdaptation:
+    routes: list[AdaptedTrainingRoute]
+    stats: AdaptationStatistics
 
 
 @dataclass

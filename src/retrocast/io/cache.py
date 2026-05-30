@@ -4,45 +4,60 @@ import functools
 import json
 import logging
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, Generic, TypeVar
+
+from pydantic import TypeAdapter
 
 from retrocast.hashing import hash_json
+from retrocast.io.blob import load_json_gz, save_json_gz
 from retrocast.paths import resolve_cache_dir
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 CacheKey = Mapping[str, Any]
-USE_DEFAULT_CACHE_DIR = object()
+
+
+@dataclass(frozen=True)
+class CacheCodec(Generic[T]):
+    load: Callable[[Path], T]
+    save: Callable[[Path, T], None]
+
+
+def json_type_cache(value_type: Any) -> CacheCodec[Any]:
+    adapter = TypeAdapter(value_type)
+
+    def load(cache_root: Path) -> Any:
+        return adapter.validate_python(load_json_gz(cache_root / "value.json.gz"))
+
+    def save(cache_root: Path, value: Any) -> None:
+        payload = adapter.dump_python(value, mode="json")
+        save_json_gz(payload, cache_root / "value.json.gz")
+
+    return CacheCodec(load=load, save=save)
 
 
 def local_cache(
     *,
     namespace: str,
     key: Callable[..., CacheKey],
-    load: Callable[[Path], T],
-    save: Callable[[Path, T], None],
+    codec: CacheCodec[T],
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:
     def decorate(compute: Callable[..., T]) -> Callable[..., T]:
         @functools.wraps(compute)
         def cached(*args: Any, **kwargs: Any) -> T:
-            cache_dir = kwargs.pop("cache_dir", USE_DEFAULT_CACHE_DIR)
-            refresh_cache = kwargs.pop("refresh_cache", False)
-            if cache_dir is None:
-                return compute(*args, **kwargs)
-
             cache_key = {"namespace": namespace, **dict(key(*args, **kwargs))}
-            cache_parent = resolve_cache_dir(namespace) if cache_dir is USE_DEFAULT_CACHE_DIR else Path(cache_dir)
+            cache_parent = resolve_cache_dir(namespace)
             cache_root = _cache_root(cache_parent, cache_key)
-            if not refresh_cache:
-                cached_value = _load(cache_root, cache_key, load)
-                if cached_value is not None:
-                    logger.info("loaded cached %s from %s", namespace, cache_root)
-                    return cached_value
+            cached_value = _load(cache_root, cache_key, codec.load)
+            if cached_value is not None:
+                logger.info("loaded cached %s from %s", namespace, cache_root)
+                return cached_value
 
             value = compute(*args, **kwargs)
-            _write(cache_root, cache_key, save, value)
+            _write(cache_root, cache_key, codec.save, value)
             logger.info("cached %s in %s", namespace, cache_root)
             return value
 

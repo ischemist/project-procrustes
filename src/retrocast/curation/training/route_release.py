@@ -6,7 +6,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from pydantic import TypeAdapter, ValidationError
 from tqdm.auto import tqdm
 
 from retrocast._version import __version__
@@ -18,20 +17,21 @@ from retrocast.curation.training.records import (
     AdaptedTrainingRoute,
     PreparedTrainingRoute,
     RawRouteSource,
+    TrainingRouteAdaptation,
     TrainingRouteRecord,
     TrainingSetBuildConfig,
     TrainingSetBuildResult,
 )
 from retrocast.exceptions import AdapterError, ChemError, TrainingReleaseError
 from retrocast.hashing import hash_file, hash_json
-from retrocast.io import ContentType, create_manifest, iter_jsonl_gz, load_json_artifact, save_jsonl_gz
-from retrocast.io.cache import local_cache
+from retrocast.io import ContentType, create_manifest, load_json_artifact, save_jsonl_gz
+from retrocast.io.cache import json_type_cache, local_cache
 from retrocast.models.route import Route, RoutePath
 from retrocast.models.task import Target
 from retrocast.typing import InChIKeyStr, SmilesStr
 
 TRAINING_RELEASE_ACTION = "scripts/paroutes/training-set-prep/create-training-release"
-ADAPTED_TRAINING_ROUTE_ADAPTER = TypeAdapter(AdaptedTrainingRoute)
+PAROUTES_TRAINING_ROUTE_ID_WIDTH = 6
 
 
 def stable_raw_route_hash(raw_route: dict[str, Any]) -> str:
@@ -40,25 +40,20 @@ def stable_raw_route_hash(raw_route: dict[str, Any]) -> str:
 
 @local_cache(
     namespace="paroutes-adapted-routes",
-    key=lambda source_path, **kwargs: {
+    key=lambda source_path, *, dataset, **_: {
         "retrocast_version": __version__,
         "function": "adapt_training_routes",
         "source_sha256": hash_file(source_path),
-        "dataset": kwargs["dataset"],
-        "id_width": kwargs["id_width"],
-        "collect_reactions": kwargs["collect_reactions"],
+        "dataset": dataset,
     },
-    load=lambda cache_root: load_cached_paroutes_adaptation(cache_root),
-    save=lambda cache_root, result: save_cached_paroutes_adaptation(cache_root, result),
+    codec=json_type_cache(TrainingRouteAdaptation),
 )
 def adapt_training_routes(
     source_path: Path,
     *,
     dataset: str,
-    id_width: int,
-    collect_reactions: bool,
     show_progress: bool = True,
-) -> tuple[list[AdaptedTrainingRoute], AdaptationStatistics]:
+) -> TrainingRouteAdaptation:
     adapter = PaRoutesAdapter()
     entries = adapter.iter_raw_routes(load_json_artifact(source_path))
     parse_stats = ConditionSlotParseStatistics()
@@ -81,7 +76,7 @@ def adapt_training_routes(
         try:
             target_smiles = canonicalize_smiles(raw_smiles)
             target = Target(
-                id=f"{dataset}-{raw_index + 1:0{id_width}d}",
+                id=f"{dataset}-{raw_index + 1:0{PAROUTES_TRAINING_ROUTE_ID_WIDTH}d}",
                 smiles=SmilesStr(target_smiles),
                 inchikey=InChIKeyStr(get_inchi_key(target_smiles)),
             )
@@ -100,8 +95,6 @@ def adapt_training_routes(
         adapted.append(
             AdaptedTrainingRoute(
                 route=route,
-                structural_signature=route.signature(),
-                reaction_signatures=route.reaction_signatures() if collect_reactions else set(),
                 source=RawRouteSource(
                     dataset=dataset,
                     raw_index=raw_index,
@@ -113,39 +106,17 @@ def adapt_training_routes(
     skipped = raw_count - len(adapted)
     assert_paroutes_reaction_hash_matches_retrocast_signature(reaction_hash_signature_pairs)
     skipped_without_error_code = skipped - sum(failures.values())
-    return adapted, AdaptationStatistics(
-        raw_routes=raw_count,
-        adapted_routes=len(adapted),
-        skipped_routes=skipped,
-        skipped_without_error_code=skipped_without_error_code,
-        failures_by_code=dict(failures),
-        non_fatal_condition_slot_parse=parse_stats,
+    return TrainingRouteAdaptation(
+        routes=adapted,
+        stats=AdaptationStatistics(
+            raw_routes=raw_count,
+            adapted_routes=len(adapted),
+            skipped_routes=skipped,
+            skipped_without_error_code=skipped_without_error_code,
+            failures_by_code=dict(failures),
+            non_fatal_condition_slot_parse=parse_stats,
+        ),
     )
-
-
-def load_cached_paroutes_adaptation(cache_root: Path) -> tuple[list[AdaptedTrainingRoute], AdaptationStatistics]:
-    stats = AdaptationStatistics.model_validate_json((cache_root / "stats.json").read_text(encoding="utf-8"))
-    try:
-        routes = [
-            ADAPTED_TRAINING_ROUTE_ADAPTER.validate_python(row) for row in iter_jsonl_gz(cache_root / "routes.jsonl.gz")
-        ]
-    except ValidationError as exc:
-        raise ValueError("invalid cached adapted route") from exc
-    if len(routes) != stats.adapted_routes:
-        raise ValueError("cached route count does not match stats")
-    return routes, stats
-
-
-def save_cached_paroutes_adaptation(
-    cache_root: Path,
-    result: tuple[list[AdaptedTrainingRoute], AdaptationStatistics],
-) -> None:
-    routes, stats = result
-    save_jsonl_gz(
-        (ADAPTED_TRAINING_ROUTE_ADAPTER.dump_python(route, mode="json") for route in routes),
-        cache_root / "routes.jsonl.gz",
-    )
-    (cache_root / "stats.json").write_text(stats.model_dump_json(indent=2), encoding="utf-8")
 
 
 class TrainingRouteReleaseBuilder:
@@ -171,14 +142,18 @@ class TrainingRouteReleaseBuilder:
         self._started = True
 
         holdout_route_signatures = {
-            route.structural_signature for routes in self.holdout_routes.values() for route in routes
+            route.route.signature() for routes in self.holdout_routes.values() for route in routes
         }
-        holdout_reaction_signatures = {
-            signature
-            for routes in self.holdout_routes.values()
-            for route in routes
-            for signature in route.reaction_signatures
-        }
+        holdout_reaction_signatures = (
+            {
+                signature
+                for routes in self.holdout_routes.values()
+                for route in routes
+                for signature in route.route.reaction_signatures()
+            }
+            if self.config.holdout_mode == "reaction"
+            else set()
+        )
 
         candidates = []
         skipped_route_holdout = 0
@@ -186,10 +161,14 @@ class TrainingRouteReleaseBuilder:
         reaction_excision_fragments = 0
         routes_fully_removed_after_excision = 0
         for route in self.all_routes:
-            if route.structural_signature in holdout_route_signatures:
+            structural_signature = route.route.signature()
+            if structural_signature in holdout_route_signatures:
                 skipped_route_holdout += 1
                 continue
-            if self.config.holdout_mode == "reaction" and route.reaction_signatures & holdout_reaction_signatures:
+            if (
+                self.config.holdout_mode == "reaction"
+                and route.route.reaction_signatures() & holdout_reaction_signatures
+            ):
                 routes_with_overlapping_reactions += 1
                 fragments = excise_reactions_from_route(route.route, holdout_reaction_signatures)
                 if not fragments:
@@ -208,7 +187,7 @@ class TrainingRouteReleaseBuilder:
             candidates.append(
                 PreparedTrainingRoute(
                     route=route.route,
-                    structural_signature=route.structural_signature,
+                    structural_signature=structural_signature,
                     sources=[route.source],
                 )
             )
