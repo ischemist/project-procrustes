@@ -61,7 +61,7 @@ Identical molecules in different positions (e.g. same building block used in two
 
 ### Route path
 
-RetroCast uses deterministic paths to refer to molecules and reactions inside a `Route`. The full grammar lives in [Route Node IDs](developers/route-node-ids); but here's a useful cheat sheet:
+RetroCast uses deterministic paths to refer to molecules and reactions inside a `Route`. The full grammar lives in [Route Node IDs](../developer-reference/route-node-ids.md); but here's a useful cheat sheet:
 
 - `rc:m:/` root target molecule
 - `rc:r:/` root reaction
@@ -242,7 +242,42 @@ class Route(BaseModel):
 
 ### Route Embedding
 
-To be defined later, once we finish the basic migration. A subtree signature primitive simplifies simple queries like "does a <- b <- c <- d" contain "a <- b", so it's part of the solution, but it doesn't help with containment check for queries like "b <- c".
+Route embedding asks whether one route occurs inside another route.
+
+`Route.signature()` and `MoleculeView.subtree_signature()` answer exact equality for a chosen root. Embedding is looser in two ways: the query target may match an internal molecule in the container route, and the container may continue below a query leaf when the audit allows leaf extension.
+
+`retrocast.curation.embedding` uses route views, paths, molecule keys, reaction signatures, and subtree signatures to produce audit traces:
+
+```python
+class EmbeddingMatch:
+    query_path: RoutePath
+    container_path: RoutePath
+    matched_reactions: int
+    leaf_extensions: tuple[LeafExtension, ...]
+
+    @property
+    def root_shifted(self) -> bool: ...
+    @property
+    def leaf_extended(self) -> bool: ...
+
+def find_route_embeddings(
+    query: Route,
+    container: Route,
+    match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    *,
+    allow_leaf_extension: bool = True,
+) -> tuple[EmbeddingMatch, ...]: ...
+
+def route_embeds_at(
+    query: MoleculeView,
+    container: MoleculeView,
+    match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    *,
+    allow_leaf_extension: bool = True,
+) -> EmbeddingMatch | None: ...
+```
+
+The detailed matching rules live in [Route Embedding](../developer-reference/route-embedding.md). The important schema-design point is small: exact subtree equality is a signature check; embedding is a route-to-route matching check.
 
 ## Workflows
 

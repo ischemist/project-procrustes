@@ -204,6 +204,25 @@ class Route(BaseModel):
     def iter_leaves(self) -> Iterator[MoleculeView]:
         yield from self.molecule_at(RoutePath.target()).iter_leaves()
 
+    def iter_molecules(self) -> Iterator[MoleculeView]:
+        yield from self.molecule_at(RoutePath.target()).iter_molecules()
+
+    def find_molecules(
+        self,
+        molecule: Molecule | MoleculeView,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    ) -> tuple[MoleculeView, ...]:
+        molecule_key = molecule.key(match_level)
+        return tuple(candidate for candidate in self.iter_molecules() if candidate.key(match_level) == molecule_key)
+
+    def contains_molecule(
+        self,
+        molecule: Molecule | MoleculeView,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    ) -> bool:
+        molecule_key = molecule.key(match_level)
+        return any(candidate.key(match_level) == molecule_key for candidate in self.iter_molecules())
+
     def reactions(self) -> list[ReactionView]:
         return list(self.iter_reactions())
 
@@ -298,6 +317,14 @@ class MoleculeView(BaseModel):
 
         for reactant in reaction.reactants():
             yield from reactant.iter_leaves()
+
+    def iter_molecules(self) -> Iterator[MoleculeView]:
+        yield self
+        reaction = self.produced_by()
+        if reaction is None:
+            return
+        for reactant in reaction.reactants():
+            yield from reactant.iter_molecules()
 
     def depth(self) -> int:
         max_depth = 0

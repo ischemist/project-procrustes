@@ -104,6 +104,25 @@ def test_route_leaves_and_depth_use_route_paths() -> None:
 
 
 @pytest.mark.unit
+def test_find_molecules_returns_all_matching_route_nodes() -> None:
+    route = one_step_route([molecule("C", KEY_A), molecule("C", KEY_A), molecule("O", KEY_B)])
+
+    matches = route.find_molecules(molecule("C", KEY_A))
+
+    assert [match.id() for match in matches] == ["rc:m:/0", "rc:m:/1"]
+    assert route.contains_molecule(molecule("O", KEY_B)) is True
+    assert route.contains_molecule(molecule("N", KEY_E)) is False
+
+
+@pytest.mark.unit
+def test_contains_molecule_uses_requested_match_level() -> None:
+    route = Route(target=molecule("C", KEY_A_STEREO_1))
+
+    assert route.contains_molecule(molecule("C", KEY_A_STEREO_2), InChIKeyLevel.FULL) is False
+    assert route.contains_molecule(molecule("C", KEY_A_STEREO_2), InChIKeyLevel.NO_STEREO) is True
+
+
+@pytest.mark.unit
 def test_reaction_identity_includes_product_and_reactants() -> None:
     route_a = one_step_route([molecule("C", KEY_A), molecule("O", KEY_B)], target_key=KEY_C)
     route_b = one_step_route([molecule("C", KEY_A), molecule("O", KEY_B)], target_key=KEY_D)

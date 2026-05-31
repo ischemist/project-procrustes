@@ -65,6 +65,18 @@ class WorkflowError(RetroCastException):
     default_code = "workflow.error"
 
 
+class CurationError(RetroCastException, ValueError):
+    """Raised when a curation API receives valid data that violates its operation contract."""
+
+    default_code = "curation.error"
+
+
+class InvalidRouteEmbeddingQueryError(CurationError):
+    """Raised when route embedding is requested for a molecule-only query route."""
+
+    default_code = "curation.route_embedding_query_invalid"
+
+
 class UnsupportedValidityTierError(WorkflowError, NotImplementedError):
     """Raised when a requested validity tier has no implemented validator."""
 
