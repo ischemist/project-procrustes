@@ -204,6 +204,9 @@ class Route(BaseModel):
     def iter_leaves(self) -> Iterator[MoleculeView]:
         yield from self.molecule_at(RoutePath.target()).iter_leaves()
 
+    def iter_molecules(self) -> Iterator[MoleculeView]:
+        yield from self.molecule_at(RoutePath.target()).iter_molecules()
+
     def reactions(self) -> list[ReactionView]:
         return list(self.iter_reactions())
 
@@ -298,6 +301,14 @@ class MoleculeView(BaseModel):
 
         for reactant in reaction.reactants():
             yield from reactant.iter_leaves()
+
+    def iter_molecules(self) -> Iterator[MoleculeView]:
+        yield self
+        reaction = self.produced_by()
+        if reaction is None:
+            return
+        for reactant in reaction.reactants():
+            yield from reactant.iter_molecules()
 
     def depth(self) -> int:
         max_depth = 0
