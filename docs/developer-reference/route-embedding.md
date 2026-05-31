@@ -176,16 +176,16 @@ At a high level, route embedding is a scan over `MoleculeView`s plus a recursive
 
 1. `find_route_embeddings(...)` starts with the query target `MoleculeView`.
 2. It scans candidate container molecules from `container.iter_molecules()`.
-    - For each candidate container `MoleculeView`, `_can_match_root(...)` rejects the pair if the query molecule key cannot match the container molecule key, or if their local `ReactionView.signature(...)` values cannot match.
-    - If the root pair is plausible, `route_embeds_at(...)` checks whether the query target subtree embeds at that candidate container molecule.
+   - For each candidate container `MoleculeView`, `_can_match_root(...)` rejects the pair if the query molecule key cannot match the container molecule key, or if their local `ReactionView.signature(...)` values cannot match.
+   - If the root pair is plausible, `route_embeds_at(...)` checks whether the query target subtree embeds at that candidate container molecule.
 3. Inside each `route_embeds_at(...)` point check:
-    - If the query target subtree and candidate container molecule subtree have the same `subtree_signature(...)`, the match is accepted immediately. This proves exact rooted-subtree containment, but it does not find shifted roots by itself and it does not express leaf-extension semantics.
-    - Otherwise, `_match_molecule(...)` recursively checks the query subtree against the candidate container subtree.
+   - If the query target subtree and candidate container molecule subtree have the same `subtree_signature(...)`, the match is accepted immediately. This proves exact rooted-subtree containment, but it does not find shifted roots by itself and it does not express leaf-extension semantics.
+   - Otherwise, `_match_molecule(...)` recursively checks the query subtree against the candidate container subtree.
 4. Inside the recursive matcher:
-    - If the query molecule is a leaf, the container molecule may be a leaf too. If `allow_leaf_extension=True`, the container may instead continue below that molecule and the match records a `LeafExtension`.
-    - If the query molecule is not a leaf, the container molecule must also have a producing reaction with the same `ReactionView.signature(...)`.
-    - At each matching reaction pair, `_match_reactants(...)` compares the query reactants with the container reactants as an unordered multiset, not a positional list.
-    - When same-key siblings make that multiset ambiguous, `_match_same_key_reactants(...)` resolves the pairing. See [duplicate same-key reactants](#duplicate-same-key-reactants).
+   - If the query molecule is a leaf, the container molecule may be a leaf too. If `allow_leaf_extension=True`, the container may instead continue below that molecule and the match records a `LeafExtension`.
+   - If the query molecule is not a leaf, the container molecule must also have a producing reaction with the same `ReactionView.signature(...)`.
+   - At each matching reaction pair, `_match_reactants(...)` compares the query reactants with the container reactants as an unordered multiset, not a positional list.
+   - When same-key siblings make that multiset ambiguous, `_match_same_key_reactants(...)` resolves the pairing. See [duplicate same-key reactants](#duplicate-same-key-reactants).
 5. The recursive calls accumulate a `_Trace` with the query reaction count and leaf-extension evidence; `route_embeds_at(...)` wraps it as an `EmbeddingMatch`.
 
 ```mermaid
