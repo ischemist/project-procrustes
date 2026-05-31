@@ -85,8 +85,6 @@ def find_route_embeddings(
     query_root = query.molecule_at(RoutePath.target())
     matches = []
     for container_root in container.iter_molecules():
-        if not _can_match_root(query_root, container_root, match_level, allow_leaf_extension=allow_leaf_extension):
-            continue
         match = route_embeds_at(query_root, container_root, match_level, allow_leaf_extension=allow_leaf_extension)
         if match is not None:
             matches.append(match)
@@ -130,10 +128,7 @@ def route_embeds_at(
 
 def subtree_reaction_count(molecule: MoleculeView) -> int:
     """count reactions in the rooted subtree below ``molecule``."""
-    reaction = molecule.produced_by()
-    if reaction is None:
-        return 0
-    return 1 + sum(subtree_reaction_count(reactant) for reactant in reaction.reactants())
+    return sum(1 for candidate in molecule.iter_molecules() if candidate.produced_by() is not None)
 
 
 def _validate_embedding_query(query: Route) -> None:
@@ -258,6 +253,8 @@ def _match_reactants(
     query_groups = _group_reactants_by_molecule_key(query_reactants, match_level)
     container_groups = _group_reactants_by_molecule_key(container_reactants, match_level)
     if query_groups.keys() != container_groups.keys():
+        return None
+    if any(len(query_groups[molecule_key]) != len(container_groups[molecule_key]) for molecule_key in query_groups):
         return None
 
     trace = _Trace(matched_reactions=0)

@@ -220,7 +220,8 @@ class Route(BaseModel):
         molecule: Molecule | MoleculeView,
         match_level: InChIKeyLevel = InChIKeyLevel.FULL,
     ) -> bool:
-        return bool(self.find_molecules(molecule, match_level))
+        molecule_key = molecule.key(match_level)
+        return any(candidate.key(match_level) == molecule_key for candidate in self.iter_molecules())
 
     def reactions(self) -> list[ReactionView]:
         return list(self.iter_reactions())

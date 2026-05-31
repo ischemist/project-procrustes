@@ -3,7 +3,6 @@ from retrocast.curation.embedding import (
     LeafExtension,
     find_route_embeddings,
     route_embeds_at,
-    subtree_reaction_count,
 )
 from retrocast.curation.filtering import (
     clean_and_prioritize_pools,
@@ -28,5 +27,4 @@ __all__ = [
     "route_is_convergent",
     "sample_random",
     "sample_stratified_priority",
-    "subtree_reaction_count",
 ]
