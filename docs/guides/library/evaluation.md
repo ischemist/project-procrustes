@@ -113,7 +113,7 @@ for scored in evaluation.targets["target-001"].candidates:
         print(reaction.reaction_id, tier_1.status)
 ```
 
-Reaction ids are route-local path ids such as `rc:r:/` and `rc:r:/1/0`. See [Route Node IDs](../../developers/route-node-ids.md).
+Reaction ids are route-local path ids such as `rc:r:/` and `rc:r:/1/0`. See [Route Node IDs](../../developer-reference/route-node-ids.md).
 
 ## Custom Tier Checkers
 

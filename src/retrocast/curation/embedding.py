@@ -1,8 +1,8 @@
-"""route embedding is unordered rooted tree pattern matching.
+"""route embedding checks whether one route occurs inside another route.
 
-subtree signatures are bottom-up merkle hashes. they solve exact rooted subtree
-containment and can give cheap candidate filters. the recursive matcher remains the
-authority for leaf-extension semantics and duplicate same-key reactant assignment.
+the matcher treats routes as unordered rooted trees. exact subtree signatures
+give a fast proof when roots already line up; recursive matching handles shifted
+roots, leaf extension, and duplicate same-key reactant assignment.
 """
 
 from __future__ import annotations
@@ -12,12 +12,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from retrocast.chem import InChIKeyLevel
+from retrocast.exceptions import InvalidRouteEmbeddingQueryError
 from retrocast.models.route import MoleculeView, Route, RoutePath
 
 
 @dataclass(frozen=True, slots=True)
 class LeafExtension:
-    """a query leaf matched a non-leaf container molecule.
+    """evidence that the container continues below a matched query leaf.
 
     ``query_leaf_path`` names the query boundary that was exceeded.
     ``container_path`` names the corresponding molecule in the container route;
@@ -30,7 +31,7 @@ class LeafExtension:
 
 @dataclass(frozen=True, slots=True)
 class EmbeddingMatch:
-    """the public trace for one embedding occurrence.
+    """trace for one place where a query route embeds in a container route.
 
     ``query_path`` and ``container_path`` are the two roots that matched.
     ``matched_reactions`` counts only reactions present in the query-side
@@ -45,12 +46,12 @@ class EmbeddingMatch:
 
     @property
     def leaf_extended(self) -> bool:
-        """return whether any query leaf was matched to a non-leaf container molecule."""
+        """return whether the container continues below any matched query leaf."""
         return bool(self.leaf_extensions)
 
     @property
     def root_shifted(self) -> bool:
-        """return whether the query root matched below the container target."""
+        """return whether the query root matched an internal container molecule."""
         return self.container_path != RoutePath.target()
 
 
@@ -74,12 +75,13 @@ def find_route_embeddings(
     *,
     allow_leaf_extension: bool = True,
 ) -> tuple[EmbeddingMatch, ...]:
-    """find every container molecule where the full query route embeds.
+    """scan the container for every place where the query target embeds.
 
-    The query is always rooted at its target. The container root is allowed to
+    the query is always rooted at its target. the container root is allowed to
     shift, so this finds both exact/full-route matches and internal matches like
     ``b <- c`` inside ``a <- b <- c``.
     """
+    _validate_embedding_query(query)
     query_root = query.molecule_at(RoutePath.target())
     matches = []
     for container_root in container.iter_molecules():
@@ -100,9 +102,9 @@ def route_embeds_at(
 ) -> EmbeddingMatch | None:
     """check one selected query root against one selected container root.
 
-    This is the authoritative point check used after a scan or an index lookup.
-    It first rejects impossible roots, then accepts exact subtree-signature
-    matches immediately, and otherwise runs the recursive unordered-tree matcher.
+    exact subtree signatures are accepted as a fast proof. all other candidates
+    are checked by the recursive matcher, which is authoritative for leaf
+    extension and duplicate same-key reactant assignment.
     """
     if not _can_match_root(query, container, match_level, allow_leaf_extension=allow_leaf_extension):
         return None
@@ -127,11 +129,26 @@ def route_embeds_at(
 
 
 def subtree_reaction_count(molecule: MoleculeView) -> int:
-    """count reactions in the rooted subtree below a molecule view."""
+    """count reactions in the rooted subtree below ``molecule``."""
     reaction = molecule.produced_by()
     if reaction is None:
         return 0
     return 1 + sum(subtree_reaction_count(reactant) for reactant in reaction.reactants())
+
+
+def _validate_embedding_query(query: Route) -> None:
+    if query.target.product_of is not None:
+        return
+    raise InvalidRouteEmbeddingQueryError(
+        "route embedding query must contain at least one reaction; use Route.contains_molecule() "
+        "for molecule membership checks",
+        context={
+            "query_target_smiles": str(query.target.smiles),
+            "query_target_inchikey": str(query.target.inchikey),
+            "query_reactions": 0,
+            "suggested_operation": "Route.contains_molecule",
+        },
+    )
 
 
 def _can_match_root(
@@ -141,12 +158,11 @@ def _can_match_root(
     *,
     allow_leaf_extension: bool,
 ) -> bool:
-    """return whether a root pair is worth recursively checking.
+    """return whether a root pair can possibly embed.
 
-    This is a cheap necessary condition, not a proof of embedding. molecule keys
-    must match. if the query root has a reaction, the container root must have
-    the same local reaction signature. if the query root is a leaf, a non-leaf
-    container root is allowed only when leaf extension is enabled.
+    this is a necessary condition, not proof. molecule keys must match. non-leaf
+    query roots also require the same local reaction signature. query leaves may
+    match non-leaf container roots only when leaf extension is enabled.
     """
     if query.key(match_level) != container.key(match_level):
         return False
@@ -168,9 +184,9 @@ def _match_molecule(
     allow_leaf_extension: bool,
     memo: dict[tuple[RoutePath, RoutePath], _Trace | None],
 ) -> _Trace | None:
-    """match two molecule roots after the cheap root checks have passed.
+    """recursively match two molecule roots after root-level checks pass.
 
-    Leaves are the only asymmetric case: a query leaf can match a container
+    leaves are the only asymmetric case: a query leaf can match a container
     non-leaf when leaf extension is enabled. otherwise both sides must expose
     the same producing reaction, and their reactants are matched recursively as
     an unordered multiset.
@@ -229,9 +245,9 @@ def _match_reactants(
     allow_leaf_extension: bool,
     memo: dict[tuple[RoutePath, RoutePath], _Trace | None],
 ) -> _Trace | None:
-    """match two reaction reactant lists without using list order.
+    """match two reaction reactant lists as unordered duplicate-aware multisets.
 
-    Reactants are first grouped by molecule key. group keys and group sizes must
+    reactants are first grouped by molecule key. group keys and group sizes must
     match, which preserves duplicate multiplicity. same-key groups are then
     matched recursively because same molecule identity does not guarantee same
     downstream subtree.
@@ -278,9 +294,9 @@ def _match_same_key_reactants(
     allow_leaf_extension: bool,
     memo: dict[tuple[RoutePath, RoutePath], _Trace | None],
 ) -> _Trace | None:
-    """find a valid pairing inside one same-key sibling group.
+    """find a recursive assignment inside one same-key sibling group.
 
-    Same-key siblings cannot be paired by position because reactant order is not
+    same-key siblings cannot be paired by position because reactant order is not
     semantic. this backtracks over container assignments and keeps the valid
     assignment with the fewest leaf extensions, using path ids only to break ties.
     """

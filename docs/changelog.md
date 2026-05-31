@@ -6,7 +6,7 @@ icon: lucide/history
 
 ## Pre-1.0 Compatibility Policy
 
-RetroCast is still pre-`1.0.0`. Until `1.0.0`, we will make breaking changes to the core schema or workflows whenever we see a compelling reason to do so. We'll try to keep some [sane deprecation schedule](developers/deprecations) unless it incurs a significant complexity cost.
+RetroCast is still pre-`1.0.0`. Until `1.0.0`, we will make breaking changes to the core schema or workflows whenever we see a compelling reason to do so. We'll try to keep some [sane deprecation schedule](developer-reference/deprecations.md) unless it incurs a significant complexity cost.
 
 Practically speaking, you should treat `2-raw` (or wherever you store the raw planner outputs) as the source of truth and `3-processed`, `4-scored`, `5-results` as regenerable.
 
@@ -76,7 +76,7 @@ The v0.6.0 compatibility layer intentionally warns instead of removing the old n
 - legacy adapter class aliases such as `AizynthAdapter`, `DMSAdapter`, and `DreamRetroAdapter`
 - target-local adaptation helpers `adapt_single_route(...)` and `adapt_routes(...)`
 
-See the [deprecation schedule](developers/deprecations.md) for the canonical removal plan.
+See the [deprecation schedule](developer-reference/deprecations.md) for the canonical removal plan.
 
 ### Migration
 

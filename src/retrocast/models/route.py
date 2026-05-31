@@ -207,6 +207,21 @@ class Route(BaseModel):
     def iter_molecules(self) -> Iterator[MoleculeView]:
         yield from self.molecule_at(RoutePath.target()).iter_molecules()
 
+    def find_molecules(
+        self,
+        molecule: Molecule | MoleculeView,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    ) -> tuple[MoleculeView, ...]:
+        molecule_key = molecule.key(match_level)
+        return tuple(candidate for candidate in self.iter_molecules() if candidate.key(match_level) == molecule_key)
+
+    def contains_molecule(
+        self,
+        molecule: Molecule | MoleculeView,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    ) -> bool:
+        return bool(self.find_molecules(molecule, match_level))
+
     def reactions(self) -> list[ReactionView]:
         return list(self.iter_reactions())
 

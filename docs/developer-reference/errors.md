@@ -4,9 +4,9 @@ icon: lucide/triangle-alert
 
 # Error Handling
 
-At CLI, I/O, adapter, workflow, and benchmark boundaries, RetroCast raises `RetroCastException` subclasses with stable `code` values. Human-readable messages can change; callers should record or branch on `code` and `context`.
+At public package, CLI, I/O, adapter, workflow, and benchmark boundaries, RetroCast raises `RetroCastException` subclasses with stable `code` values. Human-readable messages can change; callers should record or branch on `code` and `context`.
 
-Use these exceptions when the caller can do something specific with the failure: abort a command, skip one raw route record, preserve a failed prediction slot, or continue a batch. Inside local implementation code, ordinary `ValueError`, `TypeError`, and `RuntimeError` are fine.
+Use these exceptions when the caller can do something specific with the failure: abort a command, skip one raw route record, preserve a failed prediction slot, choose a different public API, or continue a batch. Inside local implementation code, ordinary `ValueError`, `TypeError`, and `RuntimeError` are fine.
 
 !!! info "Codes are the public contract"
 
@@ -14,9 +14,9 @@ Use these exceptions when the caller can do something specific with the failure:
 
 ## Rules
 
-- Raise `RetroCastException` subclasses only at package, CLI, I/O, adapter, workflow, and benchmark boundaries.
+- Raise `RetroCastException` subclasses at public package, CLI, I/O, adapter, workflow, and benchmark boundaries when callers can reasonably recover or branch.
 - Preserve causes with `raise ... from exc` when wrapping filesystem, JSON, gzip, Pydantic, RDKit, or serializer failures.
-- Let ordinary `ValueError`, `TypeError`, and `RuntimeError` represent local programmer errors.
+- Let ordinary `ValueError`, `TypeError`, and `RuntimeError` represent local programmer errors and private helper invariants.
 - Library code raises; CLI and workflow boundaries decide whether to abort, skip, count, or continue.
 - Never branch on exception prose. Branch on `error.code`.
 
@@ -71,6 +71,7 @@ except (AdapterError, ChemError) as exc:
 | `security.*` | `SecurityError` | `security.path_invalid`, `security.path_traversal` | Path, filename, or filesystem boundary input is unsafe |
 | `config.*` | `ConfigurationError` | `config.invalid_value` | Config values cannot be interpreted safely |
 | `chem.*` | `ChemError` | `chem.invalid_smiles`, `chem.runtime_error` | Chemistry parsing, identity, or backend failure |
+| `curation.*` | `CurationError` | `curation.route_embedding_query_invalid` | Curation API input is valid data but invalid for the requested operation |
 | `schema.*` | `SchemaLogicError` | `schema.logic_error` | Data is structurally valid but logically impossible |
 | `benchmark.*` | `BenchmarkError` | `benchmark.validation_failed` | Benchmark construction or uniqueness contract failed |
 | `adapter.*` | `AdapterError` | `adapter.schema_invalid`, `adapter.target_mismatch`, `adapter.cycle_detected`, `adapter.route_string_invalid` | Raw model output failed adapter boundary contracts |

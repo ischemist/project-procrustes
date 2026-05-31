@@ -42,17 +42,18 @@ nav = [
       "guides/training-sets.md",
     ] },
   ] },
-  { "Engineering" = [
+  { "For Developers" = [
     { "Rationale" = [
       "rationale/solv-n-evaluation.md",
       "rationale/schema-design.md",
       "rationale/training-set-releases.md",
     ] },
-    { "Developers" = [
-      "developers/adapters.md",
-      "developers/route-node-ids.md",
-      "developers/errors.md",
-      "developers/deprecations.md",
+    { "Reference" = [
+      "developer-reference/adapters.md",
+      "developer-reference/route-node-ids.md",
+      "developer-reference/route-embedding.md",
+      "developer-reference/errors.md",
+      "developer-reference/deprecations.md",
     ] },
   ] },
 ]

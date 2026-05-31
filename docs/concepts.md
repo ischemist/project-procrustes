@@ -74,7 +74,7 @@ Evaluation artifacts sometimes need to point back into a route. RetroCast uses d
 
 These ids are addresses inside one route tree. They are not molecule identities and they are not serialized on `Molecule` or `Reaction` objects. Internally, code should use `RoutePath`; string ids are for artifacts, annotations, and UI boundaries.
 
-See [Route Node IDs](developers/route-node-ids.md) for the full grammar.
+See [Route Node IDs](developer-reference/route-node-ids.md) for the full grammar.
 
 ## Route Signatures
 

@@ -239,7 +239,7 @@ Read [Schema Design](/rationale/schema-design) for the deeper data-model rationa
 Use the `retrocast.workflow` functions when integrating RetroCast into your own scripts.
 
 **Write Custom Adapters**  
-Need to support a new output format? See [Writing a Custom Adapter](developers/adapters.md).
+Need to support a new output format? See [Writing a Custom Adapter](developer-reference/adapters.md).
 
 **Full CLI Reference**  
 See all available commands in the [CLI Reference](guides/cli.md).

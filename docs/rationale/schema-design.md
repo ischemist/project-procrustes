@@ -61,7 +61,7 @@ Identical molecules in different positions (e.g. same building block used in two
 
 ### Route path
 
-RetroCast uses deterministic paths to refer to molecules and reactions inside a `Route`. The full grammar lives in [Route Node IDs](developers/route-node-ids); but here's a useful cheat sheet:
+RetroCast uses deterministic paths to refer to molecules and reactions inside a `Route`. The full grammar lives in [Route Node IDs](../developer-reference/route-node-ids.md); but here's a useful cheat sheet:
 
 - `rc:m:/` root target molecule
 - `rc:r:/` root reaction
@@ -242,19 +242,13 @@ class Route(BaseModel):
 
 ### Route Embedding
 
-Route embedding asks whether one route occurs inside another route. This is not the same question as full route equality, route-prefix equality, or exact rooted subtree equality.
+Route embedding asks whether one route occurs inside another route.
 
-The embedding primitive belongs in `curation`, not in the route model. A `Route` should know how to expose stable views, paths, molecule keys, reaction signatures, and subtree signatures. Whether one route should be considered a contaminating fragment of another is a comparison workflow over two routes.
+`Route.signature()` and `MoleculeView.subtree_signature()` answer exact equality for a chosen root. Embedding is looser in two ways: the query target may match an internal molecule in the container route, and the container may continue below a query leaf when the audit allows leaf extension.
 
-A subtree signature gives a cheap exact answer when roots already line up. For example, it can answer whether `a <- b <- c <- d` contains the exact target-rooted prefix `a <- b`. It does not answer whether the same route contains `b <- c`, because that query is rooted at an internal molecule of the container route.
-
-The curation primitive is therefore:
+`retrocast.curation.embedding` uses route views, paths, molecule keys, reaction signatures, and subtree signatures to produce audit traces:
 
 ```python
-class LeafExtension:
-    query_leaf_path: RoutePath
-    container_path: RoutePath
-
 class EmbeddingMatch:
     query_path: RoutePath
     container_path: RoutePath
@@ -283,17 +277,7 @@ def route_embeds_at(
 ) -> EmbeddingMatch | None: ...
 ```
 
-`find_route_embeddings` tries the query target against every molecule in the container route. It can skip roots whose molecule key and local reaction signature cannot match. `route_embeds_at` performs the real check:
-
-- if `query.subtree_signature()` equals `container.subtree_signature()`, the rooted subtree match is exact and no recursive matching is needed.
-- otherwise, molecule keys must match at the chosen roots.
-- if the query molecule is a leaf, the container molecule may also be a leaf. If `allow_leaf_extension=True`, the container may continue below that leaf in route-tree direction; the match is still valid, but the returned trace records the query leaf and the expanded container path.
-- if the query molecule is not a leaf, the container molecule must also have a producing reaction with the same `ReactionView.signature()`.
-- reactants are matched as an unordered multiset by molecule key, preserving duplicate multiplicity. When duplicate same-key reactants exist, the matcher assigns them recursively by subtree structure, not by list position.
-
-For large audits, container molecules can be indexed by exact `subtree_signature()` and by `(molecule.key(match_level), produced_by.signature(match_level) | None)`. The first index proves exact rooted containment. The second index only finds candidates. The recursive check remains authoritative for leaf extension and duplicate-reactant assignment.
-
-The return value is intentionally a match trace, not a route object and not just a boolean. `container_path` says where the query target was found. `root_shifted` distinguishes full-route matches from internal embeddings. `matched_reactions` gives the size of the matched plan. `leaf_extensions` distinguishes exact containment from "the query stops here, but the training route kept going." Each `LeafExtension` records both the query leaf that formed the boundary and the matched container molecule that continues below it, so the audit ledger can explain which query boundary was exceeded.
+The detailed matching rules live in [Route Embedding](../developer-reference/route-embedding.md). The important schema-design point is small: exact subtree equality is a signature check; embedding is a route-to-route matching check.
 
 ## Workflows
 

@@ -62,8 +62,8 @@ New to RetroCast? Start here:
 - **[Changelog](changelog.md)** - Release notes and migration guides
 - **[Training Sets](guides/training-sets.md)** - Load PaRoutes route and reaction training artifacts
 - **[Training-Set Release Rationale](rationale/training-set-releases.md)** - How PaRoutes route and single-step releases are created
-- **[Error Handling](developers/errors.md)** - Stable error codes and boundary contracts
-- **[Deprecation Schedule](developers/deprecations.md)** - Compatibility aliases and planned removal versions
+- **[Error Handling](developer-reference/errors.md)** - Stable error codes and boundary contracts
+- **[Deprecation Schedule](developer-reference/deprecations.md)** - Compatibility aliases and planned removal versions
 
 ## Benchmarks
 
