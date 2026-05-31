@@ -160,7 +160,7 @@ class EmbeddingMatch:
 
 `container_path` is where that query root matched in the container.
 
-`matched_reactions` counts query-side reactions only. Reactions below leaf-extended container nodes are evidence about the container, not part of the matched query.
+`matched_reactions` counts query-side reactions that were found in the container.
 
 `leaf_extensions` records the query/container boundary pairs where the query stopped and the container continued:
 
@@ -172,21 +172,37 @@ class LeafExtension:
 
 ## Call Flow
 
+At a high level, route embedding is a scan over `MoleculeView`s plus a recursive rooted-tree match:
+
+1. `find_route_embeddings(...)` starts with the query target `MoleculeView`.
+2. It scans candidate container molecules from `container.iter_molecules()`.
+    - For each candidate container `MoleculeView`, `_can_match_root(...)` rejects the pair if the query molecule key cannot match the container molecule key, or if their local `ReactionView.signature(...)` values cannot match.
+    - If the root pair is plausible, `route_embeds_at(...)` checks whether the query target subtree embeds at that candidate container molecule.
+3. Inside each `route_embeds_at(...)` point check:
+    - If the query target subtree and candidate container molecule subtree have the same `subtree_signature(...)`, the match is accepted immediately. This proves exact rooted-subtree containment, but it does not find shifted roots by itself and it does not express leaf-extension semantics.
+    - Otherwise, `_match_molecule(...)` recursively checks the query subtree against the candidate container subtree.
+4. Inside the recursive matcher:
+    - If the query molecule is a leaf, the container molecule may be a leaf too. If `allow_leaf_extension=True`, the container may instead continue below that molecule and the match records a `LeafExtension`.
+    - If the query molecule is not a leaf, the container molecule must also have a producing reaction with the same `ReactionView.signature(...)`.
+    - At each matching reaction pair, `_match_reactants(...)` compares the query reactants with the container reactants as an unordered multiset, not a positional list.
+    - When same-key siblings make that multiset ambiguous, `_match_same_key_reactants(...)` resolves the pairing. See [duplicate same-key reactants](#duplicate-same-key-reactants).
+5. The recursive calls accumulate a `_Trace` with the query reaction count and leaf-extension evidence; `route_embeds_at(...)` wraps it as an `EmbeddingMatch`.
+
 ```mermaid
 flowchart TD
-    scan["find_route_embeddings(query, container)"]
-    iter["container.iter_molecules()"]
-    can_root["_can_match_root(query_root, container_root)"]
-    point["route_embeds_at(query_root, container_root)"]
-    exact["subtree_signature fast path"]
-    molecule["_match_molecule(...)"]
-    reactants["_match_reactants(...)"]
-    groups["_group_reactants_by_molecule_key(...)"]
-    same_key["_match_same_key_reactants(...)"]
-    merge["_merge_traces(...)"]
-    trace["_Trace"]
-    count["subtree_reaction_count(...)"]
-    result["EmbeddingMatch"]
+    scan["scan container<br/><i>find_route_embeddings</i>"]
+    iter["next container molecule<br/><i>Route.iter_molecules</i>"]
+    can_root["cheap root check<br/><i>_can_match_root</i>"]
+    point["point check<br/><i>route_embeds_at</i>"]
+    exact["exact subtree proof<br/><i>subtree_signature</i>"]
+    count["count query reactions<br/><i>subtree_reaction_count</i>"]
+    molecule["match molecule roots<br/><i>_match_molecule</i>"]
+    reactants["match reactant multisets<br/><i>_match_reactants</i>"]
+    groups["group by molecule key<br/><i>_group_reactants_by_molecule_key</i>"]
+    same_key["assign same-key siblings<br/><i>_match_same_key_reactants</i>"]
+    merge["merge branch traces<br/><i>_merge_traces</i>"]
+    trace["internal trace<br/><i>_Trace</i>"]
+    result["public match trace<br/><i>EmbeddingMatch</i>"]
 
     scan --> iter
     iter --> can_root
@@ -205,26 +221,36 @@ flowchart TD
     trace --> result
 ```
 
-`find_route_embeddings(...)` is the scan API. It fixes the query root at the query target, walks all container molecules, applies the cheap root check, and returns every successful point match in container traversal order.
+### Duplicate Same-Key Reactants
 
-`route_embeds_at(...)` is the point API. It checks one selected query molecule against one selected container molecule. Exact subtree signatures are accepted immediately; everything else goes through the recursive matcher.
+This is mostly defensive machinery because it is hard to imagine a common chemical route where the same reaction has two same-key synthesized reactants with different downstream histories, but the `Route` model allows it, so for complete correctness of the matcher we have to deal with it.
 
-`_match_molecule(...)` owns the recursive molecule rule: keys must match; query leaves may become leaf extensions; non-leaves require matching producing reactions.
+The ambiguous shape is:
 
-`_match_reactants(...)` owns the reaction-child rule: reactants are unordered, but duplicate multiplicity matters.
+```mermaid
+flowchart LR
+    subgraph query["query"]
+        q_a["A"] --> q_rx_a["rxn"]
+        q_rx_a --> q_b0["B"]
+        q_rx_a --> q_b1["B"]
+        q_b0 --> q_rx_b0["rxn"]
+        q_rx_b0 --> q_c["C"]
+        q_b1 --> q_rx_b1["rxn"]
+        q_rx_b1 --> q_d["D"]
+    end
 
-`_match_same_key_reactants(...)` resolves duplicate same-key siblings by recursive assignment. It prefers the valid assignment with the fewest leaf extensions, using path ids only to make ties deterministic.
+    subgraph container["container"]
+        c_a["A"] --> c_rx_a["rxn"]
+        c_rx_a --> c_b0["B"]
+        c_rx_a --> c_b1["B"]
+        c_b0 --> c_rx_b0["rxn"]
+        c_rx_b0 --> c_d["D"]
+        c_b1 --> c_rx_b1["rxn"]
+        c_rx_b1 --> c_c["C"]
+    end
 
-`_Trace` is the internal accumulator for matched reaction count and leaf-extension evidence. `EmbeddingMatch` wraps that trace with the selected query and container roots.
+    q_b0 -. "pairs by subtree" .-> c_b1
+    q_b1 -. "pairs by subtree" .-> c_b0
+```
 
-## Match Rules
-
-A query molecule embeds at a container molecule when:
-
-- the two molecule keys match at the requested `InChIKeyLevel`
-- if the query molecule is a leaf, the container molecule is either also a leaf or, when `allow_leaf_extension=True`, a non-leaf recorded as a leaf extension
-- if the query molecule is not a leaf, the container molecule also has a producing reaction with the same `ReactionView.signature(...)`
-- reactants under matching reactions pair as an unordered multiset
-- duplicate same-key reactants are assigned recursively by subtree structure, not by list position
-
-`subtree_signature(...)` is a fast exact rooted-subtree proof. If the query root and container root have the same subtree signature, the embedding is exact and has no leaf extensions. Signatures do not find shifted roots by themselves, and they do not express leaf-extension semantics.
+Both root reactions have two `B` reactants. Because reactant order is not semantic, the matcher cannot pair by list position. `_match_same_key_reactants(...)` tries valid assignments inside the same-key sibling group and keeps one where every query `B` maps to a compatible container `B`.
