@@ -31,9 +31,14 @@ def create_analysis_table(
     renderables: list[RenderableType] = [Text.from_markup(f"[bold magenta]{escape(title)}[/]")]
     if subtitle is not None:
         renderables.append(Text.from_markup(f"[dim]{escape(subtitle)}[/]"))
-    note = _terminal_report_note(report)
-    if note is not None:
-        renderables.append(Text.from_markup(note))
+
+    note_parts = _report_note_parts(report)
+    flag_legend = _reliability_legend_parts([metric for metric in report.metrics.values()])
+    if flag_legend:
+        note_parts.append("flags: " + "; ".join(f"{symbol} {description}" for symbol, description in flag_legend))
+    if note_parts:
+        note = " | ".join(note_parts)
+        renderables.append(Text.from_markup(f"[dim]{escape(note)}[/]"))
 
     solv_table = _create_solv_table(report)
     if solv_table is not None:
@@ -67,39 +72,30 @@ def _create_solv_table(
     )
     table.add_column("Tier", style="bold", justify="right", no_wrap=True)
     table.add_column("Task", no_wrap=True)
-    table.add_column("Valid", justify="center", no_wrap=True)
-    table.add_column("Solv", justify="center", no_wrap=True)
-    table.add_column("MRR Valid", justify="center", no_wrap=True)
-    table.add_column("MRR Solv", justify="center", no_wrap=True)
+    table.add_column("Valid-N", justify="center", no_wrap=True)
+    table.add_column("Solv-N", justify="center", no_wrap=True)
+    table.add_column("MRR Valid-N", justify="center", no_wrap=True)
+    table.add_column("MRR Solv-N", justify="center", no_wrap=True)
+
+    def cell(name: str) -> str:
+        return _metric_cell(name, metrics.get(name))
 
     for tier in tiers:
         labels = _solv_labels(metrics, tier)
         if not labels:
             labels = [""]
         for label in labels:
+            valid_rate = f"tier_{tier}_validity_rate"
+            solv_rate = f"solv_{tier}[{label}]_rate"
+            mrr_valid = f"mrr_tier_{tier}"
+            mrr_solv = f"mrr_solv_{tier}[{label}]"
             table.add_row(
                 str(tier),
                 label,
-                _metric_cell(
-                    f"tier_{tier}_validity_rate",
-                    metrics.get(f"tier_{tier}_validity_rate"),
-                ),
-                _metric_cell(
-                    f"solv_{tier}[{label}]_rate",
-                    metrics.get(f"solv_{tier}[{label}]_rate"),
-                )
-                if label
-                else "",
-                _metric_cell(
-                    f"mrr_tier_{tier}",
-                    metrics.get(f"mrr_tier_{tier}"),
-                ),
-                _metric_cell(
-                    f"mrr_solv_{tier}[{label}]",
-                    metrics.get(f"mrr_solv_{tier}[{label}]"),
-                )
-                if label
-                else "",
+                cell(valid_rate),
+                cell(solv_rate) if label else "",
+                cell(mrr_valid),
+                cell(mrr_solv) if label else "",
             )
     return table
 
@@ -170,9 +166,12 @@ def _create_runtime_table(report: AnalysisReport) -> Table | None:
 
 def generate_markdown_report(report: AnalysisReport, *, title: str = "Evaluation Report") -> str:
     lines = [f"# {title}", "", "## Overall", ""]
-    note = _solv_note(report)
-    if note:
-        lines.extend([note, ""])
+    note_parts = _report_note_parts(report, ci_separator=": ")
+    legend = _reliability_legend([metric for metric in report.metrics.values()])
+    if legend:
+        note_parts.append(legend)
+    if note_parts:
+        lines.extend([" | ".join(note_parts), ""])
     lines.extend(_markdown_headline_metric_table(report.metrics))
     lines.extend(_markdown_reconstruction_diagnostics(report.metrics))
     runtime_rows = _runtime_rows(report, rich=False)
@@ -199,53 +198,17 @@ def generate_markdown_report(report: AnalysisReport, *, title: str = "Evaluation
     return "\n".join(lines).rstrip() + "\n"
 
 
-def _solv_note(report: AnalysisReport) -> str:
+def _report_note_parts(report: AnalysisReport, *, ci_separator: str = "=") -> list[str]:
     parts = []
     target_count = _target_count(report.metrics)
     if target_count is not None:
         parts.append(f"n={target_count} targets")
 
     if report.bootstrap_resamples is not None:
-        parts.append(f"ci: 95% bootstrap, {report.bootstrap_resamples:,} resamples")
+        parts.append(f"ci{ci_separator}95% bootstrap, {report.bootstrap_resamples:,} resamples")
     else:
-        parts.append("ci: 95% bootstrap")
-
-    legend = _reliability_legend([metric for metric in report.metrics.values()])
-    if legend:
-        parts.append(legend)
-    return " | ".join(parts)
-
-
-def _terminal_report_note(report: AnalysisReport) -> str | None:
-    lines = []
-    lines.extend(f"[dim]{escape(line)}[/]" for line in _terminal_note_lines(report))
-    return "\n".join(lines) if lines else None
-
-
-def _terminal_note_lines(report: AnalysisReport) -> list[str]:
-    parts = []
-    target_count = _target_count(report.metrics)
-    if target_count is not None:
-        parts.append(f"n={target_count} targets")
-
-    if report.bootstrap_resamples is not None:
-        parts.append(f"ci=95% bootstrap, {report.bootstrap_resamples:,} resamples")
-    else:
-        parts.append("ci=95% bootstrap")
-
-    flag_legend = _reliability_legend_parts([metric for metric in report.metrics.values()])
-    if flag_legend:
-        parts.append("flags: " + "; ".join(f"{symbol} {description}" for symbol, description in flag_legend))
-
-    return [" | ".join(parts)]
-
-
-def _plain_reconstruction_note(metrics: dict[str, MetricSummary]) -> str:
-    notes = []
-    legend = _reliability_legend(_reconstruction_metric_values(metrics))
-    if legend:
-        notes.append(legend)
-    return " | ".join(notes)
+        parts.append(f"ci{ci_separator}95% bootstrap")
+    return parts
 
 
 def _markdown_headline_metric_table(metrics: dict[str, MetricSummary]) -> list[str]:
@@ -278,45 +241,39 @@ def _markdown_reconstruction_diagnostics(
 
     heading = "#" * heading_level
     lines = ["", f"{heading} Reconstruction Diagnostics", ""]
-    note = _plain_reconstruction_note(metrics)
-    if note:
-        lines.extend([note, ""])
+    legend = _reliability_legend(_reconstruction_metric_values(metrics))
+    if legend:
+        lines.extend([legend, ""])
 
-    def diagnostic_cell(pattern: re.Pattern[str], k: int, *, include_n: bool = False) -> str:
+    def diagnostic_cell(pattern: re.Pattern[str], k: int) -> str:
         for name, metric, match in _matching_metrics(metrics, pattern):
             if int(match.group(1)) != k:
                 continue
-            value = _format_value(name, metric, rich=False)
-            ci = _format_ci(name, metric, rich=False)
-            cell = f"{value} {ci}" if ci else value
-            return f"{cell} (n={metric.count})" if include_n else cell
+            return _markdown_metric_cell(name, metric)
         return ""
 
     def prefix_cell(k: int, depth: int) -> str:
         for name, metric, match in _matching_metrics(metrics, _PREFIX_TOP_K):
             if int(match.group(1)) != depth or int(match.group(2)) != k:
                 continue
-            value = _format_value(name, metric, rich=False)
-            ci = _format_ci(name, metric, rich=False)
-            return f"{value} {ci}" if ci else value
+            return _markdown_metric_cell(name, metric)
         return ""
 
-    top_k_rows = []
-    for k in ks:
-        top_k_rows.append(
-            (
-                f"Top-{k}",
-                diagnostic_cell(_TOP_K, k),
-                diagnostic_cell(_ROOT_TOP_K, k),
-                diagnostic_cell(_GIVEN_ROOT_TOP_K, k, include_n=True),
-                diagnostic_cell(_DISTINCT_ROOT_TOP_K, k),
-            )
-        )
+    diagnostics: list[tuple[str, re.Pattern[str]]] = [
+        ("Full route", _TOP_K),
+        ("Root reaction", _ROOT_TOP_K),
+        ("Route given root", _GIVEN_ROOT_TOP_K),
+        ("Distinct roots", _DISTINCT_ROOT_TOP_K),
+    ]
+    top_k_rows = [tuple([f"Top-{k}", *[diagnostic_cell(pattern, k) for _, pattern in diagnostics]]) for k in ks]
+    diagnostic_align: list[MarkdownAlign] = ["left"]
+    for _ in diagnostics:
+        diagnostic_align.append("right")
     lines.extend(
         markdown_table(
-            ["K", "Full route", "Root reaction", "Route given root", "Distinct roots"],
+            ["K", *[label for label, _ in diagnostics]],
             top_k_rows,
-            align=["left", "right", "right", "right", "right"],
+            align=diagnostic_align,
         ).splitlines()
     )
 
@@ -428,6 +385,12 @@ def _metric_cell(
     if not ci:
         return first_line
     return f"{first_line}\n[dim]{ci}[/]"
+
+
+def _markdown_metric_cell(name: str, metric: MetricSummary) -> str:
+    value = _format_value(name, metric, rich=False)
+    ci = _format_ci(name, metric, rich=False)
+    return f"{value} {ci}" if ci else value
 
 
 def _format_duration(seconds: float | None) -> str:

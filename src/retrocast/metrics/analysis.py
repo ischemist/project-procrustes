@@ -134,7 +134,8 @@ def _top_k_reconstruction_given_root_values(
     for target in targets:
         if not _target_has_root_hit(target, k, match_level):
             continue
-        values.append(1.0 if _target_has_full_hit(target, k) else 0.0)
+        candidates = _task_satisfying_top_k(target, k)
+        values.append(1.0 if any(candidate.matches_acceptable for candidate in candidates) else 0.0)
     return values
 
 
@@ -161,10 +162,6 @@ def _distinct_root_reaction_values(
         }
         values.append(float(len(root_signatures)))
     return values
-
-
-def _target_has_full_hit(target: TargetResult, k: int) -> bool:
-    return any(candidate.matches_acceptable for candidate in _task_satisfying_top_k(target, k))
 
 
 def _target_has_root_hit(target: TargetResult, k: int, match_level: InChIKeyLevel) -> bool:
