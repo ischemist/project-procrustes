@@ -10,6 +10,7 @@ from retrocast.curation.training.records import TrainingReactionRecord
 from retrocast.curation.training.route_release import _route_transform_key
 from retrocast.exceptions import TrainingReleaseError
 from retrocast.io import iter_jsonl_gz, load_lines_gz, load_training_route_records
+from retrocast.markdown import MarkdownRow, markdown_table
 
 
 @dataclass(frozen=True)
@@ -82,29 +83,50 @@ def build_route_release_split_audit(*, release_name: str, route_records: list[An
 
 
 def render_route_release_split_audit_markdown(*, release_root_name: str, audits: list[dict[str, Any]]) -> str:
-    lines = [f"# training release audit: {release_root_name}", "", "| release | total | training | validation | val% |"]
-    lines.append("| --- | ---: | ---: | ---: | ---: |")
-    for audit in audits:
-        lines.append(
-            f"| {audit['release_name']} | {audit['total']} | {audit['training']} | {audit['validation']} | {_format_percent(_fraction(audit['validation'], audit['total']))} |"
-        )
+    lines = [
+        f"# training release audit: {release_root_name}",
+        "",
+        markdown_table(
+            ["release", "total", "training", "validation", "val%"],
+            [
+                (
+                    audit["release_name"],
+                    audit["total"],
+                    audit["training"],
+                    audit["validation"],
+                    _format_percent(_fraction(audit["validation"], audit["total"])),
+                )
+                for audit in audits
+            ],
+            align=["left", "right", "right", "right", "right"],
+        ),
+    ]
     lines.append("")
     for audit in audits:
         lines.extend(
             [
                 f"## {audit['release_name']}",
                 "",
-                "| depth | total | training | validation |",
-                "| ---: | ---: | ---: | ---: |",
+                markdown_table(
+                    ["depth", "total", "training", "validation"],
+                    [(row["depth"], row["total"], row["training"], row["validation"]) for row in audit["by_depth"]],
+                    align=["right", "right", "right", "right"],
+                ),
             ]
         )
-        for row in audit["by_depth"]:
-            lines.append(f"| {row['depth']} | {row['total']} | {row['training']} | {row['validation']} |")
-        lines.extend(["", "| convergent | total | training | validation |", "| --- | ---: | ---: | ---: |"])
-        for row in audit["by_convergence"]:
-            lines.append(
-                f"| {_format_bool(row['convergent'])} | {row['total']} | {row['training']} | {row['validation']} |"
-            )
+        lines.extend(
+            [
+                "",
+                markdown_table(
+                    ["convergent", "total", "training", "validation"],
+                    [
+                        (_format_bool(row["convergent"]), row["total"], row["training"], row["validation"])
+                        for row in audit["by_convergence"]
+                    ],
+                    align=["left", "right", "right", "right"],
+                ),
+            ]
+        )
         lines.append("")
     return "\n".join(lines)
 
@@ -212,25 +234,44 @@ def audit_single_step_release_if_present(*, release_root: Path, parent_route_ids
 
 
 def render_sanity_checks_markdown(sanity_checks: dict[str, dict[str, Any]]) -> str:
-    lines = [
-        "## sanity checks",
-        "",
-        "| release | records | training | validation | holdout refs |",
-        "| --- | ---: | ---: | ---: | ---: |",
-    ]
-    for name, checks in sorted(sanity_checks.items()):
-        lines.append(
-            f"| {name} | {checks['all_count']} | {checks['training_count']} | {checks['validation_count']} | {checks['holdout_count']} |"
+    rows: list[MarkdownRow] = [
+        (
+            name,
+            checks["all_count"],
+            checks["training_count"],
+            checks["validation_count"],
+            checks["holdout_count"],
         )
-    return "\n".join(lines) + "\n"
+        for name, checks in sorted(sanity_checks.items())
+    ]
+    return (
+        "## sanity checks\n\n"
+        + markdown_table(
+            ["release", "records", "training", "validation", "holdout refs"],
+            rows,
+            align=["left", "right", "right", "right", "right"],
+        )
+        + "\n"
+    )
 
 
 def render_single_step_sanity_markdown(checks: dict[str, Any]) -> str:
     return (
         "## single-step sanity\n\n"
-        "| release | records | training | validation | parent routes |\n"
-        "| --- | ---: | ---: | ---: | ---: |\n"
-        f"| {checks['release_name']} | {checks['records']} | {checks['training']} | {checks['validation']} | {checks['parent_routes']} |\n"
+        + markdown_table(
+            ["release", "records", "training", "validation", "parent routes"],
+            [
+                (
+                    checks["release_name"],
+                    checks["records"],
+                    checks["training"],
+                    checks["validation"],
+                    checks["parent_routes"],
+                )
+            ],
+            align=["left", "right", "right", "right", "right"],
+        )
+        + "\n"
     )
 
 

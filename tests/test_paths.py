@@ -10,10 +10,13 @@ from retrocast.exceptions import SecurityError
 from retrocast.paths import (
     DEFAULT_DATA_DIR,
     ENV_VAR_NAME,
+    benchmark_definitions_dir,
     check_migration_needed,
     ensure_path_within_root,
     get_data_dir_source,
     get_paths,
+    paroutes_assets_dir,
+    paroutes_training_release_file,
     resolve_cache_dir,
     resolve_data_dir,
     validate_directory_name,
@@ -107,6 +110,35 @@ class TestGetPaths:
         result = get_paths(Path("relative/path"))
 
         assert result["raw"] == Path("relative/path/2-raw")
+
+
+@pytest.mark.unit
+class TestParoutesPaths:
+    def test_returns_benchmark_definitions_dir(self):
+        assert benchmark_definitions_dir(Path("/data")) == Path("/data/1-benchmarks/definitions")
+
+    def test_returns_paroutes_assets_dir(self):
+        assert paroutes_assets_dir(Path("/data")) == Path("/data/0-assets/paroutes")
+
+    def test_returns_training_release_file(self):
+        assert paroutes_training_release_file(
+            "v1",
+            "route-holdout",
+            "manifest.json",
+            data_dir=Path("/data"),
+        ) == Path("/data/releases/paroutes-training-sets/v1/route-holdout/manifest.json")
+
+    @pytest.mark.parametrize(
+        ("release_version", "release_name", "filename"),
+        [
+            ("../v1", "route-holdout", "manifest.json"),
+            ("v1", "../route-holdout", "manifest.json"),
+            ("v1", "route-holdout", "../manifest.json"),
+        ],
+    )
+    def test_rejects_unsafe_training_release_segments(self, release_version, release_name, filename):
+        with pytest.raises(SecurityError):
+            paroutes_training_release_file(release_version, release_name, filename)
 
 
 @pytest.mark.unit

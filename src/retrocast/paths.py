@@ -177,6 +177,27 @@ def get_paths(data_dir: Path) -> dict[str, Path]:
     }
 
 
+def benchmark_definitions_dir(data_dir: Path = DEFAULT_DATA_DIR) -> Path:
+    return data_dir / "1-benchmarks" / "definitions"
+
+
+def paroutes_assets_dir(data_dir: Path = DEFAULT_DATA_DIR) -> Path:
+    return data_dir / "0-assets" / "paroutes"
+
+
+def paroutes_training_release_file(
+    release_version: str,
+    release_name: str,
+    filename: str = "all.jsonl.gz",
+    *,
+    data_dir: Path = DEFAULT_DATA_DIR,
+) -> Path:
+    validate_directory_name(release_version, "release_version")
+    validate_directory_name(release_name, "release_name")
+    validate_filename(filename, "filename")
+    return data_dir / "releases" / "paroutes-training-sets" / release_version / release_name / filename
+
+
 def check_migration_needed(resolved_dir: Path) -> str | None:
     """
     Check if data exists at legacy location but not at resolved location.
