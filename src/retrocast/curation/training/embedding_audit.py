@@ -11,47 +11,22 @@ from pydantic import BaseModel, ConfigDict
 from retrocast.chem import InChIKeyLevel
 from retrocast.curation.embedding import route_embeds_at, subtree_reaction_count
 from retrocast.curation.training.records import TrainingRouteRecord
-from retrocast.exceptions import InvalidRouteEmbeddingQueryError
 from retrocast.models.route import MoleculeView, Route, RoutePath
-from retrocast.models.task import Benchmark
 
 EmbeddingMatchKind = Literal["full_route", "internal_subroute"]
-BenchmarkRouteSelection = Literal["primary", "all"]
 
 
-@dataclass(frozen=True, slots=True)
-class QueryRoute:
-    source: str
-    id: str
-    route: Route
-
-
-def benchmark_query_routes(
-    benchmark: Benchmark,
-    *,
-    source: str,
-    route_selection: BenchmarkRouteSelection = "primary",
-) -> list[QueryRoute]:
-    queries: list[QueryRoute] = []
-    for target in benchmark.targets.values():
-        routes = target.acceptable_routes if route_selection == "all" else target.acceptable_routes[:1]
-        for index, route in enumerate(routes, start=1):
-            query_id = target.id if len(routes) == 1 else f"{target.id}:{index}"
-            queries.append(QueryRoute(source=source, id=query_id, route=route))
-    return queries
-
-
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class TrainingRouteOccurrence:
     record: TrainingRouteRecord
     molecule: MoleculeView
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class TrainingEmbeddingIndex:
     route_signatures: set[str]
     reaction_signatures: set[str]
-    by_reaction_root: Mapping[tuple[str, str], tuple[TrainingRouteOccurrence, ...]]
+    by_reaction_root: Mapping[str, tuple[TrainingRouteOccurrence, ...]]
 
 
 class RouteEmbeddingLedgerRow(BaseModel):
@@ -73,7 +48,7 @@ class RouteEmbeddingLedgerRow(BaseModel):
     leaf_extension_container_paths: tuple[str, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class FullEmbeddingSummary:
     query_routes_with_embedding: int
     embedding_occurrences: int
@@ -82,7 +57,7 @@ class FullEmbeddingSummary:
     root_distance_counts: tuple[tuple[int, int], ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class InternalSubrouteEmbeddingSummary:
     min_reactions: int
     checked_internal_subroutes: int
@@ -91,7 +66,7 @@ class InternalSubrouteEmbeddingSummary:
     embedding_occurrences: int
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class CoverageSummary:
     basis: str
     all_query_routes: int
@@ -105,7 +80,7 @@ class CoverageSummary:
     matched_fraction_histogram: tuple[tuple[str, int], ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class QuerySetAudit:
     source: str
     query_routes: int
@@ -117,7 +92,7 @@ class QuerySetAudit:
     coverage: CoverageSummary
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class RouteEmbeddingAudit:
     release_name: str
     match_level: str
@@ -130,7 +105,7 @@ class RouteEmbeddingAudit:
     ledger_rows: tuple[RouteEmbeddingLedgerRow, ...]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class _QueryCoverageRow:
     matched_fraction_of_query_route: float
     matched_fraction_of_container_route: float
@@ -142,13 +117,12 @@ def build_route_embedding_audit(
     *,
     release_name: str,
     training_records: Sequence[TrainingRouteRecord],
-    queries_by_source: Mapping[str, Sequence[QueryRoute]],
+    queries_by_source: Mapping[str, Mapping[str, Route]],
     match_level: InChIKeyLevel = InChIKeyLevel.FULL,
     allow_leaf_extension: bool = True,
     include_partial: bool = False,
     partial_min_reactions: int = 2,
 ) -> RouteEmbeddingAudit:
-    _validate_queries(queries_by_source)
     index = build_training_embedding_index(training_records, match_level)
     query_sets: list[QuerySetAudit] = []
     ledger_rows: list[RouteEmbeddingLedgerRow] = []
@@ -184,7 +158,7 @@ def build_training_embedding_index(
 ) -> TrainingEmbeddingIndex:
     route_signatures: set[str] = set()
     reaction_signatures: set[str] = set()
-    by_reaction_root: dict[tuple[str, str], list[TrainingRouteOccurrence]] = defaultdict(list)
+    by_reaction_root: dict[str, list[TrainingRouteOccurrence]] = defaultdict(list)
 
     for record in records:
         route_signatures.add(record.route.signature(match_level))
@@ -193,7 +167,7 @@ def build_training_embedding_index(
             occurrence = TrainingRouteOccurrence(record=record, molecule=molecule)
             reaction = molecule.produced_by()
             if reaction is not None:
-                by_reaction_root[(molecule.key(match_level), reaction.signature(match_level))].append(occurrence)
+                by_reaction_root[reaction.signature(match_level)].append(occurrence)
 
     return TrainingEmbeddingIndex(
         route_signatures=route_signatures,
@@ -205,7 +179,7 @@ def build_training_embedding_index(
 def _audit_query_set(
     *,
     source: str,
-    queries: Sequence[QueryRoute],
+    queries: Mapping[str, Route],
     index: TrainingEmbeddingIndex,
     match_level: InChIKeyLevel,
     allow_leaf_extension: bool,
@@ -213,6 +187,7 @@ def _audit_query_set(
     partial_min_reactions: int,
 ) -> tuple[QuerySetAudit, tuple[RouteEmbeddingLedgerRow, ...]]:
     full_rows = _full_route_ledger_rows(
+        source=source,
         queries=queries,
         index=index,
         match_level=match_level,
@@ -222,6 +197,7 @@ def _audit_query_set(
     internal_rows: tuple[RouteEmbeddingLedgerRow, ...] = ()
     if include_partial:
         internal_summary, internal_rows = _internal_subroute_audit(
+            source=source,
             queries=queries,
             index=index,
             match_level=match_level,
@@ -230,16 +206,16 @@ def _audit_query_set(
         )
 
     rows = (*full_rows, *internal_rows)
-    query_ids = [query.id for query in queries]
+    query_ids = list(queries)
     query_reaction_signatures = {
-        signature for query in queries for signature in query.route.reaction_signatures(match_level)
+        signature for route in queries.values() for signature in route.reaction_signatures(match_level)
     }
     query_set = QuerySetAudit(
         source=source,
         query_routes=len(queries),
         query_reaction_signatures=len(query_reaction_signatures),
         exact_route_signature_overlap=sum(
-            query.route.signature(match_level) in index.route_signatures for query in queries
+            route.signature(match_level) in index.route_signatures for route in queries.values()
         ),
         reaction_signature_overlap=len(query_reaction_signatures & index.reaction_signatures),
         full_embeddings=_summarize_full_embeddings(full_rows),
@@ -259,17 +235,20 @@ def _audit_query_set(
 
 def _full_route_ledger_rows(
     *,
-    queries: Sequence[QueryRoute],
+    source: str,
+    queries: Mapping[str, Route],
     index: TrainingEmbeddingIndex,
     match_level: InChIKeyLevel,
     allow_leaf_extension: bool,
 ) -> tuple[RouteEmbeddingLedgerRow, ...]:
     rows: list[RouteEmbeddingLedgerRow] = []
-    for query in queries:
+    for query_id, route in queries.items():
         rows.extend(
             _embedding_rows(
-                query=query,
-                query_molecule=query.route.molecule_at(RoutePath.target()),
+                query_source=source,
+                query_id=query_id,
+                query_route=route,
+                query_molecule=route.molecule_at(RoutePath.target()),
                 match_kind="full_route",
                 index=index,
                 match_level=match_level,
@@ -281,7 +260,8 @@ def _full_route_ledger_rows(
 
 def _internal_subroute_audit(
     *,
-    queries: Sequence[QueryRoute],
+    source: str,
+    queries: Mapping[str, Route],
     index: TrainingEmbeddingIndex,
     match_level: InChIKeyLevel,
     allow_leaf_extension: bool,
@@ -289,15 +269,17 @@ def _internal_subroute_audit(
 ) -> tuple[InternalSubrouteEmbeddingSummary, tuple[RouteEmbeddingLedgerRow, ...]]:
     checked = 0
     rows: list[RouteEmbeddingLedgerRow] = []
-    embedded_subroutes: set[tuple[str, str, str]] = set()
-    for query in queries:
-        for molecule in query.route.iter_molecules():
+    embedded_subroutes: set[tuple[str, str]] = set()
+    for query_id, route in queries.items():
+        for molecule in route.iter_molecules():
             if molecule.path == RoutePath.target() or subtree_reaction_count(molecule) < partial_min_reactions:
                 continue
             checked += 1
-            subroute_key = (query.source, query.id, molecule.path.id())
+            subroute_key = (query_id, molecule.path.id())
             subroute_rows = _embedding_rows(
-                query=query,
+                query_source=source,
+                query_id=query_id,
+                query_route=route,
                 query_molecule=molecule,
                 match_kind="internal_subroute",
                 index=index,
@@ -313,7 +295,7 @@ def _internal_subroute_audit(
             min_reactions=partial_min_reactions,
             checked_internal_subroutes=checked,
             embedded_internal_subroutes=len(embedded_subroutes),
-            query_routes_with_embedding=len({query_id for _, query_id, _ in embedded_subroutes}),
+            query_routes_with_embedding=len({query_id for query_id, _ in embedded_subroutes}),
             embedding_occurrences=len(rows),
         ),
         tuple(rows),
@@ -322,7 +304,9 @@ def _internal_subroute_audit(
 
 def _embedding_rows(
     *,
-    query: QueryRoute,
+    query_source: str,
+    query_id: str,
+    query_route: Route,
     query_molecule: MoleculeView,
     match_kind: EmbeddingMatchKind,
     index: TrainingEmbeddingIndex,
@@ -330,7 +314,7 @@ def _embedding_rows(
     allow_leaf_extension: bool,
 ) -> tuple[RouteEmbeddingLedgerRow, ...]:
     rows: list[RouteEmbeddingLedgerRow] = []
-    query_route_reactions = _route_reaction_count(query.route)
+    query_route_reactions = sum(1 for _ in query_route.iter_reactions())
     query_subroute_reactions = subtree_reaction_count(query_molecule)
     for occurrence in _candidate_occurrences(query_molecule, index, match_level):
         match = route_embeds_at(
@@ -342,12 +326,12 @@ def _embedding_rows(
         if match is None:
             continue
 
-        container_route_reactions = _route_reaction_count(occurrence.record.route)
+        container_route_reactions = sum(1 for _ in occurrence.record.route.iter_reactions())
         container_subtree_reactions = subtree_reaction_count(occurrence.molecule)
         rows.append(
             RouteEmbeddingLedgerRow(
-                query_source=query.source,
-                query_id=query.id,
+                query_source=query_source,
+                query_id=query_id,
                 query_path=match.query_path.id(),
                 query_route_reactions=query_route_reactions,
                 query_subroute_reactions=query_subroute_reactions,
@@ -375,13 +359,13 @@ def _candidate_occurrences(
     reaction = query_root.produced_by()
     if reaction is None:
         return ()
-    return index.by_reaction_root.get((query_root.key(match_level), reaction.signature(match_level)), ())
+    return index.by_reaction_root.get(reaction.signature(match_level), ())
 
 
 def _summarize_full_embeddings(rows: Sequence[RouteEmbeddingLedgerRow]) -> FullEmbeddingSummary:
     root_distance_counts: dict[int, int] = defaultdict(int)
     for row in rows:
-        root_distance_counts[_path_depth(row.container_path)] += 1
+        root_distance_counts[RoutePath.parse(row.container_path).depth()] += 1
 
     return FullEmbeddingSummary(
         query_routes_with_embedding=len({row.query_id for row in rows}),
@@ -474,52 +458,20 @@ def _coverage_bucket(value: float) -> str:
     return "100%"
 
 
-def _route_reaction_count(route: Route) -> int:
-    return sum(1 for _ in route.iter_reactions())
-
-
-def _validate_queries(queries_by_source: Mapping[str, Sequence[QueryRoute]]) -> None:
-    for source, queries in queries_by_source.items():
-        for query in queries:
-            if _route_reaction_count(query.route):
-                continue
-            raise InvalidRouteEmbeddingQueryError(
-                "route embedding audit queries must contain at least one reaction",
-                context={
-                    "query_source": source,
-                    "query_id": query.id,
-                    "query_target_smiles": str(query.route.target.smiles),
-                    "query_target_inchikey": str(query.route.target.inchikey),
-                },
-            )
-
-
-def _path_depth(path: str) -> int:
-    return RoutePath.parse(path).depth()
-
-
 def _mean(values: Sequence[float | int]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
 def _fraction_stats(values: Sequence[float]) -> tuple[float, float, float]:
-    return (_mean(values), _median(values), _p90(values))
-
-
-def _median(values: Sequence[float]) -> float:
     if not values:
-        return 0.0
+        return (0.0, 0.0, 0.0)
     sorted_values = sorted(values)
     midpoint = len(sorted_values) // 2
     if len(sorted_values) % 2:
-        return sorted_values[midpoint]
-    return (sorted_values[midpoint - 1] + sorted_values[midpoint]) / 2
-
-
-def _p90(values: Sequence[float]) -> float:
-    if not values:
-        return 0.0
-    return sorted(values)[ceil(0.9 * len(values)) - 1]
+        median = sorted_values[midpoint]
+    else:
+        median = (sorted_values[midpoint - 1] + sorted_values[midpoint]) / 2
+    return (_mean(values), median, sorted_values[ceil(0.9 * len(sorted_values)) - 1])
 
 
 def _ratio(numerator: int, denominator: int) -> float:

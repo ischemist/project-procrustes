@@ -17,7 +17,8 @@ def render_route_embedding_audit_markdown(audit: RouteEmbeddingAudit) -> str:
         "",
         f"- match level: `{audit.match_level}`",
         f"- allow leaf extension: `{str(audit.allow_leaf_extension).lower()}`",
-        f"- partial minimum reactions: {_format_partial_min_reactions(audit.partial_min_reactions)}",
+        "- partial minimum reactions: "
+        f"{f'{audit.partial_min_reactions} reactions' if audit.partial_min_reactions is not None else 'not run'}",
         f"- training routes: {_format_integer(audit.training_routes)}",
         f"- training route signatures: {_format_integer(audit.training_route_signatures)}",
         f"- training reaction signatures: {_format_integer(audit.training_reaction_signatures)}",
@@ -41,33 +42,25 @@ def _summary_table(query_sets: Sequence[QuerySetAudit]) -> str:
     align: list[MarkdownAlign] = ["left"]
     for _ in query_sets:
         align.append("right")
-    rows: list[MarkdownRow] = [
-        ("query routes", *(_format_integer(query_set.query_routes) for query_set in query_sets)),
-        (
+
+    def row(label: str, values: Sequence[object]) -> MarkdownRow:
+        return (label, *values)
+
+    rows = [
+        row("query routes", [_format_integer(q.query_routes) for q in query_sets]),
+        row(
             "reaction signatures in training",
-            *(
-                _format_count_rate(query_set.reaction_signature_overlap, query_set.query_reaction_signatures)
-                for query_set in query_sets
-            ),
+            [_format_count_rate(q.reaction_signature_overlap, q.query_reaction_signatures) for q in query_sets],
         ),
-        (
+        row(
             "exact route signatures",
-            *(
-                _format_count_rate(query_set.exact_route_signature_overlap, query_set.query_routes)
-                for query_set in query_sets
-            ),
+            [_format_count_rate(q.exact_route_signature_overlap, q.query_routes) for q in query_sets],
         ),
-        (
+        row(
             "full route embeddings",
-            *(
-                _format_count_rate(query_set.full_embeddings.query_routes_with_embedding, query_set.query_routes)
-                for query_set in query_sets
-            ),
+            [_format_count_rate(q.full_embeddings.query_routes_with_embedding, q.query_routes) for q in query_sets],
         ),
-        (
-            "routes with internal subroute embedding",
-            *(_format_internal_query_count(query_set) for query_set in query_sets),
-        ),
+        row("routes with internal subroute embedding", [_format_internal_query_count(q) for q in query_sets]),
     ]
     return markdown_table(["metric", *(query_set.source for query_set in query_sets)], rows, align=align)
 
@@ -85,7 +78,7 @@ def _overlap_summary(query_set: QuerySetAudit) -> str:
         lines.append("no query routes are fully embedded in training.")
         return "\n".join(lines)
 
-    distance_counts = _root_distance_count_map(full.root_distance_counts)
+    distance_counts = dict(full.root_distance_counts)
     lines.append(
         f"{_format_count_rate(full.query_routes_with_embedding, query_set.query_routes)} "
         "query routes are fully embedded somewhere inside training routes. "
@@ -110,7 +103,7 @@ def _internal_subroute_summary(query_set: QuerySetAudit, summary: InternalSubrou
         f"{_format_count_rate(summary.embedded_internal_subroutes, summary.checked_internal_subroutes)} "
         "of those internal subroutes are embedded. "
         f"there are {_format_integer(summary.embedding_occurrences)} total partial matching occurrences "
-        f"({_format_number(_ratio(summary.embedding_occurrences, summary.embedded_internal_subroutes))} "
+        f"({_ratio(summary.embedding_occurrences, summary.embedded_internal_subroutes):.2f} "
         "matches per embedded internal subroute)."
     )
 
@@ -151,9 +144,9 @@ def _best_match_coverage(coverage: CoverageSummary) -> str:
             [
                 "",
                 f"query routes with any embedding match "
-                f"{_format_number(coverage.embedded_mean_training_routes_per_query)} "
+                f"{coverage.embedded_mean_training_routes_per_query:.2f} "
                 "unique training routes and "
-                f"{_format_number(coverage.embedded_mean_occurrences_per_query)} "
+                f"{coverage.embedded_mean_occurrences_per_query:.2f} "
                 "total occurrences per query route on average.",
             ]
         )
@@ -216,46 +209,32 @@ def _format_percent(value: float) -> str:
     return f"{100 * value:.1f}%"
 
 
-def _format_number(value: float) -> str:
-    return f"{value:.2f}"
-
-
 def _format_integer(value: int) -> str:
     return f"{value:,}".replace(",", " ")
-
-
-def _format_partial_min_reactions(value: int | None) -> str:
-    if value is None:
-        return "not run"
-    return f"{value} reactions"
 
 
 def _format_plural(value: int, singular: str, plural: str) -> str:
     return f"{_format_integer(value)} {singular if value == 1 else plural}"
 
 
-def _root_distance_count_map(counts: Sequence[tuple[int, int]]) -> dict[int, int]:
-    return dict(counts)
-
-
 def _format_root_distance_sentence(counts: Sequence[tuple[int, int]]) -> str:
-    pieces = [
-        f"{_format_plural(occurrences, 'occurrence is', 'occurrences are')} embedded at distance "
-        f"{distance} (a prefix of {_root_distance_description(distance)})"
-        for distance, occurrences in counts
-        if distance > 0
-    ]
+    pieces = []
+    for distance, occurrences in counts:
+        if distance == 0:
+            continue
+        if distance == 1:
+            description = "a root child"
+        elif distance == 2:
+            description = "a child of a root child"
+        else:
+            description = f"a depth-{distance} subtree"
+        pieces.append(
+            f"{_format_plural(occurrences, 'occurrence is', 'occurrences are')} embedded at distance "
+            f"{distance} (a prefix of {description})"
+        )
     if not pieces:
         return "no embeddings are below the target"
     return "; ".join(pieces)
-
-
-def _root_distance_description(distance: int) -> str:
-    if distance == 1:
-        return "a root child"
-    if distance == 2:
-        return "a child of a root child"
-    return f"a depth-{distance} subtree"
 
 
 def _ratio(numerator: int, denominator: int) -> float:
