@@ -22,9 +22,11 @@ def test_visualization_report_uses_analysis_report() -> None:
 
     markdown = generate_markdown_report(report)
     table = create_analysis_table(report)
+    console = Console(record=True)
+    console.print(table)
 
     assert "Solv-0[buyables]" in markdown
-    assert table.row_count > 0
+    assert "Solv-N Evaluation" in console.export_text()
 
 
 def test_restored_visualization_modules_are_importable() -> None:

@@ -324,13 +324,14 @@ retrocast analyze \
 
 Useful options:
 
-| Option              | Meaning                                                        |
-| ------------------- | -------------------------------------------------------------- |
-| `--stock`           | Analyze one stock directory under `4-scored`                   |
-| `--top-k 1 5 10 50` | K values for acceptable-route reconstruction                   |
-| `--n-boot 10000`    | Number of bootstrap resamples                                  |
-| `--all-models`      | Analyze all scored models for the selected dataset(s)          |
-| `--all-datasets`    | Analyze the selected model(s) across all benchmark definitions |
+| Option                   | Meaning                                                        |
+| ------------------------ | -------------------------------------------------------------- |
+| `--stock`                | Analyze one stock directory under `4-scored`                   |
+| `--top-k 1 5 10 50`      | K values for acceptable-route reconstruction                   |
+| `--prefix-depth 1 2 3`   | Depths for acceptable-route prefix reconstruction diagnostics  |
+| `--n-boot 10000`         | Number of bootstrap resamples                                  |
+| `--all-models`           | Analyze all scored models for the selected dataset(s)          |
+| `--all-datasets`         | Analyze the selected model(s) across all benchmark definitions |
 
 Outputs:
 

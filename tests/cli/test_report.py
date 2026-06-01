@@ -42,18 +42,17 @@ def test_generate_markdown_report_includes_strata_and_metric_groups() -> None:
     assert "| Top-3 | 75.0% |  | 4 | LOW_N |" in markdown
 
 
-def test_create_analysis_table_renders_top_k_without_ci() -> None:
+def test_create_analysis_table_renders_metric_groups() -> None:
     console = Console(record=True, width=120)
     console.print(create_analysis_table(report_with_all_metric_groups()))
 
     output = console.export_text()
-    assert "Solv-N evaluation" in output
-    assert "Tier-0 Validity" in output
-    assert "Benchmark route reconstruction" in output
+    assert "Solv-N Evaluation" in output
+    assert "test-stock" in output
+    assert "Benchmark Route" in output
     assert "Top-3" in output
     assert "75.0%" in output
-    assert "Reliability" in output
-    assert "LOW_N" in output
+    assert "flags: ! low n / unstable ci" in output
 
 
 def test_reports_render_runtime_summary() -> None:
@@ -71,11 +70,12 @@ def test_reports_render_runtime_summary() -> None:
 
     markdown = generate_markdown_report(report, title="Small Run")
     assert "## Runtime" in markdown
-    assert "| Total wall time | 12.00s | 4 |" in markdown
+    assert "| Total time | 12.00 s | 4.00 s |" in markdown
+    assert "| Per target | 3.00 s | 1.00 s |" in markdown
 
     console = Console(record=True, width=120)
     console.print(create_analysis_table(report))
     output = console.export_text()
     assert "Runtime" in output
-    assert "Total wall time" in output
-    assert "12.00s" in output
+    assert "Total time" in output
+    assert "12.00 s" in output

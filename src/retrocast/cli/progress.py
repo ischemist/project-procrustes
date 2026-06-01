@@ -32,7 +32,12 @@ class RateColumn(ProgressColumn):
         return Text(f"{task.speed:.1f} {self._unit}/s", style="progress.data.speed")
 
 
-def create_cli_progress(*, console: Console, unit: str) -> Progress:
+def create_cli_progress(
+    *,
+    console: Console,
+    unit: str,
+    transient: bool = False,
+) -> Progress:
     return Progress(
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
@@ -43,6 +48,7 @@ def create_cli_progress(*, console: Console, unit: str) -> Progress:
         TimeRemainingColumn(),
         RateColumn(unit),
         console=console,
+        transient=transient,
     )
 
 

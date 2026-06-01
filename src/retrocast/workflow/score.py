@@ -130,7 +130,13 @@ def score(
             wall_time=execution_stats.wall_time.get(target_id) if execution_stats is not None else None,
             cpu_time=execution_stats.cpu_time.get(target_id) if execution_stats is not None else None,
         )
-    return Evaluation(task=task, tiers=tiers, metric_label=task.derived_metric_label(), targets=target_results)
+    return Evaluation(
+        task=task,
+        tiers=tiers,
+        metric_label=task.derived_metric_label(),
+        acceptable_match_level=acceptable_match_level,
+        targets=target_results,
+    )
 
 
 def _tier_zero_validity(candidate: Candidate) -> RouteValidity:

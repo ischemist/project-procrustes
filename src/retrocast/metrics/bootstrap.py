@@ -43,13 +43,14 @@ def summarize_values(
     n_boot: int = 10000,
     seed: int = 42,
     alpha: float = 0.05,
+    reliability: bool = True,
 ) -> MetricSummary:
     data: npt.NDArray[np.float64] = np.array(values, dtype=np.float64)
     if len(data) == 0:
         return MetricSummary(
             value=0.0,
             count=0,
-            reliability=ReliabilityFlag(code="LOW_N", message="No data."),
+            reliability=ReliabilityFlag(code="LOW_N", message="No data.") if reliability else None,
         )
 
     distribution = _bootstrap_mean(data, n_boot=n_boot, seed=seed)
@@ -59,7 +60,7 @@ def summarize_values(
         count=len(data),
         ci_low=float(np.percentile(distribution, 100 * alpha / 2)),
         ci_high=float(np.percentile(distribution, 100 * (1 - alpha / 2))),
-        reliability=check_reliability(len(data), value),
+        reliability=check_reliability(len(data), value) if reliability else None,
     )
 
 

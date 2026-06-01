@@ -615,8 +615,9 @@ analyze(
     evaluation: Evaluation,
     *,
     ks: Sequence[int] = (1, 5, 10, 50),
+    prefix_depths: Sequence[int] = (1, 2, 3),
     stratify_by: Callable[[TargetResult], str | None] | None = None,
 ) -> AnalysisReport
 ```
 
-Top-K reconstruction metrics are emitted only for targets with acceptable_routes; if no target has acceptable_routes, reconstruction metrics are omitted.
+Top-K reconstruction metrics are emitted only for targets with acceptable_routes; if no target has acceptable_routes, reconstruction metrics are omitted. Reconstruction diagnostics use `Evaluation.acceptable_match_level`, so full-route, root-reaction, and prefix comparisons stay on the same molecular identity basis.

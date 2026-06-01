@@ -11,6 +11,7 @@ def analyze(
     evaluation: Evaluation,
     *,
     ks: Sequence[int] = (1, 5, 10, 50),
+    prefix_depths: Sequence[int] = (1, 2, 3),
     stratify_by: Callable[[TargetResult], str | None] | None = None,
     n_boot: int = 10000,
     seed: int = 42,
@@ -20,7 +21,9 @@ def analyze(
         targets,
         tiers=evaluation.tiers,
         ks=ks,
+        prefix_depths=prefix_depths,
         metric_label=evaluation.metric_label,
+        acceptable_match_level=evaluation.acceptable_match_level,
         n_boot=n_boot,
         seed=seed,
     )
@@ -36,14 +39,21 @@ def analyze(
             stratum_targets,
             tiers=evaluation.tiers,
             ks=ks,
+            prefix_depths=prefix_depths,
             metric_label=evaluation.metric_label,
+            acceptable_match_level=evaluation.acceptable_match_level,
             n_boot=n_boot,
             seed=seed,
         )
         for stratum, stratum_targets in strata.items()
     }
 
-    return AnalysisReport(metrics=metrics, by_stratum=by_stratum, runtime=_runtime_summary(targets))
+    return AnalysisReport(
+        metrics=metrics,
+        by_stratum=by_stratum,
+        bootstrap_resamples=n_boot,
+        runtime=_runtime_summary(targets),
+    )
 
 
 def _runtime_summary(targets: list[TargetResult]) -> RuntimeSummary:
