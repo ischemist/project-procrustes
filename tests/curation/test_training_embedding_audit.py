@@ -31,6 +31,15 @@ def test_route_embedding_audit_summarizes_full_matches_and_renders_markdown() ->
     assert query_set.query_routes == 3
     assert query_set.reaction_signature_overlap == 2
     assert query_set.exact_route_signature_overlap == 0
+    assert [
+        (
+            row.depth,
+            row.query_routes,
+            row.root_prefix_signature_overlap,
+            row.subtree_prefix_signature_overlap,
+        )
+        for row in query_set.prefix_depths
+    ] == [(1, 3, 1, 2)]
     assert full.query_routes_with_embedding == 2
     assert full.embedding_occurrences == 2
     assert full.query_routes_with_root_shifted_embedding == 1
@@ -44,6 +53,8 @@ def test_route_embedding_audit_summarizes_full_matches_and_renders_markdown() ->
     markdown = render_route_embedding_audit_markdown(audit)
     assert "# route embedding audit: route-holdout-n1-n5" in markdown
     assert "| full route embeddings | 2 / 3 (66.7%) |" in markdown
+    assert "### root-prefix overlap" in markdown
+    assert "| 1 | 3 | 1 / 3 (33.3%) | 2 / 3 (66.7%) |" in markdown
     assert "1 query route has a root-shifted full embedding" in markdown
     assert "1 query route has a leaf-extended full embedding" in markdown
 
@@ -68,6 +79,18 @@ def test_route_embedding_audit_can_include_internal_subroutes() -> None:
     assert internal.embedding_occurrences == 1
     assert [row.match_kind for row in audit.ledger_rows] == ["full_route", "internal_subroute"]
     assert query_set.coverage.embedded_mean_occurrences_per_query == 2
+    assert [
+        (
+            row.depth,
+            row.query_routes,
+            row.root_prefix_signature_overlap,
+            row.subtree_prefix_signature_overlap,
+        )
+        for row in query_set.prefix_depths
+    ] == [
+        (1, 1, 1, 1),
+        (2, 1, 1, 1),
+    ]
 
 
 def route_c_b_a() -> Route:

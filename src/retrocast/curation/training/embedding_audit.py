@@ -26,6 +26,8 @@ class TrainingRouteOccurrence:
 class TrainingEmbeddingIndex:
     route_signatures: set[str]
     reaction_signatures: set[str]
+    root_prefix_signatures_by_depth: Mapping[int, set[str]]
+    subtree_prefix_signatures_by_depth: Mapping[int, set[str]]
     by_reaction_root: Mapping[str, tuple[TrainingRouteOccurrence, ...]]
 
 
@@ -67,6 +69,14 @@ class InternalSubrouteEmbeddingSummary:
 
 
 @dataclass(slots=True)
+class PrefixDepthSummary:
+    depth: int
+    query_routes: int
+    root_prefix_signature_overlap: int
+    subtree_prefix_signature_overlap: int
+
+
+@dataclass(slots=True)
 class CoverageSummary:
     basis: str
     all_query_routes: int
@@ -87,6 +97,7 @@ class QuerySetAudit:
     query_reaction_signatures: int
     exact_route_signature_overlap: int
     reaction_signature_overlap: int
+    prefix_depths: tuple[PrefixDepthSummary, ...]
     full_embeddings: FullEmbeddingSummary
     internal_subroute_embeddings: InternalSubrouteEmbeddingSummary | None
     coverage: CoverageSummary
@@ -158,12 +169,18 @@ def build_training_embedding_index(
 ) -> TrainingEmbeddingIndex:
     route_signatures: set[str] = set()
     reaction_signatures: set[str] = set()
+    root_prefix_signatures_by_depth: dict[int, set[str]] = defaultdict(set)
+    subtree_prefix_signatures_by_depth: dict[int, set[str]] = defaultdict(set)
     by_reaction_root: dict[str, list[TrainingRouteOccurrence]] = defaultdict(list)
 
     for record in records:
         route_signatures.add(record.route.signature(match_level))
         reaction_signatures.update(record.route.reaction_signatures(match_level))
+        for depth in range(1, record.route.depth() + 1):
+            root_prefix_signatures_by_depth[depth].add(record.route.signature(match_level, depth=depth))
         for molecule in record.route.iter_molecules():
+            for depth in range(1, molecule.depth() + 1):
+                subtree_prefix_signatures_by_depth[depth].add(molecule.subtree_signature(match_level, depth=depth))
             occurrence = TrainingRouteOccurrence(record=record, molecule=molecule)
             reaction = molecule.produced_by()
             if reaction is not None:
@@ -172,6 +189,8 @@ def build_training_embedding_index(
     return TrainingEmbeddingIndex(
         route_signatures=route_signatures,
         reaction_signatures=reaction_signatures,
+        root_prefix_signatures_by_depth=dict(root_prefix_signatures_by_depth),
+        subtree_prefix_signatures_by_depth=dict(subtree_prefix_signatures_by_depth),
         by_reaction_root={key: tuple(value) for key, value in by_reaction_root.items()},
     )
 
@@ -218,6 +237,7 @@ def _audit_query_set(
             route.signature(match_level) in index.route_signatures for route in queries.values()
         ),
         reaction_signature_overlap=len(query_reaction_signatures & index.reaction_signatures),
+        prefix_depths=_summarize_prefix_depths(queries=queries, index=index, match_level=match_level),
         full_embeddings=_summarize_full_embeddings(full_rows),
         internal_subroute_embeddings=internal_summary,
         coverage=_summarize_coverage(
@@ -231,6 +251,33 @@ def _audit_query_set(
         ),
     )
     return query_set, rows
+
+
+def _summarize_prefix_depths(
+    *,
+    queries: Mapping[str, Route],
+    index: TrainingEmbeddingIndex,
+    match_level: InChIKeyLevel,
+) -> tuple[PrefixDepthSummary, ...]:
+    max_depth = max((route.depth() for route in queries.values()), default=0)
+    summaries: list[PrefixDepthSummary] = []
+    for depth in range(1, max_depth + 1):
+        eligible = [route for route in queries.values() if route.depth() >= depth]
+        root_prefixes = index.root_prefix_signatures_by_depth.get(depth, set())
+        subtree_prefixes = index.subtree_prefix_signatures_by_depth.get(depth, set())
+        summaries.append(
+            PrefixDepthSummary(
+                depth=depth,
+                query_routes=len(eligible),
+                root_prefix_signature_overlap=sum(
+                    route.signature(match_level, depth=depth) in root_prefixes for route in eligible
+                ),
+                subtree_prefix_signature_overlap=sum(
+                    route.signature(match_level, depth=depth) in subtree_prefixes for route in eligible
+                ),
+            )
+        )
+    return tuple(summaries)
 
 
 def _full_route_ledger_rows(

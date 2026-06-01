@@ -32,6 +32,7 @@ def render_route_embedding_audit_markdown(audit: RouteEmbeddingAudit) -> str:
     for query_set in audit.query_sets:
         lines.extend(["", f"## {query_set.source}", ""])
         lines.extend(["### overlap summary", "", _overlap_summary(query_set)])
+        lines.extend(["", _prefix_depth_summary(query_set)])
         if query_set.internal_subroute_embeddings is not None:
             lines.extend(["", _internal_subroute_summary(query_set, query_set.internal_subroute_embeddings)])
         lines.extend(["", _best_match_coverage(query_set.coverage)])
@@ -110,6 +111,30 @@ def _internal_subroute_summary(query_set: QuerySetAudit, summary: InternalSubrou
         f"there are {_format_integer(summary.embedding_occurrences)} total partial matching occurrences "
         f"({matches_per_embedded_subroute:.2f} "
         "matches per embedded internal subroute)."
+    )
+
+
+def _prefix_depth_summary(query_set: QuerySetAudit) -> str:
+    return "\n".join(
+        [
+            "### root-prefix overlap",
+            "",
+            "query route prefixes are compared to training route prefixes with `route.signature(depth=k)`.",
+            "",
+            markdown_table(
+                ["prefix depth", "query routes with depth", "found at training root", "found anywhere in training"],
+                [
+                    (
+                        row.depth,
+                        _format_integer(row.query_routes),
+                        _format_count_rate(row.root_prefix_signature_overlap, row.query_routes),
+                        _format_count_rate(row.subtree_prefix_signature_overlap, row.query_routes),
+                    )
+                    for row in query_set.prefix_depths
+                ],
+                align=["right", "right", "right", "right"],
+            ),
+        ]
     )
 
 

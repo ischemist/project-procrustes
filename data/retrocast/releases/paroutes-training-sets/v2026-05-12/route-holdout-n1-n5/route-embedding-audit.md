@@ -25,6 +25,18 @@ terms: a query route is the route being searched for. a container route is a tra
 
 3 / 160 (1.9%) query routes are fully embedded somewhere inside training routes. these produce 3 total matching occurrences. 3 query routes have a root-shifted full embedding; 1 query route has a leaf-extended full embedding. 0 occurrences share the training target (distance 0 from the root); 1 occurrence is embedded at distance 1 (a prefix of a root child); 2 occurrences are embedded at distance 2 (a prefix of a child of a root child).
 
+### root-prefix overlap
+
+query route prefixes are compared to training route prefixes with `route.signature(depth=k)`.
+
+| prefix depth | query routes with depth | found at training root | found anywhere in training |
+| ---: | ---: | ---: | ---: |
+| 1 | 160 | 8 / 160 (5.0%) | 11 / 160 (6.9%) |
+| 2 | 160 | 4 / 160 (2.5%) | 7 / 160 (4.4%) |
+| 3 | 120 | 3 / 120 (2.5%) | 6 / 120 (5.0%) |
+| 4 | 80 | 1 / 80 (1.2%) | 4 / 80 (5.0%) |
+| 5 | 40 | 0 / 40 (0.0%) | 1 / 40 (2.5%) |
+
 78 / 160 (48.8%) query routes have at least one embedded internal subroute of 2+ reactions. there are 274 non-root internal subroutes with at least 2 reactions. 154 / 274 (56.2%) of those internal subroutes are embedded. there are 1 825 total partial matching occurrences (11.85 matches per embedded internal subroute).
 
 ### best-match coverage
@@ -74,6 +86,23 @@ largest embedded match reactions divided by all reactions in the query route.
 
 276 / 10 000 (2.8%) query routes are fully embedded somewhere inside training routes. these produce 541 total matching occurrences. 181 query routes have a root-shifted full embedding; 105 query routes have a leaf-extended full embedding. 100 occurrences share the training target (distance 0 from the root); 299 occurrences are embedded at distance 1 (a prefix of a root child); 98 occurrences are embedded at distance 2 (a prefix of a child of a root child); 27 occurrences are embedded at distance 3 (a prefix of a depth-3 subtree); 10 occurrences are embedded at distance 4 (a prefix of a depth-4 subtree); 5 occurrences are embedded at distance 5 (a prefix of a depth-5 subtree); 2 occurrences are embedded at distance 6 (a prefix of a depth-6 subtree).
 
+### root-prefix overlap
+
+query route prefixes are compared to training route prefixes with `route.signature(depth=k)`.
+
+| prefix depth | query routes with depth | found at training root | found anywhere in training |
+| ---: | ---: | ---: | ---: |
+| 1 | 10 000 | 460 / 10 000 (4.6%) | 675 / 10 000 (6.8%) |
+| 2 | 10 000 | 399 / 10 000 (4.0%) | 586 / 10 000 (5.9%) |
+| 3 | 7 119 | 153 / 7 119 (2.1%) | 285 / 7 119 (4.0%) |
+| 4 | 2 680 | 59 / 2 680 (2.2%) | 99 / 2 680 (3.7%) |
+| 5 | 900 | 19 / 900 (2.1%) | 29 / 900 (3.2%) |
+| 6 | 310 | 7 / 310 (2.3%) | 14 / 310 (4.5%) |
+| 7 | 97 | 1 / 97 (1.0%) | 4 / 97 (4.1%) |
+| 8 | 32 | 1 / 32 (3.1%) | 1 / 32 (3.1%) |
+| 9 | 11 | 0 / 11 (0.0%) | 0 / 11 (0.0%) |
+| 10 | 1 | 0 / 1 (0.0%) | 0 / 1 (0.0%) |
+
 2 508 / 10 000 (25.1%) query routes have at least one embedded internal subroute of 2+ reactions. there are 11 216 non-root internal subroutes with at least 2 reactions. 3 933 / 11 216 (35.1%) of those internal subroutes are embedded. there are 25 709 total partial matching occurrences (6.54 matches per embedded internal subroute).
 
 ### best-match coverage
@@ -122,6 +151,23 @@ largest embedded match reactions divided by all reactions in the query route.
 11 613 / 35 893 (32.4%) reaction signatures are present in training; 0 / 10 000 (0.0%) query routes have exact route-signature matches.
 
 218 / 10 000 (2.2%) query routes are fully embedded somewhere inside training routes. these produce 285 total matching occurrences. 138 query routes have a root-shifted full embedding; 85 query routes have a leaf-extended full embedding. 87 occurrences share the training target (distance 0 from the root); 131 occurrences are embedded at distance 1 (a prefix of a root child); 49 occurrences are embedded at distance 2 (a prefix of a child of a root child); 11 occurrences are embedded at distance 3 (a prefix of a depth-3 subtree); 6 occurrences are embedded at distance 4 (a prefix of a depth-4 subtree); 1 occurrence is embedded at distance 5 (a prefix of a depth-5 subtree).
+
+### root-prefix overlap
+
+query route prefixes are compared to training route prefixes with `route.signature(depth=k)`.
+
+| prefix depth | query routes with depth | found at training root | found anywhere in training |
+| ---: | ---: | ---: | ---: |
+| 1 | 10 000 | 515 / 10 000 (5.1%) | 680 / 10 000 (6.8%) |
+| 2 | 10 000 | 449 / 10 000 (4.5%) | 593 / 10 000 (5.9%) |
+| 3 | 9 291 | 219 / 9 291 (2.4%) | 346 / 9 291 (3.7%) |
+| 4 | 5 131 | 87 / 5 131 (1.7%) | 143 / 5 131 (2.8%) |
+| 5 | 1 874 | 28 / 1 874 (1.5%) | 49 / 1 874 (2.6%) |
+| 6 | 618 | 11 / 618 (1.8%) | 15 / 618 (2.4%) |
+| 7 | 183 | 1 / 183 (0.5%) | 1 / 183 (0.5%) |
+| 8 | 58 | 0 / 58 (0.0%) | 0 / 58 (0.0%) |
+| 9 | 16 | 0 / 16 (0.0%) | 0 / 16 (0.0%) |
+| 10 | 3 | 0 / 3 (0.0%) | 0 / 3 (0.0%) |
 
 3 765 / 10 000 (37.6%) query routes have at least one embedded internal subroute of 2+ reactions. there are 17 377 non-root internal subroutes with at least 2 reactions. 6 688 / 17 377 (38.5%) of those internal subroutes are embedded. there are 47 579 total partial matching occurrences (7.11 matches per embedded internal subroute).
 
