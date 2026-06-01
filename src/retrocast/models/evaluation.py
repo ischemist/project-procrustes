@@ -6,7 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from retrocast.models.candidates import FailureRecord
-from retrocast.models.route import ReactionId, Route
+from retrocast.models.route import InChIKeyLevel, ReactionId, Route
 from retrocast.models.task import Target, Task, TaskConstraints
 
 
@@ -104,5 +104,6 @@ class Evaluation(BaseModel):
     task: Task
     tiers: list[Tier] = Field(default_factory=list)
     metric_label: str = "task"
+    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL
     targets: dict[str, TargetResult] = Field(default_factory=dict)
     schema_version: Literal["2"] = "2"

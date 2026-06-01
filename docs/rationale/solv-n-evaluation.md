@@ -66,3 +66,10 @@ As proposed in the original [RetroCast preprint](https://arxiv.org/abs/2512.0707
 While Top-K accuracy fails to reward construction of potentially valid alternative route (a limitation well discussed in the Syntax of Matter preprint), the acceptable-route is one of the valid `Routes` that any planner (even the future Tier-3 compliant ones) should consider, and so it is reasonable to expect its reconstruction for some value of K. The exact value of K is up to debate (how many unique ways are there to make any random molecule?), and we think `K=10` and `K=50` are worth paying attention to.
 
 Notably, this means that `Top-1` accuracy should not be the headline metric.
+
+`analyze` also reports reconstruction diagnostics that preserve the same task-satisfaction filter and top-k window:
+
+- `acceptable_root_reconstruction_top_k[...]`: fraction of targets where a useful top-k candidate has the same root reaction as any acceptable route.
+- `acceptable_reconstruction_given_root_top_k[...]`: full-route reconstruction rate among targets with a root hit. Its denominator is targets, not candidate routes.
+- `acceptable_prefix_reconstruction_depth_d_top_k[...]`: fraction of targets where a useful top-k candidate matches an acceptable route prefix by `Route.signature(depth=d)`.
+- `distinct_root_reactions_top_k[...]`: mean number of distinct root reaction signatures among useful top-k candidates.

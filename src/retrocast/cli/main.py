@@ -37,6 +37,7 @@ from retrocast.io import (
 from retrocast.io.blob import load_json_artifact
 from retrocast.io.data import load_stock_file
 from retrocast.metrics.constraints import TaskConstraintChecker
+from retrocast.models.analysis import AnalysisReport
 from retrocast.models.evaluation import Evaluation
 from retrocast.models.provenance import VerificationReport
 from retrocast.models.route import InChIKeyLevel
@@ -172,6 +173,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_model_dataset_args(analyze_parser)
     analyze_parser.add_argument("--stock", help="Specific stock to analyze")
     analyze_parser.add_argument("--top-k", nargs="+", type=int, default=[1, 3, 5, 10, 20, 50, 100])
+    analyze_parser.add_argument("--prefix-depth", nargs="+", type=int, default=[1, 2, 3])
     analyze_parser.add_argument("--n-boot", type=int, default=10000)
 
     verify_parser = subparsers.add_parser("verify", help="Verify artifact manifests and lineage")
@@ -472,60 +474,90 @@ def _score_one(model_name: str, benchmark_name: str, paths: dict[str, Path], arg
 
 def handle_analyze(args: argparse.Namespace, config: dict[str, Any]) -> None:
     paths = get_paths(Path(config.get("data_dir", DEFAULT_DATA_DIR)))
+    jobs: list[tuple[str, str, str]] = []
     for model_name in _resolve_models(args, paths, stage="analyze"):
         for benchmark_name in _resolve_benchmarks(args, paths):
-            _analyze_one(model_name, benchmark_name, paths, args)
-
-
-def _analyze_one(model_name: str, benchmark_name: str, paths: dict[str, Path], args: argparse.Namespace) -> None:
-    scored_base = paths["scored"] / benchmark_name / model_name
-    if not scored_base.exists():
-        logger.warning("Skipping %s/%s: no scored directory", model_name, benchmark_name)
+            scored_base = paths["scored"] / benchmark_name / model_name
+            if not scored_base.exists():
+                logger.warning("Skipping %s/%s: no scored directory", model_name, benchmark_name)
+                continue
+            stock_names = [args.stock] if args.stock else [path.name for path in scored_base.iterdir() if path.is_dir()]
+            jobs.extend((model_name, benchmark_name, stock_name) for stock_name in stock_names)
+    if not jobs:
         return
-    stock_names = [args.stock] if args.stock else [path.name for path in scored_base.iterdir() if path.is_dir()]
-    for stock_name in stock_names:
-        evaluation_path = scored_base / stock_name / "evaluation.json.gz"
-        if not evaluation_path.exists():
-            logger.warning("Skipping missing evaluation %s", evaluation_path)
-            continue
-        evaluation = load_evaluation(evaluation_path)
-        execution_stats_path = _execution_stats_path(paths, model_name, benchmark_name)
-        execution_stats = _load_execution_stats_if_present(execution_stats_path)
-        if execution_stats is not None:
-            evaluation = _evaluation_with_execution_stats(evaluation, execution_stats)
-        report = analyze(evaluation, ks=args.top_k, n_boot=args.n_boot)
-        output_dir = paths["results"] / benchmark_name / model_name / stock_name
-        analysis_path = output_dir / "analysis.json.gz"
-        markdown_path = output_dir / "report.md"
-        save_analysis_report(report, analysis_path)
-        markdown_path.write_text(
-            generate_markdown_report(
-                report, title=f"Evaluation Report: {model_name} / {benchmark_name} / {stock_name}"
-            ),
-            encoding="utf-8",
-        )
-        sources = [evaluation_path]
-        if execution_stats is not None:
-            sources.append(execution_stats_path)
-        write_manifest(
-            output_dir / "manifest.json",
-            action="analyze:v2",
-            sources=sources,
-            outputs=[analysis_path, markdown_path],
-            root_dir=paths["raw"].parent.resolve(),
-            parameters={
-                "model": model_name,
-                "benchmark": benchmark_name,
-                "stock": stock_name,
-                "top_k": args.top_k,
-                "n_boot": args.n_boot,
-            },
-            statistics={"n_metrics": len(report.metrics), "n_strata": len(report.by_stratum)},
-        )
+
+    rendered_reports: list[tuple[AnalysisReport, str, Path]] = []
+    with create_cli_progress(console=console, unit="jobs", transient=True) as progress, quiet_info_logs("retrocast"):
+        task_id = progress.add_task("Analyzing evaluations", total=len(jobs))
+        for model_name, benchmark_name, stock_name in jobs:
+            progress.update(task_id, description=f"Analyzing {model_name}/{benchmark_name}/{stock_name}")
+            rendered = _analyze_one(model_name, benchmark_name, stock_name, paths, args)
+            if rendered is not None:
+                rendered_reports.append(rendered)
+            progress.advance(task_id)
+
+    for report, subtitle, output_dir in rendered_reports:
         console.print(
-            create_analysis_table(report, title=f"Analysis Results: {model_name} / {benchmark_name} / {stock_name}")
+            create_analysis_table(
+                report,
+                title="analysis results",
+                subtitle=subtitle,
+            )
         )
         console.print(f"\n[dim]Full report saved to: {output_dir}[/]\n")
+
+
+def _analyze_one(
+    model_name: str,
+    benchmark_name: str,
+    stock_name: str,
+    paths: dict[str, Path],
+    args: argparse.Namespace,
+) -> tuple[AnalysisReport, str, Path] | None:
+    evaluation_path = paths["scored"] / benchmark_name / model_name / stock_name / "evaluation.json.gz"
+    if not evaluation_path.exists():
+        logger.warning("Skipping missing evaluation %s", evaluation_path)
+        return None
+
+    evaluation = load_evaluation(evaluation_path)
+    execution_stats_path = _execution_stats_path(paths, model_name, benchmark_name)
+    execution_stats = _load_execution_stats_if_present(execution_stats_path)
+    if execution_stats is not None:
+        evaluation = _evaluation_with_execution_stats(evaluation, execution_stats)
+    report = analyze(
+        evaluation,
+        ks=args.top_k,
+        prefix_depths=args.prefix_depth,
+        n_boot=args.n_boot,
+    )
+    output_dir = paths["results"] / benchmark_name / model_name / stock_name
+    analysis_path = output_dir / "analysis.json.gz"
+    markdown_path = output_dir / "report.md"
+    save_analysis_report(report, analysis_path)
+    markdown_path.write_text(
+        generate_markdown_report(report, title=f"Evaluation Report: {model_name} / {benchmark_name} / {stock_name}"),
+        encoding="utf-8",
+    )
+    sources = [evaluation_path]
+    if execution_stats is not None:
+        sources.append(execution_stats_path)
+    write_manifest(
+        output_dir / "manifest.json",
+        action="analyze:v2",
+        sources=sources,
+        outputs=[analysis_path, markdown_path],
+        root_dir=paths["raw"].parent.resolve(),
+        parameters={
+            "model": model_name,
+            "benchmark": benchmark_name,
+            "stock": stock_name,
+            "top_k": args.top_k,
+            "prefix_depth": args.prefix_depth,
+            "n_boot": args.n_boot,
+        },
+        statistics={"n_metrics": len(report.metrics), "n_strata": len(report.by_stratum)},
+    )
+    return report, f"{model_name} / {benchmark_name} / {stock_name}", output_dir
 
 
 def _execution_stats_path(paths: dict[str, Path], model_name: str, benchmark_name: str) -> Path:

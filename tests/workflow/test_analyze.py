@@ -37,6 +37,12 @@ def route() -> Route:
     return Route(target=molecule("CCO", product_of=Reaction(reactants=[molecule("C"), molecule("CO")])))
 
 
+def route_from_reactants(*reactant_smiles: str) -> Route:
+    return Route(
+        target=molecule("CCO", product_of=Reaction(reactants=[molecule(smiles) for smiles in reactant_smiles]))
+    )
+
+
 def route_with_depth(depth: int) -> Route:
     current = molecule("C")
     for _ in range(depth):
@@ -54,10 +60,15 @@ def target(target_id: str, *, acceptable_routes: list[Route] | None = None) -> T
     )
 
 
-def solved_candidate(rank: int, *, matches_acceptable: bool = False) -> ScoredCandidate:
+def solved_candidate(
+    rank: int,
+    *,
+    candidate_route: Route | None = None,
+    matches_acceptable: bool = False,
+) -> ScoredCandidate:
     return ScoredCandidate(
         rank=rank,
-        route=route(),
+        route=candidate_route or route(),
         validity=RouteValidity(tiers={Tier.ZERO: TierResult(status=CheckStatus.PASS)}),
         constraints=ConstraintResult(status=CheckStatus.PASS),
         matches_acceptable=matches_acceptable,
@@ -181,6 +192,37 @@ def test_top_k_reconstruction_ranks_after_task_satisfaction_filtering() -> None:
 
     assert report.metrics["acceptable_reconstruction_top_1[task]"].value == 0.0
     assert report.metrics["acceptable_reconstruction_top_2[task]"].value == 1.0
+
+
+def test_reconstruction_diagnostics_use_useful_top_k_candidates() -> None:
+    acceptable_route = route_from_reactants("C", "CO")
+    same_root_candidate = route_from_reactants("CO", "C")
+    different_root_candidate = route_from_reactants("CC", "O")
+    report = analyze(
+        evaluation(
+            {
+                "ethanol": result(
+                    target("ethanol", acceptable_routes=[acceptable_route]),
+                    [
+                        solved_candidate(1, candidate_route=same_root_candidate),
+                        solved_candidate(2, candidate_route=different_root_candidate),
+                    ],
+                )
+            }
+        ),
+        ks=(1, 2),
+        prefix_depths=(1,),
+    )
+
+    assert report.metrics["acceptable_reconstruction_top_1[task]"].value == 0.0
+    assert report.metrics["acceptable_root_reconstruction_top_1[task]"].value == 1.0
+    assert report.metrics["acceptable_prefix_reconstruction_depth_1_top_1[task]"].value == 1.0
+    assert report.metrics["acceptable_reconstruction_given_root_top_1[task]"].value == 0.0
+    distinct_roots = report.metrics["distinct_root_reactions_top_2[task]"]
+    assert distinct_roots.value == 2.0
+    assert distinct_roots.ci_low is None
+    assert distinct_roots.ci_high is None
+    assert distinct_roots.reliability is None
 
 
 def test_analyze_stratifies_by_primary_acceptable_route_depth() -> None:

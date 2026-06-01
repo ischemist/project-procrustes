@@ -30,4 +30,5 @@ class AnalysisReport(BaseModel):
     schema_version: Literal["2"] = "2"
     metrics: dict[str, MetricSummary] = Field(default_factory=dict)
     by_stratum: dict[str, dict[str, MetricSummary]] = Field(default_factory=dict)
+    bootstrap_resamples: int | None = None
     runtime: RuntimeSummary = Field(default_factory=RuntimeSummary)
