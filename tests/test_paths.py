@@ -128,6 +128,18 @@ class TestParoutesPaths:
             data_dir=Path("/data"),
         ) == Path("/data/releases/paroutes-training-sets/v1/route-holdout/manifest.json")
 
+    @pytest.mark.parametrize(
+        ("release_version", "release_name", "filename"),
+        [
+            ("../v1", "route-holdout", "manifest.json"),
+            ("v1", "../route-holdout", "manifest.json"),
+            ("v1", "route-holdout", "../manifest.json"),
+        ],
+    )
+    def test_rejects_unsafe_training_release_segments(self, release_version, release_name, filename):
+        with pytest.raises(SecurityError):
+            paroutes_training_release_file(release_version, release_name, filename)
+
 
 @pytest.mark.unit
 class TestCheckMigrationNeeded:

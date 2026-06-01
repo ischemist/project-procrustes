@@ -265,16 +265,13 @@ def _summarize_prefix_depths(
         eligible = [route for route in queries.values() if route.depth() >= depth]
         root_prefixes = index.root_prefix_signatures_by_depth.get(depth, set())
         subtree_prefixes = index.subtree_prefix_signatures_by_depth.get(depth, set())
+        signatures = [route.signature(match_level, depth=depth) for route in eligible]
         summaries.append(
             PrefixDepthSummary(
                 depth=depth,
                 query_routes=len(eligible),
-                root_prefix_signature_overlap=sum(
-                    route.signature(match_level, depth=depth) in root_prefixes for route in eligible
-                ),
-                subtree_prefix_signature_overlap=sum(
-                    route.signature(match_level, depth=depth) in subtree_prefixes for route in eligible
-                ),
+                root_prefix_signature_overlap=sum(signature in root_prefixes for signature in signatures),
+                subtree_prefix_signature_overlap=sum(signature in subtree_prefixes for signature in signatures),
             )
         )
     return tuple(summaries)

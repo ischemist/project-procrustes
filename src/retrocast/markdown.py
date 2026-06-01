@@ -19,14 +19,18 @@ def markdown_table(
         raise ValueError("markdown table alignment must match the header count")
 
     lines = [
-        "| " + " | ".join(str(value) for value in headers) + " |",
+        "| " + " | ".join(_cell(value) for value in headers) + " |",
         "| " + " | ".join(_alignment_marker(value) for value in alignment) + " |",
     ]
     for row in rows:
         if len(row) != column_count:
             raise ValueError("markdown table rows must match the header count")
-        lines.append("| " + " | ".join(str(value) for value in row) + " |")
+        lines.append("| " + " | ".join(_cell(value) for value in row) + " |")
     return "\n".join(lines)
+
+
+def _cell(value: object) -> str:
+    return str(value).replace("\r\n", " ").replace("\n", " ").replace("\r", " ").replace("|", r"\|")
 
 
 def _alignment_marker(value: MarkdownAlign) -> str:

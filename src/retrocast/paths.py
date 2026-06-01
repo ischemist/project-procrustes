@@ -192,6 +192,9 @@ def paroutes_training_release_file(
     *,
     data_dir: Path = DEFAULT_DATA_DIR,
 ) -> Path:
+    validate_directory_name(release_version, "release_version")
+    validate_directory_name(release_name, "release_name")
+    validate_filename(filename, "filename")
     return data_dir / "releases" / "paroutes-training-sets" / release_version / release_name / filename
 
 

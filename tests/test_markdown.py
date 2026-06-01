@@ -21,6 +21,17 @@ def test_markdown_table_formats_alignment_and_cells() -> None:
 
 
 @pytest.mark.unit
+def test_markdown_table_escapes_cell_delimiters_and_line_breaks() -> None:
+    assert markdown_table(["source|name", "route"], [("line\nbreak", "a|b")]) == "\n".join(
+        [
+            r"| source\|name | route |",
+            "| --- | --- |",
+            r"| line break | a\|b |",
+        ]
+    )
+
+
+@pytest.mark.unit
 def test_markdown_table_rejects_alignment_shape_mismatch() -> None:
     with pytest.raises(ValueError, match="alignment"):
         markdown_table(["name"], [], align=["left", "right"])

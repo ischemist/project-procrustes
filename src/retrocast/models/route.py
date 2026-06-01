@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
+from functools import cache
 from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, Field
@@ -69,10 +70,12 @@ class RoutePath:
         return cls(kind=route_kind, indices=indices)
 
     @classmethod
+    @cache
     def target(cls) -> RoutePath:
         return cls(kind="m")
 
     @classmethod
+    @cache
     def root_reaction(cls) -> RoutePath:
         return cls(kind="r")
 
