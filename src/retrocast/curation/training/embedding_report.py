@@ -95,6 +95,11 @@ def _overlap_summary(query_set: QuerySetAudit) -> str:
 
 
 def _internal_subroute_summary(query_set: QuerySetAudit, summary: InternalSubrouteEmbeddingSummary) -> str:
+    matches_per_embedded_subroute = (
+        summary.embedding_occurrences / summary.embedded_internal_subroutes
+        if summary.embedded_internal_subroutes
+        else 0.0
+    )
     return (
         f"{_format_count_rate(summary.query_routes_with_embedding, query_set.query_routes)} "
         f"query routes have at least one embedded internal subroute of {summary.min_reactions}+ reactions. "
@@ -103,7 +108,7 @@ def _internal_subroute_summary(query_set: QuerySetAudit, summary: InternalSubrou
         f"{_format_count_rate(summary.embedded_internal_subroutes, summary.checked_internal_subroutes)} "
         "of those internal subroutes are embedded. "
         f"there are {_format_integer(summary.embedding_occurrences)} total partial matching occurrences "
-        f"({_ratio(summary.embedding_occurrences, summary.embedded_internal_subroutes):.2f} "
+        f"({matches_per_embedded_subroute:.2f} "
         "matches per embedded internal subroute)."
     )
 
@@ -194,7 +199,8 @@ def _coverage_table(
 
 
 def _format_count_rate(count: int, denominator: int) -> str:
-    return f"{_format_integer(count)} / {_format_integer(denominator)} ({_format_percent(_ratio(count, denominator))})"
+    rate = count / denominator if denominator else 0.0
+    return f"{_format_integer(count)} / {_format_integer(denominator)} ({_format_percent(rate)})"
 
 
 def _format_internal_query_count(query_set: QuerySetAudit) -> str:
@@ -235,7 +241,3 @@ def _format_root_distance_sentence(counts: Sequence[tuple[int, int]]) -> str:
     if not pieces:
         return "no embeddings are below the target"
     return "; ".join(pieces)
-
-
-def _ratio(numerator: int, denominator: int) -> float:
-    return numerator / denominator if denominator else 0.0
