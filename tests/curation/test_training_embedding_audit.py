@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
 from retrocast.curation.training import TrainingRouteRecord
-from retrocast.curation.training.embedding_audit import build_route_embedding_audit
+from retrocast.curation.training.embedding_audit import RouteEmbeddingAudit, build_route_embedding_audit
 from retrocast.curation.training.embedding_report import render_route_embedding_audit_markdown
 from retrocast.models.route import Molecule, Reaction, Route
 from retrocast.typing import InChIKeyStr, SmilesStr
@@ -12,22 +14,12 @@ KEY_C = "CCCCCCCCCCCCCC-UHFFFAOYSA-N"
 KEY_D = "DDDDDDDDDDDDDD-UHFFFAOYSA-N"
 
 
-def test_route_embedding_audit_summarizes_full_matches_and_renders_markdown() -> None:
-    training = route_record("container", route_c_b_a())
-    queries = {
-        "shifted": Route(target=molecule("b", KEY_B, reactants=[molecule("a", KEY_A)])),
-        "leaf": Route(target=molecule("c", KEY_C, reactants=[molecule("b", KEY_B)])),
-        "absent": Route(target=molecule("d", KEY_D, reactants=[molecule("a", KEY_A)])),
-    }
-
-    audit = build_route_embedding_audit(
-        release_name="route-holdout-n1-n5",
-        training_records=[training],
-        queries_by_source={"bench": queries},
-    )
-
+@pytest.mark.integration
+def test_route_embedding_audit_summarizes_full_matches() -> None:
+    audit = sample_full_match_audit()
     query_set = audit.query_sets[0]
     full = query_set.full_embeddings
+
     assert query_set.query_routes == 3
     assert query_set.reaction_signature_overlap == 2
     assert query_set.exact_route_signature_overlap == 0
@@ -50,7 +42,13 @@ def test_route_embedding_audit_summarizes_full_matches_and_renders_markdown() ->
         ("leaf", "rc:m:/", ("rc:m:/0",)),
     ]
 
+
+@pytest.mark.integration
+def test_route_embedding_report_renders_audit_summary() -> None:
+    audit = sample_full_match_audit()
+
     markdown = render_route_embedding_audit_markdown(audit)
+
     assert "# route embedding audit: route-holdout-n1-n5" in markdown
     assert "| full route embeddings | 2 / 3 (66.7%) |" in markdown
     assert "### root-prefix overlap" in markdown
@@ -59,6 +57,7 @@ def test_route_embedding_audit_summarizes_full_matches_and_renders_markdown() ->
     assert "1 query route has a leaf-extended full embedding" in markdown
 
 
+@pytest.mark.integration
 def test_route_embedding_audit_can_include_internal_subroutes() -> None:
     training = route_record("container", route_c_b_a())
 
@@ -91,6 +90,21 @@ def test_route_embedding_audit_can_include_internal_subroutes() -> None:
         (1, 1, 1, 1),
         (2, 1, 1, 1),
     ]
+
+
+def sample_full_match_audit() -> RouteEmbeddingAudit:
+    training = route_record("container", route_c_b_a())
+    queries = {
+        "shifted": Route(target=molecule("b", KEY_B, reactants=[molecule("a", KEY_A)])),
+        "leaf": Route(target=molecule("c", KEY_C, reactants=[molecule("b", KEY_B)])),
+        "absent": Route(target=molecule("d", KEY_D, reactants=[molecule("a", KEY_A)])),
+    }
+
+    return build_route_embedding_audit(
+        release_name="route-holdout-n1-n5",
+        training_records=[training],
+        queries_by_source={"bench": queries},
+    )
 
 
 def route_c_b_a() -> Route:
