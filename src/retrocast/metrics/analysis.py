@@ -62,9 +62,8 @@ def summarize_targets(
             metrics[f"acceptable_reconstruction_given_root_top_{k}[{metric_label}]"] = reconstruction_summary(
                 _top_k_reconstruction_given_root_values(reconstruction_targets, k, acceptable_match_level)
             )
-            metrics[f"distinct_root_reactions_top_{k}[{metric_label}]"] = reconstruction_summary(
-                _distinct_root_reaction_values(reconstruction_targets, k, acceptable_match_level),
-                reliability=False,
+            metrics[f"distinct_root_reactions_top_{k}[{metric_label}]"] = _mean_summary(
+                _distinct_root_reaction_values(reconstruction_targets, k, acceptable_match_level)
             )
             for depth in sorted(set(prefix_depths)):
                 metrics[f"acceptable_prefix_reconstruction_depth_{depth}_top_{k}[{metric_label}]"] = (
@@ -73,6 +72,12 @@ def summarize_targets(
                     )
                 )
     return metrics
+
+
+def _mean_summary(values: Sequence[float]) -> MetricSummary:
+    if not values:
+        return MetricSummary(value=0.0, count=0)
+    return MetricSummary(value=sum(values) / len(values), count=len(values))
 
 
 def _candidate_rate(

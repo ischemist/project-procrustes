@@ -218,7 +218,11 @@ def test_reconstruction_diagnostics_use_useful_top_k_candidates() -> None:
     assert report.metrics["acceptable_root_reconstruction_top_1[task]"].value == 1.0
     assert report.metrics["acceptable_prefix_reconstruction_depth_1_top_1[task]"].value == 1.0
     assert report.metrics["acceptable_reconstruction_given_root_top_1[task]"].value == 0.0
-    assert report.metrics["distinct_root_reactions_top_2[task]"].value == 2.0
+    distinct_roots = report.metrics["distinct_root_reactions_top_2[task]"]
+    assert distinct_roots.value == 2.0
+    assert distinct_roots.ci_low is None
+    assert distinct_roots.ci_high is None
+    assert distinct_roots.reliability is None
 
 
 def test_analyze_stratifies_by_primary_acceptable_route_depth() -> None:

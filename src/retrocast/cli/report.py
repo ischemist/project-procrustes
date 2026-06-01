@@ -77,7 +77,7 @@ def _create_solv_table(
     table.add_column("MRR Valid-N", justify="center", no_wrap=True)
     table.add_column("MRR Solv-N", justify="center", no_wrap=True)
 
-    def cell(name: str) -> str:
+    def cell(name: str) -> RenderableType:
         return _metric_cell(name, metrics.get(name))
 
     for tier in tiers:
@@ -109,13 +109,13 @@ def _create_reconstruction_table(
 
     depths = _diagnostic_prefix_depths(metrics)
 
-    def metric_cell(pattern: re.Pattern[str], k: int) -> str:
+    def metric_cell(pattern: re.Pattern[str], k: int) -> RenderableType:
         for name, metric, match in _matching_metrics(metrics, pattern):
             if int(match.group(1)) == k:
                 return _metric_cell(name, metric, compact_ci=True)
         return ""
 
-    def prefix_cell(k: int, depth: int) -> str:
+    def prefix_cell(k: int, depth: int) -> RenderableType:
         for name, metric, match in _matching_metrics(metrics, _PREFIX_TOP_K):
             if int(match.group(1)) == depth and int(match.group(2)) == k:
                 return _metric_cell(name, metric, compact_ci=True)
@@ -137,7 +137,7 @@ def _create_reconstruction_table(
         ("Root reaction", [metric_cell(_ROOT_TOP_K, k) for k in ks]),
         ("Route | root", [metric_cell(_GIVEN_ROOT_TOP_K, k) for k in ks]),
         *[(f"Prefix {depth}", [prefix_cell(k, depth) for k in ks]) for depth in depths],
-        ("Unique roots", [metric_cell(_DISTINCT_ROOT_TOP_K, k) for k in ks]),
+        ("Mean distinct roots", [metric_cell(_DISTINCT_ROOT_TOP_K, k) for k in ks]),
     ]
     for label, cells in rows:
         table.add_row(label, *cells)
@@ -160,7 +160,7 @@ def _create_runtime_table(report: AnalysisReport) -> Table | None:
     table.add_column("Wall", justify="right")
     table.add_column("CPU", justify="right")
     for label, wall_time, cpu_time in runtime_rows:
-        table.add_row(label, wall_time, cpu_time)
+        table.add_row(_markup(label), _markup(wall_time), _markup(cpu_time))
     return table
 
 
@@ -217,7 +217,7 @@ def _markdown_headline_metric_table(metrics: dict[str, MetricSummary]) -> list[s
         rows.append(
             (
                 _display_metric_name(name, match),
-                _format_value(name, metric, rich=False),
+                _format_value(name, metric),
                 _format_ci(name, metric, rich=False),
                 metric.count,
                 _format_reliability(metric, rich=False),
@@ -263,7 +263,7 @@ def _markdown_reconstruction_diagnostics(
         ("Full route", _TOP_K),
         ("Root reaction", _ROOT_TOP_K),
         ("Route given root", _GIVEN_ROOT_TOP_K),
-        ("Distinct roots", _DISTINCT_ROOT_TOP_K),
+        ("Mean distinct roots", _DISTINCT_ROOT_TOP_K),
     ]
     top_k_rows = [tuple([f"Top-{k}", *[diagnostic_cell(pattern, k) for _, pattern in diagnostics]]) for k in ks]
     diagnostic_align: list[MarkdownAlign] = ["left"]
@@ -318,7 +318,8 @@ def _runtime_rows(report: AnalysisReport, *, rich: bool = True) -> list[tuple[st
     ]
     rows = [row for row in rows if row[1] or row[2]]
     if rich:
-        return [_dim_runtime_projection(row) if "projected" in row[0] else row for row in rows]
+        projected_label = "Per 1M targets (projected)"
+        return [_dim_runtime_projection(row) if row[0] == projected_label else row for row in rows]
     return rows
 
 
@@ -373,7 +374,7 @@ def _metric_cell(
     metric: MetricSummary | None,
     *,
     compact_ci: bool = False,
-) -> str:
+) -> RenderableType:
     if metric is None:
         return ""
 
@@ -383,14 +384,20 @@ def _metric_cell(
 
     ci = _format_compact_ci(name, metric) if compact_ci else _format_ci(name, metric, rich=False)
     if not ci:
-        return first_line
-    return f"{first_line}\n[dim]{ci}[/]"
+        return _markup(first_line) if symbol else first_line
+    return _markup(f"{first_line}\n[dim]{ci}[/]")
+
+
+def _markup(value: str) -> Text:
+    return Text.from_markup(value)
 
 
 def _markdown_metric_cell(name: str, metric: MetricSummary) -> str:
-    value = _format_value(name, metric, rich=False)
+    value = _format_value(name, metric)
+    symbol = _plain_reliability_symbol(metric)
     ci = _format_ci(name, metric, rich=False)
-    return f"{value} {ci}" if ci else value
+    first = f"{value}{symbol}" if symbol else value
+    return f"{first} {ci}" if ci else first
 
 
 def _format_duration(seconds: float | None) -> str:
@@ -569,10 +576,10 @@ def _plain_prefix_top_k_label(match: re.Match[str]) -> str:
 
 
 def _plain_distinct_root_top_k_label(match: re.Match[str]) -> str:
-    return f"Distinct roots Top-{match.group(1)}"
+    return f"Mean distinct roots Top-{match.group(1)}"
 
 
-def _format_value(name: str, metric: MetricSummary, *, rich: bool = True) -> str:
+def _format_value(name: str, metric: MetricSummary) -> str:
     if name.startswith("mrr_") or name.startswith("distinct_root_reactions_"):
         value = f"{metric.value:.3f}"
     else:

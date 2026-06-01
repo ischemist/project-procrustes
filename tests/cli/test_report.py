@@ -18,6 +18,7 @@ def report_with_all_metric_groups() -> AnalysisReport:
                 count=4,
                 reliability=ReliabilityFlag(code="LOW_N", message="Small sample size."),
             ),
+            "distinct_root_reactions_top_3[test-stock]": MetricSummary(value=2.0, count=4),
         },
         by_stratum={
             "depth=2": {
@@ -36,6 +37,8 @@ def test_generate_markdown_report_includes_strata_and_metric_groups() -> None:
     assert "MRR Tier-0" in markdown
     assert "MRR Solv-0[test-stock]" in markdown
     assert "Top-3" in markdown
+    assert "Mean distinct roots" in markdown
+    assert "| Top-3 | 75.0%! |  |  | 2.000 |" in markdown
     assert "## By Stratum" in markdown
     assert "### depth=2" in markdown
     assert "| Top-1 | 25.0% |  | 2 |  |" in markdown
@@ -52,6 +55,8 @@ def test_create_analysis_table_renders_metric_groups() -> None:
     assert "Benchmark Route" in output
     assert "Top-3" in output
     assert "75.0%" in output
+    assert "Mean distinct roots" in output
+    assert "2.000" in output
     assert "flags: ! low n / unstable ci" in output
 
 
