@@ -5,6 +5,7 @@ import re
 from rich.markup import escape
 from rich.table import Table
 
+from retrocast.markdown import MarkdownRow, markdown_table
 from retrocast.models.analysis import AnalysisReport, MetricSummary
 
 _SOLV_RATE = re.compile(r"^solv_(\d+)\[(.+)]_rate$")
@@ -74,9 +75,18 @@ def generate_markdown_report(report: AnalysisReport, *, title: str = "Evaluation
     lines.extend(_markdown_metric_table(report.metrics))
     runtime_rows = _runtime_rows(report, rich=False)
     if runtime_rows:
-        lines.extend(["", "## Runtime", "", "| Metric | Seconds | Timed Targets |", "| --- | ---: | ---: |"])
-        for label, value in runtime_rows:
-            lines.append(f"| {label} | {value} | {report.runtime.timed_target_count} |")
+        lines.extend(
+            [
+                "",
+                "## Runtime",
+                "",
+                markdown_table(
+                    ["Metric", "Seconds", "Timed Targets"],
+                    [(label, value, report.runtime.timed_target_count) for label, value in runtime_rows],
+                    align=["left", "right", "right"],
+                ),
+            ]
+        )
     if report.by_stratum:
         lines.extend(["", "## By Stratum", ""])
         for stratum in sorted(report.by_stratum):
@@ -87,13 +97,22 @@ def generate_markdown_report(report: AnalysisReport, *, title: str = "Evaluation
 
 
 def _markdown_metric_table(metrics: dict[str, MetricSummary]) -> list[str]:
-    lines = ["| Metric | Value | 95% CI | N | Flags |", "| --- | ---: | :---: | ---: | :---: |"]
+    rows: list[MarkdownRow] = []
     for name, metric, match in _ordered_metrics(metrics):
-        lines.append(
-            f"| {_display_metric_name(name, match)} | {_format_value(name, metric, rich=False)} | "
-            f"{_format_ci(name, metric, rich=False)} | {metric.count} | {_format_reliability(metric, rich=False)} |"
+        rows.append(
+            (
+                _display_metric_name(name, match),
+                _format_value(name, metric, rich=False),
+                _format_ci(name, metric, rich=False),
+                metric.count,
+                _format_reliability(metric, rich=False),
+            )
         )
-    return lines
+    return markdown_table(
+        ["Metric", "Value", "95% CI", "N", "Flags"],
+        rows,
+        align=["left", "right", "center", "right", "center"],
+    ).splitlines()
 
 
 def _runtime_rows(report: AnalysisReport, *, rich: bool = True) -> list[tuple[str, str]]:
