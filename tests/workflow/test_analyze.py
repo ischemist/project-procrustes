@@ -125,6 +125,21 @@ def test_solv_rate_denominator_includes_failed_candidates() -> None:
     assert metric.ci_high is not None
 
 
+def test_tier_validity_is_reported_separately_from_solv() -> None:
+    report = analyze(
+        evaluation(
+            {
+                "ethanol": result(target("ethanol"), [unsolved_candidate(1)]),
+            }
+        )
+    )
+
+    assert report.metrics["tier_0_validity_rate"].value == 1.0
+    assert report.metrics["mrr_tier_0"].value == 1.0
+    assert report.metrics["solv_0[task]_rate"].value == 0.0
+    assert report.metrics["mrr_solv_0[task]"].value == 0.0
+
+
 def test_mrr_uses_first_solv_satisfying_candidate() -> None:
     report = analyze(
         evaluation(

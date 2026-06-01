@@ -1,10 +1,25 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from typing import Protocol
 
 from retrocast.metrics.bootstrap import summarize_values
 from retrocast.models.analysis import MetricSummary
-from retrocast.models.evaluation import TargetResult, Tier
+from retrocast.models.evaluation import ScoredCandidate, TargetResult, Tier
+
+CandidatePredicate = Callable[[ScoredCandidate, Tier], bool]
+
+
+class CandidateMetric(Protocol):
+    def __call__(
+        self,
+        targets: Sequence[TargetResult],
+        tier: Tier,
+        predicate: CandidatePredicate,
+        *,
+        n_boot: int,
+        seed: int,
+    ) -> MetricSummary: ...
 
 
 def summarize_targets(
@@ -19,8 +34,14 @@ def summarize_targets(
     metrics: dict[str, MetricSummary] = {}
     for tier in tiers:
         metric_suffix = str(int(tier))
-        metrics[f"solv_{metric_suffix}[{metric_label}]_rate"] = _solv_rate(targets, tier, n_boot=n_boot, seed=seed)
-        metrics[f"mrr_solv_{metric_suffix}[{metric_label}]"] = _mrr_solv(targets, tier, n_boot=n_boot, seed=seed)
+        metric_specs: tuple[tuple[str, CandidateMetric, CandidatePredicate], ...] = (
+            (f"tier_{metric_suffix}_validity_rate", _candidate_rate, ScoredCandidate.satisfies_validity),
+            (f"mrr_tier_{metric_suffix}", _candidate_mrr, ScoredCandidate.satisfies_validity),
+            (f"solv_{metric_suffix}[{metric_label}]_rate", _candidate_rate, ScoredCandidate.satisfies_solv),
+            (f"mrr_solv_{metric_suffix}[{metric_label}]", _candidate_mrr, ScoredCandidate.satisfies_solv),
+        )
+        for name, summarize, predicate in metric_specs:
+            metrics[name] = summarize(targets, tier, predicate, n_boot=n_boot, seed=seed)
 
     reconstruction_targets = [target for target in targets if target.target.acceptable_routes]
     if reconstruction_targets:
@@ -34,20 +55,34 @@ def summarize_targets(
     return metrics
 
 
-def _solv_rate(targets: Sequence[TargetResult], tier: Tier, *, n_boot: int, seed: int) -> MetricSummary:
+def _candidate_rate(
+    targets: Sequence[TargetResult],
+    tier: Tier,
+    predicate: CandidatePredicate,
+    *,
+    n_boot: int,
+    seed: int,
+) -> MetricSummary:
     values = []
     for target in targets:
-        values.append(1.0 if any(candidate.satisfies_solv(tier) for candidate in target.candidates) else 0.0)
+        values.append(1.0 if any(predicate(candidate, tier) for candidate in target.candidates) else 0.0)
     return summarize_values(values, n_boot=n_boot, seed=seed)
 
 
-def _mrr_solv(targets: Sequence[TargetResult], tier: Tier, *, n_boot: int, seed: int) -> MetricSummary:
+def _candidate_mrr(
+    targets: Sequence[TargetResult],
+    tier: Tier,
+    predicate: CandidatePredicate,
+    *,
+    n_boot: int,
+    seed: int,
+) -> MetricSummary:
     values = []
     for target in targets:
         candidates = sorted(target.candidates, key=lambda candidate: candidate.rank)
         reciprocal_rank = 0.0
         for candidate in candidates:
-            if candidate.satisfies_solv(tier):
+            if predicate(candidate, tier):
                 reciprocal_rank = 1.0 / candidate.rank
                 break
         values.append(reciprocal_rank)

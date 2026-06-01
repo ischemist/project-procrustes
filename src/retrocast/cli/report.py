@@ -10,6 +10,8 @@ from retrocast.models.analysis import AnalysisReport, MetricSummary
 
 _SOLV_RATE = re.compile(r"^solv_(\d+)\[(.+)]_rate$")
 _MRR_SOLV = re.compile(r"^mrr_solv_(\d+)\[(.+)]$")
+_TIER_VALIDITY = re.compile(r"^tier_(\d+)_validity_rate$")
+_MRR_TIER = re.compile(r"^mrr_tier_(\d+)$")
 _TOP_K = re.compile(r"^acceptable_reconstruction_top_(\d+)\[(.+)]$")
 
 
@@ -22,25 +24,12 @@ def create_analysis_table(report: AnalysisReport, *, title: str = "Analysis Resu
     table.add_column("N", justify="right")
     table.add_column("Reliability", justify="center")
 
-    solv_metrics = _matching_metrics(report.metrics, _SOLV_RATE)
-    if solv_metrics:
-        table.add_row("[dim]Solv-N hierarchy[/]", "", "", "", "")
-        for name, metric, match in solv_metrics:
+    hierarchy_metrics = _hierarchy_metrics(report.metrics)
+    if hierarchy_metrics:
+        table.add_row("[dim]Solv-N evaluation[/]", "", "", "", "")
+        for name, metric, match in hierarchy_metrics:
             table.add_row(
-                _solv_label(match),
-                _format_value(name, metric),
-                _format_ci(name, metric),
-                str(metric.count),
-                _format_reliability(metric),
-            )
-
-    mrr_metrics = _matching_metrics(report.metrics, _MRR_SOLV)
-    if mrr_metrics:
-        table.add_section()
-        table.add_row("[dim]Rank within Solv-N hierarchy[/]", "", "", "", "")
-        for name, metric, match in mrr_metrics:
-            table.add_row(
-                _mrr_label(match),
+                escape(_display_metric_name(name, match)),
                 _format_value(name, metric),
                 _format_ci(name, metric),
                 str(metric.count),
@@ -145,10 +134,28 @@ def _format_reliability(metric: MetricSummary, *, rich: bool = True) -> str:
 
 
 def _ordered_metrics(metrics: dict[str, MetricSummary]) -> list[tuple[str, MetricSummary, re.Match[str]]]:
-    ordered = []
-    for pattern in (_SOLV_RATE, _MRR_SOLV, _TOP_K):
+    ordered = _hierarchy_metrics(metrics)
+    for pattern in (_TOP_K,):
         ordered.extend(_matching_metrics(metrics, pattern))
     return ordered
+
+
+def _hierarchy_metrics(metrics: dict[str, MetricSummary]) -> list[tuple[str, MetricSummary, re.Match[str]]]:
+    matches: list[tuple[str, MetricSummary, re.Match[str]]] = []
+    for pattern in (_TIER_VALIDITY, _SOLV_RATE, _MRR_TIER, _MRR_SOLV):
+        matches.extend(_matching_metrics(metrics, pattern))
+    return sorted(matches, key=_hierarchy_sort_key)
+
+
+def _hierarchy_sort_key(item: tuple[str, MetricSummary, re.Match[str]]) -> tuple[int, int, str]:
+    name, _, match = item
+    if _TIER_VALIDITY.match(name):
+        return (int(match.group(1)), 0, "")
+    if _SOLV_RATE.match(name):
+        return (int(match.group(1)), 1, match.group(2))
+    if _MRR_TIER.match(name):
+        return (int(match.group(1)), 2, "")
+    return (int(match.group(1)), 3, match.group(2))
 
 
 def _matching_metrics(
@@ -163,19 +170,15 @@ def _matching_metrics(
 
 
 def _display_metric_name(name: str, match: re.Match[str]) -> str:
+    if _TIER_VALIDITY.match(name):
+        return _plain_tier_validity_label(match)
     if _SOLV_RATE.match(name):
         return _plain_solv_label(match)
+    if _MRR_TIER.match(name):
+        return _plain_mrr_tier_label(match)
     if _MRR_SOLV.match(name):
         return _plain_mrr_label(match)
     return _plain_top_k_label(match)
-
-
-def _solv_label(match: re.Match[str]) -> str:
-    return escape(_plain_solv_label(match))
-
-
-def _mrr_label(match: re.Match[str]) -> str:
-    return escape(_plain_mrr_label(match))
 
 
 def _top_k_label(match: re.Match[str]) -> str:
@@ -184,6 +187,14 @@ def _top_k_label(match: re.Match[str]) -> str:
 
 def _plain_solv_label(match: re.Match[str]) -> str:
     return f"Solv-{match.group(1)}[{match.group(2)}]"
+
+
+def _plain_tier_validity_label(match: re.Match[str]) -> str:
+    return f"Tier-{match.group(1)} Validity"
+
+
+def _plain_mrr_tier_label(match: re.Match[str]) -> str:
+    return f"MRR Tier-{match.group(1)}"
 
 
 def _plain_mrr_label(match: re.Match[str]) -> str:
