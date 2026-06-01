@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Protocol, cast
 
 from retrocast.exceptions import UnsupportedValidityTierError
 from retrocast.models.candidates import Candidate
 from retrocast.models.evaluation import (
+    AcceptableRouteMatch,
     CheckResult,
     CheckStatus,
     ConstraintResult,
@@ -34,6 +36,13 @@ class ConstraintChecker(Protocol):
     def check_route(self, route: Route, constraints: TaskConstraints) -> ConstraintResult: ...
 
 
+@dataclass(frozen=True, slots=True)
+class AcceptableRouteIdentity:
+    index: int
+    depth: int
+    signature: str
+
+
 def score_candidate(
     candidate: Candidate,
     *,
@@ -42,7 +51,8 @@ def score_candidate(
     tier_checkers: Sequence[TierChecker],
     constraint_checker: ConstraintChecker,
     acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
-    _acceptable_signatures: Sequence[str] | None = None,
+    acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
+    _acceptable_identities: Sequence[AcceptableRouteIdentity] | None = None,
 ) -> ScoredCandidate:
     """Score one candidate while preserving failed adaptation slots."""
     validity = _tier_zero_validity(candidate)
@@ -57,12 +67,14 @@ def score_candidate(
     route = cast(Route, candidate.route)
     _check_route_validity(route, tier_checkers, validity)
     constraints_result = constraint_checker.check_route(route, constraints)
-    acceptable_signatures = (
-        _acceptable_signatures
-        if _acceptable_signatures is not None
-        else _acceptable_route_signatures(target.acceptable_routes, acceptable_match_level)
+    acceptable_identities = (
+        _acceptable_identities
+        if _acceptable_identities is not None
+        else _acceptable_route_identities(target.acceptable_routes, acceptable_match_level)
     )
-    matched_index = _acceptable_match_index(route, acceptable_signatures, acceptable_match_level)
+    matched_index = _acceptable_match_index(
+        route, acceptable_identities, acceptable_match_level, acceptable_route_match
+    )
     return ScoredCandidate(
         rank=candidate.rank,
         route=route,
@@ -81,11 +93,12 @@ def score_target(
     tier_checkers: Sequence[TierChecker],
     constraint_checker: ConstraintChecker,
     acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
     wall_time: float | None = None,
     cpu_time: float | None = None,
 ) -> TargetResult:
     scored_candidates = []
-    acceptable_signatures = _acceptable_route_signatures(target.acceptable_routes, acceptable_match_level)
+    acceptable_identities = _acceptable_route_identities(target.acceptable_routes, acceptable_match_level)
     for candidate in candidates:
         scored_candidate = score_candidate(
             candidate,
@@ -94,7 +107,8 @@ def score_target(
             tier_checkers=tier_checkers,
             constraint_checker=constraint_checker,
             acceptable_match_level=acceptable_match_level,
-            _acceptable_signatures=acceptable_signatures,
+            acceptable_route_match=acceptable_route_match,
+            _acceptable_identities=acceptable_identities,
         )
         scored_candidates.append(scored_candidate)
 
@@ -114,6 +128,7 @@ def score(
     tier_checkers: Sequence[TierChecker] = (),
     constraint_checker: ConstraintChecker,
     acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
     execution_stats: ExecutionStats | None = None,
 ) -> Evaluation:
     tiers = [Tier.ZERO, *sorted({checker.tier for checker in tier_checkers})]
@@ -127,6 +142,7 @@ def score(
             tier_checkers=tier_checkers,
             constraint_checker=constraint_checker,
             acceptable_match_level=acceptable_match_level,
+            acceptable_route_match=acceptable_route_match,
             wall_time=execution_stats.wall_time.get(target_id) if execution_stats is not None else None,
             cpu_time=execution_stats.cpu_time.get(target_id) if execution_stats is not None else None,
         )
@@ -135,6 +151,7 @@ def score(
         tiers=tiers,
         metric_label=task.derived_metric_label(),
         acceptable_match_level=acceptable_match_level,
+        acceptable_route_match=acceptable_route_match,
         targets=target_results,
     )
 
@@ -181,15 +198,39 @@ def _check_route_validity(route: Route, tier_checkers: Sequence[TierChecker], va
 
 def _acceptable_match_index(
     route: Route,
-    acceptable_signatures: Sequence[str],
+    acceptable_identities: Sequence[AcceptableRouteIdentity],
     match_level: InChIKeyLevel,
+    route_match: AcceptableRouteMatch,
 ) -> int | None:
-    route_signature = route.signature(match_level)
-    for index, acceptable_signature in enumerate(acceptable_signatures):
-        if route_signature == acceptable_signature:
-            return index
-    return None
+    if route_match == AcceptableRouteMatch.EXACT:
+        route_signature = route.signature(match_level)
+        for identity in acceptable_identities:
+            if route_signature == identity.signature:
+                return identity.index
+        return None
+
+    if route_match == AcceptableRouteMatch.PREFIX:
+        route_depth = route.depth()
+        route_signatures_by_depth: dict[int, str] = {}
+        best: AcceptableRouteIdentity | None = None
+        for identity in acceptable_identities:
+            if route_depth < identity.depth:
+                continue
+            if identity.depth not in route_signatures_by_depth:
+                route_signatures_by_depth[identity.depth] = route.signature(match_level, depth=identity.depth)
+            route_signature = route_signatures_by_depth[identity.depth]
+            if route_signature == identity.signature and (best is None or identity.depth >= best.depth):
+                best = identity
+        return best.index if best is not None else None
+
+    raise ValueError(f"unsupported acceptable route match mode: {route_match}")
 
 
-def _acceptable_route_signatures(acceptable_routes: Sequence[Route], match_level: InChIKeyLevel) -> list[str]:
-    return [route.signature(match_level) for route in acceptable_routes]
+def _acceptable_route_identities(
+    acceptable_routes: Sequence[Route],
+    match_level: InChIKeyLevel,
+) -> tuple[AcceptableRouteIdentity, ...]:
+    return tuple(
+        AcceptableRouteIdentity(index=index, depth=route.depth(), signature=route.signature(match_level))
+        for index, route in enumerate(acceptable_routes)
+    )

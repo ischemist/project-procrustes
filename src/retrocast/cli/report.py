@@ -133,7 +133,7 @@ def _create_reconstruction_table(
         table.add_column(f"Top-{k}", justify="center", no_wrap=True)
 
     rows = [
-        ("Full route", [metric_cell(_TOP_K, k) for k in ks]),
+        ("Acceptable route", [metric_cell(_TOP_K, k) for k in ks]),
         ("Root reaction", [metric_cell(_ROOT_TOP_K, k) for k in ks]),
         ("Route | root", [metric_cell(_GIVEN_ROOT_TOP_K, k) for k in ks]),
         *[(f"Prefix {depth}", [prefix_cell(k, depth) for k in ks]) for depth in depths],
@@ -260,7 +260,7 @@ def _markdown_reconstruction_diagnostics(
         return ""
 
     diagnostics: list[tuple[str, re.Pattern[str]]] = [
-        ("Full route", _TOP_K),
+        ("Acceptable route", _TOP_K),
         ("Root reaction", _ROOT_TOP_K),
         ("Route given root", _GIVEN_ROOT_TOP_K),
         ("Mean distinct roots", _DISTINCT_ROOT_TOP_K),

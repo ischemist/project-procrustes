@@ -161,8 +161,10 @@ Options:
 | `--stock-name` | Stock label to write into task constraints; defaults to the stock filename stem |
 | `--model-name` | Optional model label for manifest metadata |
 | `--ignore-stereo` | Use stereo-agnostic stock and acceptable-route matching |
+| `--acceptable-route-match prefix\|exact` | Match acceptable routes by target-rooted prefix (default) or exact full-route identity |
 
 `score-file` writes an `Evaluation` artifact. Tier-0 validity comes from adaptation success or failure; task satisfaction comes from the configured constraints.
+`--acceptable-route-match` is applied when this artifact is scored; rerunning `analyze` on an existing `Evaluation` does not retroactively change its stored acceptable-route matches.
 
 ### `compare pareto-frontier` - Compare Reports
 
@@ -295,8 +297,11 @@ Useful options:
 | Option            | Meaning                                                      |
 | ----------------- | ------------------------------------------------------------ |
 | `--ignore-stereo` | Use stereo-agnostic stock and acceptable-route matching      |
+| `--acceptable-route-match prefix\|exact` | Match acceptable routes by target-rooted prefix (default) or exact full-route identity |
 | `--all-models`    | Score all processed models for the selected dataset(s)       |
 | `--all-datasets`  | Score the selected model(s) across all benchmark definitions |
+
+`--acceptable-route-match` is applied when the `Evaluation` is scored; rerun `score` before `analyze` to apply different matching semantics to existing processed candidates.
 
 Input:
 
