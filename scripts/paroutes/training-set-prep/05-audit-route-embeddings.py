@@ -3,15 +3,11 @@ audit route-pattern embeddings between a paroutes training release and query rou
 
 usage:
     uv run scripts/paroutes/training-set-prep/05-audit-route-embeddings.py
-    uv run scripts/paroutes/training-set-prep/05-audit-route-embeddings.py --include-partial
-    uv run scripts/paroutes/training-set-prep/05-audit-route-embeddings.py --release-path path/to/all.jsonl.gz
 """
 
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
-from typing import cast
 
 from retrocast.chem import InChIKeyLevel
 from retrocast.curation.training import adapt_training_routes
@@ -23,154 +19,73 @@ from retrocast.curation.training.embedding_audit import (
 )
 from retrocast.curation.training.embedding_report import render_route_embedding_audit_markdown
 from retrocast.io import load_benchmark, load_training_route_records, save_jsonl_gz
+from retrocast.paths import benchmark_definitions_dir, paroutes_assets_dir, paroutes_training_release_file
 from retrocast.utils.logging import configure_script_logging, logger
 
-BASE_DIR = Path(__file__).resolve().parents[3]
-DATA_DIR = BASE_DIR / "data" / "retrocast"
-RAW_DIR = DATA_DIR / "0-assets" / "paroutes"
-BENCHMARK_DIR = DATA_DIR / "1-benchmarks" / "definitions"
 RELEASE_VERSION = "v2026-05-12"
-DEFAULT_RELEASE_PATH = (
-    DATA_DIR / "releases" / "paroutes-training-sets" / RELEASE_VERSION / "route-holdout-n1-n5" / "all.jsonl.gz"
-)
-DEFAULT_BENCHMARK_PATHS = (BENCHMARK_DIR / "mkt-cnv-160.json.gz",)
-DEFAULT_RAW_HOLDOUTS = ("n1", "n5")
+RELEASE_NAME = "route-holdout-n1-n5"
+RELEASE_PATH = paroutes_training_release_file(RELEASE_VERSION, RELEASE_NAME)
+BENCHMARK_PATHS = (benchmark_definitions_dir() / "mkt-cnv-160.json.gz",)
+RAW_HOLDOUTS = ("n1", "n5")
+ROUTE_SELECTION: BenchmarkRouteSelection = "primary"
+MATCH_LEVEL = InChIKeyLevel.FULL
+INCLUDE_PARTIAL = True
+PARTIAL_MIN_REACTIONS = 2
+ALLOW_LEAF_EXTENSION = True
+SHOW_PROGRESS = True
+OUTPUT_PATH = RELEASE_PATH.parent / "route-embedding-audit.md"
+LEDGER_OUTPUT_PATH = RELEASE_PATH.parent / "route-embedding-ledger.jsonl.gz"
 
 
 def main() -> None:
     configure_script_logging()
-    parser = argparse.ArgumentParser(description="audit route embeddings in a paroutes training release.")
-    parser.add_argument(
-        "--release-path",
-        type=Path,
-        default=DEFAULT_RELEASE_PATH,
-        help=f"training route release all.jsonl.gz. default: {DEFAULT_RELEASE_PATH}",
-    )
-    parser.add_argument(
-        "--benchmark-path",
-        action="append",
-        type=Path,
-        default=None,
-        help="benchmark definition to audit. may be passed more than once. default: mkt-cnv-160.",
-    )
-    parser.add_argument(
-        "--route-selection",
-        choices=("primary", "all"),
-        default="primary",
-        help="which acceptable benchmark routes to audit. default: primary.",
-    )
-    parser.add_argument(
-        "--raw-dir",
-        type=Path,
-        default=RAW_DIR,
-        help=f"raw paroutes asset directory. default: {RAW_DIR}",
-    )
-    parser.add_argument(
-        "--raw-holdout",
-        action="append",
-        choices=DEFAULT_RAW_HOLDOUTS,
-        default=None,
-        help="raw paroutes holdout to audit. may be passed more than once. default: n1 and n5.",
-    )
-    parser.add_argument(
-        "--skip-raw-holdouts",
-        action="store_true",
-        help="only audit benchmark query routes.",
-    )
-    parser.add_argument(
-        "--match-level",
-        choices=tuple(level.value for level in InChIKeyLevel),
-        default=InChIKeyLevel.FULL.value,
-        help="molecule identity level. default: full.",
-    )
-    parser.add_argument(
-        "--include-partial",
-        action="store_true",
-        help="also report non-root query subroute embeddings.",
-    )
-    parser.add_argument(
-        "--partial-min-reactions",
-        type=int,
-        default=2,
-        help="minimum reactions in a partial query subroute. default: 2.",
-    )
-    parser.add_argument(
-        "--disallow-leaf-extension",
-        action="store_true",
-        help="require query leaves to also be leaves in the training route.",
-    )
-    parser.add_argument(
-        "--output-path",
-        type=Path,
-        default=None,
-        help="markdown report path. default: <release-dir>/route-embedding-audit.md.",
-    )
-    parser.add_argument(
-        "--ledger-output-path",
-        type=Path,
-        default=None,
-        help="compressed jsonl ledger path. default: <release-dir>/route-embedding-ledger.jsonl.gz.",
-    )
-    parser.add_argument("--no-progress", action="store_true", help="disable progress bars.")
-    args = parser.parse_args()
-
-    queries = _load_queries(args)
-    training_records = load_training_route_records(args.release_path)
+    queries = _load_queries()
+    training_records = load_training_route_records(RELEASE_PATH)
     audit = build_route_embedding_audit(
-        release_name=args.release_path.parent.name,
+        release_name=RELEASE_NAME,
         training_records=training_records,
         queries_by_source=queries,
-        match_level=InChIKeyLevel(args.match_level),
-        allow_leaf_extension=not args.disallow_leaf_extension,
-        include_partial=args.include_partial,
-        partial_min_reactions=args.partial_min_reactions,
+        match_level=MATCH_LEVEL,
+        allow_leaf_extension=ALLOW_LEAF_EXTENSION,
+        include_partial=INCLUDE_PARTIAL,
+        partial_min_reactions=PARTIAL_MIN_REACTIONS,
     )
 
-    output_path = args.output_path or args.release_path.parent / "route-embedding-audit.md"
-    ledger_output_path = args.ledger_output_path or args.release_path.parent / "route-embedding-ledger.jsonl.gz"
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    ledger_output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(render_route_embedding_audit_markdown(audit), encoding="utf-8")
-    ledger_rows = save_jsonl_gz(audit.ledger_rows, ledger_output_path)
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    LEDGER_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT_PATH.write_text(render_route_embedding_audit_markdown(audit), encoding="utf-8")
+    ledger_rows = save_jsonl_gz(audit.ledger_rows, LEDGER_OUTPUT_PATH)
     logger.info(
-        "wrote route embedding audit to %s and %s (%s ledger rows)", output_path, ledger_output_path, ledger_rows
+        "wrote route embedding audit to %s and %s (%s ledger rows)", OUTPUT_PATH, LEDGER_OUTPUT_PATH, ledger_rows
     )
 
 
-def _load_queries(args: argparse.Namespace) -> dict[str, list[QueryRoute]]:
+def _load_queries() -> dict[str, list[QueryRoute]]:
     queries: dict[str, list[QueryRoute]] = {}
-    benchmark_paths = args.benchmark_path or list(DEFAULT_BENCHMARK_PATHS)
-    for path in benchmark_paths:
+    for path in BENCHMARK_PATHS:
         source = _artifact_name(path)
-        queries[source] = _load_benchmark_queries(path, source, route_selection=args.route_selection)
+        queries[source] = _load_benchmark_queries(path, source)
 
-    if args.skip_raw_holdouts:
-        return queries
-
-    for dataset in args.raw_holdout or list(DEFAULT_RAW_HOLDOUTS):
+    for dataset in RAW_HOLDOUTS:
         source = f"{dataset}-routes"
-        queries[source] = _load_raw_paroutes_queries(
-            raw_dir=args.raw_dir,
-            dataset=dataset,
-            show_progress=not args.no_progress,
-        )
+        queries[source] = _load_raw_paroutes_queries(dataset=dataset)
     return queries
 
 
-def _load_benchmark_queries(path: Path, source: str, *, route_selection: str) -> list[QueryRoute]:
+def _load_benchmark_queries(path: Path, source: str) -> list[QueryRoute]:
     benchmark = load_benchmark(path)
     queries = benchmark_query_routes(
         benchmark,
         source=source,
-        route_selection=cast(BenchmarkRouteSelection, route_selection),
+        route_selection=ROUTE_SELECTION,
     )
     logger.info("loaded %s query routes from %s", len(queries), path)
     return queries
 
 
-def _load_raw_paroutes_queries(*, raw_dir: Path, dataset: str, show_progress: bool) -> list[QueryRoute]:
-    path = raw_dir / f"{dataset}-routes.json.gz"
-    adaptation = adapt_training_routes(path, dataset=dataset, show_progress=show_progress)
+def _load_raw_paroutes_queries(*, dataset: str) -> list[QueryRoute]:
+    path = paroutes_assets_dir() / f"{dataset}-routes.json.gz"
+    adaptation = adapt_training_routes(path, dataset=dataset, show_progress=SHOW_PROGRESS)
     logger.info("loaded %s adapted %s query routes from %s", adaptation.stats.adapted_routes, dataset, path)
     return [
         QueryRoute(
