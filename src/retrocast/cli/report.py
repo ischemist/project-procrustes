@@ -149,13 +149,16 @@ def _hierarchy_metrics(metrics: dict[str, MetricSummary]) -> list[tuple[str, Met
 
 def _hierarchy_sort_key(item: tuple[str, MetricSummary, re.Match[str]]) -> tuple[int, int, str]:
     name, _, match = item
-    if _TIER_VALIDITY.match(name):
+    pattern = match.re
+    if pattern is _TIER_VALIDITY:
         return (int(match.group(1)), 0, "")
-    if _SOLV_RATE.match(name):
+    if pattern is _SOLV_RATE:
         return (int(match.group(1)), 1, match.group(2))
-    if _MRR_TIER.match(name):
+    if pattern is _MRR_TIER:
         return (int(match.group(1)), 2, "")
-    return (int(match.group(1)), 3, match.group(2))
+    if pattern is _MRR_SOLV:
+        return (int(match.group(1)), 3, match.group(2))
+    raise ValueError(f"unexpected hierarchy metric: {name!r}")
 
 
 def _matching_metrics(
@@ -170,15 +173,18 @@ def _matching_metrics(
 
 
 def _display_metric_name(name: str, match: re.Match[str]) -> str:
-    if _TIER_VALIDITY.match(name):
+    pattern = match.re
+    if pattern is _TIER_VALIDITY:
         return _plain_tier_validity_label(match)
-    if _SOLV_RATE.match(name):
+    if pattern is _SOLV_RATE:
         return _plain_solv_label(match)
-    if _MRR_TIER.match(name):
+    if pattern is _MRR_TIER:
         return _plain_mrr_tier_label(match)
-    if _MRR_SOLV.match(name):
+    if pattern is _MRR_SOLV:
         return _plain_mrr_label(match)
-    return _plain_top_k_label(match)
+    if pattern is _TOP_K:
+        return _plain_top_k_label(match)
+    raise ValueError(f"unexpected report metric: {name!r}")
 
 
 def _top_k_label(match: re.Match[str]) -> str:
