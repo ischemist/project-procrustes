@@ -26,9 +26,10 @@ jobs:
 
       - name: generate loc report
         run: |
-          python3 scripts/pr-loc-report.py \
+          python3 scripts/pr-size-report.py \
             --base "origin/${{ github.base_ref }}" \
             --head "${{ github.sha }}" \
+            --measure git \
             > pr-loc-report.md
 
       - name: post loc report
