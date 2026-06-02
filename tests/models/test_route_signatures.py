@@ -7,7 +7,7 @@ from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from retrocast.models.route import InChIKeyLevel, Molecule, Reaction, Route
-from retrocast.typing import InChIKeyStr, SmilesStr
+from retrocast.typing import InChIKeyStr, ReactionSmilesStr, SmilesStr
 
 KEY_A = "AAAAAAAAAAAAAA-UHFFFAOYSA-N"
 KEY_B = "BBBBBBBBBBBBBB-UHFFFAOYSA-N"
@@ -34,6 +34,25 @@ def molecule(smiles: str, inchikey: str, product_of: Reaction | None = None) -> 
 def one_step_route(reactants: list[Molecule], *, target_key: str = KEY_C) -> Route:
     target = molecule("CC", target_key, product_of=Reaction(reactants=reactants))
     return Route(target=target)
+
+
+def content_route(
+    *,
+    mapped_reaction_smiles: str | None = None,
+    template: str | None = None,
+    reagents: list[str] | None = None,
+    solvents: list[str] | None = None,
+) -> Route:
+    reaction = Reaction(
+        reactants=[molecule("C", KEY_A), molecule("O", KEY_B)],
+        mapped_reaction_smiles=ReactionSmilesStr(mapped_reaction_smiles)
+        if mapped_reaction_smiles is not None
+        else None,
+        template=template,
+        reagents=[SmilesStr(reagent) for reagent in reagents] if reagents is not None else None,
+        solvents=[SmilesStr(solvent) for solvent in solvents] if solvents is not None else None,
+    )
+    return Route(target=molecule("CC", KEY_C, product_of=reaction))
 
 
 def two_step_route() -> Route:
@@ -290,6 +309,87 @@ def test_prefix_depth_changes_signatures_as_expected() -> None:
     assert shallow_route.signature(depth=0) == deep_route.signature(depth=0)
     assert shallow_route.signature(depth=1) == deep_route.signature(depth=1)
     assert shallow_route.signature() != deep_route.signature()
+
+
+@pytest.mark.unit
+def test_structural_signature_ignores_reaction_content() -> None:
+    route_a = content_route(mapped_reaction_smiles="C.O>>CC", template="template-a", reagents=["N"], solvents=["O"])
+    route_b = content_route(mapped_reaction_smiles="C.N>>CC", template="template-b", reagents=["C"], solvents=["CO"])
+
+    assert route_a.signature() == route_b.signature()
+    assert route_a.reaction_at("rc:r:/").signature() == route_b.reaction_at("rc:r:/").signature()
+
+
+@pytest.mark.unit
+def test_content_signature_uses_only_selected_reaction_fields() -> None:
+    route_a = content_route(mapped_reaction_smiles="C.O>>CC", template="same")
+    route_b = content_route(mapped_reaction_smiles="C.N>>CC", template="same")
+
+    assert route_a.content_signature(fields=("mapped_reaction_smiles",)) != route_b.content_signature(
+        fields=("mapped_reaction_smiles",)
+    )
+    assert route_a.content_signature(fields=("template",)) == route_b.content_signature(fields=("template",))
+
+
+@pytest.mark.unit
+def test_content_signature_distinguishes_absent_selected_fields() -> None:
+    route_a = content_route(template="template-a")
+    route_b = content_route(template=None)
+
+    assert route_a.content_signature(fields=("template",)) != route_b.content_signature(fields=("template",))
+
+
+@pytest.mark.unit
+def test_content_signature_treats_reagents_and_solvents_as_unordered() -> None:
+    route_a = content_route(reagents=["N", "O"], solvents=["C", "CO"])
+    route_b = content_route(reagents=["O", "N"], solvents=["CO", "C"])
+
+    assert route_a.content_signature(fields=("reagents", "solvents")) == route_b.content_signature(
+        fields=("solvents", "reagents")
+    )
+
+
+@pytest.mark.unit
+def test_content_signature_is_reactant_order_invariant() -> None:
+    reaction_a = Reaction(reactants=[molecule("C", KEY_A), molecule("O", KEY_B)], template="same")
+    reaction_b = Reaction(reactants=[molecule("O", KEY_B), molecule("C", KEY_A)], template="same")
+    route_a = Route(target=molecule("CC", KEY_C, product_of=reaction_a))
+    route_b = Route(target=molecule("CC", KEY_C, product_of=reaction_b))
+
+    assert route_a.content_signature(fields=("template",)) == route_b.content_signature(fields=("template",))
+
+
+@pytest.mark.unit
+def test_content_signature_depth_limits_nested_reaction_content() -> None:
+    child_a = molecule("CO", KEY_B, product_of=Reaction(reactants=[molecule("C", KEY_A)], template="child-a"))
+    child_b = molecule("CO", KEY_B, product_of=Reaction(reactants=[molecule("C", KEY_A)], template="child-b"))
+    route_a = one_step_route([child_a, molecule("N", KEY_D)])
+    route_b = one_step_route([child_b, molecule("N", KEY_D)])
+
+    assert route_a.content_signature(fields=("template",), depth=1) == route_b.content_signature(
+        fields=("template",), depth=1
+    )
+    assert route_a.content_signature(fields=("template",)) != route_b.content_signature(fields=("template",))
+
+
+@pytest.mark.unit
+def test_reaction_and_subtree_content_signatures_use_route_context() -> None:
+    route = content_route(mapped_reaction_smiles="C.O>>CC")
+
+    assert route.reaction_content_signatures(fields=("mapped_reaction_smiles",)) == {
+        route.reaction_at("rc:r:/").content_signature(fields=("mapped_reaction_smiles",))
+    }
+    assert route.molecule_at("rc:m:/").content_subtree_signature(fields=("mapped_reaction_smiles",)) == (
+        route.content_signature(fields=("mapped_reaction_smiles",))
+    )
+
+
+@pytest.mark.unit
+def test_content_signature_rejects_unknown_reaction_fields() -> None:
+    route = content_route()
+
+    with pytest.raises(ValueError, match="unknown reaction content fields"):
+        route.content_signature(fields=("condition_slot",))  # type: ignore[arg-type]
 
 
 @pytest.mark.unit

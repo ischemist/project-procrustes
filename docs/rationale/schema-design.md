@@ -240,6 +240,21 @@ class Route(BaseModel):
         return stable_hash(self.key(match_level, depth=depth))
 ```
 
+### Content Signatures
+
+The structural `key` / `signature` methods deliberately ignore reaction metadata. This keeps route identity usable across planners and datasets where mapped reaction SMILES, templates, reagents, solvents, or condition labels may be missing or untrustworthy.
+
+Sometimes we want a stricter comparison: same route structure, plus selected first-class reaction content. For that, routes and route-bound views expose `content_key` / `content_signature` methods. The caller must choose which reaction fields matter:
+
+```python
+route.content_signature(fields=("mapped_reaction_smiles",))
+route.content_signature(fields=("template", "reagents", "solvents"))
+```
+
+Content signatures follow the same Merkle shape as structural signatures: molecule identity, reaction identity, selected reaction content, and unordered child signatures. They also support `match_level` and route-prefix `depth` just like structural signatures.
+
+`annotations` are not part of the generic content signature API. They are arbitrary source metadata; dataset-specific identities such as PaRoutes condition slots should stay in the workflow that owns that dataset unless they graduate into first-class `Reaction` fields.
+
 ### Route Embedding
 
 Route embedding asks whether one route occurs inside another route.
