@@ -124,6 +124,31 @@ def test_route_embedding_audit_can_exclude_query_containers() -> None:
     assert audit.ledger_rows == ()
 
 
+@pytest.mark.integration
+def test_route_embedding_audit_rejects_exclusion_without_matching_query_id() -> None:
+    with pytest.raises(ValueError, match="query ids to match TrainingRouteRecord.id"):
+        build_route_embedding_audit(
+            release_name="benchmark-route-embeddings",
+            training_records=[route_record("container", route_c_b_a())],
+            queries_by_source={"bench": {"query": route_c_b_a()}},
+            exclude_query_containers=True,
+        )
+
+
+@pytest.mark.integration
+def test_route_embedding_audit_rejects_exclusion_with_duplicate_container_ids() -> None:
+    route = route_c_b_a()
+    records = [route_record("duplicate", route), route_record("duplicate", route)]
+
+    with pytest.raises(ValueError, match="unique TrainingRouteRecord.id"):
+        build_route_embedding_audit(
+            release_name="benchmark-route-embeddings",
+            training_records=records,
+            queries_by_source={"bench": {records[0].id: route}},
+            exclude_query_containers=True,
+        )
+
+
 def sample_full_match_audit() -> RouteEmbeddingAudit:
     training = route_record("container", route_c_b_a())
     queries = {

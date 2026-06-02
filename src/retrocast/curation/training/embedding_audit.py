@@ -139,6 +139,8 @@ def build_route_embedding_audit(
     partial_min_reactions: int = 2,
     exclude_query_containers: bool = False,
 ) -> RouteEmbeddingAudit:
+    if exclude_query_containers:
+        _validate_query_container_exclusion(training_records, queries_by_source)
     index = build_training_embedding_index(training_records, match_level)
     query_sets: list[QuerySetAudit] = []
     ledger_rows: list[RouteEmbeddingLedgerRow] = []
@@ -224,6 +226,29 @@ def build_training_embedding_index(
     )
 
 
+def _validate_query_container_exclusion(
+    training_records: Sequence[TrainingRouteRecord],
+    queries_by_source: Mapping[str, Mapping[str, Route]],
+) -> None:
+    container_ids = [record.id for record in training_records]
+    duplicate_ids = {container_id for container_id, count in Counter(container_ids).items() if count > 1}
+    if duplicate_ids:
+        raise ValueError(
+            "exclude_query_containers requires unique TrainingRouteRecord.id values; "
+            f"duplicate ids: {sorted(duplicate_ids)}"
+        )
+
+    container_id_set = set(container_ids)
+    missing_query_ids = sorted(
+        query_id for queries in queries_by_source.values() for query_id in queries if query_id not in container_id_set
+    )
+    if missing_query_ids:
+        raise ValueError(
+            "exclude_query_containers requires query ids to match TrainingRouteRecord.id values; "
+            f"missing ids: {missing_query_ids}"
+        )
+
+
 def _audit_query_set(
     *,
     source: str,
@@ -305,27 +330,17 @@ def _summarize_prefix_depths(
         subtree_prefixes = index.subtree_prefix_signatures_by_depth.get(depth, set())
         root_counts = index.root_prefix_signature_counts_by_depth.get(depth, {})
         subtree_counts = index.subtree_prefix_signature_counts_by_depth.get(depth, {})
+        root_overlaps = _signature_overlap_check(root_prefixes, root_counts, exclude_query_containers)
+        subtree_overlaps = _signature_overlap_check(subtree_prefixes, subtree_counts, exclude_query_containers)
         summaries.append(
             PrefixDepthSummary(
                 depth=depth,
                 query_routes=len(eligible),
                 root_prefix_signature_overlap=sum(
-                    _signature_overlaps(
-                        route.signature(match_level, depth=depth),
-                        root_prefixes,
-                        root_counts,
-                        exclude_self=exclude_query_containers,
-                    )
-                    for route in eligible
+                    root_overlaps(route.signature(match_level, depth=depth)) for route in eligible
                 ),
                 subtree_prefix_signature_overlap=sum(
-                    _signature_overlaps(
-                        route.signature(match_level, depth=depth),
-                        subtree_prefixes,
-                        subtree_counts,
-                        exclude_self=exclude_query_containers,
-                    )
-                    for route in eligible
+                    subtree_overlaps(route.signature(match_level, depth=depth)) for route in eligible
                 ),
             )
         )
@@ -338,15 +353,12 @@ def _exact_route_signature_overlap(
     match_level: InChIKeyLevel,
     exclude_query_containers: bool,
 ) -> int:
-    return sum(
-        _signature_overlaps(
-            route.signature(match_level),
-            index.route_signatures,
-            index.route_signature_counts,
-            exclude_self=exclude_query_containers,
-        )
-        for route in queries.values()
+    overlaps = _signature_overlap_check(
+        index.route_signatures,
+        index.route_signature_counts,
+        exclude_query_containers,
     )
+    return sum(overlaps(route.signature(match_level)) for route in queries.values())
 
 
 def _reaction_signature_overlap(
@@ -355,31 +367,29 @@ def _reaction_signature_overlap(
     match_level: InChIKeyLevel,
     exclude_query_containers: bool,
 ) -> int:
+    overlaps = _signature_overlap_check(
+        index.reaction_signatures,
+        index.reaction_signature_route_counts,
+        exclude_query_containers,
+    )
     return len(
         {
             signature
             for route in queries.values()
             for signature in route.reaction_signatures(match_level)
-            if _signature_overlaps(
-                signature,
-                index.reaction_signatures,
-                index.reaction_signature_route_counts,
-                exclude_self=exclude_query_containers,
-            )
+            if overlaps(signature)
         }
     )
 
 
-def _signature_overlaps(
-    signature: str,
+def _signature_overlap_check(
     signatures: set[str],
     counts: Mapping[str, int],
-    *,
-    exclude_self: bool,
-) -> bool:
-    if not exclude_self:
-        return signature in signatures
-    return counts.get(signature, 0) > 1
+    exclude_query_container: bool,
+):
+    if exclude_query_container:
+        return lambda signature: counts.get(signature, 0) > 1
+    return lambda signature: signature in signatures
 
 
 def _full_route_ledger_rows(
