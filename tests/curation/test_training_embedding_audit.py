@@ -92,6 +92,38 @@ def test_route_embedding_audit_can_include_internal_subroutes() -> None:
     ]
 
 
+@pytest.mark.integration
+def test_route_embedding_audit_can_exclude_query_containers() -> None:
+    route = route_c_b_a()
+    record = route_record("self", route)
+
+    audit = build_route_embedding_audit(
+        release_name="benchmark-route-embeddings",
+        training_records=[record],
+        queries_by_source={"bench": {record.id: route}},
+        include_partial=True,
+        partial_min_reactions=1,
+        exclude_query_containers=True,
+    )
+
+    query_set = audit.query_sets[0]
+    internal = query_set.internal_subroute_embeddings
+    assert internal is not None
+    assert query_set.reaction_signature_overlap == 0
+    assert query_set.exact_route_signature_overlap == 0
+    assert [
+        (
+            row.depth,
+            row.root_prefix_signature_overlap,
+            row.subtree_prefix_signature_overlap,
+        )
+        for row in query_set.prefix_depths
+    ] == [(1, 0, 0), (2, 0, 0)]
+    assert query_set.full_embeddings.query_routes_with_embedding == 0
+    assert internal.query_routes_with_embedding == 0
+    assert audit.ledger_rows == ()
+
+
 def sample_full_match_audit() -> RouteEmbeddingAudit:
     training = route_record("container", route_c_b_a())
     queries = {
