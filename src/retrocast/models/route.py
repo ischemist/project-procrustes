@@ -179,12 +179,13 @@ class Molecule(BaseModel):
 
 def _normalize_reactants(reactants: list[Molecule]) -> list[Molecule]:
     """
-    route paths depend on reactant order, so validation canonicalizes the list.
+    route paths are assigned from sibling positions, so reactants need one
+    canonical order at validation time.
 
-    most reactants already have distinct structural subtree keys. for those, the
-    tiebreaker would be dead work. only structurally identical reactants need the
-    first-class payload fallback to get deterministic path assignment; arbitrary
-    annotations are intentionally excluded because they are not route identity.
+    structural subtree keys usually decide the order by themselves. when two
+    reactants have the same structural key, first-class molecule and reaction
+    fields break the tie. annotations stay out of this because they are carried
+    metadata, not route identity.
     """
     groups: dict[tuple[Any, ...], list[Molecule]] = {}
     for reactant in reactants:
