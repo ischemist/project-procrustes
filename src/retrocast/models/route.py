@@ -198,26 +198,20 @@ def _normalize_reactants(reactants: list[Molecule]) -> list[Molecule]:
 
 
 def _reactant_order_tiebreaker(molecule: Molecule) -> str:
-    return json.dumps(_molecule_order_payload(molecule), sort_keys=True, separators=(",", ":"))
+    def payload(value: Molecule) -> tuple[Any, ...]:
+        reaction = value.product_of
+        reaction_payload = None
+        if reaction is not None:
+            reaction_payload = (
+                reaction.mapped_reaction_smiles,
+                reaction.template,
+                _ordered_optional_smiles(reaction.reagents),
+                _ordered_optional_smiles(reaction.solvents),
+                tuple(payload(reactant) for reactant in reaction.reactants),
+            )
+        return (value.smiles, value.inchikey, reaction_payload)
 
-
-def _molecule_order_payload(molecule: Molecule) -> tuple[Any, ...]:
-    reaction = molecule.product_of
-    return (
-        molecule.smiles,
-        molecule.inchikey,
-        None if reaction is None else _reaction_order_payload(reaction),
-    )
-
-
-def _reaction_order_payload(reaction: Reaction) -> tuple[Any, ...]:
-    return (
-        reaction.mapped_reaction_smiles,
-        reaction.template,
-        _ordered_optional_smiles(reaction.reagents),
-        _ordered_optional_smiles(reaction.solvents),
-        tuple(_molecule_order_payload(reactant) for reactant in reaction.reactants),
-    )
+    return json.dumps(payload(molecule), sort_keys=True, separators=(",", ":"))
 
 
 def _molecule_subtree_key(
