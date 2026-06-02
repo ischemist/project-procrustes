@@ -263,6 +263,18 @@ def test_duplicate_identity_reactants_use_stable_tiebreaker_for_paths() -> None:
 
 
 @pytest.mark.unit
+def test_reactant_order_tiebreaker_runs_only_for_structural_collisions() -> None:
+    route = one_step_route(
+        [
+            molecule("C", KEY_A).model_copy(update={"annotations": {"opaque": object()}}),
+            molecule("O", KEY_B),
+        ]
+    )
+
+    assert [reactant.value.inchikey for reactant in route.reaction_at("rc:r:/").reactants()] == [KEY_A, KEY_B]
+
+
+@pytest.mark.unit
 @given(tree_shapes)
 def test_generated_recursive_reactant_permutations_normalize_to_same_route(shape: TreeShape) -> None:
     route = route_from_shape(shape)
@@ -357,6 +369,31 @@ def test_content_signature_is_reactant_order_invariant() -> None:
     route_b = Route(target=molecule("CC", KEY_C, product_of=reaction_b))
 
     assert route_a.content_signature(fields=("template",)) == route_b.content_signature(fields=("template",))
+
+
+@pytest.mark.unit
+def test_content_signature_uses_requested_match_level() -> None:
+    route_a = Route(
+        target=molecule(
+            "CC",
+            KEY_C,
+            product_of=Reaction(reactants=[molecule("C", KEY_A_STEREO_1)], template="same"),
+        )
+    )
+    route_b = Route(
+        target=molecule(
+            "CC",
+            KEY_C,
+            product_of=Reaction(reactants=[molecule("C", KEY_A_STEREO_2)], template="same"),
+        )
+    )
+
+    assert route_a.content_signature(InChIKeyLevel.FULL, fields=("template",)) != route_b.content_signature(
+        InChIKeyLevel.FULL, fields=("template",)
+    )
+    assert route_a.content_signature(InChIKeyLevel.NO_STEREO, fields=("template",)) == route_b.content_signature(
+        InChIKeyLevel.NO_STEREO, fields=("template",)
+    )
 
 
 @pytest.mark.unit

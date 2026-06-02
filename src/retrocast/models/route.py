@@ -157,7 +157,7 @@ class Reaction(BaseModel):
 
     @model_validator(mode="after")
     def normalize_reactant_order(self) -> Reaction:
-        self.reactants = sorted(self.reactants, key=_reactant_order_key)
+        self.reactants = _normalize_reactants(self.reactants)
         return self
 
 
@@ -177,11 +177,21 @@ class Molecule(BaseModel):
 # section: structural and content identity
 
 
-def _reactant_order_key(molecule: Molecule) -> tuple[tuple[Any, ...], str]:
-    return (
-        _molecule_subtree_key(molecule),
-        _reactant_order_tiebreaker(molecule),
-    )
+def _normalize_reactants(reactants: list[Molecule]) -> list[Molecule]:
+    """
+    RoutePaths depend on reactant order, so pydantic validation should normalize it.
+
+    Order is determined by structural signatures of subtrees, and ties are broken by full serialization (which would include annotations, mapped smiles, etc)
+    """
+    groups: dict[tuple[Any, ...], list[Molecule]] = {}
+    for reactant in reactants:
+        groups.setdefault(_molecule_subtree_key(reactant), []).append(reactant)
+
+    ordered: list[Molecule] = []
+    for key in sorted(groups):
+        group = groups[key]
+        ordered.extend(group if len(group) == 1 else sorted(group, key=_reactant_order_tiebreaker))
+    return ordered
 
 
 def _reactant_order_tiebreaker(molecule: Molecule) -> str:
