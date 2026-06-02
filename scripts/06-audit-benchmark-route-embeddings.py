@@ -12,7 +12,11 @@ from pathlib import Path
 from typing import Literal
 
 from retrocast.chem import InChIKeyLevel
-from retrocast.curation.training.embedding_audit import RouteEmbeddingAudit, build_route_embedding_audit
+from retrocast.curation.training.embedding_audit import (
+    RouteEmbeddingAudit,
+    build_route_embedding_audit,
+    build_training_embedding_index,
+)
 from retrocast.curation.training.embedding_report import render_route_embedding_audit_markdown
 from retrocast.curation.training.records import TrainingRouteRecord
 from retrocast.io import load_benchmark, save_jsonl_gz
@@ -46,7 +50,14 @@ def main() -> None:
         )
         logger.info("loaded %s acceptable routes from %s", len(records), benchmark_name)
 
-    audit = merge_audits("benchmark-route-embeddings", audits, total_routes=len(all_records))
+    index = build_training_embedding_index(all_records, match_level)
+    audit = merge_audits(
+        "benchmark-route-embeddings",
+        audits,
+        total_routes=len(all_records),
+        route_signatures=len(index.route_signatures),
+        reaction_signatures=len(index.reaction_signatures),
+    )
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / "benchmark-route-embedding-audit.md"
@@ -88,7 +99,16 @@ def load_benchmark_records(
     return records
 
 
-def merge_audits(release_name: str, audits: list[RouteEmbeddingAudit], *, total_routes: int) -> RouteEmbeddingAudit:
+def merge_audits(
+    release_name: str,
+    audits: list[RouteEmbeddingAudit],
+    *,
+    total_routes: int,
+    route_signatures: int,
+    reaction_signatures: int,
+) -> RouteEmbeddingAudit:
+    if not audits:
+        raise ValueError("merge_audits requires at least one audit")
     first = audits[0]
     return RouteEmbeddingAudit(
         release_name=release_name,
@@ -96,8 +116,8 @@ def merge_audits(release_name: str, audits: list[RouteEmbeddingAudit], *, total_
         allow_leaf_extension=first.allow_leaf_extension,
         partial_min_reactions=first.partial_min_reactions,
         training_routes=total_routes,
-        training_route_signatures=sum(audit.training_route_signatures for audit in audits),
-        training_reaction_signatures=sum(audit.training_reaction_signatures for audit in audits),
+        training_route_signatures=route_signatures,
+        training_reaction_signatures=reaction_signatures,
         query_sets=tuple(query_set for audit in audits for query_set in audit.query_sets),
         ledger_rows=tuple(row for audit in audits for row in audit.ledger_rows),
     )
