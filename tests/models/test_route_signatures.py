@@ -59,7 +59,7 @@ def reverse_child_order(shape: TreeShape) -> TreeShape:
 
 
 def route_path_keys(route: Route) -> dict[str, str]:
-    return {molecule.id(): molecule.value.inchikey for molecule in route.iter_molecules()}
+    return {molecule.id(): molecule.subtree_signature() for molecule in route.iter_molecules()}
 
 
 tree_shapes = st.recursive(
