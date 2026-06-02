@@ -179,9 +179,12 @@ class Molecule(BaseModel):
 
 def _normalize_reactants(reactants: list[Molecule]) -> list[Molecule]:
     """
-    RoutePaths depend on reactant order, so pydantic validation should normalize it.
+    route paths depend on reactant order, so validation canonicalizes the list.
 
-    Order is determined by structural signatures of subtrees, and ties are broken by full serialization (which would include annotations, mapped smiles, etc)
+    most reactants already have distinct structural subtree keys. for those, the
+    json tiebreaker would be dead work and can trip over arbitrary annotations.
+    only structurally identical reactants need the full serialization fallback to
+    get deterministic path assignment.
     """
     groups: dict[tuple[Any, ...], list[Molecule]] = {}
     for reactant in reactants:
