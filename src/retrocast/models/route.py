@@ -179,13 +179,9 @@ class Molecule(BaseModel):
 
 def _normalize_reactants(reactants: list[Molecule]) -> list[Molecule]:
     """
-    route paths are assigned from sibling positions, so reactants need one
-    canonical order at validation time.
+    RoutePaths depend on the order of reactants, so to ensure that for a chemically unique Route a path is prescriptive, we need to normalize the positions of sibling nodes.
 
-    structural subtree keys usually decide the order by themselves. when two
-    reactants have the same structural key, first-class molecule and reaction
-    fields break the tie. annotations stay out of this because they are carried
-    metadata, not route identity.
+    Sorting uses subtree keys. The tiebreaker compares all route fields we can confidently serialize.
     """
     groups: dict[tuple[Any, ...], list[Molecule]] = {}
     for reactant in reactants:
