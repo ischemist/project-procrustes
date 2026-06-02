@@ -240,6 +240,19 @@ class Route(BaseModel):
         return stable_hash(self.key(match_level, depth=depth))
 ```
 
+### Content Signatures
+
+The structural `key` / `signature` methods answer the basic route question: same molecules, same reaction graph. They do not read mapped reaction SMILES, templates, reagents, solvents, condition labels, or annotations.
+
+Sometimes we want a stricter comparison: same structure, plus selected reaction content. For that, routes and route-bound views expose `content_key` / `content_signature` methods. The caller chooses which reaction fields matter:
+
+```python
+route.content_signature(fields=("mapped_reaction_smiles",))
+route.content_signature(fields=("template", "reagents", "solvents"))
+```
+
+Content signatures follow the same Merkle shape as structural signatures: molecule identity, reaction identity, selected reaction content, and unordered child signatures. They also support `match_level` and route-prefix `depth`.
+
 ### Route Embedding
 
 Route embedding asks whether one route occurs inside another route.

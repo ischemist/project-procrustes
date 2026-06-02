@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from functools import cache
 from typing import Annotated, Any, Literal
@@ -12,7 +12,19 @@ from retrocast.chem import InChIKeyLevel, reduce_inchikey
 from retrocast.hashing import hash_json
 from retrocast.typing import InChIKeyStr, ReactionSmilesStr, SmilesStr
 
+# section: public route types
+
 RouteNodeKind = Literal["m", "r"]
+ReactionContentField = Literal["mapped_reaction_smiles", "template", "reagents", "solvents"]
+REACTION_CONTENT_FIELDS: tuple[ReactionContentField, ...] = (
+    "mapped_reaction_smiles",
+    "template",
+    "reagents",
+    "solvents",
+)
+
+
+# section: shared validation and hashing
 
 
 def _stable_hash(value: Any) -> str:
@@ -22,6 +34,9 @@ def _stable_hash(value: Any) -> str:
 def _validate_depth(depth: int | None) -> None:
     if depth is not None and depth < 0:
         raise ValueError("depth must be non-negative")
+
+
+# section: route paths
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +144,9 @@ ReactionId = Annotated[str, AfterValidator(validate_reaction_id)]
 MoleculeId = Annotated[str, AfterValidator(validate_molecule_id)]
 
 
+# section: core schema
+
+
 class Reaction(BaseModel):
     reactants: list[Molecule]
     mapped_reaction_smiles: ReactionSmilesStr | None = None
@@ -139,7 +157,7 @@ class Reaction(BaseModel):
 
     @model_validator(mode="after")
     def normalize_reactant_order(self) -> Reaction:
-        self.reactants = sorted(self.reactants, key=_reactant_order_key)
+        self.reactants = _normalize_reactants(self.reactants)
         return self
 
 
@@ -156,15 +174,41 @@ class Molecule(BaseModel):
         return _stable_hash(self.key(match_level))
 
 
-def _reactant_order_key(molecule: Molecule) -> tuple[tuple[Any, ...], str]:
-    return (
-        _molecule_subtree_key(molecule),
-        _reactant_order_tiebreaker(molecule),
-    )
+# section: structural and content identity
+
+
+def _normalize_reactants(reactants: list[Molecule]) -> list[Molecule]:
+    """
+    RoutePaths depend on the order of reactants, so to ensure that for a chemically unique Route a path is prescriptive, we need to normalize the positions of sibling nodes.
+
+    Sorting uses subtree keys. The tiebreaker compares all route fields we can confidently serialize.
+    """
+    groups: dict[tuple[Any, ...], list[Molecule]] = {}
+    for reactant in reactants:
+        groups.setdefault(_molecule_subtree_key(reactant), []).append(reactant)
+
+    ordered: list[Molecule] = []
+    for key in sorted(groups):
+        group = groups[key]
+        ordered.extend(group if len(group) == 1 else sorted(group, key=_reactant_order_tiebreaker))
+    return ordered
 
 
 def _reactant_order_tiebreaker(molecule: Molecule) -> str:
-    return json.dumps(molecule.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    def payload(value: Molecule) -> tuple[Any, ...]:
+        reaction = value.product_of
+        reaction_payload = None
+        if reaction is not None:
+            reaction_payload = (
+                reaction.mapped_reaction_smiles,
+                reaction.template,
+                _ordered_optional_smiles(reaction.reagents),
+                _ordered_optional_smiles(reaction.solvents),
+                tuple(payload(reactant) for reactant in reaction.reactants),
+            )
+        return (value.smiles, value.inchikey, reaction_payload)
+
+    return json.dumps(payload(molecule), sort_keys=True, separators=(",", ":"))
 
 
 def _molecule_subtree_key(
@@ -201,6 +245,81 @@ def _reaction_key(
         product.key(match_level),
         tuple(sorted(reactant.key(match_level) for reactant in reaction.reactants)),
     )
+
+
+def _normalize_content_fields(fields: Iterable[ReactionContentField]) -> tuple[ReactionContentField, ...]:
+    # str is iterable, but a field name should be treated as one requested field.
+    requested = {fields} if isinstance(fields, str) else set(fields)
+    unknown = sorted(requested - set(REACTION_CONTENT_FIELDS))
+    if unknown:
+        raise ValueError(f"unknown reaction content fields: {', '.join(unknown)}")
+    return tuple(field for field in REACTION_CONTENT_FIELDS if field in requested)
+
+
+def _reaction_content_key(
+    product: Molecule,
+    reaction: Reaction,
+    match_level: InChIKeyLevel,
+    *,
+    fields: tuple[ReactionContentField, ...],
+) -> tuple[Any, ...]:
+    if not fields:
+        return _reaction_key(product, reaction, match_level)
+    return (
+        "rxn-content",
+        _reaction_key(product, reaction, match_level),
+        tuple((field, _reaction_content_field_value(reaction, field)) for field in fields),
+    )
+
+
+def _reaction_content_field_value(reaction: Reaction, field: ReactionContentField) -> Any:
+    match field:
+        case "mapped_reaction_smiles":
+            return reaction.mapped_reaction_smiles
+        case "template":
+            return reaction.template
+        case "reagents":
+            return _ordered_optional_smiles(reaction.reagents)
+        case "solvents":
+            return _ordered_optional_smiles(reaction.solvents)
+        case _ as unreachable:
+            raise AssertionError(f"unhandled reaction content field: {unreachable!r}")
+
+
+def _ordered_optional_smiles(values: list[SmilesStr] | None) -> tuple[str, ...] | None:
+    if not values:
+        return None
+    return tuple(sorted(str(value) for value in values))
+
+
+def _molecule_content_subtree_key(
+    molecule: Molecule,
+    match_level: InChIKeyLevel,
+    *,
+    fields: tuple[ReactionContentField, ...],
+    depth: int | None = None,
+) -> tuple[Any, ...]:
+    if not fields:
+        return _molecule_subtree_key(molecule, match_level, depth=depth)
+    _validate_depth(depth)
+    reaction = molecule.product_of
+    if reaction is None or depth == 0:
+        return ("mol-content", molecule.key(match_level))
+
+    next_depth = None if depth is None else depth - 1
+    child_signatures = sorted(
+        _stable_hash(_molecule_content_subtree_key(reactant, match_level, fields=fields, depth=next_depth))
+        for reactant in reaction.reactants
+    )
+    return (
+        "mol-content",
+        molecule.key(match_level),
+        _reaction_content_key(molecule, reaction, match_level, fields=fields),
+        tuple(child_signatures),
+    )
+
+
+# section: route model
 
 
 class Route(BaseModel):
@@ -300,6 +419,34 @@ class Route(BaseModel):
     def reaction_signatures(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> set[str]:
         return {reaction.signature(match_level) for reaction in self.iter_reactions()}
 
+    def content_key(
+        self,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+        *,
+        fields: Iterable[ReactionContentField],
+        depth: int | None = None,
+    ) -> tuple[Any, ...]:
+        content_fields = _normalize_content_fields(fields)
+        return self.molecule_at(RoutePath.target()).content_subtree_key(match_level, fields=content_fields, depth=depth)
+
+    def content_signature(
+        self,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+        *,
+        fields: Iterable[ReactionContentField],
+        depth: int | None = None,
+    ) -> str:
+        return _stable_hash(self.content_key(match_level, fields=fields, depth=depth))
+
+    def reaction_content_signatures(
+        self,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+        *,
+        fields: Iterable[ReactionContentField],
+    ) -> set[str]:
+        content_fields = _normalize_content_fields(fields)
+        return {reaction.content_signature(match_level, fields=content_fields) for reaction in self.iter_reactions()}
+
     def depth(self) -> int:
         return self.molecule_at(RoutePath.target()).depth()
 
@@ -316,6 +463,9 @@ class Route(BaseModel):
                 return True
             stack.extend(reaction.reactants)
         return False
+
+
+# section: route-bound views
 
 
 class ReactionView(BaseModel):
@@ -340,6 +490,23 @@ class ReactionView(BaseModel):
 
     def signature(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> str:
         return _stable_hash(self.key(match_level))
+
+    def content_key(
+        self,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+        *,
+        fields: Iterable[ReactionContentField],
+    ) -> tuple[Any, ...]:
+        content_fields = _normalize_content_fields(fields)
+        return _reaction_content_key(self.product().value, self.value, match_level, fields=content_fields)
+
+    def content_signature(
+        self,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+        *,
+        fields: Iterable[ReactionContentField],
+    ) -> str:
+        return _stable_hash(self.content_key(match_level, fields=fields))
 
 
 class MoleculeView(BaseModel):
@@ -409,3 +576,22 @@ class MoleculeView(BaseModel):
         depth: int | None = None,
     ) -> str:
         return _stable_hash(self.subtree_key(match_level, depth=depth))
+
+    def content_subtree_key(
+        self,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+        *,
+        fields: Iterable[ReactionContentField],
+        depth: int | None = None,
+    ) -> tuple[Any, ...]:
+        content_fields = _normalize_content_fields(fields)
+        return _molecule_content_subtree_key(self.value, match_level, fields=content_fields, depth=depth)
+
+    def content_subtree_signature(
+        self,
+        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+        *,
+        fields: Iterable[ReactionContentField],
+        depth: int | None = None,
+    ) -> str:
+        return _stable_hash(self.content_subtree_key(match_level, fields=fields, depth=depth))
