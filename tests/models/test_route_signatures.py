@@ -275,6 +275,34 @@ def test_reactant_order_tiebreaker_runs_only_for_structural_collisions() -> None
 
 
 @pytest.mark.unit
+def test_reactant_order_tiebreaker_ignores_annotations() -> None:
+    first = molecule(
+        "C",
+        KEY_A,
+        product_of=Reaction(
+            reactants=[molecule("N", KEY_D)],
+            template="template-a",
+            annotations={"opaque": object()},
+        ),
+    ).model_copy(update={"annotations": {"opaque": object()}})
+    second = molecule(
+        "C",
+        KEY_A,
+        product_of=Reaction(
+            reactants=[molecule("N", KEY_D)],
+            template="template-b",
+            annotations={"opaque": object()},
+        ),
+    ).model_copy(update={"annotations": {"opaque": object()}})
+
+    route = one_step_route([second, first])
+    first_reactant_reaction = route.molecule_at("rc:m:/0").value.product_of
+
+    assert first_reactant_reaction is not None
+    assert first_reactant_reaction.template == "template-a"
+
+
+@pytest.mark.unit
 @given(tree_shapes)
 def test_generated_recursive_reactant_permutations_normalize_to_same_route(shape: TreeShape) -> None:
     route = route_from_shape(shape)
@@ -359,6 +387,29 @@ def test_content_signature_treats_reagents_and_solvents_as_unordered() -> None:
     assert route_a.content_signature(fields=("reagents", "solvents")) == route_b.content_signature(
         fields=("solvents", "reagents")
     )
+
+
+@pytest.mark.unit
+def test_content_signature_treats_empty_reagents_and_solvents_as_absent() -> None:
+    route_a = content_route(reagents=[], solvents=[])
+    route_b = content_route(reagents=None, solvents=None)
+
+    assert route_a.content_signature(fields=("reagents", "solvents")) == route_b.content_signature(
+        fields=("reagents", "solvents")
+    )
+
+
+@pytest.mark.unit
+def test_empty_content_fields_use_structural_identity() -> None:
+    route = content_route(mapped_reaction_smiles="C.O>>CC", template="template-a")
+    target = route.molecule_at("rc:m:/")
+    reaction = route.reaction_at("rc:r:/")
+
+    assert route.content_signature(fields=()) == route.signature()
+    assert route.content_signature(fields=(), depth=1) == route.signature(depth=1)
+    assert target.content_subtree_signature(fields=()) == target.subtree_signature()
+    assert reaction.content_signature(fields=()) == reaction.signature()
+    assert route.reaction_content_signatures(fields=()) == route.reaction_signatures()
 
 
 @pytest.mark.unit

@@ -182,9 +182,9 @@ def _normalize_reactants(reactants: list[Molecule]) -> list[Molecule]:
     route paths depend on reactant order, so validation canonicalizes the list.
 
     most reactants already have distinct structural subtree keys. for those, the
-    json tiebreaker would be dead work and can trip over arbitrary annotations.
-    only structurally identical reactants need the full serialization fallback to
-    get deterministic path assignment.
+    tiebreaker would be dead work. only structurally identical reactants need the
+    first-class payload fallback to get deterministic path assignment; arbitrary
+    annotations are intentionally excluded because they are not route identity.
     """
     groups: dict[tuple[Any, ...], list[Molecule]] = {}
     for reactant in reactants:
@@ -198,7 +198,26 @@ def _normalize_reactants(reactants: list[Molecule]) -> list[Molecule]:
 
 
 def _reactant_order_tiebreaker(molecule: Molecule) -> str:
-    return json.dumps(molecule.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    return json.dumps(_molecule_order_payload(molecule), sort_keys=True, separators=(",", ":"))
+
+
+def _molecule_order_payload(molecule: Molecule) -> tuple[Any, ...]:
+    reaction = molecule.product_of
+    return (
+        molecule.smiles,
+        molecule.inchikey,
+        None if reaction is None else _reaction_order_payload(reaction),
+    )
+
+
+def _reaction_order_payload(reaction: Reaction) -> tuple[Any, ...]:
+    return (
+        reaction.mapped_reaction_smiles,
+        reaction.template,
+        _ordered_optional_smiles(reaction.reagents),
+        _ordered_optional_smiles(reaction.solvents),
+        tuple(_molecule_order_payload(reactant) for reactant in reaction.reactants),
+    )
 
 
 def _molecule_subtree_key(
@@ -238,6 +257,7 @@ def _reaction_key(
 
 
 def _normalize_content_fields(fields: Iterable[ReactionContentField]) -> tuple[ReactionContentField, ...]:
+    # str is iterable, but a field name should be treated as one requested field.
     requested = {fields} if isinstance(fields, str) else set(fields)
     unknown = sorted(requested - set(REACTION_CONTENT_FIELDS))
     if unknown:
@@ -252,6 +272,8 @@ def _reaction_content_key(
     *,
     fields: tuple[ReactionContentField, ...],
 ) -> tuple[Any, ...]:
+    if not fields:
+        return _reaction_key(product, reaction, match_level)
     return (
         "rxn-content",
         _reaction_key(product, reaction, match_level),
@@ -266,9 +288,17 @@ def _reaction_content_field_value(reaction: Reaction, field: ReactionContentFiel
         case "template":
             return reaction.template
         case "reagents":
-            return None if reaction.reagents is None else tuple(sorted(str(reagent) for reagent in reaction.reagents))
+            return _ordered_optional_smiles(reaction.reagents)
         case "solvents":
-            return None if reaction.solvents is None else tuple(sorted(str(solvent) for solvent in reaction.solvents))
+            return _ordered_optional_smiles(reaction.solvents)
+        case _ as unreachable:
+            raise AssertionError(f"unhandled reaction content field: {unreachable!r}")
+
+
+def _ordered_optional_smiles(values: list[SmilesStr] | None) -> tuple[str, ...] | None:
+    if not values:
+        return None
+    return tuple(sorted(str(value) for value in values))
 
 
 def _molecule_content_subtree_key(
@@ -278,6 +308,8 @@ def _molecule_content_subtree_key(
     fields: tuple[ReactionContentField, ...],
     depth: int | None = None,
 ) -> tuple[Any, ...]:
+    if not fields:
+        return _molecule_subtree_key(molecule, match_level, depth=depth)
     _validate_depth(depth)
     reaction = molecule.product_of
     if reaction is None or depth == 0:
