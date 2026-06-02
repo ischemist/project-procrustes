@@ -23,6 +23,11 @@ class Tier(IntEnum):
     THREE = 3
 
 
+class AcceptableRouteMatch(StrEnum):
+    PREFIX = "prefix"
+    EXACT = "exact"
+
+
 class CheckResult(BaseModel):
     code: str
     status: CheckStatus = CheckStatus.FAIL
@@ -105,5 +110,6 @@ class Evaluation(BaseModel):
     tiers: list[Tier] = Field(default_factory=list)
     metric_label: str = "task"
     acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL
+    acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.EXACT
     targets: dict[str, TargetResult] = Field(default_factory=dict)
     schema_version: Literal["2"] = "2"

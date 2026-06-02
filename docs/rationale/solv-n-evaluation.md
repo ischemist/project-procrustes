@@ -59,7 +59,9 @@ This is measured by mean-reverse rank (MRR@Solv-N) metric.
 
 In the absence of automated Tier-2 validity checks, as a temporary proxy of full chemical validity we test whether a model can reconstruct an existing, experimentally-verified route for a novel target.
 
-Top-K accuracy measures if an experimentally verified `Route` is present within first `k` `Routes` returned by the model.
+Top-K accuracy measures if an experimentally verified `Route` is reconstructed within first `k` `Routes` returned by the model. A candidate reconstructs an acceptable route when the acceptable route is a target-rooted prefix of the candidate route: `candidate.signature(depth=acceptable.depth()) == acceptable.signature()`, with the candidate at least as deep as the acceptable route. This avoids penalizing a planner that recovers the reference route and then continues expanding below a reference leaf.
+
+Exact full-route identity remains available at scoring time through `acceptable_route_match="exact"` / `--acceptable-route-match exact`, but prefix matching is the default reported reconstruction semantics.
 
 As proposed in the original [RetroCast preprint](https://arxiv.org/abs/2512.07079), we utilize a user-centric evaluation approach. As such, the ranking is performed **after** Routes are filtered for satisfaction of the problem scope (because Routes that do not satisfy them are of no interest to the user).
 
@@ -70,6 +72,6 @@ Notably, this means that `Top-1` accuracy should not be the headline metric.
 `analyze` also reports reconstruction diagnostics that preserve the same task-satisfaction filter and top-k window:
 
 - `acceptable_root_reconstruction_top_k[...]`: fraction of targets where a useful top-k candidate has the same root reaction as any acceptable route.
-- `acceptable_reconstruction_given_root_top_k[...]`: full-route reconstruction rate among targets with a root hit. Its denominator is targets, not candidate routes.
+- `acceptable_reconstruction_given_root_top_k[...]`: acceptable-route reconstruction rate among targets with a root hit. Its denominator is targets, not candidate routes.
 - `acceptable_prefix_reconstruction_depth_d_top_k[...]`: fraction of targets where a useful top-k candidate matches an acceptable route prefix by `Route.signature(depth=d)`.
 - `distinct_root_reactions_top_k[...]`: mean number of distinct root reaction signatures among useful top-k candidates.

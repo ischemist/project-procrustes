@@ -3,6 +3,7 @@
 from retrocast.models.analysis import AnalysisReport, MetricSummary, ReliabilityFlag
 from retrocast.models.candidates import Candidate, FailureRecord
 from retrocast.models.evaluation import (
+    AcceptableRouteMatch,
     CheckResult,
     CheckStatus,
     ConstraintResult,
@@ -31,6 +32,7 @@ from retrocast.models.task import Benchmark, Target, Task, TaskConstraints
 
 __all__ = [
     "AnalysisReport",
+    "AcceptableRouteMatch",
     "Benchmark",
     "Candidate",
     "CheckResult",

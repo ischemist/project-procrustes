@@ -8,6 +8,7 @@ from retrocast.models import (
     Candidate,
     CheckStatus,
     ConstraintResult,
+    Evaluation,
     FailureRecord,
     Molecule,
     Reaction,
@@ -22,7 +23,7 @@ from retrocast.models import (
 )
 from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
 from retrocast.utils.timing import ExecutionStats
-from retrocast.workflow.score import score, score_candidate
+from retrocast.workflow.score import AcceptableRouteMatch, score, score_candidate
 
 
 class FixedTierChecker:
@@ -223,9 +224,129 @@ def test_score_preserves_candidate_rank_and_records_acceptable_match() -> None:
 
     scored = evaluation.targets["ethanol"].candidates[0]
     assert evaluation.tiers == [Tier.ZERO, Tier.ONE]
+    assert evaluation.acceptable_route_match == AcceptableRouteMatch.PREFIX
     assert scored.rank == 7
     assert scored.matches_acceptable
     assert scored.matched_acceptable_index == 1
+
+
+def test_score_records_acceptable_match_when_reference_is_prediction_prefix() -> None:
+    acceptable_route = route(reactant_smiles=("C", "CO"))
+    predicted_route = Route(
+        target=molecule(
+            "CCO",
+            product_of=Reaction(
+                reactants=[
+                    molecule("C", product_of=Reaction(reactants=[molecule("N")])),
+                    molecule("CO"),
+                ]
+            ),
+        )
+    )
+    benchmark_target = target(acceptable_routes=[acceptable_route])
+
+    scored = score_candidate(
+        Candidate(rank=1, route=predicted_route),
+        target=benchmark_target,
+        constraints=TaskConstraints(),
+        tier_checkers=[],
+        constraint_checker=FixedConstraintChecker(),
+    )
+
+    assert predicted_route.signature() != acceptable_route.signature()
+    assert scored.matches_acceptable
+    assert scored.matched_acceptable_index == 0
+
+
+def test_score_prefers_deepest_acceptable_prefix_match() -> None:
+    shallow_route = route(reactant_smiles=("C", "CO"))
+    deep_route = Route(
+        target=molecule(
+            "CCO",
+            product_of=Reaction(
+                reactants=[
+                    molecule("C", product_of=Reaction(reactants=[molecule("N")])),
+                    molecule("CO"),
+                ]
+            ),
+        )
+    )
+    benchmark_target = target(acceptable_routes=[shallow_route, deep_route])
+
+    scored = score_candidate(
+        Candidate(rank=1, route=deep_route),
+        target=benchmark_target,
+        constraints=TaskConstraints(),
+        tier_checkers=[],
+        constraint_checker=FixedConstraintChecker(),
+    )
+
+    assert scored.matches_acceptable
+    assert scored.matched_acceptable_index == 1
+
+
+def test_score_can_require_exact_acceptable_route_match() -> None:
+    acceptable_route = route(reactant_smiles=("C", "CO"))
+    predicted_route = Route(
+        target=molecule(
+            "CCO",
+            product_of=Reaction(
+                reactants=[
+                    molecule("C", product_of=Reaction(reactants=[molecule("N")])),
+                    molecule("CO"),
+                ]
+            ),
+        )
+    )
+    benchmark_target = target(acceptable_routes=[acceptable_route])
+
+    scored = score_candidate(
+        Candidate(rank=1, route=predicted_route),
+        target=benchmark_target,
+        constraints=TaskConstraints(),
+        tier_checkers=[],
+        constraint_checker=FixedConstraintChecker(),
+        acceptable_route_match=AcceptableRouteMatch.EXACT,
+    )
+
+    assert not scored.matches_acceptable
+    assert scored.matched_acceptable_index is None
+
+
+def test_legacy_evaluation_defaults_to_exact_acceptable_route_match() -> None:
+    benchmark_target = target()
+
+    evaluation = Evaluation(task=task(benchmark_target))
+
+    assert evaluation.acceptable_route_match == AcceptableRouteMatch.EXACT
+
+
+def test_score_does_not_match_candidate_shorter_than_reference_route() -> None:
+    acceptable_route = Route(
+        target=molecule(
+            "CCO",
+            product_of=Reaction(
+                reactants=[
+                    molecule("C", product_of=Reaction(reactants=[molecule("N")])),
+                    molecule("CO"),
+                ]
+            ),
+        )
+    )
+    predicted_route = route(reactant_smiles=("C", "CO"))
+    benchmark_target = target(acceptable_routes=[acceptable_route])
+
+    scored = score_candidate(
+        Candidate(rank=1, route=predicted_route),
+        target=benchmark_target,
+        constraints=TaskConstraints(),
+        tier_checkers=[],
+        constraint_checker=FixedConstraintChecker(),
+    )
+
+    assert predicted_route.signature(depth=predicted_route.depth()) != acceptable_route.signature()
+    assert not scored.matches_acceptable
+    assert scored.matched_acceptable_index is None
 
 
 def test_score_records_metric_label_from_task() -> None:

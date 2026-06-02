@@ -525,6 +525,8 @@ class TargetResult(BaseModel):
 class Evaluation(BaseModel):
     task: Task
     tiers: list[Tier] = Field(default_factory=list)
+    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL
+    acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.EXACT
     targets: dict[str, TargetResult] = Field(default_factory=dict)
     schema_version: str = "2"
 ```
@@ -569,6 +571,7 @@ def score_candidate(
     tier_checkers: Sequence[TierChecker],
     constraint_checker: ConstraintChecker,
     acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
 ) -> ScoredCandidate: ...
 
 
@@ -580,6 +583,7 @@ def score_target(
     tier_checkers: Sequence[TierChecker],
     constraint_checker: ConstraintChecker,
     acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
 ) -> TargetResult: ...
 
 
@@ -590,6 +594,7 @@ def score(
     tier_checkers: Sequence[TierChecker],
     constraint_checker: ConstraintChecker,
     acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
 ) -> Evaluation: ...
 ```
 
@@ -620,4 +625,4 @@ analyze(
 ) -> AnalysisReport
 ```
 
-Top-K reconstruction metrics are emitted only for targets with acceptable_routes; if no target has acceptable_routes, reconstruction metrics are omitted. Reconstruction diagnostics use `Evaluation.acceptable_match_level`, so full-route, root-reaction, and prefix comparisons stay on the same molecular identity basis.
+Top-K reconstruction metrics are emitted only for targets with acceptable_routes; if no target has acceptable_routes, reconstruction metrics are omitted. Reconstruction diagnostics use `Evaluation.acceptable_match_level`, so route, root-reaction, and prefix comparisons stay on the same molecular identity basis. `Evaluation.acceptable_route_match` records whether headline acceptable-route reconstruction used target-rooted prefix matching or exact full-route identity. Its model default is `EXACT` so legacy artifacts without the field are interpreted according to their original scoring semantics; new scoring writes the selected mode explicitly.

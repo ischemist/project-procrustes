@@ -258,14 +258,20 @@ def test_v2_project_cli_ingest_score_analyze(tmp_path, monkeypatch) -> None:
         str(score_file_path),
         "--model-name",
         "test-model",
+        "--acceptable-route-match",
+        "exact",
     )
-    assert load_evaluation(score_file_path).targets["ethanol"].candidates[0].satisfies_task()
-    assert (tmp_path / "score-file-evaluation.manifest.json").exists()
+    score_file_evaluation = load_evaluation(score_file_path)
+    assert score_file_evaluation.acceptable_route_match == "exact"
+    assert score_file_evaluation.targets["ethanol"].candidates[0].satisfies_task()
+    score_file_manifest = json.loads((tmp_path / "score-file-evaluation.manifest.json").read_text(encoding="utf-8"))
+    assert score_file_manifest["parameters"]["acceptable_route_match"] == "exact"
 
     run_cli(monkeypatch, "--data-dir", str(data_dir), "score", "--model", "test-model", "--dataset", "small")
     evaluation_path = data_dir / "4-scored" / "small" / "test-model" / "test-stock" / "evaluation.json.gz"
     evaluation = load_evaluation(evaluation_path)
     assert evaluation.schema_version == "2"
+    assert evaluation.acceptable_route_match == "prefix"
     assert evaluation.targets["ethanol"].candidates[0].satisfies_task()
     assert evaluation.targets["ethanol"].wall_time == 12.5
     assert evaluation.targets["ethanol"].cpu_time == 3.25

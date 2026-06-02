@@ -55,6 +55,7 @@ from retrocast.typing import InChIKeyStr
 from retrocast.utils.logging import configure_script_logging
 from retrocast.utils.timing import ExecutionStats
 from retrocast.workflow import (
+    AcceptableRouteMatch,
     adapt_candidates,
     analyze,
     collect_candidates,
@@ -148,6 +149,7 @@ def _build_parser() -> argparse.ArgumentParser:
     score_file.add_argument("--stock-name", help="Stock label to write into task constraints")
     score_file.add_argument("--model-name", help="Optional model label for manifest metadata")
     score_file.add_argument("--ignore-stereo", action="store_true", help="Use stereo-agnostic stock matching")
+    _add_acceptable_route_match_arg(score_file)
 
     compare_parser = subparsers.add_parser("compare", help="Compare schema v2 analysis reports")
     compare_subparsers = compare_parser.add_subparsers(dest="compare_command", required=True)
@@ -168,6 +170,7 @@ def _build_parser() -> argparse.ArgumentParser:
     score_parser = subparsers.add_parser("score", help="Score v2 processed candidates")
     _add_model_dataset_args(score_parser)
     score_parser.add_argument("--ignore-stereo", action="store_true", help="Use stereo-agnostic stock matching")
+    _add_acceptable_route_match_arg(score_parser)
 
     analyze_parser = subparsers.add_parser("analyze", help="Analyze v2 evaluation artifacts")
     _add_model_dataset_args(analyze_parser)
@@ -191,6 +194,15 @@ def _non_negative_int(value: str) -> int:
     if parsed < 0:
         raise argparse.ArgumentTypeError("must be non-negative")
     return parsed
+
+
+def _add_acceptable_route_match_arg(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--acceptable-route-match",
+        choices=[mode.value for mode in AcceptableRouteMatch],
+        default=AcceptableRouteMatch.PREFIX.value,
+        help="How predicted routes are matched against acceptable routes for reconstruction metrics",
+    )
 
 
 def _add_model_dataset_args(parser: argparse.ArgumentParser) -> None:
@@ -271,6 +283,7 @@ def handle_score_file(args: argparse.Namespace) -> None:
             match_level=match_level,
         ),
         acceptable_match_level=match_level,
+        acceptable_route_match=AcceptableRouteMatch(args.acceptable_route_match),
     )
     save_evaluation(evaluation, args.output)
     write_manifest(
@@ -283,6 +296,7 @@ def handle_score_file(args: argparse.Namespace) -> None:
             "stock": stock_name,
             "model_name": args.model_name,
             "ignore_stereo": args.ignore_stereo,
+            "acceptable_route_match": args.acceptable_route_match,
         },
         statistics=evaluation_statistics(evaluation),
     )
@@ -445,6 +459,7 @@ def _score_one(model_name: str, benchmark_name: str, paths: dict[str, Path], arg
             match_level=match_level,
         ),
         acceptable_match_level=match_level,
+        acceptable_route_match=AcceptableRouteMatch(args.acceptable_route_match),
         execution_stats=_load_execution_stats_if_present(_execution_stats_path(paths, model_name, benchmark_name)),
     )
 
@@ -466,6 +481,7 @@ def _score_one(model_name: str, benchmark_name: str, paths: dict[str, Path], arg
             "benchmark": benchmark_name,
             "stock": output_label,
             "ignore_stereo": args.ignore_stereo,
+            "acceptable_route_match": args.acceptable_route_match,
         },
         statistics=evaluation_statistics(evaluation),
     )
