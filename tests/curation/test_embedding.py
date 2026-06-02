@@ -239,7 +239,7 @@ def test_find_route_embeddings_returns_all_matching_container_roots_in_traversal
 
     matches = find_route_embeddings(query, container)
 
-    assert [match.container_path.id() for match in matches] == ["rc:m:/0", "rc:m:/2"]
+    assert [match.container_path.id() for match in matches] == ["rc:m:/0", "rc:m:/1"]
     assert all(match.root_shifted for match in matches)
 
 
@@ -305,7 +305,7 @@ def test_regression_same_key_assignment_minimizes_leaf_extensions() -> None:
     assert match is not None
     assert match.matched_reactions == 2
     assert [(item.query_leaf_path.id(), item.container_path.id()) for item in match.leaf_extensions] == [
-        ("rc:m:/0", "rc:m:/0")
+        ("rc:m:/0", "rc:m:/1")
     ]
 
 
@@ -589,7 +589,7 @@ def test_regression_leaf_query_matches_upstream_expanded_container_root_only_whe
             embeds=True,
             blocked_without_leaf_extension=False,
             matched_reactions=1,
-            leaf_extensions=(("rc:m:/0", "rc:m:/1"), ("rc:m:/1", "rc:m:/0")),
+            leaf_extensions=(("rc:m:/0", "rc:m:/0"), ("rc:m:/1", "rc:m:/1")),
         ),
     ],
     ids=lambda case: case.case_id,
@@ -768,8 +768,13 @@ def test_generated_leaf_deepening_is_reported_only_as_leaf_extension(shape: Tree
     assert sorted(extension.query_leaf_path.id() for extension in allowed.leaf_extensions) == sorted(
         leaf.id() for leaf in query.leaves()
     )
-    assert sorted(extension.container_path.id() for extension in allowed.leaf_extensions) == sorted(
-        leaf.id() for leaf in query.leaves()
+    assert all(
+        query.molecule_at(extension.query_leaf_path).key() == container.molecule_at(extension.container_path).key()
+        for extension in allowed.leaf_extensions
+    )
+    assert all(
+        container.molecule_at(extension.container_path).produced_by() is not None
+        for extension in allowed.leaf_extensions
     )
     assert blocked is None
 

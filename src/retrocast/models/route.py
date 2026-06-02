@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cache
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field, model_validator
 
 from retrocast.chem import InChIKeyLevel, reduce_inchikey
 from retrocast.hashing import hash_json
@@ -136,6 +137,11 @@ class Reaction(BaseModel):
     solvents: list[SmilesStr] | None = None
     annotations: dict[str, Any] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def normalize_reactant_order(self) -> Reaction:
+        self.reactants = sorted(self.reactants, key=_reactant_order_key)
+        return self
+
 
 class Molecule(BaseModel):
     smiles: SmilesStr
@@ -148,6 +154,53 @@ class Molecule(BaseModel):
 
     def signature(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> str:
         return _stable_hash(self.key(match_level))
+
+
+def _reactant_order_key(molecule: Molecule) -> tuple[tuple[Any, ...], str]:
+    return (
+        _molecule_subtree_key(molecule),
+        _reactant_order_tiebreaker(molecule),
+    )
+
+
+def _reactant_order_tiebreaker(molecule: Molecule) -> str:
+    return json.dumps(molecule.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+
+
+def _molecule_subtree_key(
+    molecule: Molecule,
+    match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    *,
+    depth: int | None = None,
+) -> tuple[Any, ...]:
+    """Compute subtree identity from raw molecules before a route-bound view exists."""
+    _validate_depth(depth)
+    reaction = molecule.product_of
+    if reaction is None or depth == 0:
+        return ("mol", molecule.key(match_level))
+
+    next_depth = None if depth is None else depth - 1
+    child_signatures = sorted(
+        _stable_hash(_molecule_subtree_key(reactant, match_level, depth=next_depth)) for reactant in reaction.reactants
+    )
+    return (
+        "mol",
+        molecule.key(match_level),
+        _reaction_key(molecule, reaction, match_level),
+        tuple(child_signatures),
+    )
+
+
+def _reaction_key(
+    product: Molecule,
+    reaction: Reaction,
+    match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+) -> tuple[str, str, tuple[str, ...]]:
+    return (
+        "rxn",
+        product.key(match_level),
+        tuple(sorted(reactant.key(match_level) for reactant in reaction.reactants)),
+    )
 
 
 class Route(BaseModel):
@@ -283,11 +336,7 @@ class ReactionView(BaseModel):
         ]
 
     def key(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> tuple[str, str, tuple[str, ...]]:
-        return (
-            "rxn",
-            self.product().key(match_level),
-            tuple(sorted(reactant.key(match_level) for reactant in self.reactants())),
-        )
+        return _reaction_key(self.product().value, self.value, match_level)
 
     def signature(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> str:
         return _stable_hash(self.key(match_level))
@@ -351,21 +400,7 @@ class MoleculeView(BaseModel):
         *,
         depth: int | None = None,
     ) -> tuple[Any, ...]:
-        _validate_depth(depth)
-        if self.value.product_of is None or depth == 0:
-            return ("mol", self.key(match_level))
-
-        reaction = ReactionView(route=self.route, path=self.path.produced_by(), value=self.value.product_of)
-        next_depth = None if depth is None else depth - 1
-        child_signatures = sorted(
-            reactant.subtree_signature(match_level, depth=next_depth) for reactant in reaction.reactants()
-        )
-        return (
-            "mol",
-            self.key(match_level),
-            reaction.key(match_level),
-            tuple(child_signatures),
-        )
+        return _molecule_subtree_key(self.value, match_level, depth=depth)
 
     def subtree_signature(
         self,

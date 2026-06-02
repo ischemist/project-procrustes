@@ -168,7 +168,7 @@ def test_paroutes_casts_real_fixture_routes_with_stable_signatures() -> None:
     ]
     assert [route.annotations["patent_id"] for route in routes] == ["US20150051201A1", "US08242133B2"]
     assert [[reactant.value.smiles for reactant in route.reaction_at("rc:r:/").reactants()] for route in routes] == [
-        ["CN1CCn2ncc(N)c21", "CNc1nc(Cl)ncc1C(F)(F)F"],
+        ["CNc1nc(Cl)ncc1C(F)(F)F", "CN1CCn2ncc(N)c21"],
         ["Nc1cc(OC(F)(F)F)ccc1O", "O=C(O)c1ccncc1Cl"],
     ]
 

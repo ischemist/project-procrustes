@@ -1,3 +1,6 @@
+from itertools import permutations
+from typing import TypeAlias
+
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
@@ -13,6 +16,15 @@ KEY_D = "DDDDDDDDDDDDDD-UHFFFAOYSA-N"
 KEY_E = "EEEEEEEEEEEEEE-UHFFFAOYSA-N"
 KEY_A_STEREO_1 = "AAAAAAAAAAAAAA-BBBBBBBBSA-N"
 KEY_A_STEREO_2 = "AAAAAAAAAAAAAA-CCCCCCCCSA-N"
+KEY_TO_SMILES = {
+    KEY_A: "C",
+    KEY_B: "CO",
+    KEY_C: "CC",
+    KEY_D: "N",
+    KEY_E: "O",
+}
+TREE_KEYS = (KEY_A, KEY_B, KEY_D, KEY_E)
+TreeShape: TypeAlias = tuple[str, tuple["TreeShape", ...]]
 
 
 def molecule(smiles: str, inchikey: str, product_of: Reaction | None = None) -> Molecule:
@@ -29,6 +41,32 @@ def two_step_route() -> Route:
     intermediate = molecule("CO", KEY_B, product_of=Reaction(reactants=[leaf]))
     target = molecule("CCO", KEY_C, product_of=Reaction(reactants=[intermediate, molecule("N", KEY_D)]))
     return Route(target=target)
+
+
+def route_from_shape(shape: TreeShape) -> Route:
+    return Route(target=molecule_from_shape((KEY_C, (shape,))))
+
+
+def molecule_from_shape(shape: TreeShape) -> Molecule:
+    key, children = shape
+    reaction = None if not children else Reaction(reactants=[molecule_from_shape(child) for child in children])
+    return molecule(KEY_TO_SMILES[key], key, product_of=reaction)
+
+
+def reverse_child_order(shape: TreeShape) -> TreeShape:
+    key, children = shape
+    return (key, tuple(reverse_child_order(child) for child in reversed(children)))
+
+
+def route_path_keys(route: Route) -> dict[str, str]:
+    return {molecule.id(): molecule.value.inchikey for molecule in route.iter_molecules()}
+
+
+tree_shapes = st.recursive(
+    st.sampled_from(TREE_KEYS).map(lambda key: (key, ())),
+    lambda children: st.tuples(st.sampled_from(TREE_KEYS), st.lists(children, min_size=1, max_size=3).map(tuple)),
+    max_leaves=8,
+)
 
 
 @pytest.mark.unit
@@ -149,6 +187,84 @@ def test_reactant_order_does_not_affect_reaction_signature() -> None:
 
 
 @pytest.mark.unit
+def test_reactant_order_does_not_affect_route_paths() -> None:
+    intermediate = molecule("CO", KEY_B, product_of=Reaction(reactants=[molecule("N", KEY_D), molecule("C", KEY_A)]))
+    route_a = one_step_route([molecule("O", KEY_E), intermediate])
+    route_b = one_step_route([intermediate, molecule("O", KEY_E)])
+
+    assert route_a.model_dump(mode="json") == route_b.model_dump(mode="json")
+    assert route_a.molecule_at("rc:m:/0").value.inchikey == KEY_B
+    assert route_b.molecule_at("rc:m:/0").value.inchikey == KEY_B
+    assert route_a.molecule_at("rc:m:/0/0").value.inchikey == KEY_A
+    assert route_b.molecule_at("rc:m:/0/0").value.inchikey == KEY_A
+
+
+@pytest.mark.unit
+def test_nested_reactant_permutations_normalize_to_same_route_object() -> None:
+    def build_route(root_order: tuple[str, ...], child_order: tuple[str, ...]) -> Route:
+        leaves = {
+            KEY_A: molecule("C", KEY_A),
+            KEY_D: molecule("N", KEY_D),
+        }
+        intermediate = molecule(
+            "CO",
+            KEY_B,
+            product_of=Reaction(reactants=[leaves[key] for key in child_order]),
+        )
+        root_reactants = {
+            KEY_B: intermediate,
+            KEY_E: molecule("O", KEY_E),
+        }
+        return one_step_route([root_reactants[key] for key in root_order])
+
+    routes = [
+        build_route(root_order, child_order)
+        for root_order in permutations((KEY_B, KEY_E))
+        for child_order in permutations((KEY_A, KEY_D))
+    ]
+
+    reference = routes[0]
+    assert {route.signature() for route in routes} == {reference.signature()}
+    assert all(route == reference for route in routes)
+    assert all(route.model_dump(mode="json") == reference.model_dump(mode="json") for route in routes)
+
+
+@pytest.mark.unit
+def test_duplicate_identity_reactants_use_stable_tiebreaker_for_paths() -> None:
+    left = molecule("C", KEY_A, product_of=Reaction(reactants=[molecule("N", KEY_D)]))
+    right = molecule("C", KEY_A, product_of=Reaction(reactants=[molecule("O", KEY_E)]))
+
+    route_a = one_step_route([left, right])
+    route_b = one_step_route([right, left])
+
+    assert route_a.signature() == route_b.signature()
+    assert route_a == route_b
+    assert route_a.molecule_at("rc:m:/0/0").value.inchikey == KEY_D
+    assert route_b.molecule_at("rc:m:/0/0").value.inchikey == KEY_D
+
+
+@pytest.mark.unit
+@given(tree_shapes)
+def test_generated_recursive_reactant_permutations_normalize_to_same_route(shape: TreeShape) -> None:
+    route = route_from_shape(shape)
+    permuted = route_from_shape(reverse_child_order(shape))
+
+    assert permuted.signature() == route.signature()
+    assert permuted.model_dump(mode="json") == route.model_dump(mode="json")
+    assert route_path_keys(permuted) == route_path_keys(route)
+
+
+@pytest.mark.unit
+@given(st.lists(tree_shapes, min_size=1, max_size=5))
+def test_generated_sibling_permutations_keep_route_paths_stable(children: list[TreeShape]) -> None:
+    route = route_from_shape((KEY_C, tuple(children)))
+    permuted = route_from_shape((KEY_C, tuple(reversed(children))))
+
+    assert permuted.signature() == route.signature()
+    assert route_path_keys(permuted) == route_path_keys(route)
+
+
+@pytest.mark.unit
 def test_duplicate_reactants_do_affect_route_signature() -> None:
     route_a = one_step_route([molecule("C", KEY_A)])
     route_b = one_step_route([molecule("C", KEY_A), molecule("C", KEY_A)])
@@ -247,6 +363,9 @@ def test_generated_reactant_permutations_do_not_change_signature(reactant_keys: 
     permuted = one_step_route([molecule("C", key) for key in reactant_keys])
 
     assert permuted.signature() == reference.signature()
+    assert [reactant.value.inchikey for reactant in permuted.reaction_at("rc:r:/").reactants()] == [
+        reactant.value.inchikey for reactant in reference.reaction_at("rc:r:/").reactants()
+    ]
 
 
 @pytest.mark.unit

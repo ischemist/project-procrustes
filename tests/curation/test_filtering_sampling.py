@@ -93,10 +93,10 @@ def test_excise_top_convergent_reaction_keeps_only_live_subroutes() -> None:
 
     fragments = excise_reactions_from_route(route, {route.reaction_at("rc:r:/").signature()})
 
-    assert [fragment.target.smiles for fragment in fragments] == [
+    assert {fragment.target.smiles for fragment in fragments} == {
         SmilesStr(canonicalize_smiles("CC")),
         SmilesStr(canonicalize_smiles("CN")),
-    ]
+    }
 
 
 @given(shape=route_shape(), data=st.data())
