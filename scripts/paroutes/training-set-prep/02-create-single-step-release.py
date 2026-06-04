@@ -4,7 +4,7 @@ route artifacts.
 
 usage:
     uv run scripts/paroutes/training-set-prep/02-create-single-step-release.py
-    uv run scripts/paroutes/training-set-prep/02-create-single-step-release.py --route-release-dir path/to/reaction-holdout-n1-n5
+    uv run scripts/paroutes/training-set-prep/02-create-single-step-release.py --mode reaction --route-release-dir path/to/reaction-holdout-n1-n5
     uv run scripts/paroutes/training-set-prep/02-create-single-step-release.py --mode route
 """
 

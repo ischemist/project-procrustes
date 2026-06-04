@@ -152,6 +152,9 @@ def audit_single_step_release_if_present(
     training_exact_reaction_keys = [exact_reaction_record_key(record) for record in files.training]
     if duplicate_training_exact_reaction_keys := duplicate_count(training_exact_reaction_keys):
         failures["duplicate_training_exact_reaction_keys"] = duplicate_training_exact_reaction_keys
+    validation_exact_reaction_keys = [exact_reaction_record_key(record) for record in files.validation]
+    if duplicate_validation_exact_reaction_keys := duplicate_count(validation_exact_reaction_keys):
+        failures["duplicate_validation_exact_reaction_keys"] = duplicate_validation_exact_reaction_keys
     training_identities = {reaction_record_identity_key(record) for record in files.training}
     validation_identities = {reaction_record_identity_key(record) for record in files.validation}
     shared = training_identities & validation_identities

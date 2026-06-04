@@ -40,6 +40,12 @@ def build_test_reaction_records(
 ) -> list[TestReactionRecord]:
     records: list[TestReactionRecord] = []
     for route_record in route_records:
+        if route_record.dataset != dataset:
+            raise TrainingReleaseError(
+                "test single-step release route dataset does not match requested dataset",
+                code="workflow.test_single_step_dataset_mismatch",
+                context={"dataset": dataset, "route_id": route_record.id, "route_dataset": route_record.dataset},
+            )
         for step_index, reaction in enumerate(route_record.route.iter_reactions(), start=1):
             mapped_smiles = reaction.value.mapped_reaction_smiles
             if mapped_smiles is None:
@@ -49,6 +55,18 @@ def build_test_reaction_records(
                     context={"route_id": route_record.id, "reaction_id": reaction.id()},
                 )
             annotations = reaction.value.annotations
+            condition_slot_smiles = _string_list_annotation(
+                annotations,
+                "condition_slot_smiles",
+                route_id=route_record.id,
+                reaction_id=reaction.id(),
+            )
+            alternative_mapped_smiles = _string_list_annotation(
+                annotations,
+                "alternative_mapped_smiles",
+                route_id=route_record.id,
+                reaction_id=reaction.id(),
+            )
             records.append(
                 TestReactionRecord(
                     id=f"{route_prefix}-{dataset}-single-step-reactions-{len(records) + 1:06d}",
@@ -59,11 +77,7 @@ def build_test_reaction_records(
                     condition_slot=annotations.get("condition_slot")
                     if isinstance(annotations.get("condition_slot"), str)
                     else None,
-                    condition_slot_smiles=[
-                        SmilesStr(value)
-                        for value in annotations.get("condition_slot_smiles", [])
-                        if isinstance(value, str)
-                    ],
+                    condition_slot_smiles=[SmilesStr(value) for value in condition_slot_smiles],
                     sources=[
                         TrainingReactionSource(
                             route_id=route_record.id,
@@ -76,7 +90,7 @@ def build_test_reaction_records(
                     ],
                     alternative_mapped_smiles=[
                         ReactionSmilesStr(value)
-                        for value in annotations.get("alternative_mapped_smiles", [])
+                        for value in alternative_mapped_smiles
                         if isinstance(value, str) and value != mapped_smiles
                     ],
                 )
@@ -162,7 +176,7 @@ def write_test_reaction_release(
                 all_rsmi_path,
                 [record.to_rsmi_line() for record in records],
                 ContentType.UNKNOWN,
-                hash_json([record.to_rsmi_line() for record in records]),
+                hash_json(sorted(record.to_rsmi_line() for record in records)),
             ),
         ],
         root_dir=source_root,
@@ -173,6 +187,17 @@ def write_test_reaction_release(
         keyed_output_files=True,
     )
     manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+
+
+def _string_list_annotation(annotations: dict[str, object], key: str, *, route_id: str, reaction_id: str) -> list[str]:
+    value = annotations.get(key, [])
+    if not isinstance(value, list):
+        raise TrainingReleaseError(
+            f"test single-step release annotation '{key}' must be a list",
+            code=f"workflow.test_single_step_invalid_{key}",
+            context={"route_id": route_id, "reaction_id": reaction_id},
+        )
+    return [item for item in value if isinstance(item, str)]
 
 
 def _condition_identity(record: TestReactionRecord) -> tuple[str, ...]:

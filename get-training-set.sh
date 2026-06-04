@@ -147,6 +147,8 @@ main() {
             ;;
     esac
 
+    validate_omit_parts "$OMIT"
+
     RESOLVED_RELEASE="$RELEASE"
     if [ "$RELEASE" = "latest" ]; then
         RESOLVED_RELEASE="$(resolve_latest_release "$BASE_URL" "$DATASET")"
@@ -168,7 +170,10 @@ main() {
     mkdir -p "$RELEASE_DIR"
     curl -fsSL "$CHECKSUMS_URL" -o "$CHECKSUMS_PATH"
 
-    mapfile -t DOWNLOAD_KEYS < <(resolve_download_keys "$ARTIFACT" "$SPLIT" "$FORMAT" "$OMIT")
+    DOWNLOAD_KEYS=()
+    while IFS= read -r key; do
+        DOWNLOAD_KEYS+=("$key")
+    done < <(resolve_download_keys "$ARTIFACT" "$SPLIT" "$FORMAT" "$OMIT")
     if [ "${#DOWNLOAD_KEYS[@]}" -eq 0 ]; then
         echo -e "${R}error: no published files match request${NC}" >&2
         exit 1
@@ -235,6 +240,28 @@ resolve_latest_release() {
     echo "$latest_release"
 }
 
+validate_omit_parts() {
+    local omit="$1"
+    local part
+
+    [ -z "$omit" ] && return 0
+    while IFS= read -r part; do
+        case "$part" in
+            ""|all|training|validation|jsonl|rsmi) ;;
+            *)
+                echo -e "${R}error: unsupported omit part '$part'${NC}" >&2
+                exit 1
+                ;;
+        esac
+    done < <(printf '%s\n' "$omit" | awk '{
+        count = split($0, parts, ",")
+        for (i = 1; i <= count; i++) {
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", parts[i])
+            print parts[i]
+        }
+    }')
+}
+
 resolve_download_keys() {
     local artifact="$1"
     local split="$2"
@@ -243,6 +270,9 @@ resolve_download_keys() {
 
     awk -v artifact="$artifact" -v split_filter="$split" -v format_filter="$format" -v omit="$omit" '
         function has_omitted_part(file, parts, count, i) {
+            if (omit == "") {
+                return 0
+            }
             count = split_csv(omit, parts)
             for (i = 1; i <= count; i++) {
                 if (parts[i] != "" && file_part_matches(file, parts[i])) {
@@ -270,7 +300,7 @@ resolve_download_keys() {
             file = key
             sub(/^.*\//, "", file)
             if (file == "manifest.json") {
-                if (split_filter == "" && format_filter == "") {
+                if (artifact != "" || (split_filter == "" && format_filter == "")) {
                     print key
                 }
                 next

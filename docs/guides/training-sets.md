@@ -90,7 +90,7 @@ Pick one of two workflows:
     data/datasets/paroutes/<release>/<artifact>/<file>
     ```
 
-One-step reaction training uses the same flow with `artifact="single-step-reaction-holdout-n1-n5"` or `artifact="single-step-route-holdout-n1-n5"`. By default that downloads the canonical `jsonl` artifact. Pass `format="rsmi"` if you specifically want the plain reaction-smiles text file.
+One-step reaction training uses the same flow with `artifact="single-step-reaction-holdout-n1-n5"` or `artifact="single-step-route-holdout-n1-n5"`. By default, that downloads the canonical `jsonl` artifact. Pass `format="rsmi"` if you specifically want the plain reaction-smiles text file.
 
 The original PaRoutes n1/n5 test sets are also published as all-only artifacts: `n1-routes`, `n5-routes`, `n1-single-step-reactions`, and `n5-single-step-reactions`. Use `split="all"` for those.
 

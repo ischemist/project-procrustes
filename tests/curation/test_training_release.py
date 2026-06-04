@@ -182,6 +182,55 @@ def test_test_set_reaction_release_hashes_conditionless_records(tmp_path: Path) 
     assert (tmp_path / "n1-single-step-reactions" / "manifest.json").exists()
 
 
+def test_test_set_reaction_release_rejects_mixed_dataset_records() -> None:
+    route_records = build_test_route_records(dataset="n5", routes=[adapted_route("n5-a", one_step_route("C.C>>CC"))])
+
+    with pytest.raises(TrainingReleaseError) as error:
+        build_test_reaction_records(dataset="n1", route_records=route_records)
+
+    assert error.value.code == "workflow.test_single_step_dataset_mismatch"
+    assert error.value.context["route_dataset"] == "n5"
+
+
+def test_test_set_reaction_release_rejects_non_list_annotations() -> None:
+    route = one_step_route("C.C>>CC")
+    assert route.target.product_of is not None
+    route.target.product_of.annotations["condition_slot_smiles"] = "O"
+    route_records = build_test_route_records(dataset="n1", routes=[adapted_route("n1-a", route)])
+
+    with pytest.raises(TrainingReleaseError) as error:
+        build_test_reaction_records(dataset="n1", route_records=route_records)
+
+    assert error.value.code == "workflow.test_single_step_invalid_condition_slot_smiles"
+
+
+def test_test_set_reaction_release_rsmi_content_hash_is_order_independent(tmp_path: Path) -> None:
+    record_a = build_test_reaction_records(
+        dataset="n1",
+        route_records=build_test_route_records(dataset="n1", routes=[adapted_route("n1-a", two_step_route())]),
+    )[0]
+    record_b = record_a.model_copy(update={"id": "other", "mapped_smiles": ReactionSmilesStr("N.N>>NN")})
+
+    write_test_reaction_release(
+        dataset="n1",
+        records=[record_a, record_b],
+        output_dir=tmp_path / "first",
+        source_paths=[],
+        source_root=tmp_path,
+    )
+    write_test_reaction_release(
+        dataset="n1",
+        records=[record_b, record_a],
+        output_dir=tmp_path / "second",
+        source_paths=[],
+        source_root=tmp_path,
+    )
+
+    first = json.loads((tmp_path / "first" / "n1-single-step-reactions" / "manifest.json").read_text())
+    second = json.loads((tmp_path / "second" / "n1-single-step-reactions" / "manifest.json").read_text())
+    assert first["output_files"]["all_rsmi"]["content_hash"] == second["output_files"]["all_rsmi"]["content_hash"]
+
+
 def test_route_release_keeps_condition_variants_separate() -> None:
     route_a = one_step_route("C.C>O>CC", condition_slot_smiles=["O"])
     route_b = one_step_route("C.C>N>CC", condition_slot_smiles=["N"])
@@ -396,12 +445,16 @@ def test_single_step_audit_rejects_release_identity_failures(tmp_path: Path) -> 
     release_dir = tmp_path / "single-step-reaction-holdout-n1-n5"
     training = reaction_record("train", "route-train", split="training")
     validation = reaction_record("validation", "missing-route", split="validation")
+    duplicate_validation = validation.model_copy(update={"id": "reaction-validation-duplicate"})
     save_jsonl_gz([training, validation], release_dir / "all.jsonl.gz")
     save_jsonl_gz([training], release_dir / "training.jsonl.gz")
-    save_jsonl_gz([validation], release_dir / "validation.jsonl.gz")
+    save_jsonl_gz([validation, duplicate_validation], release_dir / "validation.jsonl.gz")
     save_lines_gz([training.to_rsmi_line()], release_dir / "all.rsmi.txt.gz")
     save_lines_gz([training.to_rsmi_line()], release_dir / "training.rsmi.txt.gz")
-    save_lines_gz([validation.to_rsmi_line()], release_dir / "validation.rsmi.txt.gz")
+    save_lines_gz(
+        [validation.to_rsmi_line(), duplicate_validation.to_rsmi_line()],
+        release_dir / "validation.rsmi.txt.gz",
+    )
 
     with pytest.raises(TrainingReleaseError) as error:
         audit_single_step_release_if_present(release_root=tmp_path, parent_route_ids={"route-train"})
@@ -411,6 +464,7 @@ def test_single_step_audit_rejects_release_identity_failures(tmp_path: Path) -> 
     assert failures["rsmi_count_mismatches"] == {"all": 1, "training": 0, "validation": 0}
     assert failures["cross_split_reaction_identity_overlap"] == 1
     assert failures["missing_parent_route_sources"] == 1
+    assert failures["duplicate_validation_exact_reaction_keys"] == 1
 
 
 def test_single_step_audit_success_absent_release_and_identity_helpers(tmp_path: Path) -> None:
