@@ -59,11 +59,11 @@ def test_route_embedding_report_renders_audit_summary() -> None:
 
 @pytest.mark.integration
 def test_route_embedding_audit_can_include_internal_subroutes() -> None:
-    training = route_record("container", route_c_b_a())
+    container = route_record("container", route_c_b_a())
 
     audit = build_route_embedding_audit(
         release_name="route-holdout-n1-n5",
-        training_records=[training],
+        container_records=[container],
         queries_by_source={"bench": {"full": route_c_b_a()}},
         include_partial=True,
         partial_min_reactions=1,
@@ -99,7 +99,7 @@ def test_route_embedding_audit_can_exclude_query_containers() -> None:
 
     audit = build_route_embedding_audit(
         release_name="benchmark-route-embeddings",
-        training_records=[record],
+        container_records=[record],
         queries_by_source={"bench": {record.id: route}},
         include_partial=True,
         partial_min_reactions=1,
@@ -126,10 +126,10 @@ def test_route_embedding_audit_can_exclude_query_containers() -> None:
 
 @pytest.mark.integration
 def test_route_embedding_audit_rejects_exclusion_without_matching_query_id() -> None:
-    with pytest.raises(ValueError, match="query ids to match TrainingRouteRecord.id"):
+    with pytest.raises(ValueError, match="query ids to match container record ids"):
         build_route_embedding_audit(
             release_name="benchmark-route-embeddings",
-            training_records=[route_record("container", route_c_b_a())],
+            container_records=[route_record("container", route_c_b_a())],
             queries_by_source={"bench": {"query": route_c_b_a()}},
             exclude_query_containers=True,
         )
@@ -140,17 +140,17 @@ def test_route_embedding_audit_rejects_exclusion_with_duplicate_container_ids() 
     route = route_c_b_a()
     records = [route_record("duplicate", route), route_record("duplicate", route)]
 
-    with pytest.raises(ValueError, match="unique TrainingRouteRecord.id"):
+    with pytest.raises(ValueError, match="unique container record ids"):
         build_route_embedding_audit(
             release_name="benchmark-route-embeddings",
-            training_records=records,
+            container_records=records,
             queries_by_source={"bench": {records[0].id: route}},
             exclude_query_containers=True,
         )
 
 
 def sample_full_match_audit() -> RouteEmbeddingAudit:
-    training = route_record("container", route_c_b_a())
+    container = route_record("container", route_c_b_a())
     queries = {
         "shifted": Route(target=molecule("b", KEY_B, reactants=[molecule("a", KEY_A)])),
         "leaf": Route(target=molecule("c", KEY_C, reactants=[molecule("b", KEY_B)])),
@@ -159,7 +159,7 @@ def sample_full_match_audit() -> RouteEmbeddingAudit:
 
     return build_route_embedding_audit(
         release_name="route-holdout-n1-n5",
-        training_records=[training],
+        container_records=[container],
         queries_by_source={"bench": queries},
     )
 

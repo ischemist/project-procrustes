@@ -14,8 +14,8 @@ from typing import Literal
 from retrocast.chem import InChIKeyLevel
 from retrocast.curation.training.embedding_audit import (
     RouteEmbeddingAudit,
+    build_container_embedding_index,
     build_route_embedding_audit,
-    build_training_embedding_index,
 )
 from retrocast.curation.training.embedding_report import render_route_embedding_audit_markdown
 from retrocast.curation.training.records import TrainingRouteRecord
@@ -39,7 +39,7 @@ def main() -> None:
         audits.append(
             build_route_embedding_audit(
                 release_name=benchmark_name,
-                training_records=records,
+                container_records=records,
                 queries_by_source={benchmark_name: {record.id: record.route for record in records}},
                 match_level=match_level,
                 allow_leaf_extension=args.allow_leaf_extension,
@@ -50,7 +50,7 @@ def main() -> None:
         )
         logger.info("loaded %s acceptable routes from %s", len(records), benchmark_name)
 
-    index = build_training_embedding_index(all_records, match_level)
+    index = build_container_embedding_index(all_records, match_level)
     audit = merge_audits(
         "benchmark-route-embeddings",
         audits,
@@ -115,9 +115,9 @@ def merge_audits(
         match_level=first.match_level,
         allow_leaf_extension=first.allow_leaf_extension,
         partial_min_reactions=first.partial_min_reactions,
-        training_routes=total_routes,
-        training_route_signatures=route_signatures,
-        training_reaction_signatures=reaction_signatures,
+        container_routes=total_routes,
+        container_route_signatures=route_signatures,
+        container_reaction_signatures=reaction_signatures,
         query_sets=tuple(query_set for audit in audits for query_set in audit.query_sets),
         ledger_rows=tuple(row for audit in audits for row in audit.ledger_rows),
     )

@@ -14,7 +14,7 @@ from retrocast.markdown import MarkdownAlign, MarkdownRow, markdown_table
 def render_route_embedding_audit_markdown(
     audit: RouteEmbeddingAudit,
     *,
-    container_label: str = "training",
+    container_label: str = "container",
 ) -> str:
     container_route_label = f"{container_label} route"
     lines = [
@@ -24,9 +24,9 @@ def render_route_embedding_audit_markdown(
         f"- allow leaf extension: `{str(audit.allow_leaf_extension).lower()}`",
         "- partial minimum reactions: "
         f"{f'{audit.partial_min_reactions} reactions' if audit.partial_min_reactions is not None else 'not run'}",
-        f"- {container_label} routes: {_format_integer(audit.training_routes)}",
-        f"- {container_route_label} signatures: {_format_integer(audit.training_route_signatures)}",
-        f"- {container_label} reaction signatures: {_format_integer(audit.training_reaction_signatures)}",
+        f"- {container_label} routes: {_format_integer(audit.container_routes)}",
+        f"- {container_route_label} signatures: {_format_integer(audit.container_route_signatures)}",
+        f"- {container_label} reaction signatures: {_format_integer(audit.container_reaction_signatures)}",
         "",
         "terms: a query route is the route being searched for. "
         f"a container route is a {container_route_label} where an embedding is found.",
@@ -188,7 +188,7 @@ def _best_match_coverage(
             [
                 "",
                 f"query routes with any embedding match "
-                f"{coverage.embedded_mean_training_routes_per_query:.2f} "
+                f"{coverage.embedded_mean_container_routes_per_query:.2f} "
                 f"unique {container_route_label}s and "
                 f"{coverage.embedded_mean_occurrences_per_query:.2f} "
                 "total occurrences per query route on average.",

@@ -17,13 +17,13 @@ EmbeddingMatchKind = Literal["full_route", "internal_subroute"]
 
 
 @dataclass(slots=True)
-class TrainingRouteOccurrence:
+class ContainerRouteOccurrence:
     record: TrainingRouteRecord
     molecule: MoleculeView
 
 
 @dataclass(slots=True)
-class TrainingEmbeddingIndex:
+class ContainerEmbeddingIndex:
     route_signatures: set[str]
     reaction_signatures: set[str]
     route_signature_counts: Mapping[str, int]
@@ -32,7 +32,7 @@ class TrainingEmbeddingIndex:
     subtree_prefix_signatures_by_depth: Mapping[int, set[str]]
     root_prefix_signature_counts_by_depth: Mapping[int, Mapping[str, int]]
     subtree_prefix_signature_counts_by_depth: Mapping[int, Mapping[str, int]]
-    by_reaction_root: Mapping[str, tuple[TrainingRouteOccurrence, ...]]
+    by_reaction_root: Mapping[str, tuple[ContainerRouteOccurrence, ...]]
 
 
 class RouteEmbeddingLedgerRow(BaseModel):
@@ -89,7 +89,7 @@ class CoverageSummary:
     embedded_query_fraction_stats: tuple[float, float, float]
     all_container_fraction_stats: tuple[float, float, float]
     embedded_container_fraction_stats: tuple[float, float, float]
-    embedded_mean_training_routes_per_query: float
+    embedded_mean_container_routes_per_query: float
     embedded_mean_occurrences_per_query: float
     matched_fraction_histogram: tuple[tuple[str, int], ...]
 
@@ -113,9 +113,9 @@ class RouteEmbeddingAudit:
     match_level: str
     allow_leaf_extension: bool
     partial_min_reactions: int | None
-    training_routes: int
-    training_route_signatures: int
-    training_reaction_signatures: int
+    container_routes: int
+    container_route_signatures: int
+    container_reaction_signatures: int
     query_sets: tuple[QuerySetAudit, ...]
     ledger_rows: tuple[RouteEmbeddingLedgerRow, ...]
 
@@ -124,14 +124,14 @@ class RouteEmbeddingAudit:
 class _QueryCoverageRow:
     matched_fraction_of_query_route: float
     matched_fraction_of_container_route: float
-    training_routes: int
+    container_routes: int
     occurrences: int
 
 
 def build_route_embedding_audit(
     *,
     release_name: str,
-    training_records: Sequence[TrainingRouteRecord],
+    container_records: Sequence[TrainingRouteRecord],
     queries_by_source: Mapping[str, Mapping[str, Route]],
     match_level: InChIKeyLevel = InChIKeyLevel.FULL,
     allow_leaf_extension: bool = True,
@@ -140,8 +140,22 @@ def build_route_embedding_audit(
     exclude_query_containers: bool = False,
 ) -> RouteEmbeddingAudit:
     if exclude_query_containers:
-        _validate_query_container_exclusion(training_records, queries_by_source)
-    index = build_training_embedding_index(training_records, match_level)
+        container_ids = [record.id for record in container_records]
+        duplicate_ids = {container_id for container_id, count in Counter(container_ids).items() if count > 1}
+        if duplicate_ids:
+            raise ValueError(
+                f"exclude_query_containers requires unique container record ids; duplicate ids: {sorted(duplicate_ids)}"
+            )
+
+        container_id_set = set(container_ids)
+        query_ids = {query_id for queries in queries_by_source.values() for query_id in queries}
+        missing_query_ids = sorted(query_ids - container_id_set)
+        if missing_query_ids:
+            raise ValueError(
+                "exclude_query_containers requires query ids to match container record ids; "
+                f"missing ids: {missing_query_ids}"
+            )
+    index = build_container_embedding_index(container_records, match_level)
     query_sets: list[QuerySetAudit] = []
     ledger_rows: list[RouteEmbeddingLedgerRow] = []
     for source, queries in sorted(queries_by_source.items()):
@@ -163,18 +177,18 @@ def build_route_embedding_audit(
         match_level=match_level.value,
         allow_leaf_extension=allow_leaf_extension,
         partial_min_reactions=partial_min_reactions if include_partial else None,
-        training_routes=len(training_records),
-        training_route_signatures=len(index.route_signatures),
-        training_reaction_signatures=len(index.reaction_signatures),
+        container_routes=len(container_records),
+        container_route_signatures=len(index.route_signatures),
+        container_reaction_signatures=len(index.reaction_signatures),
         query_sets=tuple(query_sets),
         ledger_rows=tuple(ledger_rows),
     )
 
 
-def build_training_embedding_index(
+def build_container_embedding_index(
     records: Sequence[TrainingRouteRecord],
     match_level: InChIKeyLevel = InChIKeyLevel.FULL,
-) -> TrainingEmbeddingIndex:
+) -> ContainerEmbeddingIndex:
     route_signatures: set[str] = set()
     reaction_signatures: set[str] = set()
     route_signature_counts: Counter[str] = Counter()
@@ -183,7 +197,7 @@ def build_training_embedding_index(
     subtree_prefix_signatures_by_depth: dict[int, set[str]] = defaultdict(set)
     root_prefix_signature_counts_by_depth: dict[int, Counter[str]] = defaultdict(Counter)
     subtree_prefix_signature_counts_by_depth: dict[int, Counter[str]] = defaultdict(Counter)
-    by_reaction_root: dict[str, list[TrainingRouteOccurrence]] = defaultdict(list)
+    by_reaction_root: dict[str, list[ContainerRouteOccurrence]] = defaultdict(list)
 
     for record in records:
         route_signature = record.route.signature(match_level)
@@ -202,14 +216,14 @@ def build_training_embedding_index(
                 subtree_prefix = molecule.subtree_signature(match_level, depth=depth)
                 subtree_prefix_signatures_by_depth[depth].add(subtree_prefix)
                 subtree_prefixes_by_depth[depth].add(subtree_prefix)
-            occurrence = TrainingRouteOccurrence(record=record, molecule=molecule)
+            occurrence = ContainerRouteOccurrence(record=record, molecule=molecule)
             reaction = molecule.produced_by()
             if reaction is not None:
                 by_reaction_root[reaction.signature(match_level)].append(occurrence)
         for depth, signatures in subtree_prefixes_by_depth.items():
             subtree_prefix_signature_counts_by_depth[depth].update(signatures)
 
-    return TrainingEmbeddingIndex(
+    return ContainerEmbeddingIndex(
         route_signatures=route_signatures,
         reaction_signatures=reaction_signatures,
         route_signature_counts=dict(route_signature_counts),
@@ -226,34 +240,11 @@ def build_training_embedding_index(
     )
 
 
-def _validate_query_container_exclusion(
-    training_records: Sequence[TrainingRouteRecord],
-    queries_by_source: Mapping[str, Mapping[str, Route]],
-) -> None:
-    container_ids = [record.id for record in training_records]
-    duplicate_ids = {container_id for container_id, count in Counter(container_ids).items() if count > 1}
-    if duplicate_ids:
-        raise ValueError(
-            "exclude_query_containers requires unique TrainingRouteRecord.id values; "
-            f"duplicate ids: {sorted(duplicate_ids)}"
-        )
-
-    container_id_set = set(container_ids)
-    missing_query_ids = sorted(
-        query_id for queries in queries_by_source.values() for query_id in queries if query_id not in container_id_set
-    )
-    if missing_query_ids:
-        raise ValueError(
-            "exclude_query_containers requires query ids to match TrainingRouteRecord.id values; "
-            f"missing ids: {missing_query_ids}"
-        )
-
-
 def _audit_query_set(
     *,
     source: str,
     queries: Mapping[str, Route],
-    index: TrainingEmbeddingIndex,
+    index: ContainerEmbeddingIndex,
     match_level: InChIKeyLevel,
     allow_leaf_extension: bool,
     include_partial: bool,
@@ -286,14 +277,28 @@ def _audit_query_set(
     query_reaction_signatures = {
         signature for route in queries.values() for signature in route.reaction_signatures(match_level)
     }
+    if exclude_query_containers:
+        exact_route_signature_overlap = sum(
+            index.route_signature_counts.get(route.signature(match_level), 0) > 1 for route in queries.values()
+        )
+        reaction_signature_overlap = len(
+            {
+                signature
+                for signature in query_reaction_signatures
+                if index.reaction_signature_route_counts.get(signature, 0) > 1
+            }
+        )
+    else:
+        exact_route_signature_overlap = sum(
+            route.signature(match_level) in index.route_signatures for route in queries.values()
+        )
+        reaction_signature_overlap = len(query_reaction_signatures & index.reaction_signatures)
     query_set = QuerySetAudit(
         source=source,
         query_routes=len(queries),
         query_reaction_signatures=len(query_reaction_signatures),
-        exact_route_signature_overlap=_exact_route_signature_overlap(
-            queries, index, match_level, exclude_query_containers
-        ),
-        reaction_signature_overlap=_reaction_signature_overlap(queries, index, match_level, exclude_query_containers),
+        exact_route_signature_overlap=exact_route_signature_overlap,
+        reaction_signature_overlap=reaction_signature_overlap,
         prefix_depths=_summarize_prefix_depths(
             queries=queries,
             index=index,
@@ -318,7 +323,7 @@ def _audit_query_set(
 def _summarize_prefix_depths(
     *,
     queries: Mapping[str, Route],
-    index: TrainingEmbeddingIndex,
+    index: ContainerEmbeddingIndex,
     match_level: InChIKeyLevel,
     exclude_query_containers: bool,
 ) -> tuple[PrefixDepthSummary, ...]:
@@ -330,73 +335,29 @@ def _summarize_prefix_depths(
         subtree_prefixes = index.subtree_prefix_signatures_by_depth.get(depth, set())
         root_counts = index.root_prefix_signature_counts_by_depth.get(depth, {})
         subtree_counts = index.subtree_prefix_signature_counts_by_depth.get(depth, {})
-        root_overlaps = _signature_overlap_check(root_prefixes, root_counts, exclude_query_containers)
-        subtree_overlaps = _signature_overlap_check(subtree_prefixes, subtree_counts, exclude_query_containers)
+        signatures = [route.signature(match_level, depth=depth) for route in eligible]
+        if exclude_query_containers:
+            root_overlap = sum(root_counts.get(signature, 0) > 1 for signature in signatures)
+            subtree_overlap = sum(subtree_counts.get(signature, 0) > 1 for signature in signatures)
+        else:
+            root_overlap = sum(signature in root_prefixes for signature in signatures)
+            subtree_overlap = sum(signature in subtree_prefixes for signature in signatures)
         summaries.append(
             PrefixDepthSummary(
                 depth=depth,
                 query_routes=len(eligible),
-                root_prefix_signature_overlap=sum(
-                    root_overlaps(route.signature(match_level, depth=depth)) for route in eligible
-                ),
-                subtree_prefix_signature_overlap=sum(
-                    subtree_overlaps(route.signature(match_level, depth=depth)) for route in eligible
-                ),
+                root_prefix_signature_overlap=root_overlap,
+                subtree_prefix_signature_overlap=subtree_overlap,
             )
         )
     return tuple(summaries)
-
-
-def _exact_route_signature_overlap(
-    queries: Mapping[str, Route],
-    index: TrainingEmbeddingIndex,
-    match_level: InChIKeyLevel,
-    exclude_query_containers: bool,
-) -> int:
-    overlaps = _signature_overlap_check(
-        index.route_signatures,
-        index.route_signature_counts,
-        exclude_query_containers,
-    )
-    return sum(overlaps(route.signature(match_level)) for route in queries.values())
-
-
-def _reaction_signature_overlap(
-    queries: Mapping[str, Route],
-    index: TrainingEmbeddingIndex,
-    match_level: InChIKeyLevel,
-    exclude_query_containers: bool,
-) -> int:
-    overlaps = _signature_overlap_check(
-        index.reaction_signatures,
-        index.reaction_signature_route_counts,
-        exclude_query_containers,
-    )
-    return len(
-        {
-            signature
-            for route in queries.values()
-            for signature in route.reaction_signatures(match_level)
-            if overlaps(signature)
-        }
-    )
-
-
-def _signature_overlap_check(
-    signatures: set[str],
-    counts: Mapping[str, int],
-    exclude_query_container: bool,
-):
-    if exclude_query_container:
-        return lambda signature: counts.get(signature, 0) > 1
-    return lambda signature: signature in signatures
 
 
 def _full_route_ledger_rows(
     *,
     source: str,
     queries: Mapping[str, Route],
-    index: TrainingEmbeddingIndex,
+    index: ContainerEmbeddingIndex,
     match_level: InChIKeyLevel,
     allow_leaf_extension: bool,
     exclude_query_containers: bool,
@@ -423,7 +384,7 @@ def _internal_subroute_audit(
     *,
     source: str,
     queries: Mapping[str, Route],
-    index: TrainingEmbeddingIndex,
+    index: ContainerEmbeddingIndex,
     match_level: InChIKeyLevel,
     allow_leaf_extension: bool,
     partial_min_reactions: int,
@@ -472,7 +433,7 @@ def _embedding_rows(
     query_route: Route,
     query_molecule: MoleculeView,
     match_kind: EmbeddingMatchKind,
-    index: TrainingEmbeddingIndex,
+    index: ContainerEmbeddingIndex,
     match_level: InChIKeyLevel,
     allow_leaf_extension: bool,
     exclude_query_container: bool,
@@ -519,9 +480,9 @@ def _embedding_rows(
 
 def _candidate_occurrences(
     query_root: MoleculeView,
-    index: TrainingEmbeddingIndex,
+    index: ContainerEmbeddingIndex,
     match_level: InChIKeyLevel,
-) -> Sequence[TrainingRouteOccurrence]:
+) -> Sequence[ContainerRouteOccurrence]:
     reaction = query_root.produced_by()
     if reaction is None:
         return ()
@@ -570,7 +531,7 @@ def _summarize_coverage(
         embedded_container_fraction_stats=_fraction_stats(
             [row.matched_fraction_of_container_route for row in embedded_rows]
         ),
-        embedded_mean_training_routes_per_query=_mean([row.training_routes for row in embedded_rows]),
+        embedded_mean_container_routes_per_query=_mean([row.container_routes for row in embedded_rows]),
         embedded_mean_occurrences_per_query=_mean([row.occurrences for row in embedded_rows]),
         matched_fraction_histogram=_coverage_histogram(coverage_rows),
     )
@@ -581,7 +542,7 @@ def _query_coverage_row(rows: Sequence[RouteEmbeddingLedgerRow]) -> _QueryCovera
         return _QueryCoverageRow(
             matched_fraction_of_query_route=0.0,
             matched_fraction_of_container_route=0.0,
-            training_routes=0,
+            container_routes=0,
             occurrences=0,
         )
 
@@ -597,7 +558,7 @@ def _query_coverage_row(rows: Sequence[RouteEmbeddingLedgerRow]) -> _QueryCovera
     return _QueryCoverageRow(
         matched_fraction_of_query_route=_ratio(best.matched_reactions, best.query_route_reactions),
         matched_fraction_of_container_route=_ratio(best.matched_reactions, best.container_route_reactions),
-        training_routes=len({row.container_route_id for row in rows}),
+        container_routes=len({row.container_route_id for row in rows}),
         occurrences=len(rows),
     )
 
