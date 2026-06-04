@@ -13,6 +13,9 @@ import argparse
 from pathlib import Path
 from typing import cast
 
+from rich.console import Console
+
+from retrocast.cli.progress import step_progress
 from retrocast.curation.training import (
     TrainingHoldoutMode,
     TrainingRouteReleaseBuilder,
@@ -51,11 +54,6 @@ def main() -> None:
         help="Validation fraction within each stratification bucket. Default: 0.05.",
     )
     parser.add_argument("--seed", type=int, default=20260502, help="Deterministic split seed.")
-    parser.add_argument(
-        "--no-progress",
-        action="store_true",
-        help="Disable progress bars.",
-    )
     args = parser.parse_args()
 
     all_path = RAW_DIR / "all-routes.json.gz"
@@ -63,22 +61,13 @@ def main() -> None:
     n5_path = RAW_DIR / "n5-routes.json.gz"
     source_paths = [all_path, n1_path, n5_path]
 
-    show_progress = not args.no_progress
-    all_adaptation = adapt_training_routes(
-        all_path,
-        dataset="all",
-        show_progress=show_progress,
-    )
-    n1_adaptation = adapt_training_routes(
-        n1_path,
-        dataset="n1",
-        show_progress=show_progress,
-    )
-    n5_adaptation = adapt_training_routes(
-        n5_path,
-        dataset="n5",
-        show_progress=show_progress,
-    )
+    with step_progress(console=Console(), total=3, transient=True) as step:
+        with step("all: adapt routes"):
+            all_adaptation = adapt_training_routes(all_path, dataset="all", show_progress=False)
+        with step("n1: adapt routes"):
+            n1_adaptation = adapt_training_routes(n1_path, dataset="n1", show_progress=False)
+        with step("n5: adapt routes"):
+            n5_adaptation = adapt_training_routes(n5_path, dataset="n5", show_progress=False)
     logger.info("Inputs adapted:")
     logger.info("  %s: %s routes", all_path.relative_to(BASE_DIR), f"{all_adaptation.stats.adapted_routes:,}")
     logger.info("  %s: %s routes", n1_path.relative_to(BASE_DIR), f"{n1_adaptation.stats.adapted_routes:,}")
@@ -92,7 +81,6 @@ def main() -> None:
             holdout_mode=mode,
             val_fraction=args.val_fraction,
             seed=args.seed,
-            show_progress=show_progress,
         )
 
         result = TrainingRouteReleaseBuilder(
@@ -112,34 +100,39 @@ def main() -> None:
         output = result.summary["output"]
         all_records = output["all_records"]
         postprocessing = result.summary["postprocessing"]
+        release_name = result.release_name
         logger.info(
-            "Output: %s records (%s training, %s validation).",
+            "%s output: %s records (%s training, %s validation).",
+            release_name,
             all_records["total"],
             all_records["training"],
             all_records["validation"],
         )
         logger.info(
-            "Postprocessing: %s exact route matches removed; %s duplicates removed.",
+            "%s postprocessing: %s exact route matches removed; %s duplicates removed.",
+            release_name,
             postprocessing["exact_route_matches_removed"],
             postprocessing["duplicate_routes_removed"],
         )
         logger.info(
-            "Dedup breakdown: %s exact-chemistry duplicates removed; %s mapped-smiles variants collapsed.",
+            "%s dedup breakdown: %s exact-chemistry duplicates removed; %s mapped-smiles variants collapsed.",
+            release_name,
             postprocessing["chemical_duplicates_removed"],
             postprocessing["mapped_smiles_variants_collapsed"],
         )
         reaction_overlap = postprocessing.get("reaction_overlap")
         if reaction_overlap is not None:
             logger.info(
-                "Reaction overlap: %s routes had overlapping reactions; %s fragments kept after excision "
+                "%s reaction overlap: %s routes had overlapping reactions; %s fragments kept after excision "
                 "(%s routes fully removed).",
+                release_name,
                 reaction_overlap["routes_with_overlapping_reactions"],
                 reaction_overlap["fragments_kept_after_excision"],
                 reaction_overlap["routes_fully_removed_after_excision"],
             )
         failures_by_code = result.summary["adaptation"]["all_routes"]["failures_by_code"]
         if failures_by_code:
-            logger.info("Adaptation failures by code: %s", failures_by_code)
+            logger.info("%s adaptation failures by code: %s", release_name, failures_by_code)
 
 
 if __name__ == "__main__":

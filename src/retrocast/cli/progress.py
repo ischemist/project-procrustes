@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager
 from typing import Any
 
 from rich.console import Console
@@ -50,6 +50,26 @@ def create_cli_progress(
         console=console,
         transient=transient,
     )
+
+
+@contextmanager
+def step_progress(
+    *,
+    console: Console,
+    total: int,
+    unit: str = "steps",
+    transient: bool = False,
+) -> Iterator[Callable[[str], AbstractContextManager[None]]]:
+    with create_cli_progress(console=console, unit=unit, transient=transient) as progress:
+        task_id = progress.add_task("starting", total=total)
+
+        @contextmanager
+        def step(description: str) -> Iterator[None]:
+            progress.update(task_id, description=description)
+            yield
+            progress.advance(task_id)
+
+        yield step
 
 
 def estimate_raw_route_entries(

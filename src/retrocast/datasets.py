@@ -26,8 +26,13 @@ from retrocast.paths import resolve_cache_dir, validate_filename
 
 TrainingDatasetName = Literal["paroutes"]
 TrainingArtifactName = Literal[
+    "n1-routes",
+    "n5-routes",
     "route-holdout-n1-n5",
     "reaction-holdout-n1-n5",
+    "n1-single-step-reactions",
+    "n5-single-step-reactions",
+    "single-step-route-holdout-n1-n5",
     "single-step-reaction-holdout-n1-n5",
 ]
 TrainingSplitName = Literal["all", "training", "validation"]
@@ -61,20 +66,49 @@ class DownloadedBenchmarkAssets:
 
 @dataclass(frozen=True)
 class TrainingArtifactSpec:
+    supported_splits: tuple[TrainingSplitName, ...]
     supported_formats: tuple[TrainingSetFormat, ...]
     suffix_by_format: dict[TrainingSetFormat, str]
 
 
 TRAINING_ARTIFACT_SPECS: dict[str, TrainingArtifactSpec] = {
+    "n1-routes": TrainingArtifactSpec(
+        supported_splits=("all",),
+        supported_formats=("jsonl",),
+        suffix_by_format={"jsonl": ".jsonl.gz"},
+    ),
+    "n5-routes": TrainingArtifactSpec(
+        supported_splits=("all",),
+        supported_formats=("jsonl",),
+        suffix_by_format={"jsonl": ".jsonl.gz"},
+    ),
     "route-holdout-n1-n5": TrainingArtifactSpec(
+        supported_splits=("all", "training", "validation"),
         supported_formats=("jsonl",),
         suffix_by_format={"jsonl": ".jsonl.gz"},
     ),
     "reaction-holdout-n1-n5": TrainingArtifactSpec(
+        supported_splits=("all", "training", "validation"),
         supported_formats=("jsonl",),
         suffix_by_format={"jsonl": ".jsonl.gz"},
     ),
+    "n1-single-step-reactions": TrainingArtifactSpec(
+        supported_splits=("all",),
+        supported_formats=("jsonl", "rsmi"),
+        suffix_by_format={"jsonl": ".jsonl.gz", "rsmi": ".rsmi.txt.gz"},
+    ),
+    "n5-single-step-reactions": TrainingArtifactSpec(
+        supported_splits=("all",),
+        supported_formats=("jsonl", "rsmi"),
+        suffix_by_format={"jsonl": ".jsonl.gz", "rsmi": ".rsmi.txt.gz"},
+    ),
+    "single-step-route-holdout-n1-n5": TrainingArtifactSpec(
+        supported_splits=("all", "training", "validation"),
+        supported_formats=("jsonl", "rsmi"),
+        suffix_by_format={"jsonl": ".jsonl.gz", "rsmi": ".rsmi.txt.gz"},
+    ),
     "single-step-reaction-holdout-n1-n5": TrainingArtifactSpec(
+        supported_splits=("all", "training", "validation"),
         supported_formats=("jsonl", "rsmi"),
         suffix_by_format={"jsonl": ".jsonl.gz", "rsmi": ".rsmi.txt.gz"},
     ),
@@ -265,13 +299,20 @@ def validate_training_dataset_request(
             code="dataset.unsupported_split",
             context={"split": split},
         )
+    artifact_spec = TRAINING_ARTIFACT_SPECS[artifact]
+    if split not in artifact_spec.supported_splits:
+        raise ConfigurationError(
+            f"artifact '{artifact}' does not support split '{split}'",
+            code="dataset.split_mismatch",
+            context={"artifact": artifact, "split": split, "supported_splits": list(artifact_spec.supported_splits)},
+        )
     if format not in {"jsonl", "rsmi"}:
         raise ConfigurationError(
             f"unsupported training dataset format: {format}",
             code="dataset.unsupported_format",
             context={"format": format},
         )
-    supported_formats = TRAINING_ARTIFACT_SPECS[artifact].supported_formats
+    supported_formats = artifact_spec.supported_formats
     if format not in supported_formats:
         raise ConfigurationError(
             f"artifact '{artifact}' does not support format '{format}'",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections import defaultdict
 from collections.abc import Sequence
 from pathlib import Path
@@ -27,12 +28,6 @@ class TrainingReactionReleaseBuilder:
         self._started = False
 
     def build(self) -> TrainingReactionBuildResult:
-        if self.config.holdout_mode != "reaction":
-            raise TrainingReleaseError(
-                "single-step training release requires TrainingSetBuildConfig(holdout_mode='reaction')",
-                code="workflow.single_step_requires_reaction_holdout",
-                context={"holdout_mode": self.config.holdout_mode},
-            )
         if self._started:
             raise RuntimeError("TrainingReactionReleaseBuilder instances are single-use")
         self._started = True
@@ -40,19 +35,31 @@ class TrainingReactionReleaseBuilder:
         training, training_postprocessing = self._build_split("training")
         validation_before, validation_postprocessing = self._build_split("validation")
         overlap_before = _summarize_cross_split_overlap(training, validation_before)
-        training_keys = {_reaction_identity(record) for record in training}
-        validation = [record for record in validation_before if _reaction_identity(record) not in training_keys]
-        overlap_removed = len(validation_before) - len(validation)
+        if self.config.holdout_mode == "reaction":
+            training_keys = {_reaction_identity(record) for record in training}
+            validation = [record for record in validation_before if _reaction_identity(record) not in training_keys]
+            overlap_removed = len(validation_before) - len(validation)
+        else:
+            validation = validation_before
+            overlap_removed = 0
         overlap_after = _summarize_cross_split_overlap(training, validation)
-        if overlap_after["shared_reaction_identities"] or overlap_after["shared_exact_reaction_signatures"]:
+        if self.config.holdout_mode == "reaction" and (
+            overlap_after["shared_reaction_identities"] or overlap_after["shared_exact_reaction_signatures"]
+        ):
             raise TrainingReleaseError(
                 "single-step release validation split still overlaps with training after cleanup",
                 code="workflow.single_step_validation_overlap",
                 context=overlap_after,
             )
+        if self.config.holdout_mode == "route" and overlap_after["shared_reaction_identities"]:
+            warnings.warn(
+                "single-step route-holdout release has cross-split reaction identity overlap",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         records = _renumber([*training, *validation], prefix=self.config.route_prefix)
         return TrainingReactionBuildResult(
-            release_name="single-step-reaction-holdout-n1-n5",
+            release_name=f"single-step-{self.config.release_name}",
             records=records,
             summary={
                 "reaction_postprocessing": {

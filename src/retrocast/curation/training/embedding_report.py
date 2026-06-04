@@ -8,7 +8,7 @@ from retrocast.curation.training.embedding_audit import (
     QuerySetAudit,
     RouteEmbeddingAudit,
 )
-from retrocast.markdown import MarkdownAlign, MarkdownRow, markdown_table
+from retrocast.markdown import MarkdownAlign, MarkdownRow, format_integer, markdown_table
 
 
 def render_route_embedding_audit_markdown(
@@ -24,9 +24,9 @@ def render_route_embedding_audit_markdown(
         f"- allow leaf extension: `{str(audit.allow_leaf_extension).lower()}`",
         "- partial minimum reactions: "
         f"{f'{audit.partial_min_reactions} reactions' if audit.partial_min_reactions is not None else 'not run'}",
-        f"- {container_label} routes: {_format_integer(audit.container_routes)}",
-        f"- {container_route_label} signatures: {_format_integer(audit.container_route_signatures)}",
-        f"- {container_label} reaction signatures: {_format_integer(audit.container_reaction_signatures)}",
+        f"- {container_label} routes: {format_integer(audit.container_routes)}",
+        f"- {container_route_label} signatures: {format_integer(audit.container_route_signatures)}",
+        f"- {container_label} reaction signatures: {format_integer(audit.container_reaction_signatures)}",
         "",
         "terms: a query route is the route being searched for. "
         f"a container route is a {container_route_label} where an embedding is found.",
@@ -53,7 +53,7 @@ def _summary_table(query_sets: Sequence[QuerySetAudit], *, container_label: str)
         return (label, *values)
 
     rows = [
-        row("query routes", [_format_integer(q.query_routes) for q in query_sets]),
+        row("query routes", [format_integer(q.query_routes) for q in query_sets]),
         row(
             f"reaction signatures in {container_label}",
             [_format_count_rate(q.reaction_signature_overlap, q.query_reaction_signatures) for q in query_sets],
@@ -88,7 +88,7 @@ def _overlap_summary(query_set: QuerySetAudit, *, container_label: str) -> str:
     lines.append(
         f"{_format_count_rate(full.query_routes_with_embedding, query_set.query_routes)} "
         f"query routes are fully embedded somewhere inside {container_label} routes. "
-        f"these produce {_format_integer(full.embedding_occurrences)} total matching occurrences. "
+        f"these produce {format_integer(full.embedding_occurrences)} total matching occurrences. "
         f"{_format_plural(full.query_routes_with_root_shifted_embedding, 'query route has', 'query routes have')} "
         "a root-shifted full embedding; "
         f"{_format_plural(full.query_routes_with_leaf_extended_embedding, 'query route has', 'query routes have')} "
@@ -109,11 +109,11 @@ def _internal_subroute_summary(query_set: QuerySetAudit, summary: InternalSubrou
     return (
         f"{_format_count_rate(summary.query_routes_with_embedding, query_set.query_routes)} "
         f"query routes have at least one embedded internal subroute of {summary.min_reactions}+ reactions. "
-        f"there are {_format_integer(summary.checked_internal_subroutes)} non-root internal subroutes "
+        f"there are {format_integer(summary.checked_internal_subroutes)} non-root internal subroutes "
         f"with at least {summary.min_reactions} reactions. "
         f"{_format_count_rate(summary.embedded_internal_subroutes, summary.checked_internal_subroutes)} "
         "of those internal subroutes are embedded. "
-        f"there are {_format_integer(summary.embedding_occurrences)} total partial matching occurrences "
+        f"there are {format_integer(summary.embedding_occurrences)} total partial matching occurrences "
         f"({matches_per_embedded_subroute:.2f} "
         "matches per embedded internal subroute)."
     )
@@ -136,7 +136,7 @@ def _prefix_depth_summary(query_set: QuerySetAudit, *, container_label: str) -> 
                 [
                     (
                         row.depth,
-                        _format_integer(row.query_routes),
+                        format_integer(row.query_routes),
                         _format_count_rate(row.root_prefix_signature_overlap, row.query_routes),
                         _format_count_rate(row.subtree_prefix_signature_overlap, row.query_routes),
                     )
@@ -204,7 +204,7 @@ def _best_match_coverage(
             markdown_table(
                 ["largest embedded fraction of query-route reactions", "query routes"],
                 [
-                    (bucket, _format_integer(query_routes))
+                    (bucket, format_integer(query_routes))
                     for bucket, query_routes in coverage.matched_fraction_histogram
                 ],
                 align=["left", "right"],
@@ -225,11 +225,11 @@ def _coverage_table(
         ["population", "mean", "median", "p90"],
         [
             (
-                f"all query routes ({_format_integer(all_query_routes)})",
+                f"all query routes ({format_integer(all_query_routes)})",
                 *(_format_percent(value) for value in all_values),
             ),
             (
-                f"query routes with any embedding ({_format_integer(embedded_query_routes)})",
+                f"query routes with any embedding ({format_integer(embedded_query_routes)})",
                 *(_format_percent(value) for value in embedded_values),
             ),
         ],
@@ -239,7 +239,7 @@ def _coverage_table(
 
 def _format_count_rate(count: int, denominator: int) -> str:
     rate = count / denominator if denominator else 0.0
-    return f"{_format_integer(count)} / {_format_integer(denominator)} ({_format_percent(rate)})"
+    return f"{format_integer(count)} / {format_integer(denominator)} ({_format_percent(rate)})"
 
 
 def _format_internal_query_count(query_set: QuerySetAudit) -> str:
@@ -254,12 +254,8 @@ def _format_percent(value: float) -> str:
     return f"{100 * value:.1f}%"
 
 
-def _format_integer(value: int) -> str:
-    return f"{value:,}".replace(",", " ")
-
-
 def _format_plural(value: int, singular: str, plural: str) -> str:
-    return f"{_format_integer(value)} {singular if value == 1 else plural}"
+    return f"{format_integer(value)} {singular if value == 1 else plural}"
 
 
 def _format_root_distance_sentence(counts: Sequence[tuple[int, int]]) -> str:

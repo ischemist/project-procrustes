@@ -17,6 +17,10 @@ from retrocast.curation.training import (
     TrainingRouteReleaseBuilder,
     TrainingSetBuildConfig,
     adapt_training_routes,
+    build_test_reaction_records,
+    build_test_route_records,
+    write_test_reaction_release,
+    write_test_route_release,
     write_training_reaction_release,
     write_training_release,
 )
@@ -28,14 +32,12 @@ from retrocast.curation.training.audit import (
     build_route_release_split_audit,
     duplicate_count,
     exact_reaction_record_key,
-    load_holdout_reference,
     reaction_record_identity_key,
     render_route_release_split_audit_markdown,
-    render_sanity_checks_markdown,
-    render_single_step_sanity_markdown,
 )
+from retrocast.curation.training.route_release import summarize_records
 from retrocast.exceptions import AdapterError, TrainingReleaseError
-from retrocast.io import load_training_route_records, save_json_gz, save_jsonl_gz, save_lines_gz
+from retrocast.io import iter_jsonl_gz, load_training_route_records, save_json_gz, save_jsonl_gz, save_lines_gz
 from retrocast.models import Molecule, Reaction, Route
 from retrocast.typing import InChIKeyStr, ReactionSmilesStr, SmilesStr
 
@@ -89,6 +91,19 @@ def test_schema_v2_training_route_and_reaction_release_roundtrip(
     assert reaction_manifest["output_files"]["all"]["content_hash"] is not None
 
 
+def test_route_summary_depth_counts_are_sorted_numerically() -> None:
+    summary = summarize_records(
+        [
+            route_record("depth-10", linear_route(depth=10), split="training"),
+            route_record("depth-2-a", linear_route(depth=2), split="training"),
+            route_record("depth-3", linear_route(depth=3), split="training"),
+            route_record("depth-2-b", linear_route(depth=2), split="training"),
+        ]
+    )
+
+    assert summary["by_depth"] == {"2": 2, "3": 1, "10": 1}
+
+
 def test_route_release_collapses_mapped_variants_and_preserves_sources() -> None:
     route_a = one_step_route("C.C>>CC", patent_id="patent-a")
     route_b = one_step_route("[CH3:1].[CH3:2]>>[CH3:1][CH3:2]", patent_id="patent-b")
@@ -112,6 +127,59 @@ def test_route_release_collapses_mapped_variants_and_preserves_sources() -> None
     assert record.route.target.product_of.annotations["alternative_mapped_smiles"] == [
         "[CH3:1].[CH3:2]>>[CH3:1][CH3:2]"
     ]
+
+
+def test_test_set_release_writes_routes_and_occurrence_preserving_reactions(tmp_path: Path) -> None:
+    adapted = [adapted_route("n1-a", two_step_route())]
+    route_records = build_test_route_records(dataset="n1", routes=adapted)
+    reaction_records = build_test_reaction_records(dataset="n1", route_records=route_records)
+
+    assert route_records[0].id == "paroutes-n1-routes-00001"
+    assert len(reaction_records) == 2
+    assert [source.route_id for record in reaction_records for source in record.sources] == [
+        "paroutes-n1-routes-00001",
+        "paroutes-n1-routes-00001",
+    ]
+    assert [source.step_index for record in reaction_records for source in record.sources] == [1, 2]
+
+    write_test_route_release(
+        dataset="n1",
+        records=route_records,
+        adaptation=adaptation_stats(raw=1, adapted=1),
+        output_dir=tmp_path,
+        source_paths=[],
+        source_root=tmp_path,
+    )
+    write_test_reaction_release(
+        dataset="n1",
+        records=reaction_records,
+        output_dir=tmp_path,
+        source_paths=[tmp_path / "n1-routes" / "all.jsonl.gz", tmp_path / "n1-routes" / "manifest.json"],
+        source_root=tmp_path,
+    )
+
+    assert len(list(iter_jsonl_gz(tmp_path / "n1-routes" / "all.jsonl.gz"))) == 1
+    assert len(list(iter_jsonl_gz(tmp_path / "n1-single-step-reactions" / "all.jsonl.gz"))) == 2
+    assert (tmp_path / "n1-routes" / "manifest.json").exists()
+    assert (tmp_path / "n1-single-step-reactions" / "all.rsmi.txt.gz").exists()
+
+
+def test_test_set_reaction_release_hashes_conditionless_records(tmp_path: Path) -> None:
+    route_records = build_test_route_records(dataset="n1", routes=[adapted_route("n1-a", one_step_route("C.C>>CC"))])
+    reaction_records = build_test_reaction_records(dataset="n1", route_records=route_records)
+
+    assert reaction_records[0].condition_slot is None
+    assert reaction_records[0].condition_slot_smiles == []
+
+    write_test_reaction_release(
+        dataset="n1",
+        records=reaction_records,
+        output_dir=tmp_path,
+        source_paths=[],
+        source_root=tmp_path,
+    )
+
+    assert (tmp_path / "n1-single-step-reactions" / "manifest.json").exists()
 
 
 def test_route_release_keeps_condition_variants_separate() -> None:
@@ -139,38 +207,36 @@ def test_route_audit_allows_condition_distinct_same_structure() -> None:
     audit_route_release_sanity(
         release_name="route-holdout-n1-n5",
         files=RouteReleaseFiles(all=records, training=records, validation=[]),
-        holdout={},
     )
 
 
-def test_route_split_audit_markdown_summarizes_depth_and_convergence(tmp_path: Path) -> None:
+def test_route_split_audit_markdown_summarizes_releases_and_depth() -> None:
     records = [
         route_record("train", one_step_route("C.C>>CC"), split="training"),
         route_record("val", two_step_route(), split="validation"),
     ]
-    release_dir = tmp_path / "route-holdout-n1-n5"
-    release_dir.mkdir()
-    (release_dir / "manifest.json").write_text(
-        json.dumps({"summary": {"adaptation": {"n1": {"raw_routes": 1}, "n5": {"raw_routes": 0}}}}),
-        encoding="utf-8",
-    )
 
     audit = build_route_release_split_audit(release_name="route-holdout-n1-n5", route_records=records)
-    markdown = render_route_release_split_audit_markdown(release_root_name="v1", audits=[audit])
+    markdown = render_route_release_split_audit_markdown(
+        release_root_name="v1",
+        audits=[audit],
+        summary_rows=[
+            audit,
+            {
+                "release_name": "single-step-route-holdout-n1-n5",
+                "total": 2000,
+                "training": 1500,
+                "validation": 500,
+            },
+        ],
+    )
 
-    assert load_holdout_reference(release_dir) == {"n1": 1, "n5": 0}
     assert audit["total"] == 2
     assert "| route-holdout-n1-n5 | 2 | 1 | 1 | 50.0000% |" in markdown
-    assert "| false |" in markdown
-    assert "| true |" in markdown
-
-
-def test_route_sanity_markdown_reports_success_counts() -> None:
-    checks = {"route": {"all_count": 2, "training_count": 1, "validation_count": 1, "holdout_count": 3}}
-
-    markdown = render_sanity_checks_markdown(checks)
-
-    assert "| route | 2 | 1 | 1 | 3 |" in markdown
+    assert "| single-step-route-holdout-n1-n5 | 2 000 | 1 500 | 500 | 25.0000% |" in markdown
+    assert "## sanity checks" not in markdown
+    assert "## single-step sanity" not in markdown
+    assert "convergent" not in markdown
 
 
 def test_route_audit_rejects_release_identity_failures() -> None:
@@ -210,7 +276,6 @@ def test_route_audit_rejects_release_identity_failures() -> None:
                 training=all_records[:4] + [wrong_split],
                 validation=[duplicate_validation_a, duplicate_validation_b, wrong_validation],
             ),
-            holdout={},
         )
 
     assert error.value.code == "workflow.route_release_audit_failed"
@@ -275,6 +340,29 @@ def test_reaction_release_deduplicates_and_removes_validation_overlap() -> None:
     )
 
 
+def test_route_holdout_reaction_release_keeps_validation_overlap_with_warning() -> None:
+    training_route = one_step_route("C.C>O>CC", condition_slot_smiles=["O"])
+    validation_overlap = one_step_route("[CH3:1].[CH3:2]>O>[CH3:1][CH3:2]", condition_slot_smiles=["O"])
+    config = TrainingSetBuildConfig(holdout_mode="route", val_fraction=0.0, show_progress=False)
+
+    with pytest.warns(RuntimeWarning, match="cross-split reaction identity overlap"):
+        result = TrainingReactionReleaseBuilder(
+            route_records=[
+                route_record("train", training_route, split="training"),
+                route_record("val-overlap", validation_overlap, split="validation"),
+            ],
+            config=config,
+        ).build()
+
+    assert result.release_name == "single-step-route-holdout-n1-n5"
+    assert [record.split for record in result.records] == ["training", "validation"]
+    assert result.summary["reaction_postprocessing"]["validation"]["overlap_removed_from_validation"] == 0
+    assert (
+        result.summary["reaction_postprocessing"]["cross_split_overlap_after_cleanup"]["shared_reaction_identities"]
+        == 1
+    )
+
+
 def test_reaction_release_merges_exact_duplicate_sources() -> None:
     route = one_step_route("C.C>>CC")
     config = TrainingSetBuildConfig(holdout_mode="reaction", val_fraction=0.0, show_progress=False)
@@ -293,15 +381,8 @@ def test_reaction_release_merges_exact_duplicate_sources() -> None:
     assert result.summary["reaction_postprocessing"]["training"]["mapped_smiles_variants_collapsed"] == 0
 
 
-def test_reaction_release_requires_reaction_holdout_and_mapped_reactions() -> None:
+def test_reaction_release_requires_mapped_reactions() -> None:
     route = one_step_route(None)
-
-    with pytest.raises(TrainingReleaseError, match="requires") as config_error:
-        TrainingReactionReleaseBuilder(
-            route_records=[route_record("route", route, split="training")],
-            config=TrainingSetBuildConfig(holdout_mode="route", show_progress=False),
-        ).build()
-    assert config_error.value.code == "workflow.single_step_requires_reaction_holdout"
 
     with pytest.raises(TrainingReleaseError, match="mapped_reaction_smiles") as mapped_error:
         TrainingReactionReleaseBuilder(
@@ -353,12 +434,12 @@ def test_single_step_audit_success_absent_release_and_identity_helpers(tmp_path:
 
     assert result == {
         "release_name": "single-step-reaction-holdout-n1-n5",
-        "records": 2,
+        "total": 2,
         "training": 1,
         "validation": 1,
         "parent_routes": 2,
+        "cross_split_reaction_identity_overlap": 0,
     }
-    assert "| single-step-reaction-holdout-n1-n5 | 2 | 1 | 1 | 2 |" in render_single_step_sanity_markdown(result)
     assert duplicate_count([1, 1, 2]) == 1
     assert exact_reaction_record_key(training) == ("C.C>>CC", ("O",), None)
     assert reaction_record_identity_key(training) == (("C", "C"), "CC", ("O",))
@@ -539,6 +620,20 @@ def two_step_route() -> Route:
         ),
         annotations={"patent_id": "patent"},
     )
+
+
+def linear_route(*, depth: int) -> Route:
+    current = molecule("C")
+    for index in range(depth):
+        current = molecule(
+            "C" * (index + 2),
+            product_of=Reaction(
+                reactants=[current, molecule("C")],
+                mapped_reaction_smiles=ReactionSmilesStr("C.C>>CC"),
+                annotations={"source_id": f"patent;{index + 1}"},
+            ),
+        )
+    return Route(target=current, annotations={"patent_id": "patent"})
 
 
 def molecule(smiles: str, *, product_of: Reaction | None = None) -> Molecule:

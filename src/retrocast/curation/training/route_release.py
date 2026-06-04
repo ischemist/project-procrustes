@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import random
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
+from rich.console import Console
 from tqdm.auto import tqdm
 
 from retrocast._version import __version__
 from retrocast.adapters.paroutes import ConditionSlotParseStatistics, PaRoutesAdapter, analyze_condition_slots
 from retrocast.chem import canonicalize_smiles, get_inchi_key
+from retrocast.cli.progress import step_progress
 from retrocast.curation.filtering import excise_reactions_from_route
 from retrocast.curation.training.records import (
     AdaptationStatistics,
@@ -32,6 +35,12 @@ from retrocast.typing import InChIKeyStr, SmilesStr
 
 TRAINING_RELEASE_ACTION = "scripts/paroutes/training-set-prep/create-training-release"
 PAROUTES_TRAINING_ROUTE_ID_WIDTH = 6
+
+
+def _phase(step, description: str):
+    if step is None:
+        return nullcontext()
+    return step(description)
 
 
 def stable_raw_route_hash(raw_route: dict[str, Any]) -> str:
@@ -134,60 +143,70 @@ class TrainingRouteReleaseBuilder:
             raise RuntimeError("TrainingRouteReleaseBuilder instances are single-use")
         self._started = True
 
-        holdout_route_signatures = {
-            route.route.signature() for routes in self.holdout_routes.values() for route in routes
-        }
-        holdout_reaction_signatures = (
-            {
-                signature
-                for routes in self.holdout_routes.values()
-                for route in routes
-                for signature in route.route.reaction_signatures()
-            }
-            if self.config.holdout_mode == "reaction"
-            else set()
-        )
+        if not self.config.show_progress:
+            return self._build(step=None)
 
-        candidates = []
-        skipped_route_holdout = 0
-        routes_with_overlapping_reactions = 0
-        reaction_excision_fragments = 0
-        routes_fully_removed_after_excision = 0
-        for route in self.all_routes:
-            structural_signature = route.route.signature()
-            if structural_signature in holdout_route_signatures:
-                skipped_route_holdout += 1
-                continue
-            if (
-                self.config.holdout_mode == "reaction"
-                and route.route.reaction_signatures() & holdout_reaction_signatures
-            ):
-                routes_with_overlapping_reactions += 1
-                fragments = excise_reactions_from_route(route.route, holdout_reaction_signatures)
-                if not fragments:
-                    routes_fully_removed_after_excision += 1
+        with step_progress(console=Console(), total=self._build_step_count(), transient=True) as step:
+            return self._build(step=step)
+
+    def _build_step_count(self) -> int:
+        return 6 if self.config.holdout_mode == "reaction" else 5
+
+    def _build(self, *, step) -> TrainingSetBuildResult:
+        with _phase(step, f"{self.config.holdout_mode}: collect holdout routes"):
+            holdout_routes = [route for routes in self.holdout_routes.values() for route in routes]
+            holdout_route_signatures = {route.route.signature() for route in holdout_routes}
+
+        holdout_reaction_signatures = set()
+        if self.config.holdout_mode == "reaction":
+            with _phase(step, "reaction: collect holdout reactions"):
+                for route in holdout_routes:
+                    holdout_reaction_signatures.update(route.route.reaction_signatures())
+
+        with _phase(step, f"{self.config.holdout_mode}: prepare candidates"):
+            candidates = []
+            skipped_route_holdout = 0
+            routes_with_overlapping_reactions = 0
+            reaction_excision_fragments = 0
+            routes_fully_removed_after_excision = 0
+            for route in self.all_routes:
+                structural_signature = route.route.signature()
+                if structural_signature in holdout_route_signatures:
+                    skipped_route_holdout += 1
                     continue
-                reaction_excision_fragments += len(fragments)
-                for fragment in fragments:
-                    candidates.append(
-                        PreparedTrainingRoute(
-                            route=fragment,
-                            structural_signature=fragment.signature(),
-                            sources=[route.source],
+                if (
+                    self.config.holdout_mode == "reaction"
+                    and route.route.reaction_signatures() & holdout_reaction_signatures
+                ):
+                    routes_with_overlapping_reactions += 1
+                    fragments = excise_reactions_from_route(route.route, holdout_reaction_signatures)
+                    if not fragments:
+                        routes_fully_removed_after_excision += 1
+                        continue
+                    reaction_excision_fragments += len(fragments)
+                    for fragment in fragments:
+                        candidates.append(
+                            PreparedTrainingRoute(
+                                route=fragment,
+                                structural_signature=fragment.signature(),
+                                sources=[route.source],
+                            )
                         )
+                    continue
+                candidates.append(
+                    PreparedTrainingRoute(
+                        route=route.route,
+                        structural_signature=structural_signature,
+                        sources=[route.source],
                     )
-                continue
-            candidates.append(
-                PreparedTrainingRoute(
-                    route=route.route,
-                    structural_signature=structural_signature,
-                    sources=[route.source],
                 )
-            )
 
-        exact_unique, exact_duplicates_removed = _merge_exact_route_duplicates(candidates)
-        transform_unique, mapped_variants_collapsed = _merge_transform_route_variants(exact_unique)
-        records = self._build_records(transform_unique)
+        with _phase(step, f"{self.config.holdout_mode}: merge exact duplicates"):
+            exact_unique, exact_duplicates_removed = _merge_exact_route_duplicates(candidates)
+        with _phase(step, f"{self.config.holdout_mode}: collapse mapped variants"):
+            transform_unique, mapped_variants_collapsed = _merge_transform_route_variants(exact_unique)
+        with _phase(step, f"{self.config.holdout_mode}: assign splits"):
+            records = self._build_records(transform_unique)
         summary = {
             "input": {"all_routes": len(self.all_routes)},
             "adaptation": {
@@ -212,7 +231,10 @@ class TrainingRouteReleaseBuilder:
         }
         return TrainingSetBuildResult(release_name=self.config.release_name, records=records, summary=summary)
 
-    def _build_records(self, routes: Sequence[PreparedTrainingRoute]) -> list[TrainingRouteRecord]:
+    def _build_records(
+        self,
+        routes: Sequence[PreparedTrainingRoute],
+    ) -> list[TrainingRouteRecord]:
         validation_ids = _validation_indices(routes, val_fraction=self.config.val_fraction, seed=self.config.seed)
         width = max(6, len(str(len(routes))))
         records = []
@@ -274,9 +296,10 @@ def write_training_release(
 def summarize_records(records: Sequence[TrainingRouteRecord]) -> dict[str, Any]:
     training = sum(1 for record in records if record.split == "training")
     validation = sum(1 for record in records if record.split == "validation")
+    depths = Counter(record.route.depth() for record in records)
     return {
         "all_records": {"total": len(records), "training": training, "validation": validation},
-        "by_depth": _count_by(records, lambda record: str(record.route.depth())),
+        "by_depth": {str(depth): depths[depth] for depth in sorted(depths)},
     }
 
 
@@ -330,7 +353,9 @@ def extract_paroutes_reaction_hash_by_source_id(raw_route: Mapping[str, Any]) ->
     return reaction_hash_by_source_id
 
 
-def _merge_exact_route_duplicates(routes: Sequence[PreparedTrainingRoute]) -> tuple[list[PreparedTrainingRoute], int]:
+def _merge_exact_route_duplicates(
+    routes: Sequence[PreparedTrainingRoute],
+) -> tuple[list[PreparedTrainingRoute], int]:
     grouped: dict[tuple[Any, ...], PreparedTrainingRoute] = {}
     duplicates_removed = 0
     for route in routes:
@@ -346,7 +371,9 @@ def _merge_exact_route_duplicates(routes: Sequence[PreparedTrainingRoute]) -> tu
     return list(grouped.values()), duplicates_removed
 
 
-def _merge_transform_route_variants(routes: Sequence[PreparedTrainingRoute]) -> tuple[list[PreparedTrainingRoute], int]:
+def _merge_transform_route_variants(
+    routes: Sequence[PreparedTrainingRoute],
+) -> tuple[list[PreparedTrainingRoute], int]:
     groups: dict[tuple[Any, ...], list[PreparedTrainingRoute]] = defaultdict(list)
     for route in routes:
         groups[_route_transform_key(route.route)].append(route)
@@ -470,10 +497,3 @@ def _validation_indices(routes: Sequence[PreparedTrainingRoute], *, val_fraction
         if count > 0:
             validation.update(rng.sample(indices, count))
     return validation
-
-
-def _count_by(records: Sequence[TrainingRouteRecord], key_fn) -> dict[str, int]:
-    counts: dict[str, int] = defaultdict(int)
-    for record in records:
-        counts[key_fn(record)] += 1
-    return dict(sorted(counts.items()))

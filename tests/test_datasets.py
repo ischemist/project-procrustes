@@ -71,6 +71,26 @@ def test_download_training_set_rejects_unsupported_format(tmp_path: Path) -> Non
         )
 
 
+def test_download_training_set_allows_n1_all_only_artifacts(tmp_path: Path) -> None:
+    remote_root = tmp_path / "remote"
+    write_n1_test_release(remote_root)
+
+    path = download_training_set(
+        "paroutes",
+        artifact="n1-single-step-reactions",
+        split="all",
+        format="rsmi",
+        base_url=remote_root.resolve().as_uri(),
+        cache_dir=tmp_path / "cache",
+    )
+
+    assert path == tmp_path / "cache" / "paroutes" / "v2026-05-12" / "n1-single-step-reactions" / "all.rsmi.txt.gz"
+    assert path.exists()
+    with pytest.raises(ConfigurationError) as exc_info:
+        validate_training_dataset_request(dataset="paroutes", artifact="n1-routes", split="training", format="jsonl")
+    assert exc_info.value.code == "dataset.split_mismatch"
+
+
 @pytest.mark.parametrize(
     ("kwargs", "code"),
     [
@@ -338,6 +358,27 @@ def write_training_release(remote_root: Path) -> None:
         paths=[
             Path("single-step-reaction-holdout-n1-n5/training.rsmi.txt.gz"),
             Path("single-step-reaction-holdout-n1-n5/manifest.json"),
+        ],
+    )
+
+
+def write_n1_test_release(remote_root: Path) -> None:
+    artifact_dir = remote_root / "paroutes" / "v2026-05-12" / "n1-single-step-reactions"
+    artifact_dir.mkdir(parents=True)
+    (remote_root / "paroutes").mkdir(exist_ok=True)
+    (remote_root / "paroutes" / "latest.json").write_text(
+        json.dumps({"dataset": "paroutes", "latest_release": "v2026-05-12"}),
+        encoding="utf-8",
+    )
+    with gzip.open(artifact_dir / "all.rsmi.txt.gz", "wt", encoding="utf-8") as handle:
+        handle.write("c>o>cc\n")
+    (artifact_dir / "manifest.json").write_text('{"schema_version":"2"}', encoding="utf-8")
+    write_sha256sums(
+        remote_root / "paroutes" / "v2026-05-12" / "SHA256SUMS",
+        root=remote_root / "paroutes" / "v2026-05-12",
+        paths=[
+            Path("n1-single-step-reactions/all.rsmi.txt.gz"),
+            Path("n1-single-step-reactions/manifest.json"),
         ],
     )
 
