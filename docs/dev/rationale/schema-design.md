@@ -61,7 +61,7 @@ Identical molecules in different positions (e.g. same building block used in two
 
 ### Route path
 
-RetroCast uses deterministic paths to refer to molecules and reactions inside a `Route`. The full grammar lives in [Route Node IDs](../developer-reference/route-node-ids.md); but here's a useful cheat sheet:
+RetroCast uses deterministic paths to refer to molecules and reactions inside a `Route`. The full grammar lives in [Route Node IDs](../reference/route-node-ids.md); but here's a useful cheat sheet:
 
 - `rc:m:/` root target molecule
 - `rc:r:/` root reaction
@@ -290,7 +290,7 @@ def route_embeds_at(
 ) -> EmbeddingMatch | None: ...
 ```
 
-The detailed matching rules live in [Route Embedding](../developer-reference/route-embedding.md). The important schema-design point is small: exact subtree equality is a signature check; embedding is a route-to-route matching check.
+The detailed matching rules live in [Route Embedding](../reference/route-embedding.md). The important schema-design point is small: exact subtree equality is a signature check; embedding is a route-to-route matching check.
 
 ## Workflows
 
@@ -440,7 +440,7 @@ ingest_candidates(raw_payload, adapter, task, *, max_candidates: int | None = No
 
 ## 4. Score
 
-The ultimate method for scoring any synthesis plan is by passing it through the [Solv-N filter](/rationale/solv-n-evaluation), which is defined as:
+The ultimate method for scoring any synthesis plan is by passing it through the [Solv-N filter](/dev/rationale/solv-n-evaluation), which is defined as:
 
 ```text
 Solv-i[task] = Tier-i validity + satisfaction of task constraints.

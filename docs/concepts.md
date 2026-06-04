@@ -27,7 +27,7 @@ The adapter handles the raw format. The evaluation pipeline handles canonical ob
 
 ## Route
 
-In [RetroCast schema](/rationale/schema-design), a `Route` is a resolved AND/OR tree of `Molecule` and `Reaction` nodes.
+In [RetroCast schema](/dev/rationale/schema-design), a `Route` is a resolved AND/OR tree of `Molecule` and `Reaction` nodes.
 
 ```text
 Route -> Molecule -> Reaction -> Molecule -> Reaction -> ...
@@ -60,7 +60,7 @@ class Route(BaseModel):
 
 Identical molecules in different route positions are different nodes. This keeps the route as a tree, which makes serialization, traversal, and route signatures straightforward. Chemical identity is still represented by InChIKey-derived molecule keys; node identity is route-local.
 
-For the full design rationale, see [Schema Design](/rationale/schema-design).
+For the full design rationale, see [Schema Design](/dev/rationale/schema-design).
 
 ## Route-Local Node IDs
 
@@ -74,7 +74,7 @@ Evaluation artifacts sometimes need to point back into a route. RetroCast uses d
 
 These ids are addresses inside one route tree. They are not molecule identities and they are not serialized on `Molecule` or `Reaction` objects. Internally, code should use `RoutePath`; string ids are for artifacts, annotations, and UI boundaries.
 
-See [Route Node IDs](developer-reference/route-node-ids.md) for the full grammar.
+See [Route Node IDs](dev/reference/route-node-ids.md) for the full grammar.
 
 ## Route Signatures
 
@@ -166,7 +166,7 @@ Those results are stored separately in `Evaluation`:
 - `TargetResult` groups scored candidates for one target.
 - `Evaluation` groups all target results for one task.
 
-See [Solv-N Evaluation](/rationale/solv-n-evaluation) for the rationale behind the metric.
+See [Solv-N Evaluation](/dev/rationale/solv-n-evaluation) for the rationale behind the metric.
 
 ## Workflow
 

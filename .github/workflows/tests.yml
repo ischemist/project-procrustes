@@ -84,15 +84,35 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            const output = `### Pytest Coverage Report 🧪
+            const marker = "<!-- retrocast-pytest-coverage-report -->";
+            const output = `${marker}
+            ### Pytest Coverage Report 🧪
             \`\`\`
             ${{ steps.coverage.outputs.report }}
             \`\`\`
             `;
 
-            github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: output
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
             });
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body: output,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body: output,
+              });
+            }

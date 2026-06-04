@@ -125,4 +125,4 @@ from retrocast import get_adapter
 adapter = get_adapter("paroutes")
 ```
 
-See [Writing a Custom Adapter](../../developer-reference/adapters.md) for adapter contracts and raw-shape patterns.
+See [Writing a Custom Adapter](../../dev/reference/adapters.md) for adapter contracts and raw-shape patterns.

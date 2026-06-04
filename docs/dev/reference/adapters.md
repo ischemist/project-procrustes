@@ -4,7 +4,7 @@ icon: lucide/code-xml
 
 # Writing a Custom Adapter
 
-Every retrosynthesis planner has its own output format: nested molecule/reaction trees, route strings, custom xml payloads. The job of a single adapter is to handle one type of raw format and cast it into the canonical `Route` model (see [schema design](/rationale/schema-design) for a mental model of `Route`).
+Every retrosynthesis planner has its own output format: nested molecule/reaction trees, route strings, custom xml payloads. The job of a single adapter is to handle one type of raw format and cast it into the canonical `Route` model (see [schema design](/dev/rationale/schema-design) for a mental model of `Route`).
 
 The adapter-level data flow is:
 

@@ -44,16 +44,16 @@ nav = [
   ] },
   { "For Developers" = [
     { "Rationale" = [
-      "rationale/solv-n-evaluation.md",
-      "rationale/schema-design.md",
-      "rationale/training-set-releases.md",
+      "dev/rationale/solv-n-evaluation.md",
+      "dev/rationale/schema-design.md",
+      "dev/rationale/training-set-releases.md",
     ] },
     { "Reference" = [
-      "developer-reference/adapters.md",
-      "developer-reference/route-node-ids.md",
-      "developer-reference/route-embedding.md",
-      "developer-reference/errors.md",
-      "developer-reference/deprecations.md",
+      "dev/reference/adapters.md",
+      "dev/reference/route-node-ids.md",
+      "dev/reference/route-embedding.md",
+      "dev/reference/errors.md",
+      "dev/reference/deprecations.md",
     ] },
   ] },
 ]

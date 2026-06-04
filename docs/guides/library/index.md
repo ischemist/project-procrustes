@@ -65,4 +65,4 @@ report = analyze(evaluation)
 Solv-i[task] = Tier-i route validity + task constraint satisfaction
 ```
 
-For the deeper data-model rationale, see [Schema Design](/rationale/schema-design).
+For the deeper data-model rationale, see [Schema Design](/dev/rationale/schema-design).

@@ -233,13 +233,13 @@ Use `adapt_route(...)` or `adapt_routes(...)` for route-first inspection. Use `a
 Read [Concepts](concepts.md) to understand the schema-2 model and workflow.
 
 **Understand Schema Design**  
-Read [Schema Design](/rationale/schema-design) for the deeper data-model rationale.
+Read [Schema Design](/dev/rationale/schema-design) for the deeper data-model rationale.
 
 **Use the Python API**  
 Use the `retrocast.workflow` functions when integrating RetroCast into your own scripts.
 
 **Write Custom Adapters**  
-Need to support a new output format? See [Writing a Custom Adapter](developer-reference/adapters.md).
+Need to support a new output format? See [Writing a Custom Adapter](dev/reference/adapters.md).
 
 **Full CLI Reference**  
 See all available commands in the [CLI Reference](guides/cli.md).

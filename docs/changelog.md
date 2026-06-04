@@ -6,7 +6,7 @@ icon: lucide/history
 
 ## Pre-1.0 Compatibility Policy
 
-RetroCast is still pre-`1.0.0`. Until `1.0.0`, we will make breaking changes to the core schema or workflows whenever we see a compelling reason to do so. We'll try to keep some [sane deprecation schedule](developer-reference/deprecations.md) unless it incurs a significant complexity cost.
+RetroCast is still pre-`1.0.0`. Until `1.0.0`, we will make breaking changes to the core schema or workflows whenever we see a compelling reason to do so. We'll try to keep some [sane deprecation schedule](dev/reference/deprecations.md) unless it incurs a significant complexity cost.
 
 Practically speaking, you should treat `2-raw` (or wherever you store the raw planner outputs) as the source of truth and `3-processed`, `4-scored`, `5-results` as regenerable.
 
@@ -14,7 +14,7 @@ For most use cases, this should not be a problem since the full pipeline of inge
 
 ## v0.7.0 (in development, not yet released on PyPi)
 
-v0.7.0 updates RetroCast to new [schema design](/rationale/schema-design), check that page for the full mental model.
+v0.7.0 updates RetroCast to new [schema design](/dev/rationale/schema-design), check that page for the full mental model.
 
 ### Highlights
 
@@ -23,7 +23,7 @@ v0.7.0 updates RetroCast to new [schema design](/rationale/schema-design), check
 - Split the workflow around the schema-2 path: `adapt -> collect -> score -> analyze`.
 - Kept route-local node ids derived from tree position rather than serialized into `Molecule` or `Reaction` objects.
 - Added route signatures for full-route, prefix-depth, reaction, and subtree comparison.
-- Implemented [Solv-N scoring](/rationale/solv-n-evaluation): Tier-N route validity plus task-constraint satisfaction.
+- Implemented [Solv-N scoring](/dev/rationale/solv-n-evaluation): Tier-N route validity plus task-constraint satisfaction.
 
 ### Migration Notes
 
@@ -76,7 +76,7 @@ The v0.6.0 compatibility layer intentionally warns instead of removing the old n
 - legacy adapter class aliases such as `AizynthAdapter`, `DMSAdapter`, and `DreamRetroAdapter`
 - target-local adaptation helpers `adapt_single_route(...)` and `adapt_routes(...)`
 
-See the [deprecation schedule](developer-reference/deprecations.md) for the canonical removal plan.
+See the [deprecation schedule](dev/reference/deprecations.md) for the canonical removal plan.
 
 ### Migration
 
