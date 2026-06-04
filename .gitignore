@@ -97,5 +97,6 @@ data/retrocast/3-processed/
 data/retrocast/4-scored/
 data/retrocast/5-results/
 data/retrocast/6-comparisons/
+data/retrocast/audits/
 .private
 .codex

@@ -54,10 +54,10 @@ def main() -> None:
         }
         logger.info("loaded %s adapted %s query routes from %s", adaptation.stats.adapted_routes, dataset, path)
 
-    training_records = load_training_route_records(RELEASE_PATH)
+    container_records = load_training_route_records(RELEASE_PATH)
     audit = build_route_embedding_audit(
         release_name=RELEASE_NAME,
-        training_records=training_records,
+        container_records=container_records,
         queries_by_source=queries,
         match_level=MATCH_LEVEL,
         allow_leaf_extension=ALLOW_LEAF_EXTENSION,
@@ -67,7 +67,7 @@ def main() -> None:
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     LEDGER_OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_PATH.write_text(render_route_embedding_audit_markdown(audit), encoding="utf-8")
+    OUTPUT_PATH.write_text(render_route_embedding_audit_markdown(audit, container_label="training"), encoding="utf-8")
     ledger_rows = save_jsonl_gz(audit.ledger_rows, LEDGER_OUTPUT_PATH)
     logger.info(
         "wrote route embedding audit to %s and %s (%s ledger rows)", OUTPUT_PATH, LEDGER_OUTPUT_PATH, ledger_rows

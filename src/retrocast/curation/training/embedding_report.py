@@ -11,7 +11,12 @@ from retrocast.curation.training.embedding_audit import (
 from retrocast.markdown import MarkdownAlign, MarkdownRow, markdown_table
 
 
-def render_route_embedding_audit_markdown(audit: RouteEmbeddingAudit) -> str:
+def render_route_embedding_audit_markdown(
+    audit: RouteEmbeddingAudit,
+    *,
+    container_label: str = "container",
+) -> str:
+    container_route_label = f"{container_label} route"
     lines = [
         f"# route embedding audit: {audit.release_name}",
         "",
@@ -19,27 +24,27 @@ def render_route_embedding_audit_markdown(audit: RouteEmbeddingAudit) -> str:
         f"- allow leaf extension: `{str(audit.allow_leaf_extension).lower()}`",
         "- partial minimum reactions: "
         f"{f'{audit.partial_min_reactions} reactions' if audit.partial_min_reactions is not None else 'not run'}",
-        f"- training routes: {_format_integer(audit.training_routes)}",
-        f"- training route signatures: {_format_integer(audit.training_route_signatures)}",
-        f"- training reaction signatures: {_format_integer(audit.training_reaction_signatures)}",
+        f"- {container_label} routes: {_format_integer(audit.container_routes)}",
+        f"- {container_route_label} signatures: {_format_integer(audit.container_route_signatures)}",
+        f"- {container_label} reaction signatures: {_format_integer(audit.container_reaction_signatures)}",
         "",
         "terms: a query route is the route being searched for. "
-        "a container route is a training route where an embedding is found.",
+        f"a container route is a {container_route_label} where an embedding is found.",
         "",
-        _summary_table(audit.query_sets),
+        _summary_table(audit.query_sets, container_label=container_label),
     ]
 
     for query_set in audit.query_sets:
         lines.extend(["", f"## {query_set.source}", ""])
-        lines.extend(["### overlap summary", "", _overlap_summary(query_set)])
-        lines.extend(["", _prefix_depth_summary(query_set)])
+        lines.extend(["### overlap summary", "", _overlap_summary(query_set, container_label=container_label)])
+        lines.extend(["", _prefix_depth_summary(query_set, container_label=container_label)])
         if query_set.internal_subroute_embeddings is not None:
             lines.extend(["", _internal_subroute_summary(query_set, query_set.internal_subroute_embeddings)])
-        lines.extend(["", _best_match_coverage(query_set.coverage)])
+        lines.extend(["", _best_match_coverage(query_set.coverage, container_route_label=container_route_label)])
     return "\n".join(lines) + "\n"
 
 
-def _summary_table(query_sets: Sequence[QuerySetAudit]) -> str:
+def _summary_table(query_sets: Sequence[QuerySetAudit], *, container_label: str) -> str:
     align: list[MarkdownAlign] = ["left"]
     for _ in query_sets:
         align.append("right")
@@ -50,7 +55,7 @@ def _summary_table(query_sets: Sequence[QuerySetAudit]) -> str:
     rows = [
         row("query routes", [_format_integer(q.query_routes) for q in query_sets]),
         row(
-            "reaction signatures in training",
+            f"reaction signatures in {container_label}",
             [_format_count_rate(q.reaction_signature_overlap, q.query_reaction_signatures) for q in query_sets],
         ),
         row(
@@ -66,30 +71,30 @@ def _summary_table(query_sets: Sequence[QuerySetAudit]) -> str:
     return markdown_table(["metric", *(query_set.source for query_set in query_sets)], rows, align=align)
 
 
-def _overlap_summary(query_set: QuerySetAudit) -> str:
+def _overlap_summary(query_set: QuerySetAudit, *, container_label: str) -> str:
     full = query_set.full_embeddings
     lines = [
         f"{_format_count_rate(query_set.reaction_signature_overlap, query_set.query_reaction_signatures)} "
-        "reaction signatures are present in training; "
+        f"reaction signatures are present in {container_label}; "
         f"{_format_count_rate(query_set.exact_route_signature_overlap, query_set.query_routes)} "
         "query routes have exact route-signature matches.",
         "",
     ]
     if full.query_routes_with_embedding == 0:
-        lines.append("no query routes are fully embedded in training.")
+        lines.append(f"no query routes are fully embedded in {container_label}.")
         return "\n".join(lines)
 
     distance_counts = dict(full.root_distance_counts)
     lines.append(
         f"{_format_count_rate(full.query_routes_with_embedding, query_set.query_routes)} "
-        "query routes are fully embedded somewhere inside training routes. "
+        f"query routes are fully embedded somewhere inside {container_label} routes. "
         f"these produce {_format_integer(full.embedding_occurrences)} total matching occurrences. "
         f"{_format_plural(full.query_routes_with_root_shifted_embedding, 'query route has', 'query routes have')} "
         "a root-shifted full embedding; "
         f"{_format_plural(full.query_routes_with_leaf_extended_embedding, 'query route has', 'query routes have')} "
         "a leaf-extended full embedding. "
         f"{_format_plural(distance_counts.get(0, 0), 'occurrence shares', 'occurrences share')} "
-        "the training target (distance 0 from the root); "
+        f"the {container_label} target (distance 0 from the root); "
         f"{_format_root_distance_sentence(full.root_distance_counts)}."
     )
     return "\n".join(lines)
@@ -114,15 +119,20 @@ def _internal_subroute_summary(query_set: QuerySetAudit, summary: InternalSubrou
     )
 
 
-def _prefix_depth_summary(query_set: QuerySetAudit) -> str:
+def _prefix_depth_summary(query_set: QuerySetAudit, *, container_label: str) -> str:
     return "\n".join(
         [
             "### root-prefix overlap",
             "",
-            "query route prefixes are compared to training route prefixes with `route.signature(depth=k)`.",
+            f"query route prefixes are compared to {container_label} route prefixes with `route.signature(depth=k)`.",
             "",
             markdown_table(
-                ["prefix depth", "query routes with depth", "found at training root", "found anywhere in training"],
+                [
+                    "prefix depth",
+                    "query routes with depth",
+                    f"found at {container_label} root",
+                    f"found anywhere in {container_label}",
+                ],
                 [
                     (
                         row.depth,
@@ -138,7 +148,11 @@ def _prefix_depth_summary(query_set: QuerySetAudit) -> str:
     )
 
 
-def _best_match_coverage(coverage: CoverageSummary) -> str:
+def _best_match_coverage(
+    coverage: CoverageSummary,
+    *,
+    container_route_label: str,
+) -> str:
     lines = [
         "### best-match coverage",
         "",
@@ -158,7 +172,7 @@ def _best_match_coverage(coverage: CoverageSummary) -> str:
             embedded_values=coverage.embedded_query_fraction_stats,
         ),
         "",
-        "#### matched fraction of training route",
+        f"#### matched fraction of {container_route_label}",
         "",
         "matched reactions divided by all reactions in the container route.",
         "",
@@ -174,8 +188,8 @@ def _best_match_coverage(coverage: CoverageSummary) -> str:
             [
                 "",
                 f"query routes with any embedding match "
-                f"{coverage.embedded_mean_training_routes_per_query:.2f} "
-                "unique training routes and "
+                f"{coverage.embedded_mean_container_routes_per_query:.2f} "
+                f"unique {container_route_label}s and "
                 f"{coverage.embedded_mean_occurrences_per_query:.2f} "
                 "total occurrences per query route on average.",
             ]
