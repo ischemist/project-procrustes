@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections import defaultdict
 from collections.abc import Sequence
 from pathlib import Path
@@ -27,12 +28,6 @@ class TrainingReactionReleaseBuilder:
         self._started = False
 
     def build(self) -> TrainingReactionBuildResult:
-        if self.config.holdout_mode != "reaction":
-            raise TrainingReleaseError(
-                "single-step training release requires TrainingSetBuildConfig(holdout_mode='reaction')",
-                code="workflow.single_step_requires_reaction_holdout",
-                context={"holdout_mode": self.config.holdout_mode},
-            )
         if self._started:
             raise RuntimeError("TrainingReactionReleaseBuilder instances are single-use")
         self._started = True
@@ -40,19 +35,31 @@ class TrainingReactionReleaseBuilder:
         training, training_postprocessing = self._build_split("training")
         validation_before, validation_postprocessing = self._build_split("validation")
         overlap_before = _summarize_cross_split_overlap(training, validation_before)
-        training_keys = {_reaction_identity(record) for record in training}
-        validation = [record for record in validation_before if _reaction_identity(record) not in training_keys]
-        overlap_removed = len(validation_before) - len(validation)
+        if self.config.holdout_mode == "reaction":
+            training_keys = {_reaction_identity(record) for record in training}
+            validation = [record for record in validation_before if _reaction_identity(record) not in training_keys]
+            overlap_removed = len(validation_before) - len(validation)
+        else:
+            validation = validation_before
+            overlap_removed = 0
         overlap_after = _summarize_cross_split_overlap(training, validation)
-        if overlap_after["shared_reaction_identities"] or overlap_after["shared_exact_reaction_signatures"]:
+        if self.config.holdout_mode == "reaction" and (
+            overlap_after["shared_reaction_identities"] or overlap_after["shared_exact_reaction_signatures"]
+        ):
             raise TrainingReleaseError(
                 "single-step release validation split still overlaps with training after cleanup",
                 code="workflow.single_step_validation_overlap",
                 context=overlap_after,
             )
+        if self.config.holdout_mode == "route" and overlap_after["shared_reaction_identities"]:
+            warnings.warn(
+                "single-step route-holdout release has cross-split reaction identity overlap",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         records = _renumber([*training, *validation], prefix=self.config.route_prefix)
         return TrainingReactionBuildResult(
-            release_name="single-step-reaction-holdout-n1-n5",
+            release_name=f"single-step-{self.config.release_name}",
             records=records,
             summary={
                 "reaction_postprocessing": {
@@ -157,9 +164,9 @@ def write_training_reaction_release(
         action=TRAINING_REACTION_RELEASE_ACTION,
         sources=source_paths,
         outputs=[
-            ("all", all_path, result.records, ContentType.UNKNOWN),
-            ("training", training_path, training, ContentType.UNKNOWN),
-            ("validation", validation_path, validation, ContentType.UNKNOWN),
+            ("all", all_path, result.records, ContentType.UNKNOWN, reaction_records_content_hash(result.records)),
+            ("training", training_path, training, ContentType.UNKNOWN, reaction_records_content_hash(training)),
+            ("validation", validation_path, validation, ContentType.UNKNOWN, reaction_records_content_hash(validation)),
         ],
         root_dir=source_root,
         parameters=config.to_manifest_dict(),
@@ -168,12 +175,6 @@ def write_training_reaction_release(
         release_name=result.release_name,
         keyed_output_files=True,
     )
-    output_files = manifest.output_files
-    if not isinstance(output_files, dict):
-        raise TypeError("training reaction release manifest must use keyed output files")
-    output_files["all"].content_hash = reaction_records_content_hash(result.records)
-    output_files["training"].content_hash = reaction_records_content_hash(training)
-    output_files["validation"].content_hash = reaction_records_content_hash(validation)
     manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
 
 

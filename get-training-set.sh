@@ -10,9 +10,11 @@ main() {
     OUTPUT_DIR=""
     DATASET="paroutes"
     ARTIFACT=""
-    SPLIT="training"
-    FORMAT="jsonl"
+    SPLIT=""
+    FORMAT=""
     RELEASE="latest"
+    RELEASE_EXPLICIT=0
+    OMIT=""
     DRY_RUN=0
 
     R='\033[0;31m'
@@ -23,19 +25,25 @@ main() {
         echo ""
         echo -e "${B}usage:${NC}"
         if [ -t 0 ]; then
-            echo "  $0 <artifact> [flags]"
+            echo "  $0 [artifact|release] [flags]"
         else
-            echo "  ... | bash -s -- <artifact> [flags]"
+            echo "  ... | bash -s -- [artifact|release] [flags]"
         fi
         echo ""
         echo -e "${B}artifacts:${NC}"
+        echo "  n1-routes"
+        echo "  n5-routes"
         echo "  route-holdout-n1-n5"
         echo "  reaction-holdout-n1-n5"
+        echo "  n1-single-step-reactions"
+        echo "  n5-single-step-reactions"
+        echo "  single-step-route-holdout-n1-n5"
         echo "  single-step-reaction-holdout-n1-n5"
         echo ""
         echo -e "${B}flags:${NC}"
-        echo "  --split=all|training|validation"
-        echo "  --format=jsonl|rsmi"
+        echo "  --split=all|training|validation  only download one split"
+        echo "  --format=jsonl|rsmi              only download one format"
+        echo "  --omit=PART[,PART...]            omit splits or formats"
         echo "  --release=latest|vYYYY-MM-DD"
         echo "  --dataset=paroutes"
         echo "  --dir=PATH  materialize into an explicit project-owned directory"
@@ -56,7 +64,8 @@ main() {
             -V|--version) show_version ;;
             --split=*) SPLIT="${1#*=}"; shift ;;
             --format=*) FORMAT="${1#*=}"; shift ;;
-            --release=*) RELEASE="${1#*=}"; shift ;;
+            --omit=*) OMIT="${1#*=}"; shift ;;
+            --release=*) RELEASE="${1#*=}"; RELEASE_EXPLICIT=1; shift ;;
             --dataset=*) DATASET="${1#*=}"; shift ;;
             --dir=*) OUTPUT_DIR="${1#*=}"; shift ;;
             --dry-run) DRY_RUN=1; shift ;;
@@ -66,9 +75,17 @@ main() {
                 ;;
             *)
                 if [ -z "$ARTIFACT" ]; then
-                    ARTIFACT="$1"
+                    case "$1" in
+                        v[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])
+                            RELEASE="$1"
+                            RELEASE_EXPLICIT=1
+                            ;;
+                        *)
+                            ARTIFACT="$1"
+                            ;;
+                    esac
                 else
-                    echo -e "${R}error: multiple artifacts specified${NC}" >&2
+                    echo -e "${R}error: multiple positional arguments specified${NC}" >&2
                     usage
                 fi
                 shift
@@ -76,7 +93,9 @@ main() {
         esac
     done
 
-    [ -n "$ARTIFACT" ] || usage
+    if [ -z "$ARTIFACT" ] && [ "$RELEASE_EXPLICIT" -eq 0 ]; then
+        usage
+    fi
 
     for cmd in curl awk; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -102,23 +121,34 @@ main() {
             ;;
     esac
 
-    case "$ARTIFACT" in
-        route-holdout-n1-n5|reaction-holdout-n1-n5|single-step-reaction-holdout-n1-n5) ;;
-        *)
-            echo -e "${R}error: unsupported artifact '$ARTIFACT'${NC}" >&2
-            exit 1
-            ;;
-    esac
+    if [ -n "$ARTIFACT" ]; then
+        case "$ARTIFACT" in
+            n1-routes|n5-routes|route-holdout-n1-n5|reaction-holdout-n1-n5|n1-single-step-reactions|n5-single-step-reactions|single-step-route-holdout-n1-n5|single-step-reaction-holdout-n1-n5) ;;
+            *)
+                echo -e "${R}error: unsupported artifact '$ARTIFACT'${NC}" >&2
+                exit 1
+                ;;
+        esac
+    fi
 
     case "$SPLIT" in
-        all|training|validation) ;;
+        ""|all|training|validation) ;;
         *)
             echo -e "${R}error: unsupported split '$SPLIT'${NC}" >&2
             exit 1
             ;;
     esac
 
-    FILENAME="$(resolve_filename "$ARTIFACT" "$SPLIT" "$FORMAT")"
+    case "$FORMAT" in
+        ""|jsonl|rsmi) ;;
+        *)
+            echo -e "${R}error: unsupported format '$FORMAT'${NC}" >&2
+            exit 1
+            ;;
+    esac
+
+    validate_omit_parts "$OMIT"
+
     RESOLVED_RELEASE="$RELEASE"
     if [ "$RELEASE" = "latest" ]; then
         RESOLVED_RELEASE="$(resolve_latest_release "$BASE_URL" "$DATASET")"
@@ -134,26 +164,34 @@ main() {
     else
         RELEASE_DIR="$ROOT_DIR/$DATASET/$RESOLVED_RELEASE"
     fi
-    LOCAL_DIR="$RELEASE_DIR/$ARTIFACT"
-    LOCAL_PATH="$LOCAL_DIR/$FILENAME"
-    MANIFEST_PATH="$LOCAL_DIR/manifest.json"
     CHECKSUMS_PATH="$RELEASE_DIR/SHA256SUMS"
-    FILE_URL="$BASE_URL/$DATASET/$RESOLVED_RELEASE/$ARTIFACT/$FILENAME"
-    MANIFEST_URL="$BASE_URL/$DATASET/$RESOLVED_RELEASE/$ARTIFACT/manifest.json"
     CHECKSUMS_URL="$BASE_URL/$DATASET/$RESOLVED_RELEASE/SHA256SUMS"
-    CHECKSUMS_KEY="$ARTIFACT/$FILENAME"
-    MANIFEST_CHECKSUM_KEY="$ARTIFACT/manifest.json"
 
-    mkdir -p "$LOCAL_DIR"
+    mkdir -p "$RELEASE_DIR"
     curl -fsSL "$CHECKSUMS_URL" -o "$CHECKSUMS_PATH"
+
+    DOWNLOAD_KEYS=()
+    while IFS= read -r key; do
+        DOWNLOAD_KEYS+=("$key")
+    done < <(resolve_download_keys "$ARTIFACT" "$SPLIT" "$FORMAT" "$OMIT")
+    if [ "${#DOWNLOAD_KEYS[@]}" -eq 0 ]; then
+        echo -e "${R}error: no published files match request${NC}" >&2
+        exit 1
+    fi
+
     if [ "$DRY_RUN" -eq 1 ]; then
-        echo "$LOCAL_PATH"
+        for key in "${DOWNLOAD_KEYS[@]}"; do
+            echo "$RELEASE_DIR/$key"
+        done
         exit 0
     fi
 
-    download_and_verify "$FILE_URL" "$LOCAL_PATH" "$CHECKSUMS_KEY"
-    download_and_verify "$MANIFEST_URL" "$MANIFEST_PATH" "$MANIFEST_CHECKSUM_KEY"
-    echo "$LOCAL_PATH"
+    for key in "${DOWNLOAD_KEYS[@]}"; do
+        local_path="$RELEASE_DIR/$key"
+        mkdir -p "$(dirname "$local_path")"
+        download_and_verify "$BASE_URL/$DATASET/$RESOLVED_RELEASE/$key" "$local_path" "$key"
+        echo "$local_path"
+    done
 }
 
 download_and_verify() {
@@ -202,32 +240,86 @@ resolve_latest_release() {
     echo "$latest_release"
 }
 
-resolve_filename() {
+validate_omit_parts() {
+    local omit="$1"
+    local part
+
+    [ -z "$omit" ] && return 0
+    while IFS= read -r part; do
+        case "$part" in
+            ""|all|training|validation|jsonl|rsmi) ;;
+            *)
+                echo -e "${R}error: unsupported omit part '$part'${NC}" >&2
+                exit 1
+                ;;
+        esac
+    done < <(printf '%s\n' "$omit" | awk '{
+        count = split($0, parts, ",")
+        for (i = 1; i <= count; i++) {
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", parts[i])
+            print parts[i]
+        }
+    }')
+}
+
+resolve_download_keys() {
     local artifact="$1"
     local split="$2"
     local format="$3"
+    local omit="$4"
 
-    case "$artifact" in
-        route-holdout-n1-n5|reaction-holdout-n1-n5)
-            case "$format" in
-                jsonl) echo "${split}.jsonl.gz" ;;
-                *)
-                    echo "unsupported format '$format' for artifact '$artifact'" >&2
-                    exit 1
-                    ;;
-            esac
-            ;;
-        single-step-reaction-holdout-n1-n5)
-            case "$format" in
-                jsonl) echo "${split}.jsonl.gz" ;;
-                rsmi) echo "${split}.rsmi.txt.gz" ;;
-                *)
-                    echo "unsupported format '$format' for artifact '$artifact'" >&2
-                    exit 1
-                    ;;
-            esac
-            ;;
-    esac
+    awk -v artifact="$artifact" -v split_filter="$split" -v format_filter="$format" -v omit="$omit" '
+        function has_omitted_part(file, parts, count, i) {
+            if (omit == "") {
+                return 0
+            }
+            count = split_csv(omit, parts)
+            for (i = 1; i <= count; i++) {
+                if (parts[i] != "" && file_part_matches(file, parts[i])) {
+                    return 1
+                }
+            }
+            return 0
+        }
+        function split_csv(value, parts, n, raw, i) {
+            n = split(value, raw, ",")
+            for (i = 1; i <= n; i++) {
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", raw[i])
+                parts[i] = raw[i]
+            }
+            return n
+        }
+        function file_part_matches(file, part) {
+            return file == part ".jsonl.gz" || file == part ".rsmi.txt.gz" || file ~ ("\\." part "\\.")
+        }
+        $2 != "" {
+            key = $2
+            if (artifact != "" && key !~ ("^" artifact "/")) {
+                next
+            }
+            file = key
+            sub(/^.*\//, "", file)
+            if (file == "manifest.json") {
+                if (artifact != "" || (split_filter == "" && format_filter == "")) {
+                    print key
+                }
+                next
+            }
+            if (split_filter != "" && !file_part_matches(file, split_filter)) {
+                next
+            }
+            if (format_filter == "jsonl" && file !~ /\.jsonl\.gz$/) {
+                next
+            }
+            if (format_filter == "rsmi" && file !~ /\.rsmi\.txt\.gz$/) {
+                next
+            }
+            if (has_omitted_part(file)) {
+                next
+            }
+            print key
+        }
+    ' "$CHECKSUMS_PATH"
 }
 
 main "$@"

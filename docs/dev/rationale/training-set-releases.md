@@ -28,13 +28,23 @@ RetroCast is an open-source effort, so we do not release this as an authoritativ
 
 ## Overview
 
-RetroCast produces three PaRoutes-derived artifacts from `all-routes.json.gz`, `n1-routes.json.gz`, and `n5-routes.json.gz`:
+RetroCast produces PaRoutes-derived training and test set artifacts from `all-routes.json.gz`, `n1-routes.json.gz`, and `n5-routes.json.gz`.
+
+Training artifacts:
 
 1. `route-holdout-n1-n5`
 2. `reaction-holdout-n1-n5`
-3. `single-step-reaction-holdout-n1-n5`
+3. `single-step-route-holdout-n1-n5`
+4. `single-step-reaction-holdout-n1-n5`
 
-`all` is the candidate training universe. `n1` and `n5` are the holdout reference sets.
+Test set artifacts:
+
+1. `n1-routes`
+2. `n5-routes`
+3. `n1-single-step-reactions`
+4. `n5-single-step-reactions`
+
+`all` is the candidate training universe. `n1` and `n5` are the holdout test sets.
 
 ## Route Releases
 
@@ -90,15 +100,29 @@ Entrypoint:
 
 Implementation:
 
-- `load_training_route_records()` reads the released `reaction-holdout-n1-n5` route artifact.
-- `TrainingReactionReleaseBuilder` flattens routes into reactions, deduplicates each split, and removes validation reactions that overlap training.
+- `load_training_route_records()` reads released route artifacts.
+- `TrainingReactionReleaseBuilder` flattens routes into reactions, deduplicates each split, and applies holdout-specific split cleanup.
 - `write_training_reaction_release()` writes the final artifact.
 
-The single-step release does not re-adapt raw PaRoutes. It derives from the released `reaction-holdout-n1-n5` route artifact so the single-step predictor and multistep planner train from compatible data.
+The single-step releases do not re-adapt raw PaRoutes. They derive from released route artifacts so the single-step predictor and multistep planner train from compatible data.
+
+`single-step-route-holdout-n1-n5` derives from `route-holdout-n1-n5`. Because route holdout only excludes exact holdout routes, flattened training and validation splits may share reaction identities. RetroCast reports that overlap in the build summary and audit instead of removing it.
+
+`single-step-reaction-holdout-n1-n5` derives from `reaction-holdout-n1-n5`. Because this artifact is intended for one-step reaction training, validation reactions that overlap training are removed after split-level deduplication.
 
 Each flattened reaction keeps reactants, product, mapped smiles, alternative mapped smiles, condition metadata, and route-step provenance. Reaction sources store `route_id`, `step_index`, and optional PaRoutes `source_id`; raw route hashes and patent ids stay in the parent route release.
 
 The structured `jsonl.gz` files are canonical. The `*.rsmi.txt.gz` files are convenience exports.
+
+## Test Set Releases
+
+Entrypoint:
+
+- `scripts/paroutes/training-set-prep/06-create-test-set-release.py`
+
+`n1-routes` and `n5-routes` adapt the original PaRoutes test set routes into RetroCast `Route` records. They publish only `all.jsonl.gz`.
+
+`n1-single-step-reactions` and `n5-single-step-reactions` flatten those adapted test set routes into route-step reaction records. They are occurrence-preserving: if the same reaction appears in multiple test set routes, or multiple times inside one test set route, each occurrence remains in the release with route-step provenance. They publish `all.jsonl.gz` and `all.rsmi.txt.gz`.
 
 ## Audit
 

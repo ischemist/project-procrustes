@@ -10,6 +10,7 @@ from retrocast.models.route import Route
 from retrocast.typing import ReactionSmilesStr, SmilesStr
 
 TrainingHoldoutMode = Literal["route", "reaction"]
+TestSetName = Literal["n1", "n5"]
 SplitName = Literal["training", "validation"]
 
 
@@ -33,6 +34,17 @@ class TrainingRouteRecord(BaseModel):
         return self.route.signature()
 
 
+class TestRouteRecord(BaseModel):
+    id: str
+    dataset: TestSetName
+    route: Route
+    sources: list[RawRouteSource] = Field(default_factory=list)
+
+    @property
+    def route_signature(self) -> str:
+        return self.route.signature()
+
+
 class TrainingReactionSource(BaseModel):
     route_id: str
     step_index: int | None = None
@@ -43,6 +55,21 @@ class TrainingReactionSource(BaseModel):
 class TrainingReactionRecord(BaseModel):
     id: str
     split: SplitName
+    reactants: list[SmilesStr]
+    product: SmilesStr
+    mapped_smiles: ReactionSmilesStr
+    alternative_mapped_smiles: list[ReactionSmilesStr] = Field(default_factory=list)
+    condition_slot: str | None = None
+    condition_slot_smiles: list[SmilesStr] = Field(default_factory=list)
+    sources: list[TrainingReactionSource] = Field(default_factory=list)
+
+    def to_rsmi_line(self) -> str:
+        return self.mapped_smiles
+
+
+class TestReactionRecord(BaseModel):
+    id: str
+    dataset: TestSetName
     reactants: list[SmilesStr]
     product: SmilesStr
     mapped_smiles: ReactionSmilesStr

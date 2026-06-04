@@ -90,7 +90,9 @@ Pick one of two workflows:
     data/datasets/paroutes/<release>/<artifact>/<file>
     ```
 
-One-step reaction training uses the same flow with `artifact="single-step-reaction-holdout-n1-n5"`. By default that downloads the canonical `jsonl` artifact. Pass `format="rsmi"` if you specifically want the plain reaction-smiles text file.
+One-step reaction training uses the same flow with `artifact="single-step-reaction-holdout-n1-n5"` or `artifact="single-step-route-holdout-n1-n5"`. By default, that downloads the canonical `jsonl` artifact. Pass `format="rsmi"` if you specifically want the plain reaction-smiles text file.
+
+The original PaRoutes n1/n5 test sets are also published as all-only artifacts: `n1-routes`, `n5-routes`, `n1-single-step-reactions`, and `n5-single-step-reactions`. Use `split="all"` for those.
 
 When a real download happens in an interactive terminal, RetroCast shows a progress bar automatically. Pass `show_progress=False` to suppress it or `show_progress=True` to force it.
 
@@ -108,8 +110,13 @@ Use `reaction-holdout-n1-n5` unless you specifically need a route-holdout baseli
 
 | artifact | intended training target | holdout rule | valid `format` values | files published per split |
 | --- | --- | --- | --- | --- |
+| `n1-routes` | test set/evaluation routes | original PaRoutes n1 routes adapted to RetroCast `Route` records | `jsonl` | `all.jsonl.gz` |
+| `n5-routes` | test set/evaluation routes | original PaRoutes n5 routes adapted to RetroCast `Route` records | `jsonl` | `all.jsonl.gz` |
 | `route-holdout-n1-n5` | multistep route models | remove exact `n1 ∪ n5` routes | `jsonl` | `all.jsonl.gz`, `training.jsonl.gz`, `validation.jsonl.gz` |
 | `reaction-holdout-n1-n5` | multistep route models | remove exact holdout routes, then excise holdout reactions | `jsonl` | `all.jsonl.gz`, `training.jsonl.gz`, `validation.jsonl.gz` |
+| `n1-single-step-reactions` | test set/evaluation reactions | flatten original n1 routes, preserving route-step occurrences | `jsonl`, `rsmi` | `all.jsonl.gz`, `all.rsmi.txt.gz` |
+| `n5-single-step-reactions` | test set/evaluation reactions | flatten original n5 routes, preserving route-step occurrences | `jsonl`, `rsmi` | `all.jsonl.gz`, `all.rsmi.txt.gz` |
+| `single-step-route-holdout-n1-n5` | one-step reaction models | flatten `route-holdout-n1-n5` routes into deduplicated reactions; cross-split reaction overlap is reported, not removed | `jsonl`, `rsmi` | `all.jsonl.gz`, `training.jsonl.gz`, `validation.jsonl.gz`, `all.rsmi.txt.gz`, `training.rsmi.txt.gz`, `validation.rsmi.txt.gz` |
 | `single-step-reaction-holdout-n1-n5` | one-step reaction models | flatten `reaction-holdout-n1-n5` routes into deduplicated reactions | `jsonl`, `rsmi` | `all.jsonl.gz`, `training.jsonl.gz`, `validation.jsonl.gz`, `all.rsmi.txt.gz`, `training.rsmi.txt.gz`, `validation.rsmi.txt.gz` |
 
 Each artifact directory includes:

@@ -2,12 +2,9 @@ from retrocast.curation.training.audit import (
     audit_route_release_sanity,
     audit_single_step_release_if_present,
     build_route_release_split_audit,
-    load_holdout_reference,
     load_route_release_files,
     load_single_step_release_files,
     render_route_release_split_audit_markdown,
-    render_sanity_checks_markdown,
-    render_single_step_sanity_markdown,
     required_route_release_files,
 )
 from retrocast.curation.training.reaction_release import (
@@ -19,6 +16,9 @@ from retrocast.curation.training.records import (
     AdaptedTrainingRoute,
     RawRouteSource,
     SplitName,
+    TestReactionRecord,
+    TestRouteRecord,
+    TestSetName,
     TrainingHoldoutMode,
     TrainingReactionBuildResult,
     TrainingReactionRecord,
@@ -34,12 +34,21 @@ from retrocast.curation.training.route_release import (
     stable_raw_route_hash,
     write_training_release,
 )
+from retrocast.curation.training.testset_release import (
+    build_test_reaction_records,
+    build_test_route_records,
+    write_test_reaction_release,
+    write_test_route_release,
+)
 
 __all__ = [
     "AdaptationStatistics",
     "AdaptedTrainingRoute",
     "RawRouteSource",
     "SplitName",
+    "TestReactionRecord",
+    "TestRouteRecord",
+    "TestSetName",
     "TrainingHoldoutMode",
     "TrainingReactionRecord",
     "TrainingReactionBuildResult",
@@ -54,14 +63,15 @@ __all__ = [
     "audit_route_release_sanity",
     "audit_single_step_release_if_present",
     "build_route_release_split_audit",
-    "load_holdout_reference",
+    "build_test_reaction_records",
+    "build_test_route_records",
     "load_route_release_files",
     "load_single_step_release_files",
     "render_route_release_split_audit_markdown",
-    "render_sanity_checks_markdown",
-    "render_single_step_sanity_markdown",
     "required_route_release_files",
     "stable_raw_route_hash",
     "write_training_reaction_release",
     "write_training_release",
+    "write_test_reaction_release",
+    "write_test_route_release",
 ]

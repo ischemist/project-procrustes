@@ -24,7 +24,8 @@ class ContentType(StrEnum):
 ContentTypeHint = Literal["benchmark", "predictions", "route_corpus", "stock", "unknown"]
 UnlabeledManifestOutput: TypeAlias = tuple[Path, Any, ContentType | ContentTypeHint]
 LabeledManifestOutput: TypeAlias = tuple[str, Path, Any, ContentType | ContentTypeHint]
-ManifestOutput: TypeAlias = UnlabeledManifestOutput | LabeledManifestOutput
+LabeledManifestOutputWithHash: TypeAlias = tuple[str, Path, Any, ContentType | ContentTypeHint, str]
+ManifestOutput: TypeAlias = UnlabeledManifestOutput | LabeledManifestOutput | LabeledManifestOutputWithHash
 
 
 def calculate_file_hash(path: Path) -> str:
@@ -51,14 +52,15 @@ def create_manifest(
 
     output_infos = []
     for output in outputs:
-        label, path, obj, content_type = _normalize_manifest_output(output)
+        label, path, obj, content_type, content_hash = _normalize_manifest_output(output)
+        content_type = ContentType(content_type)
         file_hash = calculate_file_hash(path) if path.exists() else "file-not-written"
         output_infos.append(
             FileInfo(
                 label=label,
                 path=_relative_path(path, root_dir),
                 file_hash=file_hash,
-                content_hash=_content_hash(obj, ContentType(content_type)),
+                content_hash=content_hash if content_hash is not None else _content_hash(obj, content_type),
             )
         )
 
@@ -89,21 +91,30 @@ def create_manifest(
 
 def _normalize_manifest_output(
     output: ManifestOutput,
-) -> tuple[str | None, Path, Any, ContentType | ContentTypeHint]:
+) -> tuple[str | None, Path, Any, ContentType | ContentTypeHint, str | None]:
     items: tuple[Any, ...] = tuple(output)
     if len(items) == 3:
         path, obj, content_type = items
         if not isinstance(path, Path):
             raise TypeError(f"manifest output path must be Path, got {type(path).__name__}")
-        return None, path, obj, content_type
+        return None, path, obj, content_type, None
     if len(items) == 4:
         label, path, obj, content_type = items
         if not isinstance(label, str):
             raise TypeError(f"manifest output label must be str, got {type(label).__name__}")
         if not isinstance(path, Path):
             raise TypeError(f"manifest output path must be Path, got {type(path).__name__}")
-        return label, path, obj, content_type
-    raise ValueError(f"manifest output must have 3 or 4 items, got {len(items)}")
+        return label, path, obj, content_type, None
+    if len(items) == 5:
+        label, path, obj, content_type, content_hash = items
+        if not isinstance(label, str):
+            raise TypeError(f"manifest output label must be str, got {type(label).__name__}")
+        if not isinstance(path, Path):
+            raise TypeError(f"manifest output path must be Path, got {type(path).__name__}")
+        if not isinstance(content_hash, str):
+            raise TypeError(f"manifest output content hash must be str, got {type(content_hash).__name__}")
+        return label, path, obj, content_type, content_hash
+    raise ValueError(f"manifest output must have 3, 4, or 5 items, got {len(items)}")
 
 
 def _relative_path(path: Path, root_dir: Path) -> str:

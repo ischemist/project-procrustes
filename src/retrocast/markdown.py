@@ -7,6 +7,10 @@ MarkdownAlign = Literal["left", "right", "center"]
 MarkdownRow = Sequence[object]
 
 
+def format_integer(value: int) -> str:
+    return f"{value:,}".replace(",", " ")
+
+
 def markdown_table(
     headers: MarkdownRow,
     rows: Sequence[MarkdownRow],

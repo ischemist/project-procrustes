@@ -2,7 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from retrocast.markdown import markdown_table
+from retrocast.markdown import format_integer, markdown_table
+
+
+@pytest.mark.unit
+def test_format_integer_uses_space_grouping() -> None:
+    assert format_integer(0) == "0"
+    assert format_integer(999) == "999"
+    assert format_integer(1000) == "1 000"
+    assert format_integer(1234567) == "1 234 567"
 
 
 @pytest.mark.unit
