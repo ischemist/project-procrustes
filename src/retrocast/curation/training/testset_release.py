@@ -109,19 +109,23 @@ def write_test_route_release(
     manifest = create_manifest(
         action=TEST_RELEASE_ACTION,
         sources=source_paths,
-        outputs=[("all", all_path, records, ContentType.UNKNOWN)],
+        outputs=[
+            (
+                "all",
+                all_path,
+                records,
+                ContentType.UNKNOWN,
+                hash_json(
+                    sorted(record.route.content_signature(fields=("mapped_reaction_smiles",)) for record in records)
+                ),
+            )
+        ],
         root_dir=source_root,
         parameters={"dataset": dataset, "artifact": release_name},
         statistics=summary["output"],
         summary=summary,
         release_name=release_name,
         keyed_output_files=True,
-    )
-    output_files = manifest.output_files
-    if not isinstance(output_files, dict):
-        raise TypeError("test route release manifest must use keyed output files")
-    output_files["all"].content_hash = hash_json(
-        sorted(record.route.content_signature(fields=("mapped_reaction_smiles",)) for record in records)
     )
     manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
 
@@ -146,8 +150,20 @@ def write_test_reaction_release(
         action=TEST_RELEASE_ACTION,
         sources=source_paths,
         outputs=[
-            ("all", all_path, records, ContentType.UNKNOWN),
-            ("all_rsmi", all_rsmi_path, [record.to_rsmi_line() for record in records], ContentType.UNKNOWN),
+            (
+                "all",
+                all_path,
+                records,
+                ContentType.UNKNOWN,
+                hash_json(sorted((str(record.mapped_smiles), _condition_identity(record)) for record in records)),
+            ),
+            (
+                "all_rsmi",
+                all_rsmi_path,
+                [record.to_rsmi_line() for record in records],
+                ContentType.UNKNOWN,
+                hash_json([record.to_rsmi_line() for record in records]),
+            ),
         ],
         root_dir=source_root,
         parameters={"dataset": dataset, "artifact": release_name},
@@ -156,13 +172,6 @@ def write_test_reaction_release(
         release_name=release_name,
         keyed_output_files=True,
     )
-    output_files = manifest.output_files
-    if not isinstance(output_files, dict):
-        raise TypeError("test reaction release manifest must use keyed output files")
-    output_files["all"].content_hash = hash_json(
-        sorted((str(record.mapped_smiles), _condition_identity(record)) for record in records)
-    )
-    output_files["all_rsmi"].content_hash = hash_json([record.to_rsmi_line() for record in records])
     manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
 
 
