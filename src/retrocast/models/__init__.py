@@ -28,7 +28,18 @@ from retrocast.models.route import (
     validate_molecule_id,
     validate_reaction_id,
 )
-from retrocast.models.task import Benchmark, Target, Task, TaskConstraints
+from retrocast.models.task import (
+    REQUIRED_LEAVES,
+    ROUTE_DEPTH,
+    STOCK_TERMINATION,
+    Benchmark,
+    RequiredLeavesConstraint,
+    RouteDepthConstraint,
+    StockTerminationConstraint,
+    Target,
+    Task,
+    TaskConstraint,
+)
 
 __all__ = [
     "AnalysisReport",
@@ -49,17 +60,23 @@ __all__ = [
     "ReactionId",
     "ReactionValidity",
     "ReactionView",
+    "REQUIRED_LEAVES",
     "ReliabilityFlag",
     "Route",
+    "ROUTE_DEPTH",
     "RoutePath",
     "RouteValidity",
+    "RouteDepthConstraint",
     "ScoredCandidate",
+    "STOCK_TERMINATION",
+    "StockTerminationConstraint",
     "Target",
     "TargetResult",
     "Task",
-    "TaskConstraints",
+    "TaskConstraint",
     "Tier",
     "TierResult",
+    "RequiredLeavesConstraint",
     "validate_molecule_id",
     "validate_reaction_id",
 ]
