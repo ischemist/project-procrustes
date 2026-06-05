@@ -39,9 +39,9 @@ def summarize_targets(
         metric_suffix = str(int(tier))
         metric_specs: tuple[tuple[str, CandidateMetric, CandidatePredicate], ...] = (
             (f"tier_{metric_suffix}_validity_rate", _candidate_rate, ScoredCandidate.satisfies_validity),
-            (f"mrr_tier_{metric_suffix}", _candidate_mrr, ScoredCandidate.satisfies_validity),
+            (f"tier_{metric_suffix}_validity_mrr", _candidate_mrr, ScoredCandidate.satisfies_validity),
             (f"solv_{metric_suffix}[{metric_label}]_rate", _candidate_rate, ScoredCandidate.satisfies_solv),
-            (f"mrr_solv_{metric_suffix}[{metric_label}]", _candidate_mrr, ScoredCandidate.satisfies_solv),
+            (f"solv_{metric_suffix}[{metric_label}]_mrr", _candidate_mrr, ScoredCandidate.satisfies_solv),
         )
         for name, summarize, predicate in metric_specs:
             metrics[name] = summarize(targets, tier, predicate, n_boot=n_boot, seed=seed)

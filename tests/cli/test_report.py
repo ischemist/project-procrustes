@@ -11,8 +11,8 @@ def report_with_all_metric_groups() -> AnalysisReport:
         metrics={
             "tier_0_validity_rate": MetricSummary(value=0.75, count=4, ci_low=0.5, ci_high=1.0),
             "solv_0[test-stock]_rate": MetricSummary(value=1.0, count=4, ci_low=0.8, ci_high=1.0),
-            "mrr_tier_0": MetricSummary(value=0.25, count=4, ci_low=0.0, ci_high=0.5),
-            "mrr_solv_0[test-stock]": MetricSummary(value=0.5, count=4, ci_low=0.25, ci_high=0.75),
+            "tier_0_validity_mrr": MetricSummary(value=0.25, count=4, ci_low=0.0, ci_high=0.5),
+            "solv_0[test-stock]_mrr": MetricSummary(value=0.5, count=4, ci_low=0.25, ci_high=0.75),
             "acceptable_reconstruction_top_3[test-stock]": MetricSummary(
                 value=0.75,
                 count=4,

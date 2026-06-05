@@ -87,7 +87,7 @@ scored = evaluation.targets["target-001"].candidates[0]
 
 print(scored.satisfies_validity(Tier.ZERO))
 print(scored.satisfies_task())
-print(scored.satisfies_solv(Tier.ZERO))
+print(scored.satisfies_solv(tier=0))
 ```
 
 ## Inspect Failed Adaptation Slots

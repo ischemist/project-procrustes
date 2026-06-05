@@ -12,9 +12,9 @@ from retrocast.markdown import MarkdownAlign, MarkdownRow, markdown_table
 from retrocast.models.analysis import AnalysisReport, MetricSummary
 
 _SOLV_RATE = re.compile(r"^solv_(\d+)\[(.+)]_rate$")
-_MRR_SOLV = re.compile(r"^mrr_solv_(\d+)\[(.+)]$")
+_SOLV_MRR = re.compile(r"^solv_(\d+)\[(.+)]_mrr$")
 _TIER_VALIDITY = re.compile(r"^tier_(\d+)_validity_rate$")
-_MRR_TIER = re.compile(r"^mrr_tier_(\d+)$")
+_TIER_VALIDITY_MRR = re.compile(r"^tier_(\d+)_validity_mrr$")
 _TOP_K = re.compile(r"^acceptable_reconstruction_top_(\d+)\[(.+)]$")
 _ROOT_TOP_K = re.compile(r"^acceptable_root_reconstruction_top_(\d+)\[(.+)]$")
 _GIVEN_ROOT_TOP_K = re.compile(r"^acceptable_reconstruction_given_root_top_(\d+)\[(.+)]$")
@@ -87,8 +87,8 @@ def _create_solv_table(
         for label in labels:
             valid_rate = f"tier_{tier}_validity_rate"
             solv_rate = f"solv_{tier}[{label}]_rate"
-            mrr_valid = f"mrr_tier_{tier}"
-            mrr_solv = f"mrr_solv_{tier}[{label}]"
+            mrr_valid = f"tier_{tier}_validity_mrr"
+            mrr_solv = f"solv_{tier}[{label}]_mrr"
             table.add_row(
                 str(tier),
                 label,
@@ -350,7 +350,7 @@ def _reconstruction_metric_values(metrics: dict[str, MetricSummary]) -> list[Met
 def _solv_tiers(metrics: dict[str, MetricSummary]) -> list[int]:
     tiers: set[int] = set()
     for name in metrics:
-        for pattern in (_TIER_VALIDITY, _SOLV_RATE, _MRR_TIER, _MRR_SOLV):
+        for pattern in (_TIER_VALIDITY, _SOLV_RATE, _TIER_VALIDITY_MRR, _SOLV_MRR):
             match = pattern.match(name)
             if match is not None:
                 tiers.add(int(match.group(1)))
@@ -363,7 +363,7 @@ def _solv_labels(metrics: dict[str, MetricSummary], tier: int) -> list[str]:
         solv_match = _SOLV_RATE.match(name)
         if solv_match is not None and int(solv_match.group(1)) == tier:
             labels.add(solv_match.group(2))
-        mrr_match = _MRR_SOLV.match(name)
+        mrr_match = _SOLV_MRR.match(name)
         if mrr_match is not None and int(mrr_match.group(1)) == tier:
             labels.add(mrr_match.group(2))
     return sorted(labels)
@@ -466,7 +466,7 @@ def _headline_metrics(metrics: dict[str, MetricSummary]) -> list[tuple[str, Metr
 
 def _hierarchy_metrics(metrics: dict[str, MetricSummary]) -> list[tuple[str, MetricSummary, re.Match[str]]]:
     matches: list[tuple[str, MetricSummary, re.Match[str]]] = []
-    for pattern in (_TIER_VALIDITY, _SOLV_RATE, _MRR_TIER, _MRR_SOLV):
+    for pattern in (_TIER_VALIDITY, _SOLV_RATE, _TIER_VALIDITY_MRR, _SOLV_MRR):
         matches.extend(_matching_metrics(metrics, pattern))
     return sorted(matches, key=_hierarchy_sort_key)
 
@@ -484,9 +484,9 @@ def _hierarchy_sort_key(item: tuple[str, MetricSummary, re.Match[str]]) -> tuple
         return (int(match.group(1)), 0, "")
     if pattern is _SOLV_RATE:
         return (int(match.group(1)), 1, match.group(2))
-    if pattern is _MRR_TIER:
+    if pattern is _TIER_VALIDITY_MRR:
         return (int(match.group(1)), 2, "")
-    if pattern is _MRR_SOLV:
+    if pattern is _SOLV_MRR:
         return (int(match.group(1)), 3, match.group(2))
     raise ValueError(f"unexpected hierarchy metric: {name!r}")
 
@@ -526,9 +526,9 @@ def _display_metric_name(name: str, match: re.Match[str]) -> str:
         return _plain_tier_validity_label(match)
     if pattern is _SOLV_RATE:
         return _plain_solv_label(match)
-    if pattern is _MRR_TIER:
-        return _plain_mrr_tier_label(match)
-    if pattern is _MRR_SOLV:
+    if pattern is _TIER_VALIDITY_MRR:
+        return _plain_mrr_validity_label(match)
+    if pattern is _SOLV_MRR:
         return _plain_mrr_label(match)
     if pattern is _TOP_K:
         return _plain_top_k_label(match)
@@ -551,7 +551,7 @@ def _plain_tier_validity_label(match: re.Match[str]) -> str:
     return f"Tier-{match.group(1)} Validity"
 
 
-def _plain_mrr_tier_label(match: re.Match[str]) -> str:
+def _plain_mrr_validity_label(match: re.Match[str]) -> str:
     return f"MRR Tier-{match.group(1)}"
 
 

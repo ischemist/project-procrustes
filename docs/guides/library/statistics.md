@@ -27,6 +27,18 @@ print(summary.ci_low, summary.ci_high)
 print(summary.reliability)
 ```
 
+For common metrics, `AnalysisReport` also provides typed accessors that build the same serialized keys:
+
+```python
+validity_0 = report.validity_rate(tier=0)
+mrr_validity_0 = report.mrr_validity(tier=0)
+solv_0 = report.solv_rate(tier=0, label="buyables")
+mrr_solv_0 = report.mrr_solv(tier=0, label="buyables")
+top_10 = report.reconstruction(top_k=10, label="buyables")
+```
+
+The accessors return `None` when the metric was not emitted.
+
 Fields:
 
 | Field               | Meaning                                                         |
@@ -48,7 +60,7 @@ The bracketed label comes from the task. For example:
 
 ## MRR@Solv-N
 
-`mrr_solv_0[buyables]` is the mean reciprocal rank of the first candidate satisfying Solv-0 for each target.
+`solv_0[buyables]_mrr` is the mean reciprocal rank of the first candidate satisfying Solv-0 for each target.
 
 A target contributes `1 / rank` if a satisfying candidate exists, otherwise `0`.
 

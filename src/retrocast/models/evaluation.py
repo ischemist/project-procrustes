@@ -78,22 +78,22 @@ class ScoredCandidate(BaseModel):
     def failed_adaptation(self) -> bool:
         return self.failure is not None
 
-    def tier_result(self, tier: Tier) -> TierResult:
-        return self.validity.tiers.get(tier, TierResult(status=CheckStatus.NOT_EVALUATED))
+    def tier_result(self, tier: Tier | int) -> TierResult:
+        return self.validity.tiers.get(Tier(tier), TierResult(status=CheckStatus.NOT_EVALUATED))
 
-    def reaction_tier_result(self, reaction_id: ReactionId, tier: Tier) -> TierResult | None:
+    def reaction_tier_result(self, reaction_id: ReactionId, tier: Tier | int) -> TierResult | None:
         for reaction in self.validity.reactions:
             if reaction.reaction_id == reaction_id:
-                return reaction.tiers.get(tier)
+                return reaction.tiers.get(Tier(tier))
         return None
 
-    def satisfies_validity(self, tier: Tier) -> bool:
+    def satisfies_validity(self, tier: Tier | int) -> bool:
         return self.tier_result(tier).status == CheckStatus.PASS
 
     def satisfies_task(self) -> bool:
         return self.constraints.status == CheckStatus.PASS
 
-    def satisfies_solv(self, tier: Tier) -> bool:
+    def satisfies_solv(self, tier: Tier | int) -> bool:
         return self.satisfies_validity(tier) and self.satisfies_task()
 
 
