@@ -63,6 +63,7 @@ New to RetroCast? Start here:
 - **[Training Sets](guides/training-sets.md)** - Load PaRoutes route and reaction training artifacts
 - **[Training-Set Release Rationale](dev/rationale/training-set-releases.md)** - How PaRoutes route and single-step releases are created
 - **[Error Handling](dev/reference/errors.md)** - Stable error codes and boundary contracts
+- **[Public API](dev/reference/public-api.md)** - Package exports and re-export policy
 - **[Deprecation Schedule](dev/reference/deprecations.md)** - Compatibility aliases and planned removal versions
 
 ## Benchmarks
