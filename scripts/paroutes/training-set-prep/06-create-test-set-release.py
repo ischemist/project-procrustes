@@ -15,9 +15,9 @@ from typing import cast
 from rich.console import Console
 
 from retrocast.cli.progress import step_progress
-from retrocast.curation.training import (
-    TestSetName,
-    adapt_training_routes,
+from retrocast.curation.training.records import TestSetName
+from retrocast.curation.training.route_release import adapt_training_routes
+from retrocast.curation.training.testset_release import (
     build_test_reaction_records,
     build_test_route_records,
     write_test_reaction_release,

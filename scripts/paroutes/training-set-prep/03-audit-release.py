@@ -14,12 +14,13 @@ from pathlib import Path
 from rich.console import Console
 
 from retrocast.cli.progress import step_progress
-from retrocast.curation.training import build_route_release_split_audit, render_route_release_split_audit_markdown
 from retrocast.curation.training.audit import (
     RouteReleaseFiles,
     audit_route_release_sanity,
     audit_single_step_release_if_present,
+    build_route_release_split_audit,
     load_route_release_files,
+    render_route_release_split_audit_markdown,
     required_route_release_files,
 )
 from retrocast.utils.logging import configure_script_logging, logger

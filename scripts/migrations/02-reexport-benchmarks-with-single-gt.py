@@ -10,7 +10,7 @@ This script:
 
 from pathlib import Path
 
-from retrocast.io.blob import save_json_gz
+from retrocast.io import save_json_gz
 from retrocast.io.data import load_benchmark
 from retrocast.io.provenance import create_manifest
 from retrocast.utils.logging import configure_script_logging, logger

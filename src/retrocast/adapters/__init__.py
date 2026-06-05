@@ -10,9 +10,7 @@ from retrocast.adapters.multistepttl import MultiStepTTLAdapter
 from retrocast.adapters.paroutes import PaRoutesAdapter
 from retrocast.adapters.registry import (
     ADAPTER_TYPES,
-    DEPRECATED_ADAPTER_SLUGS,
     get_adapter,
-    normalize_adapter_slug,
 )
 from retrocast.adapters.retrochimera import RetroChimeraAdapter
 from retrocast.adapters.retrostar import RetroStarAdapter
@@ -27,7 +25,6 @@ __all__ = [
     "AdaptMode",
     "AiZynthFinderAdapter",
     "AskcosAdapter",
-    "DEPRECATED_ADAPTER_SLUGS",
     "DirectMultiStepAdapter",
     "DreamRetroErAdapter",
     "MolBuilderAdapter",
@@ -41,5 +38,4 @@ __all__ = [
     "SyntheseusAdapter",
     "UrsaAdapter",
     "get_adapter",
-    "normalize_adapter_slug",
 ]

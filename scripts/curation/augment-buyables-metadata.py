@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from tqdm import tqdm
 
 from retrocast.chem import get_inchi_key
-from retrocast.io.blob import save_json_gz
+from retrocast.io import save_json_gz
 from retrocast.io.data import load_stock_file
 from retrocast.io.provenance import create_manifest
 from retrocast.typing import InchiKeyStr, SmilesStr

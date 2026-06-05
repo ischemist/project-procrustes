@@ -4,7 +4,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.curation import (
+from retrocast.curation.filtering import (
     clean_and_prioritize_pools,
     deduplicate_routes,
     excise_reactions_from_route,

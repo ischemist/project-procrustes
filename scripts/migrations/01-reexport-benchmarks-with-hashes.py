@@ -14,7 +14,7 @@ pre-computed and stored in each Route object, making them available for web visu
 import logging
 from pathlib import Path
 
-from retrocast.io.blob import save_json_gz
+from retrocast.io import save_json_gz
 from retrocast.io.data import load_benchmark
 from retrocast.io.provenance import create_manifest
 

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from retrocast.curation.training import TrainingRouteRecord
 from retrocast.curation.training.embedding_audit import RouteEmbeddingAudit, build_route_embedding_audit
 from retrocast.curation.training.embedding_report import render_route_embedding_audit_markdown
+from retrocast.curation.training.records import TrainingRouteRecord
 from retrocast.models.route import Molecule, Reaction, Route
 from retrocast.typing import InChIKeyStr, SmilesStr
 

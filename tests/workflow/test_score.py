@@ -24,7 +24,8 @@ from retrocast.models import (
 )
 from retrocast.typing import ErrorCode, InChIKeyStr, SmilesStr
 from retrocast.utils.timing import ExecutionStats
-from retrocast.workflow.score import AcceptableRouteMatch, score, score_candidate
+from retrocast.workflow import AcceptableRouteMatch
+from retrocast.workflow.score import score, score_candidate
 
 
 class FixedTierChecker:

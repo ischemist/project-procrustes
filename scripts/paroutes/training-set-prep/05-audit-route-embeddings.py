@@ -13,9 +13,9 @@ from rich.console import Console
 
 from retrocast.chem import InChIKeyLevel
 from retrocast.cli.progress import step_progress
-from retrocast.curation.training import adapt_training_routes
 from retrocast.curation.training.embedding_audit import build_route_embedding_audit
 from retrocast.curation.training.embedding_report import render_route_embedding_audit_markdown
+from retrocast.curation.training.route_release import adapt_training_routes
 from retrocast.io import load_benchmark, load_training_route_records, save_jsonl_gz
 from retrocast.models.route import Route
 from retrocast.paths import benchmark_definitions_dir, paroutes_assets_dir, paroutes_training_release_file

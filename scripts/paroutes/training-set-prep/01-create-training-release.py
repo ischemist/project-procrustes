@@ -16,10 +16,12 @@ from typing import cast
 from rich.console import Console
 
 from retrocast.cli.progress import step_progress
-from retrocast.curation.training import (
+from retrocast.curation.training.records import (
     TrainingHoldoutMode,
-    TrainingRouteReleaseBuilder,
     TrainingSetBuildConfig,
+)
+from retrocast.curation.training.route_release import (
+    TrainingRouteReleaseBuilder,
     adapt_training_routes,
     write_training_release,
 )
