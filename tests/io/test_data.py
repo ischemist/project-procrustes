@@ -34,7 +34,17 @@ from retrocast.io import (
     save_task,
 )
 from retrocast.io.data import BenchmarkResultsLoader
-from retrocast.models import Benchmark, Candidate, FailureRecord, Molecule, Route, Target, Task, TaskConstraints
+from retrocast.models import (
+    Benchmark,
+    Candidate,
+    FailureRecord,
+    Molecule,
+    Route,
+    RouteDepthConstraint,
+    StockTerminationConstraint,
+    Target,
+    Task,
+)
 from retrocast.models.analysis import AnalysisReport, MetricSummary
 from retrocast.models.evaluation import (
     CheckStatus,
@@ -66,7 +76,7 @@ def benchmark() -> Benchmark:
         name="small",
         description="round-trip fixture",
         targets={benchmark_target.id: benchmark_target},
-        default_constraints=TaskConstraints(stock="n5-stock"),
+        default_constraints=[StockTerminationConstraint(stock="n5-stock")],
     )
 
 
@@ -328,7 +338,7 @@ def scored_evaluation(route_depth: int | Literal["short", "medium", "long"] = 1)
     )
     target_result = TargetResult(
         target=benchmark_target,
-        effective_constraints=TaskConstraints(route_depth=route_depth),
+        effective_constraints=[RouteDepthConstraint(max_depth=route_depth)],
         candidates=[scored],
         wall_time=1.0,
         cpu_time=0.5,

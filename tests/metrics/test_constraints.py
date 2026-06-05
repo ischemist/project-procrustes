@@ -1,8 +1,25 @@
 from __future__ import annotations
 
+import pytest
+
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.metrics.constraints import TaskConstraintChecker
-from retrocast.models import CheckStatus, Molecule, Reaction, Route, TaskConstraints
+from retrocast.exceptions import UnsupportedTaskConstraintError
+from retrocast.metrics.constraints import (
+    RequiredLeavesChecker,
+    RouteDepthChecker,
+    StockTerminationChecker,
+    check_task_constraints,
+)
+from retrocast.models import (
+    CheckStatus,
+    Molecule,
+    Reaction,
+    RequiredLeavesConstraint,
+    Route,
+    RouteDepthConstraint,
+    StockTerminationConstraint,
+    TaskConstraint,
+)
 from retrocast.typing import InChIKeyStr, SmilesStr
 
 
@@ -35,53 +52,62 @@ def inchikey_for(smiles: str) -> InChIKeyStr:
 
 
 def test_stock_constraint_passes_when_all_leaves_are_in_stock() -> None:
-    result = TaskConstraintChecker(stock=stock_for("C", "CO"), stock_name="stock-a").check_route(
-        route(), TaskConstraints(stock="stock-a")
+    result = check_task_constraints(
+        route(),
+        [StockTerminationConstraint(stock="stock-a")],
+        [StockTerminationChecker(stocks={"stock-a": stock_for("C", "CO")})],
     )
 
     assert result.status == CheckStatus.PASS
 
 
 def test_stock_constraint_fails_when_leaf_is_missing() -> None:
-    result = TaskConstraintChecker(stock=stock_for("C"), stock_name="stock-a").check_route(
-        route(), TaskConstraints(stock="stock-a")
+    result = check_task_constraints(
+        route(),
+        [StockTerminationConstraint(stock="stock-a")],
+        [StockTerminationChecker(stocks={"stock-a": stock_for("C")})],
     )
 
     assert result.status == CheckStatus.FAIL
     assert result.checks[0].code == "constraint.stock_termination.missing_leaf"
 
 
-def test_stock_constraint_fails_clearly_without_stock_keys() -> None:
-    result = TaskConstraintChecker(stock_name="stock-a").check_route(route(), TaskConstraints(stock="stock-a"))
-
-    assert result.status == CheckStatus.FAIL
-    assert result.checks[0].code == "constraint.stock_termination.no_stock_keys"
-
-
 def test_stock_constraint_selects_stock_by_task_constraint_name() -> None:
-    checker = TaskConstraintChecker(
-        stocks={
-            "stock-a": stock_for("C"),
-            "stock-b": stock_for("C", "CO"),
-        }
+    stocks = {
+        "stock-a": stock_for("C"),
+        "stock-b": stock_for("C", "CO"),
+    }
+
+    checkers = [StockTerminationChecker(stocks=stocks)]
+
+    assert (
+        check_task_constraints(route(), [StockTerminationConstraint(stock="stock-a")], checkers).status
+        == CheckStatus.FAIL
+    )
+    assert (
+        check_task_constraints(route(), [StockTerminationConstraint(stock="stock-b")], checkers).status
+        == CheckStatus.PASS
     )
 
-    assert checker.check_route(route(), TaskConstraints(stock="stock-a")).status == CheckStatus.FAIL
-    assert checker.check_route(route(), TaskConstraints(stock="stock-b")).status == CheckStatus.PASS
 
-
-def test_stock_constraint_fails_clearly_when_named_stock_is_missing() -> None:
-    result = TaskConstraintChecker(stocks={"stock-a": stock_for("C", "CO")}).check_route(
-        route(), TaskConstraints(stock="stock-b")
+def test_stock_constraint_fails_clearly_when_named_stock_is_not_registered() -> None:
+    result = check_task_constraints(
+        route(),
+        [StockTerminationConstraint(stock="stock-b")],
+        [StockTerminationChecker(stocks={"stock-a": stock_for("C", "CO")})],
     )
 
     assert result.status == CheckStatus.FAIL
-    assert result.checks[0].code == "constraint.stock_termination.no_stock_keys"
+    assert result.checks[0].code == "constraint.stock_termination.unregistered_stock"
     assert result.checks[0].details == {"stock": "stock-b"}
 
 
 def test_required_leaf_constraint_fails_when_required_leaf_is_missing() -> None:
-    result = TaskConstraintChecker().check_route(route(), TaskConstraints(required_leaves_smiles=[SmilesStr("CC")]))
+    result = check_task_constraints(
+        route(),
+        [RequiredLeavesConstraint(smiles=[SmilesStr("CC")])],
+        [RequiredLeavesChecker()],
+    )
 
     assert result.status == CheckStatus.FAIL
     assert result.checks[0].code == "constraint.required_leaf.missing"
@@ -98,27 +124,46 @@ def test_route_depth_constraint_fails_when_route_is_too_deep() -> None:
         )
     )
 
-    result = TaskConstraintChecker().check_route(deep_route, TaskConstraints(route_depth=1))
+    result = check_task_constraints(deep_route, [RouteDepthConstraint(max_depth=1)], [RouteDepthChecker()])
 
     assert result.status == CheckStatus.FAIL
     assert result.checks[0].code == "constraint.route_depth.exceeded"
 
 
 def test_route_depth_named_constraints_use_explicit_ranges() -> None:
-    checker = TaskConstraintChecker()
+    checkers = [RouteDepthChecker()]
 
-    assert checker.check_route(route_with_depth(3), TaskConstraints(route_depth="short")).status == CheckStatus.PASS
-    assert checker.check_route(route_with_depth(4), TaskConstraints(route_depth="short")).status == CheckStatus.FAIL
-    assert checker.check_route(route_with_depth(4), TaskConstraints(route_depth="medium")).status == CheckStatus.PASS
-    assert checker.check_route(route_with_depth(7), TaskConstraints(route_depth="medium")).status == CheckStatus.FAIL
-    assert checker.check_route(route_with_depth(7), TaskConstraints(route_depth="long")).status == CheckStatus.PASS
-    assert checker.check_route(route_with_depth(6), TaskConstraints(route_depth="long")).status == CheckStatus.FAIL
-
-
-def test_stock_only_checker_ignores_other_task_constraints() -> None:
-    result = TaskConstraintChecker.stock_termination(stock=stock_for("C", "CO"), stock_name="stock-a").check_route(
-        route(),
-        TaskConstraints(stock="stock-a", required_leaves_smiles=[SmilesStr("CC")], route_depth=0),
+    assert (
+        check_task_constraints(route_with_depth(3), [RouteDepthConstraint(max_depth="short")], checkers).status
+        == CheckStatus.PASS
+    )
+    assert (
+        check_task_constraints(route_with_depth(4), [RouteDepthConstraint(max_depth="short")], checkers).status
+        == CheckStatus.FAIL
+    )
+    assert (
+        check_task_constraints(route_with_depth(4), [RouteDepthConstraint(max_depth="medium")], checkers).status
+        == CheckStatus.PASS
+    )
+    assert (
+        check_task_constraints(route_with_depth(7), [RouteDepthConstraint(max_depth="medium")], checkers).status
+        == CheckStatus.FAIL
+    )
+    assert (
+        check_task_constraints(route_with_depth(7), [RouteDepthConstraint(max_depth="long")], checkers).status
+        == CheckStatus.PASS
+    )
+    assert (
+        check_task_constraints(route_with_depth(6), [RouteDepthConstraint(max_depth="long")], checkers).status
+        == CheckStatus.FAIL
     )
 
-    assert result.status == CheckStatus.PASS
+
+def test_unknown_constraint_kind_fails_closed() -> None:
+    with pytest.raises(UnsupportedTaskConstraintError) as exc_info:
+        check_task_constraints(
+            route(), [TaskConstraint(kind="ariadne.reaction_count", max_count=5)], [RouteDepthChecker()]
+        )
+
+    assert exc_info.value.code == "constraint.unsupported"
+    assert exc_info.value.context == {"kind": "ariadne.reaction_count"}

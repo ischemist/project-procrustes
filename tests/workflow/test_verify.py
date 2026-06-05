@@ -38,7 +38,7 @@ def write_manifest_to_disk(manifest: Manifest, path: Path) -> None:
     """Helper to write a manifest to disk."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
-        f.write(manifest.model_dump_json(indent=2))
+        f.write(manifest.model_dump_json(indent=2, exclude_none=True))
 
 
 # =============================================================================

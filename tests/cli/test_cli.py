@@ -22,7 +22,7 @@ from retrocast.io import (
     save_evaluation,
 )
 from retrocast.io.blob import save_json_gz
-from retrocast.models import Benchmark, Target, TaskConstraints
+from retrocast.models import Benchmark, StockTerminationConstraint, Target
 from retrocast.models.analysis import AnalysisReport, MetricSummary
 from retrocast.models.candidates import Candidate
 from retrocast.typing import InChIKeyStr, SmilesStr
@@ -70,7 +70,7 @@ def benchmark() -> Benchmark:
     return Benchmark(
         name="small",
         targets={target.id: target},
-        default_constraints=TaskConstraints(stock="test-stock"),
+        default_constraints=[StockTerminationConstraint(stock="test-stock")],
     )
 
 

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from retrocast.api import analyze_evaluation, ingest_with_adapter, score_predictions
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.models import Benchmark, Candidate, CheckStatus, Molecule, Reaction, Route, Target, TaskConstraints
+from retrocast.metrics import RouteDepthChecker
+from retrocast.models import Benchmark, Candidate, CheckStatus, Molecule, Reaction, Route, RouteDepthConstraint, Target
 from retrocast.models.evaluation import (
     ConstraintResult,
     Evaluation,
@@ -21,10 +22,14 @@ def test_score_predictions_applies_non_stock_task_constraints() -> None:
     task = Benchmark(
         name="depth-check",
         targets={target.id: target},
-        default_constraints=TaskConstraints(route_depth=0),
+        default_constraints=[RouteDepthConstraint(max_depth=0)],
     )
 
-    evaluation = score_predictions({target.id: [Candidate(rank=1, route=route)]}, task)
+    evaluation = score_predictions(
+        {target.id: [Candidate(rank=1, route=route)]},
+        task,
+        constraint_checkers=[RouteDepthChecker()],
+    )
 
     scored = evaluation.targets[target.id].candidates[0]
     assert scored.constraints.status == CheckStatus.FAIL
@@ -43,7 +48,7 @@ def test_api_ingest_accepts_adapter_names_and_analyze_delegates_to_workflow() ->
         targets={
             target.id: TargetResult(
                 target=target,
-                effective_constraints=TaskConstraints(route_depth=1),
+                effective_constraints=[RouteDepthConstraint(max_depth=1)],
                 candidates=[
                     ScoredCandidate(
                         rank=1,

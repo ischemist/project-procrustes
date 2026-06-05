@@ -4,20 +4,21 @@ import pytest
 
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import UnsupportedValidityTierError
+from retrocast.metrics import RequiredLeavesChecker, RouteDepthChecker, StockTerminationChecker
 from retrocast.models import (
     Candidate,
     CheckStatus,
-    ConstraintResult,
     Evaluation,
     FailureRecord,
     Molecule,
     Reaction,
     ReactionValidity,
     Route,
+    RouteDepthConstraint,
     RouteValidity,
+    StockTerminationConstraint,
     Target,
     Task,
-    TaskConstraints,
     Tier,
     TierResult,
 )
@@ -61,16 +62,6 @@ class FixedTierTwoChecker(FixedTierChecker):
     tier = Tier.TWO
 
 
-class FixedConstraintChecker:
-    name = "fixed-task"
-
-    def __init__(self, status: CheckStatus = CheckStatus.PASS) -> None:
-        self.status = status
-
-    def check_route(self, route: Route, constraints: TaskConstraints) -> ConstraintResult:
-        return ConstraintResult(status=self.status)
-
-
 def molecule(smiles: str, *, product_of: Reaction | None = None) -> Molecule:
     canonical = canonicalize_smiles(smiles)
     return Molecule(
@@ -103,6 +94,10 @@ def task(benchmark_target: Target) -> Task:
     return Task(name="small", targets={benchmark_target.id: benchmark_target})
 
 
+def stock_for(*smiles_values: str) -> set[InChIKeyStr]:
+    return {InChIKeyStr(get_inchi_key(canonicalize_smiles(smiles))) for smiles in smiles_values}
+
+
 def test_failed_candidate_does_not_satisfy_solv_zero() -> None:
     candidate = Candidate(
         rank=1,
@@ -112,9 +107,9 @@ def test_failed_candidate_does_not_satisfy_solv_zero() -> None:
     scored = score_candidate(
         candidate,
         target=target(),
-        constraints=TaskConstraints(),
+        constraints=[],
         tier_checkers=[],
-        constraint_checker=FixedConstraintChecker(),
+        constraint_checkers=[],
     )
 
     assert scored.failed_adaptation()
@@ -127,9 +122,9 @@ def test_valid_route_satisfies_tier_zero_from_candidate_boundary() -> None:
     scored = score_candidate(
         Candidate(rank=2, route=route()),
         target=target(),
-        constraints=TaskConstraints(),
+        constraints=[],
         tier_checkers=[],
-        constraint_checker=FixedConstraintChecker(),
+        constraint_checkers=[],
     )
 
     assert scored.has_route()
@@ -142,9 +137,9 @@ def test_task_constraint_failure_prevents_solv_zero() -> None:
     scored = score_candidate(
         Candidate(rank=1, route=route()),
         target=target(),
-        constraints=TaskConstraints(stock="stock-a"),
+        constraints=[RouteDepthConstraint(max_depth=0)],
         tier_checkers=[FixedTierChecker()],
-        constraint_checker=FixedConstraintChecker(CheckStatus.FAIL),
+        constraint_checkers=[RouteDepthChecker()],
     )
 
     assert scored.satisfies_validity(Tier.ZERO)
@@ -158,9 +153,9 @@ def test_reaction_validity_is_addressable_by_reaction_id() -> None:
     scored = score_candidate(
         Candidate(rank=1, route=route()),
         target=target(),
-        constraints=TaskConstraints(),
+        constraints=[],
         tier_checkers=[FixedTierChecker()],
-        constraint_checker=FixedConstraintChecker(),
+        constraint_checkers=[],
     )
 
     result = scored.reaction_tier_result("rc:r:/", Tier.ONE)
@@ -173,9 +168,9 @@ def test_route_tier_checker_cannot_claim_tier_zero() -> None:
         score_candidate(
             Candidate(rank=1, route=route()),
             target=target(),
-            constraints=TaskConstraints(),
+            constraints=[],
             tier_checkers=[InvalidTierZeroRouteChecker()],
-            constraint_checker=FixedConstraintChecker(),
+            constraint_checkers=[],
         )
     assert exc_info.value.code == "validity.unsupported_tier"
     assert exc_info.value.context == {"tier": 0, "checker": "invalid-tier-zero"}
@@ -186,9 +181,9 @@ def test_route_tier_checker_cannot_return_tier_zero() -> None:
         score_candidate(
             Candidate(rank=1, route=route()),
             target=target(),
-            constraints=TaskConstraints(),
+            constraints=[],
             tier_checkers=[InvalidReturnedTierZeroRouteChecker()],
-            constraint_checker=FixedConstraintChecker(),
+            constraint_checkers=[],
         )
     assert exc_info.value.code == "validity.unsupported_tier"
     assert exc_info.value.context == {"tier": 0, "checker": "invalid-returned-tier-zero"}
@@ -198,9 +193,9 @@ def test_reaction_validity_merges_results_from_multiple_tier_checkers() -> None:
     scored = score_candidate(
         Candidate(rank=1, route=route()),
         target=target(),
-        constraints=TaskConstraints(),
+        constraints=[],
         tier_checkers=[FixedTierChecker(), FixedTierTwoChecker(CheckStatus.FAIL)],
-        constraint_checker=FixedConstraintChecker(),
+        constraint_checkers=[],
     )
 
     tier_one = scored.reaction_tier_result("rc:r:/", Tier.ONE)
@@ -219,7 +214,6 @@ def test_score_preserves_candidate_rank_and_records_acceptable_match() -> None:
         {"ethanol": [Candidate(rank=7, route=predicted_route)]},
         task(benchmark_target),
         tier_checkers=[FixedTierChecker()],
-        constraint_checker=FixedConstraintChecker(),
     )
 
     scored = evaluation.targets["ethanol"].candidates[0]
@@ -248,9 +242,9 @@ def test_score_records_acceptable_match_when_reference_is_prediction_prefix() ->
     scored = score_candidate(
         Candidate(rank=1, route=predicted_route),
         target=benchmark_target,
-        constraints=TaskConstraints(),
+        constraints=[],
         tier_checkers=[],
-        constraint_checker=FixedConstraintChecker(),
+        constraint_checkers=[],
     )
 
     assert predicted_route.signature() != acceptable_route.signature()
@@ -276,9 +270,9 @@ def test_score_prefers_deepest_acceptable_prefix_match() -> None:
     scored = score_candidate(
         Candidate(rank=1, route=deep_route),
         target=benchmark_target,
-        constraints=TaskConstraints(),
+        constraints=[],
         tier_checkers=[],
-        constraint_checker=FixedConstraintChecker(),
+        constraint_checkers=[],
     )
 
     assert scored.matches_acceptable
@@ -303,9 +297,9 @@ def test_score_can_require_exact_acceptable_route_match() -> None:
     scored = score_candidate(
         Candidate(rank=1, route=predicted_route),
         target=benchmark_target,
-        constraints=TaskConstraints(),
+        constraints=[],
         tier_checkers=[],
-        constraint_checker=FixedConstraintChecker(),
+        constraint_checkers=[],
         acceptable_route_match=AcceptableRouteMatch.EXACT,
     )
 
@@ -339,9 +333,9 @@ def test_score_does_not_match_candidate_shorter_than_reference_route() -> None:
     scored = score_candidate(
         Candidate(rank=1, route=predicted_route),
         target=benchmark_target,
-        constraints=TaskConstraints(),
+        constraints=[],
         tier_checkers=[],
-        constraint_checker=FixedConstraintChecker(),
+        constraint_checkers=[],
     )
 
     assert predicted_route.signature(depth=predicted_route.depth()) != acceptable_route.signature()
@@ -354,14 +348,21 @@ def test_score_records_metric_label_from_task() -> None:
     benchmark_task = Task(
         name="scoped",
         targets={benchmark_target.id: benchmark_target},
-        default_constraints=TaskConstraints(stock="buyables", route_depth=3),
+        default_constraints=[
+            StockTerminationConstraint(stock="buyables"),
+            RouteDepthConstraint(max_depth=3),
+        ],
     )
 
     evaluation = score(
         {"ethanol": [Candidate(rank=1, route=route())]},
         benchmark_task,
         tier_checkers=[],
-        constraint_checker=FixedConstraintChecker(),
+        constraint_checkers=[
+            StockTerminationChecker(stocks={"buyables": stock_for("C", "CO")}),
+            RequiredLeavesChecker(),
+            RouteDepthChecker(),
+        ],
     )
 
     assert evaluation.metric_label == "buyables+depth"
@@ -375,7 +376,7 @@ def test_score_carries_execution_stats_to_target_results() -> None:
         {"ethanol": [Candidate(rank=1, route=route())]},
         task(benchmark_target),
         tier_checkers=[],
-        constraint_checker=FixedConstraintChecker(),
+        constraint_checkers=[],
         execution_stats=execution_stats,
     )
 

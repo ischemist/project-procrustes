@@ -5,9 +5,9 @@ from importlib.metadata import entry_points
 
 def test_installed_package_runs_minimal_v2_workflow() -> None:
     import retrocast
-    from retrocast import Benchmark, Target, TaskConstraints, analyze, get_adapter, ingest_candidates, score
+    from retrocast import Benchmark, StockTerminationConstraint, Target, analyze, get_adapter, ingest_candidates, score
     from retrocast.chem import get_inchi_key
-    from retrocast.metrics import TaskConstraintChecker
+    from retrocast.metrics import RequiredLeavesChecker, RouteDepthChecker, StockTerminationChecker
     from retrocast.typing import InChIKeyStr, SmilesStr
 
     assert isinstance(retrocast.__version__, str)
@@ -21,7 +21,7 @@ def test_installed_package_runs_minimal_v2_workflow() -> None:
     task = Benchmark(
         name="smoke",
         targets={target.id: target},
-        default_constraints=TaskConstraints(stock="tiny-stock"),
+        default_constraints=[StockTerminationConstraint(stock="tiny-stock")],
     )
     raw_payload = {
         "ethanol": {
@@ -56,10 +56,11 @@ def test_installed_package_runs_minimal_v2_workflow() -> None:
     evaluation = score(
         predictions,
         task,
-        constraint_checker=TaskConstraintChecker(
-            stock={InChIKeyStr(get_inchi_key("C"))},
-            stock_name="tiny-stock",
-        ),
+        constraint_checkers=[
+            StockTerminationChecker(stocks={"tiny-stock": {InChIKeyStr(get_inchi_key("C"))}}),
+            RequiredLeavesChecker(),
+            RouteDepthChecker(),
+        ],
     )
     report = analyze(evaluation, n_boot=10)
 

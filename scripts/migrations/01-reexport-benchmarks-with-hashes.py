@@ -81,7 +81,7 @@ def main():
             )
 
             with open(manifest_path, "w") as f:
-                f.write(manifest.model_dump_json(indent=2))
+                f.write(manifest.model_dump_json(indent=2, exclude_none=True))
             logger.info(f"  Created manifest: {manifest_path.name}")
 
             logger.info(f"  ✓ Successfully processed {benchmark_file.name}")
