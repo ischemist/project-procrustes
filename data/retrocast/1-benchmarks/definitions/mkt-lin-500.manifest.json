@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2",
   "retrocast_version": "0.5.0",
   "created_at": "2025-12-01T19:38:04.905141Z",
   "action": "scripts/paroutes/02-create-subsets",
@@ -7,26 +7,40 @@
     "seed": 19450716,
     "name": "mkt-lin-500"
   },
+  "directives": {},
   "source_files": [
     {
       "path": "1-benchmarks/definitions/paroutes-n5-full-buyables-pruned.json.gz",
-      "file_hash": "824655ae1e0dd30b683259f0ffab0dc7b9f1c6f86cfe20dbef92a322772e28f5",
-      "content_hash": null
+      "file_hash": "824655ae1e0dd30b683259f0ffab0dc7b9f1c6f86cfe20dbef92a322772e28f5"
     },
     {
       "path": "1-benchmarks/stocks/buyables-stock.csv.gz",
-      "file_hash": "b144cd96adf19694dcf35f6ccd28432062682ea43a47f4c2203fd3f813ea1bac",
-      "content_hash": null
-    }
-  ],
-  "output_files": [
+      "file_hash": "b144cd96adf19694dcf35f6ccd28432062682ea43a47f4c2203fd3f813ea1bac"
+    },
     {
       "path": "1-benchmarks/definitions/mkt-lin-500.json.gz",
       "file_hash": "10aedb788717206977a72b64f1b3eb0779727dedd536aba90db28c564017490d",
       "content_hash": "4c3adb442a5dcd0973e4ec8ee0d739bbfe0ebb2c6592bdda714bd653fa38eb27"
     }
   ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/mkt-lin-500.json.gz",
+      "file_hash": "f925e688d731a0ad4e3aa6a505df094f6d3ca64ce3facc312bc5f64731921b33",
+      "content_hash": "2995ce3d53e6e7b2cd8b1696ff5fc9295e7c03585a32b77144445f01a9a388d3"
+    }
+  ],
   "statistics": {
-    "n_targets": 500
+    "n_targets": 500,
+    "metric_label": "buyables-stock"
+  },
+  "summary": {
+    "migrations": [
+      {
+        "action": "scripts/migrations/05-migrate-task-constraints-to-records",
+        "previous_schema_version": "1.0",
+        "schema_version": "2"
+      }
+    ]
   }
 }

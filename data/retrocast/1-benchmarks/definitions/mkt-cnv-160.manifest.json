@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2",
   "retrocast_version": "0.5.0",
   "created_at": "2025-12-01T19:38:05.800051Z",
   "action": "scripts/paroutes/02-create-subsets",
@@ -7,26 +7,40 @@
     "seed": 20180329,
     "name": "mkt-cnv-160"
   },
+  "directives": {},
   "source_files": [
     {
       "path": "1-benchmarks/definitions/paroutes-n5-full-buyables-pruned.json.gz",
-      "file_hash": "824655ae1e0dd30b683259f0ffab0dc7b9f1c6f86cfe20dbef92a322772e28f5",
-      "content_hash": null
+      "file_hash": "824655ae1e0dd30b683259f0ffab0dc7b9f1c6f86cfe20dbef92a322772e28f5"
     },
     {
       "path": "1-benchmarks/stocks/buyables-stock.csv.gz",
-      "file_hash": "b144cd96adf19694dcf35f6ccd28432062682ea43a47f4c2203fd3f813ea1bac",
-      "content_hash": null
-    }
-  ],
-  "output_files": [
+      "file_hash": "b144cd96adf19694dcf35f6ccd28432062682ea43a47f4c2203fd3f813ea1bac"
+    },
     {
       "path": "1-benchmarks/definitions/mkt-cnv-160.json.gz",
       "file_hash": "b7f960fb5c97d18a1776881423f3569e804b89dcd7f38fcec912749d86522084",
       "content_hash": "adff7df0895b9171f6e33a2cd21f5bcd2f83ef6d91186d22ed5b20bcfb3d11b9"
     }
   ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/mkt-cnv-160.json.gz",
+      "file_hash": "7390a9c2522b1c81605e80a42a8de7c7ad9a5797d028633b54904bc78f091bb8",
+      "content_hash": "9cc8af1b5a411223881a7c3ba58d4ea6abc32f0504b271843f726ddd8b6cac19"
+    }
+  ],
   "statistics": {
-    "n_targets": 160
+    "n_targets": 160,
+    "metric_label": "buyables-stock"
+  },
+  "summary": {
+    "migrations": [
+      {
+        "action": "scripts/migrations/05-migrate-task-constraints-to-records",
+        "previous_schema_version": "1.0",
+        "schema_version": "2"
+      }
+    ]
   }
 }

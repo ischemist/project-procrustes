@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2",
   "retrocast_version": "0.5.0",
   "created_at": "2025-12-01T19:38:00.918122Z",
   "action": "scripts/paroutes/02-create-subsets",
@@ -7,26 +7,40 @@
     "seed": 662607015,
     "name": "ref-cnv-400"
   },
+  "directives": {},
   "source_files": [
     {
       "path": "1-benchmarks/definitions/paroutes-n5-full-pruned.json.gz",
-      "file_hash": "ddd087377551e106e8b39954459988d2ee40261150d4d5b3c802da4c6c4dfb99",
-      "content_hash": null
+      "file_hash": "ddd087377551e106e8b39954459988d2ee40261150d4d5b3c802da4c6c4dfb99"
     },
     {
       "path": "1-benchmarks/stocks/n5-stock.csv.gz",
-      "file_hash": "e8ff1fd558bb8c8992ef808ca33b1f965674542bf9e4428e5ef3f9b8a078f6e9",
-      "content_hash": null
-    }
-  ],
-  "output_files": [
+      "file_hash": "e8ff1fd558bb8c8992ef808ca33b1f965674542bf9e4428e5ef3f9b8a078f6e9"
+    },
     {
       "path": "1-benchmarks/definitions/ref-cnv-400.json.gz",
       "file_hash": "0da9027211ee22e527a07f7a7d57700daf4ec9072139ec8aa2947ee243d05556",
       "content_hash": "86f57386ee604016b707ed48dea34140778ed24401ebd5865571bce5b62bbf1a"
     }
   ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/ref-cnv-400.json.gz",
+      "file_hash": "3895c2909c53593560c5ba610abc7e6df80513dfd8624165c560451735097d36",
+      "content_hash": "12402c9ddbbd0e4bc17a4b6195eb514dd4043491a756e816027f8e7a1bfc9569"
+    }
+  ],
   "statistics": {
-    "n_targets": 400
+    "n_targets": 400,
+    "metric_label": "n5-stock"
+  },
+  "summary": {
+    "migrations": [
+      {
+        "action": "scripts/migrations/05-migrate-task-constraints-to-records",
+        "previous_schema_version": "1.0",
+        "schema_version": "2"
+      }
+    ]
   }
 }

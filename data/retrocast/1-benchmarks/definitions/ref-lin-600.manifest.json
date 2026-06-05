@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2",
   "retrocast_version": "0.5.0",
   "created_at": "2025-12-01T19:38:00.736313Z",
   "action": "scripts/paroutes/02-create-subsets",
@@ -7,26 +7,40 @@
     "seed": 17890304,
     "name": "ref-lin-600"
   },
+  "directives": {},
   "source_files": [
     {
       "path": "1-benchmarks/definitions/paroutes-n5-full-pruned.json.gz",
-      "file_hash": "ddd087377551e106e8b39954459988d2ee40261150d4d5b3c802da4c6c4dfb99",
-      "content_hash": null
+      "file_hash": "ddd087377551e106e8b39954459988d2ee40261150d4d5b3c802da4c6c4dfb99"
     },
     {
       "path": "1-benchmarks/stocks/n5-stock.csv.gz",
-      "file_hash": "e8ff1fd558bb8c8992ef808ca33b1f965674542bf9e4428e5ef3f9b8a078f6e9",
-      "content_hash": null
-    }
-  ],
-  "output_files": [
+      "file_hash": "e8ff1fd558bb8c8992ef808ca33b1f965674542bf9e4428e5ef3f9b8a078f6e9"
+    },
     {
       "path": "1-benchmarks/definitions/ref-lin-600.json.gz",
       "file_hash": "4b20459d44ad209e3ac2789969892c3882ec8fcf31fb6edf2404b1a2307326a0",
       "content_hash": "d974d913b66bbba56eec553031b41deb414331cfa17de4936c4773cf941813ff"
     }
   ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/ref-lin-600.json.gz",
+      "file_hash": "61e696668b63e77d7c2a29c0821768e1c383de8313852d6e995224859494442e",
+      "content_hash": "bf40f8ed005b5d91e7599e4d19191d051cd7b4076527b8c75f35fc80ba1ab8fb"
+    }
+  ],
   "statistics": {
-    "n_targets": 600
+    "n_targets": 600,
+    "metric_label": "n5-stock"
+  },
+  "summary": {
+    "migrations": [
+      {
+        "action": "scripts/migrations/05-migrate-task-constraints-to-records",
+        "previous_schema_version": "1.0",
+        "schema_version": "2"
+      }
+    ]
   }
 }

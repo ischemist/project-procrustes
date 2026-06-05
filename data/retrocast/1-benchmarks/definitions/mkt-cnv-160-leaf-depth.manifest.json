@@ -1,0 +1,30 @@
+{
+  "schema_version": "2",
+  "retrocast_version": "0.7.0.dev18",
+  "created_at": "2026-06-05T03:17:38.241118Z",
+  "action": "scripts/paroutes/benchmark-prep/05-create-constraint-variants",
+  "parameters": {
+    "source": "mkt-cnv-160",
+    "variant": "leaf-depth"
+  },
+  "directives": {},
+  "source_files": [
+    {
+      "path": "retrocast/1-benchmarks/definitions/mkt-cnv-160.json.gz",
+      "file_hash": "7390a9c2522b1c81605e80a42a8de7c7ad9a5797d028633b54904bc78f091bb8"
+    }
+  ],
+  "output_files": [
+    {
+      "path": "retrocast/1-benchmarks/definitions/mkt-cnv-160-leaf-depth.json.gz",
+      "file_hash": "bfb48e2540b7ac3a7d32408cb00f108293595ed67fff5baa3d9db44aca06a8d3",
+      "content_hash": "433d83803b2ce8ca781a4ff0fab46732a3c20bccc0556eb8b091d6b7c4b3b19b"
+    }
+  ],
+  "statistics": {
+    "n_targets": 160,
+    "n_constrained_targets": 160,
+    "metric_label": "buyables-stock+leaf+depth"
+  },
+  "summary": {}
+}
