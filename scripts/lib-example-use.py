@@ -8,7 +8,7 @@ from rich.console import Console
 from retrocast.adapters import AiZynthFinderAdapter
 from retrocast.cli.progress import create_cli_progress, quiet_info_logs
 from retrocast.io import load_benchmark, load_json_gz, load_stock_file
-from retrocast.metrics import TaskConstraintChecker
+from retrocast.metrics import RequiredLeavesChecker, RouteDepthChecker, StockTerminationChecker
 from retrocast.utils.logging import configure_script_logging, logger
 from retrocast.workflow import (
     adapt_candidates,
@@ -23,7 +23,8 @@ from retrocast.workflow import (
 
 RAW_PATH = Path("data/retrocast/2-raw/aizynthfinder-4.4.1-mcts-iter100-depth6/mkt-cnv-160/results.json.gz")
 BENCHMARK_PATH = Path("data/retrocast/1-benchmarks/definitions/mkt-cnv-160.json.gz")
-STOCKS_DIR = Path("data/retrocast/1-benchmarks/stocks")
+STOCK_NAME = "n5-stock"
+STOCK_PATH = Path("data/retrocast/1-benchmarks/stocks/n5-stock.csv.gz")
 
 
 def main() -> None:
@@ -33,8 +34,7 @@ def main() -> None:
     console = Console()
     raw_payload = load_json_gz(args.raw_path)
     task = load_benchmark(args.benchmark_path)
-    stock_name = task.default_constraints.stock
-    stock = load_stock_file(args.stocks_dir / f"{stock_name}.csv.gz") if stock_name is not None else set()
+    stock = load_stock_file(args.stock_path)
     adapter = AiZynthFinderAdapter()
     logger.info("loaded raw payload and benchmark: targets=%s", len(task.targets))
 
@@ -71,7 +71,11 @@ def main() -> None:
         collected_candidates,
         task,
         tier_checkers=[],
-        constraint_checker=TaskConstraintChecker(stock=stock, stock_name=stock_name),
+        constraint_checkers=[
+            StockTerminationChecker(stocks={args.stock_name: stock}),
+            RequiredLeavesChecker(),
+            RouteDepthChecker(),
+        ],
     )
     report = analyze(evaluation, ks=(1, 10))
     logger.info("score: targets=%s", len(evaluation.targets))
@@ -107,7 +111,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the library API example against local schema-2 artifacts.")
     parser.add_argument("--raw-path", type=Path, default=RAW_PATH)
     parser.add_argument("--benchmark-path", type=Path, default=BENCHMARK_PATH)
-    parser.add_argument("--stocks-dir", type=Path, default=STOCKS_DIR)
+    parser.add_argument("--stock-name", default=STOCK_NAME)
+    parser.add_argument("--stock-path", type=Path, default=STOCK_PATH)
     return parser.parse_args()
 
 
