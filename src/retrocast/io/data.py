@@ -255,6 +255,10 @@ def load_execution_stats(path: Path) -> ExecutionStats:
     return _load_model(path, _EXECUTION_STATS_ADAPTER, artifact="execution_stats")
 
 
+def save_execution_stats(stats: ExecutionStats, path: Path) -> None:
+    _save_model(stats, path, _EXECUTION_STATS_ADAPTER, artifact="execution_stats")
+
+
 def load_analysis_report(path: Path) -> AnalysisReport:
     return _load_model(path, _ANALYSIS_REPORT_ADAPTER, artifact="analysis_report")
 
