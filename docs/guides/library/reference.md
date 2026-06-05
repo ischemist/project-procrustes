@@ -22,11 +22,11 @@ This page lists the main schema-2 entry points. See the neighboring guides for c
 
 | Function | Purpose | Returns |
 | --- | --- | --- |
-| `score(predictions, task, constraint_checker=...)` | Score collected candidates | `Evaluation` |
+| `score(predictions, task, constraint_checkers=...)` | Score collected candidates | `Evaluation` |
 | `score_candidate(candidate, target=..., constraints=..., ...)` | Score one candidate | `ScoredCandidate` |
 | `score_target(candidates, target=..., constraints=..., ...)` | Score one target's candidates | `TargetResult` |
 | `analyze(evaluation, ks=(1, 5, 10, 50), n_boot=10000)` | Summarize an evaluation | `AnalysisReport` |
-| `score_predictions(predictions, task, stock=..., stock_name=...)` | Convenience wrapper around `score(...)` | `Evaluation` |
+| `score_predictions(predictions, task, stocks=...)` | Convenience wrapper that builds default task constraint checkers | `Evaluation` |
 | `analyze_evaluation(evaluation, n_boot=10000)` | Convenience wrapper around `analyze(...)` | `AnalysisReport` |
 
 ## IO
@@ -47,7 +47,7 @@ This page lists the main schema-2 entry points. See the neighboring guides for c
 | `Route`, `Molecule`, `Reaction`                                  | Canonical route tree       |
 | `RoutePath`, `ReactionId`, `MoleculeId`                          | Route-local addressing     |
 | `Candidate`, `FailureRecord`                                     | Adaptation accounting      |
-| `Target`, `TaskConstraints`, `Task`, `Benchmark`                 | Problem definition         |
+| `Target`, `TaskConstraint`, `Task`, `Benchmark`                  | Problem definition         |
 | `CheckResult`, `TierResult`, `RouteValidity`, `ConstraintResult` | Scoring details            |
 | `ScoredCandidate`, `TargetResult`, `Evaluation`                  | Scored prediction artifact |
 | `MetricSummary`, `AnalysisReport`                                | Analysis artifact          |

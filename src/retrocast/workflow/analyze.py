@@ -5,6 +5,7 @@ from collections.abc import Callable, Sequence
 from retrocast.metrics.analysis import summarize_targets
 from retrocast.models.analysis import AnalysisReport, RuntimeSummary
 from retrocast.models.evaluation import Evaluation, TargetResult
+from retrocast.models.task import RouteDepthConstraint
 
 
 def analyze(
@@ -73,7 +74,7 @@ def _runtime_summary(targets: list[TargetResult]) -> RuntimeSummary:
 def _default_route_depth_stratum(target: TargetResult) -> str | None:
     if target.target.acceptable_routes:
         return f"depth {target.target.acceptable_routes[0].depth()}"
-    route_depth = target.effective_constraints.route_depth
-    if route_depth is None:
-        return None
-    return f"depth {route_depth}"
+    for constraint in target.effective_constraints:
+        if isinstance(constraint, RouteDepthConstraint):
+            return f"depth {constraint.max_depth}"
+    return None

@@ -36,12 +36,16 @@ from retrocast.io import (
 )
 from retrocast.io.blob import load_json_artifact
 from retrocast.io.data import load_stock_file
-from retrocast.metrics.constraints import TaskConstraintChecker
+from retrocast.metrics.constraints import RequiredLeavesChecker, RouteDepthChecker, StockTerminationChecker
 from retrocast.models.analysis import AnalysisReport
 from retrocast.models.evaluation import Evaluation
 from retrocast.models.provenance import VerificationReport
 from retrocast.models.route import InChIKeyLevel
-from retrocast.models.task import Benchmark
+from retrocast.models.task import (
+    STOCK_TERMINATION,
+    Benchmark,
+    StockTerminationConstraint,
+)
 from retrocast.paths import (
     DEFAULT_DATA_DIR,
     ENV_VAR_NAME,
@@ -277,11 +281,11 @@ def handle_score_file(args: argparse.Namespace) -> None:
     evaluation = score(
         predictions=load_collected_candidates(args.candidates),
         task=task,
-        constraint_checker=TaskConstraintChecker(
-            stock=_load_stock_path(args.stock),
-            stock_name=stock_name,
-            match_level=match_level,
-        ),
+        constraint_checkers=[
+            StockTerminationChecker(stocks={stock_name: _load_stock_path(args.stock)}, match_level=match_level),
+            RequiredLeavesChecker(match_level=match_level),
+            RouteDepthChecker(),
+        ],
         acceptable_match_level=match_level,
         acceptable_route_match=AcceptableRouteMatch(args.acceptable_route_match),
     )
@@ -311,12 +315,19 @@ def _stock_name_from_path(path: Path) -> str:
 
 
 def _task_with_stock(task: Benchmark, stock_name: str) -> Benchmark:
+    stock_constraint = StockTerminationConstraint(stock=stock_name)
+
     return task.model_copy(
         update={
-            "default_constraints": task.default_constraints.model_copy(update={"stock": stock_name}),
+            # score-file takes an explicit stock path. Bind that path to the task
+            # by replacing any serialized stock constraint with this stock name.
+            "default_constraints": [
+                *[constraint for constraint in task.default_constraints if constraint.kind != STOCK_TERMINATION],
+                stock_constraint,
+            ],
             "constraints": {
-                target_id: task.effective_constraints(target_id).model_copy(update={"stock": stock_name})
-                for target_id in task.targets
+                target_id: [constraint for constraint in constraints if constraint.kind != STOCK_TERMINATION]
+                for target_id, constraints in task.constraints.items()
             },
         }
     )
@@ -454,10 +465,11 @@ def _score_one(model_name: str, benchmark_name: str, paths: dict[str, Path], arg
     evaluation = score(
         predictions=predictions,
         task=task,
-        constraint_checker=TaskConstraintChecker(
-            stocks=stock_registry,
-            match_level=match_level,
-        ),
+        constraint_checkers=[
+            StockTerminationChecker(stocks=stock_registry, match_level=match_level),
+            RequiredLeavesChecker(match_level=match_level),
+            RouteDepthChecker(),
+        ],
         acceptable_match_level=match_level,
         acceptable_route_match=AcceptableRouteMatch(args.acceptable_route_match),
         execution_stats=_load_execution_stats_if_present(_execution_stats_path(paths, model_name, benchmark_name)),
@@ -850,9 +862,9 @@ def _load_stock_registry(
 def _effective_stock_names(task: Benchmark) -> set[str]:
     stock_names = set()
     for target_id in task.targets:
-        stock = task.effective_constraints(target_id).stock
-        if stock is not None:
-            stock_names.add(stock)
+        for constraint in task.effective_constraints(target_id):
+            if isinstance(constraint, StockTerminationConstraint):
+                stock_names.add(constraint.stock)
     return stock_names
 
 

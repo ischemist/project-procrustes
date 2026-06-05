@@ -22,6 +22,7 @@ from retrocast.exceptions import (
 )
 from retrocast.hashing import hash_file
 from retrocast.io import load_benchmark
+from retrocast.models import StockTerminationConstraint
 from retrocast.paths import resolve_cache_dir, validate_filename
 
 TrainingDatasetName = Literal["paroutes"]
@@ -660,11 +661,11 @@ def write_response_with_progress(*, response: Any, handle: BufferedWriter, descr
 
 
 def _single_stock_name(benchmark: Any) -> str | None:
-    stock_names = {
-        benchmark.effective_constraints(target_id).stock
-        for target_id in benchmark.targets
-        if benchmark.effective_constraints(target_id).stock is not None
-    }
+    stock_names = set()
+    for target_id in benchmark.targets:
+        for constraint in benchmark.effective_constraints(target_id):
+            if isinstance(constraint, StockTerminationConstraint):
+                stock_names.add(constraint.stock)
     if len(stock_names) == 1:
         return next(iter(stock_names))
     return None

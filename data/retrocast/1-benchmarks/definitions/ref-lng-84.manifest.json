@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2",
   "retrocast_version": "0.5.0",
   "created_at": "2025-12-01T19:38:01.968719Z",
   "action": "scripts/paroutes/02-create-subsets",
@@ -7,31 +7,44 @@
     "seed": 42,
     "name": "ref-lng-84"
   },
+  "directives": {},
   "source_files": [
     {
       "path": "1-benchmarks/definitions/paroutes-n5-full-pruned.json.gz",
-      "file_hash": "ddd087377551e106e8b39954459988d2ee40261150d4d5b3c802da4c6c4dfb99",
-      "content_hash": null
+      "file_hash": "ddd087377551e106e8b39954459988d2ee40261150d4d5b3c802da4c6c4dfb99"
     },
     {
       "path": "1-benchmarks/definitions/paroutes-n1-full-pruned.json.gz",
-      "file_hash": "5e569a4238c576a11d4ce17abfc49ebf238d86369ea8cee9b0a880ca19df520f",
-      "content_hash": null
+      "file_hash": "5e569a4238c576a11d4ce17abfc49ebf238d86369ea8cee9b0a880ca19df520f"
     },
     {
       "path": "1-benchmarks/stocks/n1-n5-stock.csv.gz",
-      "file_hash": "8381c59a07755607ff4a01d8d8da062ed48d7392cf8c5e2975c2a1955f630cb9",
-      "content_hash": null
-    }
-  ],
-  "output_files": [
+      "file_hash": "8381c59a07755607ff4a01d8d8da062ed48d7392cf8c5e2975c2a1955f630cb9"
+    },
     {
       "path": "1-benchmarks/definitions/ref-lng-84.json.gz",
       "file_hash": "3ed74bbf10bc1142aba4c17163b867a105c6f78eb3f97692245e30534183d0af",
       "content_hash": "b2b8200e1e48b5627fa099a281e778f41b4f13efdb2978116ccd6f56034b350a"
     }
   ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/ref-lng-84.json.gz",
+      "file_hash": "a82783729b577c36f2e09a2b6fdd55ae9542aed5546571d67ef9cb74dc21f70a",
+      "content_hash": "2a873a63b0cbc185721ee50061fbbf23535e0235aeaa2e05152e9f6c2caf9fec"
+    }
+  ],
   "statistics": {
-    "n_targets": 84
+    "n_targets": 84,
+    "metric_label": "n1-n5-stock"
+  },
+  "summary": {
+    "migrations": [
+      {
+        "action": "scripts/migrations/05-migrate-task-constraints-to-records",
+        "previous_schema_version": "1.0",
+        "schema_version": "2"
+      }
+    ]
   }
 }

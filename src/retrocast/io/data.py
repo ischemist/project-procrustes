@@ -23,7 +23,7 @@ from retrocast.models.analysis import AnalysisReport
 from retrocast.models.candidates import Candidate
 from retrocast.models.evaluation import Evaluation, TargetResult
 from retrocast.models.route import Route
-from retrocast.models.task import Benchmark, Task
+from retrocast.models.task import Benchmark, RouteDepthConstraint, Task
 from retrocast.typing import InChIKeyStr, SmilesStr
 from retrocast.utils.timing import ExecutionStats
 from retrocast.workflow.collect import CollectedCandidates, CollectedRoutes
@@ -142,10 +142,10 @@ def _target_route_depth_stratum(target: TargetResult) -> str | None:
     acceptable_routes = target.target.acceptable_routes
     if acceptable_routes:
         return f"depth {acceptable_routes[0].depth()}"
-    route_depth = target.effective_constraints.route_depth
-    if route_depth is None:
-        return None
-    return f"depth {route_depth}"
+    for constraint in target.effective_constraints:
+        if isinstance(constraint, RouteDepthConstraint):
+            return f"depth {constraint.max_depth}"
+    return None
 
 
 def load_training_route_records(path: Path):
@@ -186,7 +186,7 @@ def save_stock_files(
         statistics=statistics.to_manifest_dict() if statistics is not None else {},
         keyed_output_files=True,
     )
-    manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+    manifest_path.write_text(manifest.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
     return csv_path, txt_path, manifest_path
 
 

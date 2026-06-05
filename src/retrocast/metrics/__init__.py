@@ -7,7 +7,13 @@ from retrocast.metrics.bootstrap import (
     compute_metric_with_ci,
     summarize_values,
 )
-from retrocast.metrics.constraints import TaskConstraintChecker
+from retrocast.metrics.constraints import (
+    RequiredLeavesChecker,
+    RouteDepthChecker,
+    StockTerminationChecker,
+    TaskConstraintChecker,
+    check_task_constraints,
+)
 from retrocast.metrics.ranking import (
     PairwiseComparison,
     RankResult,
@@ -20,8 +26,12 @@ __all__ = [
     "PairwiseComparison",
     "RankResult",
     "StratifiedMetricSummary",
+    "RequiredLeavesChecker",
+    "RouteDepthChecker",
+    "StockTerminationChecker",
     "TaskConstraintChecker",
     "check_reliability",
+    "check_task_constraints",
     "compute_metric_with_ci",
     "compute_paired_difference",
     "compute_pairwise_tournament",

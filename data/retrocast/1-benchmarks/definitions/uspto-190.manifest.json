@@ -1,28 +1,43 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2",
   "retrocast_version": "0.5.0",
   "created_at": "2025-12-01T19:34:40.741210Z",
   "action": "scripts/curation/uspto-190/create-benchmark-from-pickle",
   "parameters": {
     "check_buyables": false
   },
+  "directives": {},
   "source_files": [
     {
       "path": "0-assets/routes_possible_test_hard.pkl",
-      "file_hash": "a9fdde23fc044a1ca6e2c67f24f7d713e457c303b835a5c8383eeeb5e90a4981",
-      "content_hash": null
-    }
-  ],
-  "output_files": [
+      "file_hash": "a9fdde23fc044a1ca6e2c67f24f7d713e457c303b835a5c8383eeeb5e90a4981"
+    },
     {
       "path": "1-benchmarks/definitions/uspto-190.json.gz",
       "file_hash": "da47f77da552a6f071dc03c96a3bfcf92ed602d6a7e6162090e3618f24ccc650",
       "content_hash": "1e7ef1f0bf60fa2a8685bf8453db7cc1a2f990a6f56167a6c5f5b00f458449b3"
     }
   ],
+  "output_files": [
+    {
+      "path": "1-benchmarks/definitions/uspto-190.json.gz",
+      "file_hash": "019173c85ab67300a20aafbd44174d6551ca67a41e948a511372ae5dca775a80",
+      "content_hash": "a997b582236680b4f1a28be0ec86374e6f9ce0076ec34068585aed8c7f833a24"
+    }
+  ],
   "statistics": {
     "n_targets": 190,
     "n_failed": 0,
-    "n_unsolvable": 0
+    "n_unsolvable": 0,
+    "metric_label": "buyables-stock"
+  },
+  "summary": {
+    "migrations": [
+      {
+        "action": "scripts/migrations/05-migrate-task-constraints-to-records",
+        "previous_schema_version": "1.0",
+        "schema_version": "2"
+      }
+    ]
   }
 }

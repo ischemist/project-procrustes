@@ -175,7 +175,7 @@ def write_training_reaction_release(
         release_name=result.release_name,
         keyed_output_files=True,
     )
-    manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+    manifest_path.write_text(manifest.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
 
 
 def summarize_reaction_records(records: Sequence[TrainingReactionRecord]) -> dict[str, Any]:

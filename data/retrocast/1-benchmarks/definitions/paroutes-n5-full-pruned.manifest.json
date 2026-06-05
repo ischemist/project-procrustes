@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2",
   "retrocast_version": "0.5.0",
   "created_at": "2025-12-01T19:36:07.475984Z",
   "action": "scripts/paroutes/01-cast-paroutes",
@@ -8,18 +8,23 @@
     "check_buyables": false,
     "prune_intermediates": true
   },
+  "directives": {},
   "source_files": [
     {
       "path": "0-assets/paroutes/n5-routes.json.gz",
-      "file_hash": "5333b4aeb4e65a2c50e42a8f3a3701c75d76c8045280ec6cc460fbb3ebd605ad",
-      "content_hash": null
+      "file_hash": "5333b4aeb4e65a2c50e42a8f3a3701c75d76c8045280ec6cc460fbb3ebd605ad"
+    },
+    {
+      "path": "1-benchmarks/definitions/paroutes-n5-full-pruned.json.gz",
+      "file_hash": "ddd087377551e106e8b39954459988d2ee40261150d4d5b3c802da4c6c4dfb99",
+      "content_hash": "7dbadf21241886bb8770ffd6b00f1d5965389ce074088e887e3e46b7b68e52f0"
     }
   ],
   "output_files": [
     {
       "path": "1-benchmarks/definitions/paroutes-n5-full-pruned.json.gz",
-      "file_hash": "ddd087377551e106e8b39954459988d2ee40261150d4d5b3c802da4c6c4dfb99",
-      "content_hash": "7dbadf21241886bb8770ffd6b00f1d5965389ce074088e887e3e46b7b68e52f0"
+      "file_hash": "08097010022d95676d2aaaeb5de1e3d2277b7e9f63489c397d25889642ea3ed3",
+      "content_hash": "99d2bec3dfd5873035cd92135fc88da702842a3184dc90c8ab2dae8043d3ec84"
     }
   ],
   "statistics": {
@@ -27,6 +32,16 @@
     "n_failures": 0,
     "n_targets_with_pruning": 0,
     "n_total_pruned_routes": 0,
-    "avg_pruned_routes_per_target": 0
+    "avg_pruned_routes_per_target": 0,
+    "metric_label": "n5-stock"
+  },
+  "summary": {
+    "migrations": [
+      {
+        "action": "scripts/migrations/05-migrate-task-constraints-to-records",
+        "previous_schema_version": "1.0",
+        "schema_version": "2"
+      }
+    ]
   }
 }

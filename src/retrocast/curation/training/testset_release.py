@@ -141,7 +141,7 @@ def write_test_route_release(
         release_name=release_name,
         keyed_output_files=True,
     )
-    manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+    manifest_path.write_text(manifest.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
 
 
 def write_test_reaction_release(
@@ -186,7 +186,7 @@ def write_test_reaction_release(
         release_name=release_name,
         keyed_output_files=True,
     )
-    manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+    manifest_path.write_text(manifest.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
 
 
 def _string_list_annotation(annotations: dict[str, object], key: str, *, route_id: str, reaction_id: str) -> list[str]:

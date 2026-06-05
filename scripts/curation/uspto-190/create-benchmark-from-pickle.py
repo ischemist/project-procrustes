@@ -25,8 +25,9 @@ from retrocast.adapters.retrostar import RetroStarAdapter, RetroStarRoutePayload
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.exceptions import InvalidSmilesError, RetroCastException
 from retrocast.io import create_manifest, load_stock_file, save_benchmark
-from retrocast.metrics import TaskConstraintChecker
-from retrocast.models import Benchmark, Route, Target, TaskConstraints
+from retrocast.metrics import StockTerminationChecker, check_task_constraints
+from retrocast.models import Benchmark, Route, StockTerminationConstraint, Target
+from retrocast.typing import InChIKeyStr
 from retrocast.utils.logging import configure_script_logging, logger
 
 BASE_DIR = Path(__file__).resolve().parents[3]
@@ -83,10 +84,6 @@ def create_benchmark_from_pickle(
     benchmark_targets: dict[str, Target] = {}
     failed = 0
     stock_termination_failures = 0
-    stock_checker = (
-        TaskConstraintChecker.stock_termination(stock=stock, stock_name="buyables-stock") if stock is not None else None
-    )
-
     for idx, route_steps in enumerate(routes):
         target_id = f"USPTO-{idx + 1:03d}/{len(routes)}"
 
@@ -106,9 +103,9 @@ def create_benchmark_from_pickle(
 
             # If checking buyables, filter out routes that do not terminate in stock.
             if check_buyables:
-                if stock_checker is None:
-                    raise ValueError("stock checker must be loaded when check_buyables=True")
-                if not satisfies_stock_termination(route, stock_checker=stock_checker, stock_name="buyables-stock"):
+                if stock is None:
+                    raise ValueError("stock must be loaded when check_buyables=True")
+                if not satisfies_stock_termination(route, stock=stock, stock_name="buyables-stock"):
                     stock_termination_failures += 1
                     continue
 
@@ -142,11 +139,11 @@ def create_benchmark_from_pickle(
         logger.info(f"Route length distribution: {dict(sorted(length_counts.items()))}")
 
     if check_buyables:
-        if stock_checker is None:
-            raise ValueError("stock checker must be loaded when check_buyables=True")
+        if stock is None:
+            raise ValueError("stock must be loaded when check_buyables=True")
         validate_acceptable_routes_satisfy_stock(
             targets=benchmark_targets,
-            stock_checker=stock_checker,
+            stock=stock,
             stock_name="buyables-stock",
         )
 
@@ -163,7 +160,7 @@ def create_benchmark_from_pickle(
         name=name,
         description=description,
         targets=benchmark_targets,
-        default_constraints=TaskConstraints(stock="buyables-stock"),
+        default_constraints=[StockTerminationConstraint(stock="buyables-stock")],
         annotations={"source": "retro-pickle"},
     )
 
@@ -188,7 +185,7 @@ def create_benchmark_from_pickle(
 
     manifest_path = DEF_DIR / f"{name}.manifest.json"
     with open(manifest_path, "w") as f:
-        f.write(manifest.model_dump_json(indent=2))
+        f.write(manifest.model_dump_json(indent=2, exclude_none=True))
 
     logger.info(f"Benchmark saved: {out_path}")
     logger.info(f"Manifest saved: {manifest_path}")
@@ -197,19 +194,24 @@ def create_benchmark_from_pickle(
 def validate_acceptable_routes_satisfy_stock(
     *,
     targets: dict[str, Target],
-    stock_checker: TaskConstraintChecker,
+    stock: set[InChIKeyStr],
     stock_name: str,
 ) -> None:
     for target in targets.values():
         for route_index, route in enumerate(target.acceptable_routes, start=1):
-            if not satisfies_stock_termination(route, stock_checker=stock_checker, stock_name=stock_name):
+            if not satisfies_stock_termination(route, stock=stock, stock_name=stock_name):
                 raise ValueError(
                     f"{target.id}: acceptable route {route_index} fails declared stock constraint '{stock_name}'"
                 )
 
 
-def satisfies_stock_termination(route: Route, *, stock_checker: TaskConstraintChecker, stock_name: str) -> bool:
-    return not stock_checker.check_route(route, TaskConstraints(stock=stock_name)).checks
+def satisfies_stock_termination(route: Route, *, stock: set[InChIKeyStr], stock_name: str) -> bool:
+    result = check_task_constraints(
+        route,
+        [StockTerminationConstraint(stock=stock_name)],
+        [StockTerminationChecker(stocks={stock_name: stock})],
+    )
+    return not result.checks
 
 
 def main():

@@ -33,7 +33,7 @@ from retrocast.exceptions import (
     DatasetVerificationError,
 )
 from retrocast.io import save_benchmark
-from retrocast.models import Benchmark, Target, TaskConstraints
+from retrocast.models import Benchmark, StockTerminationConstraint, Target
 from retrocast.typing import InChIKeyStr, SmilesStr
 
 
@@ -423,7 +423,7 @@ def benchmark() -> Benchmark:
     return Benchmark(
         name="small",
         targets={target.id: target},
-        default_constraints=TaskConstraints(stock="test-stock"),
+        default_constraints=[StockTerminationConstraint(stock="test-stock")],
     )
 
 

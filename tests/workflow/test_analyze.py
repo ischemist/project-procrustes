@@ -11,12 +11,12 @@ from retrocast.models import (
     Molecule,
     Reaction,
     Route,
+    RouteDepthConstraint,
     RouteValidity,
     ScoredCandidate,
     Target,
     TargetResult,
     Task,
-    TaskConstraints,
     Tier,
     TierResult,
 )
@@ -100,7 +100,7 @@ def evaluation(results: dict[str, TargetResult]) -> Evaluation:
 
 
 def result(benchmark_target: Target, candidates: list[ScoredCandidate]) -> TargetResult:
-    return TargetResult(target=benchmark_target, effective_constraints=TaskConstraints(), candidates=candidates)
+    return TargetResult(target=benchmark_target, effective_constraints=[], candidates=candidates)
 
 
 def timed_result(
@@ -112,7 +112,7 @@ def timed_result(
 ) -> TargetResult:
     return TargetResult(
         target=benchmark_target,
-        effective_constraints=TaskConstraints(),
+        effective_constraints=[],
         candidates=candidates,
         wall_time=wall_time,
         cpu_time=cpu_time,
@@ -252,7 +252,7 @@ def test_analyze_stratifies_by_route_depth_constraint_when_no_acceptable_route_e
             {
                 "ethanol": TargetResult(
                     target=benchmark_target,
-                    effective_constraints=TaskConstraints(route_depth=3),
+                    effective_constraints=[RouteDepthConstraint(max_depth=3)],
                     candidates=[solved_candidate(1)],
                 )
             }

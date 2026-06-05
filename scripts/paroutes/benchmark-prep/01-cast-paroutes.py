@@ -17,8 +17,8 @@ from retrocast import adapt_route, get_adapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
 from retrocast.curation.generators import generate_pruned_routes
 from retrocast.io import create_manifest, load_json_artifact, load_stock_file, save_benchmark
-from retrocast.metrics import TaskConstraintChecker
-from retrocast.models import Benchmark, Route, Target, TaskConstraints
+from retrocast.metrics import StockTerminationChecker, check_task_constraints
+from retrocast.models import Benchmark, Route, StockTerminationConstraint, Target
 from retrocast.typing import InChIKeyStr, SmilesStr
 from retrocast.utils.logging import configure_script_logging, logger
 
@@ -60,8 +60,6 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
     stock_termination_failures = 0
     total_pruned_routes = 0
     targets_with_pruning = 0
-    stock_checker = TaskConstraintChecker.stock_termination(stock=stock_for_validation, stock_name=stock_name_str)
-
     for source_order, entry in tqdm(enumerate(raw_entries, start=1), total=len(raw_entries), desc=f"Casting {name}"):
         raw_item = entry.payload
         row_index = entry.source_row_index or source_order
@@ -84,7 +82,7 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
         # Optionally filter to routes that terminate in buyables stock.
         if check_buyables and not satisfies_stock_termination(
             route,
-            stock_checker=stock_checker,
+            stock=stock_for_validation,
             stock_name=stock_name_str,
         ):
             stock_termination_failures += 1
@@ -111,7 +109,7 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
         validate_acceptable_routes_satisfy_stock(
             target_id=target_id,
             routes=target.acceptable_routes,
-            stock_checker=stock_checker,
+            stock=stock_for_validation,
             stock_name=stock_name_str,
         )
 
@@ -121,7 +119,7 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
         name=f"paroutes-{name}-full{suffix}",
         description=f"Full raw import of PaRoutes {name} set.",
         targets=targets,
-        default_constraints=TaskConstraints(stock=stock_name_str),
+        default_constraints=[StockTerminationConstraint(stock=stock_name_str)],
     )
 
     logger.info(f"Created {len(benchmark.targets)} targets. {failures} failed.")
@@ -152,7 +150,7 @@ def process_dataset(name: str, check_buyables: bool = False, prune_intermediates
     )
     # Save Manifest (plain JSON, not gzipped, so it's readable)
     with open(manifest_path, "w", encoding="utf-8") as f:
-        f.write(manifest.model_dump_json(indent=2))
+        f.write(manifest.model_dump_json(indent=2, exclude_none=True))
 
     logger.info(f"Manifest saved to {manifest_path}")
 
@@ -161,18 +159,23 @@ def validate_acceptable_routes_satisfy_stock(
     *,
     target_id: str,
     routes: list[Route],
-    stock_checker: TaskConstraintChecker,
+    stock: set[InChIKeyStr],
     stock_name: str,
 ) -> None:
     for route_index, route in enumerate(routes, start=1):
-        if not satisfies_stock_termination(route, stock_checker=stock_checker, stock_name=stock_name):
+        if not satisfies_stock_termination(route, stock=stock, stock_name=stock_name):
             raise ValueError(
                 f"{target_id}: acceptable route {route_index} fails declared stock constraint '{stock_name}'"
             )
 
 
-def satisfies_stock_termination(route: Route, *, stock_checker: TaskConstraintChecker, stock_name: str) -> bool:
-    return not stock_checker.check_route(route, TaskConstraints(stock=stock_name)).checks
+def satisfies_stock_termination(route: Route, *, stock: set[InChIKeyStr], stock_name: str) -> bool:
+    result = check_task_constraints(
+        route,
+        [StockTerminationConstraint(stock=stock_name)],
+        [StockTerminationChecker(stocks={stock_name: stock})],
+    )
+    return not result.checks
 
 
 def main():

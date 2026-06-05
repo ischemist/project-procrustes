@@ -16,8 +16,8 @@ from pathlib import Path
 from retrocast.curation.filtering import clean_and_prioritize_pools, filter_by_route_type
 from retrocast.curation.sampling import sample_random, sample_stratified_priority
 from retrocast.io import create_manifest, load_benchmark, load_stock_file, save_benchmark
-from retrocast.metrics import TaskConstraintChecker
-from retrocast.models import Benchmark, Target, TaskConstraints
+from retrocast.metrics import StockTerminationChecker, check_task_constraints
+from retrocast.models import Benchmark, StockTerminationConstraint, Target
 from retrocast.typing import InChIKeyStr
 from retrocast.utils.logging import configure_script_logging, logger
 
@@ -44,7 +44,7 @@ def create_subset(
         name=name,
         description=description,
         targets={t.id: t for t in targets},
-        default_constraints=TaskConstraints(stock=stock_name),
+        default_constraints=[StockTerminationConstraint(stock=stock_name)],
     )
 
     out_path = out_dir / f"{name}.json.gz"
@@ -62,18 +62,21 @@ def create_subset(
     )
 
     with open(manifest_path, "w") as f:
-        f.write(manifest.model_dump_json(indent=2))
+        f.write(manifest.model_dump_json(indent=2, exclude_none=True))
 
     logger.info(f"Created {name} with {len(subset.targets)} targets.")
 
 
 def validate_targets_satisfy_stock(*, targets: list[Target], stock: set[InChIKeyStr], stock_name: str) -> None:
-    stock_checker = TaskConstraintChecker.stock_termination(stock=stock, stock_name=stock_name)
     for target in targets:
         if not target.acceptable_routes:
             raise ValueError(f"{target.id}: target has no acceptable routes")
         for route_index, route in enumerate(target.acceptable_routes, start=1):
-            if stock_checker.check_route(route, TaskConstraints(stock=stock_name)).checks:
+            if check_task_constraints(
+                route,
+                [StockTerminationConstraint(stock=stock_name)],
+                [StockTerminationChecker(stocks={stock_name: stock})],
+            ).checks:
                 raise ValueError(
                     f"{target.id}: acceptable route {route_index} fails declared stock constraint '{stock_name}'"
                 )

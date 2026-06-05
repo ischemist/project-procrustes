@@ -3,11 +3,11 @@ from __future__ import annotations
 from enum import IntEnum, StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, SerializeAsAny, field_validator, model_validator
 
 from retrocast.models.candidates import FailureRecord
 from retrocast.models.route import InChIKeyLevel, ReactionId, Route
-from retrocast.models.task import Target, Task, TaskConstraints
+from retrocast.models.task import Target, Task, TaskConstraint, hydrate_task_constraints
 
 
 class CheckStatus(StrEnum):
@@ -99,10 +99,17 @@ class ScoredCandidate(BaseModel):
 
 class TargetResult(BaseModel):
     target: Target
-    effective_constraints: TaskConstraints
+    # Pydantic serializes fields through their annotation. Without SerializeAsAny,
+    # subclass payload fields like stock/smiles/max_depth are dropped.
+    effective_constraints: list[SerializeAsAny[TaskConstraint]]
     candidates: list[ScoredCandidate] = Field(default_factory=list)
     wall_time: float | None = None
     cpu_time: float | None = None
+
+    @field_validator("effective_constraints", mode="before")
+    @classmethod
+    def _parse_effective_constraints(cls, value: object) -> list[TaskConstraint]:
+        return hydrate_task_constraints(value)
 
 
 class Evaluation(BaseModel):

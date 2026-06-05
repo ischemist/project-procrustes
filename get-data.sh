@@ -118,8 +118,11 @@ main() {
         # --- specific benchmark bundles (hardcoded dependencies) ---
         # anchored regex: matches lines starting with 1-benchmarks
         # AND containing either the benchmark name OR the required stock
-        mkt-lin-500) PATTERN="^1-benchmarks/.*(mkt-lin-500|buyables-stock)" ;;
-        mkt-cnv-160) PATTERN="^1-benchmarks/.*(mkt-cnv-160|buyables-stock)" ;;
+        mkt-lin-500) PATTERN="^1-benchmarks/.*(mkt-lin-500\\.|buyables-stock)" ;;
+        mkt-cnv-160) PATTERN="^1-benchmarks/.*(mkt-cnv-160\\.|buyables-stock)" ;;
+        mkt-cnv-160-depth) PATTERN="^1-benchmarks/.*(mkt-cnv-160-depth\\.|buyables-stock)" ;;
+        mkt-cnv-160-leaf) PATTERN="^1-benchmarks/.*(mkt-cnv-160-leaf\\.|buyables-stock)" ;;
+        mkt-cnv-160-leaf-depth) PATTERN="^1-benchmarks/.*(mkt-cnv-160-leaf-depth\\.|buyables-stock)" ;;
 
         ref-lin-600) PATTERN="^1-benchmarks/.*(ref-lin-600|n5-stock)" ;;
         ref-cnv-400) PATTERN="^1-benchmarks/.*(ref-cnv-400|n5-stock)" ;;

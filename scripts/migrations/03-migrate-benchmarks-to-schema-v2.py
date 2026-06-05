@@ -21,7 +21,7 @@ from retrocast.io import load_json_gz, save_benchmark
 from retrocast.io.provenance import calculate_file_hash
 from retrocast.models.provenance import FileInfo, Manifest
 from retrocast.models.route import Molecule, Reaction, Route
-from retrocast.models.task import Benchmark, Target, TaskConstraints
+from retrocast.models.task import Benchmark, StockTerminationConstraint, Target
 from retrocast.typing import InChIKeyStr, ReactionSmilesStr, SmilesStr
 from retrocast.utils.logging import configure_script_logging, logger
 
@@ -75,7 +75,7 @@ def main() -> None:
             statistics={"n_targets": len(benchmark.targets), "n_acceptable_routes": route_count},
             summary={"schema_version": "2", "legacy_schema": "v0.5.0"},
         )
-        manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+        manifest_path.write_text(manifest.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
         logger.info("  wrote %s and refreshed %s", output_path.name, manifest_path.name)
 
     if not args.write:
@@ -105,7 +105,7 @@ def convert_benchmark(data: dict[str, Any]) -> Benchmark:
         name=data["name"],
         description=data.get("description") or "",
         targets=targets,
-        default_constraints=TaskConstraints(stock=data.get("stock_name")),
+        default_constraints=[StockTerminationConstraint(stock=data["stock_name"])] if data.get("stock_name") else [],
         annotations={"migrated_from": "v0.5.0"},
     )
 
