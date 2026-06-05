@@ -91,8 +91,7 @@ TRAINING_INDEX_TEMPLATE = """<!doctype html>
   <div class="meta">
     generated: {timestamp}<br>
     latest release: <a href="{latest_json_href}">{release}</a><br>
-    release checksums: <a href="{release_checksums_href}">{release}/SHA256SUMS</a><br>
-    shell helper: <a href="/retrocast/get-training-set.sh">get-training-set.sh</a>
+    release checksums: <a href="{release_checksums_href}">{release}/SHA256SUMS</a>
   </div>
 
   <h2>related docs</h2>
@@ -147,7 +146,6 @@ def main() -> None:
                     "e.g. icgroup:/var/www/files.ischemist.com/retrocast"
                 )
             upload_training_release(staged_root=staged_root, dataset=args.dataset, remote_root=args.remote_root)
-            upload_shell_script(remote_root=args.remote_root)
 
 
 def find_latest_release_dir(releases_dir: Path) -> Path:
@@ -266,19 +264,6 @@ def upload_training_release(*, staged_root: Path, dataset: str, remote_root: str
         f"{remote_root}/training-sets/{dataset}/",
     ]
     logger.info("uploading staged training-set payload to %s/training-sets/%s/", remote_root, dataset)
-    subprocess.run(cmd, check=True)
-
-
-def upload_shell_script(*, remote_root: str) -> None:
-    shell_script = BASE_DIR / "get-training-set.sh"
-    cmd = [
-        "rsync",
-        "-avz",
-        "--progress",
-        str(shell_script),
-        f"{remote_root}/get-training-set.sh",
-    ]
-    logger.info("uploading %s to %s/get-training-set.sh", shell_script, remote_root)
     subprocess.run(cmd, check=True)
 
 

@@ -4,7 +4,7 @@ icon: lucide/database-zap
 
 # Training Sets
 
-RetroCast publishes PaRoutes training artifacts as hosted, versioned datasets. The official Python workflow is centered on `retrocast.datasets`. Use the shell helper when you need a download path outside Python.
+RetroCast publishes PaRoutes training artifacts as hosted, versioned datasets. The official Python workflow is centered on `retrocast.datasets`. Use `retrocast get-training-data` when you need a download path outside Python.
 
 !!! warning "Requires the hosted training-set API"
 
@@ -39,10 +39,10 @@ Pick one of two workflows:
         ...
     ```
 
-    shell fallback:
+    cli:
 
     ```bash
-    curl -fsSL https://files.ischemist.com/retrocast/get-training-set.sh | bash -s -- reaction-holdout-n1-n5 --split training
+    retrocast get-training-data reaction-holdout-n1-n5 --split training
     ```
 
     resulting local layout:
@@ -76,10 +76,10 @@ Pick one of two workflows:
         ...
     ```
 
-    shell fallback:
+    cli:
 
     ```bash
-    curl -fsSL https://files.ischemist.com/retrocast/get-training-set.sh | bash -s -- reaction-holdout-n1-n5 --split training --dir data/datasets/paroutes
+    retrocast get-training-data reaction-holdout-n1-n5 --split training --dir data/datasets/paroutes
     ```
 
     resulting local layout:
@@ -377,38 +377,37 @@ data/datasets/paroutes/v2026-05-12/reaction-holdout-n1-n5/training.jsonl.gz
 
 Override the shared cache with:
 
-- `RETROCAST_CACHE_DIR` for both shell and Python
-- `RETROCAST_TRAINING_SET_CACHE_DIR` for the shell helper's training-set cache only
+- `RETROCAST_CACHE_DIR` for both the CLI and Python
 - `cache_dir=...` in Python for per-call control
 
 Use `cache_dir` when you want to relocate the shared cache root but still keep the managed `paroutes/<release>/...` structure. Use `output_dir` when you want to own the dataset root yourself.
 
-## Shell API
+## CLI API
 
-The shell helper mirrors the Python surface, but it is the fallback story, not the primary one.
+The CLI mirrors the Python surface for release downloads.
 
 Download route JSONL:
 
 ```bash
-curl -fsSL https://files.ischemist.com/retrocast/get-training-set.sh | bash -s -- reaction-holdout-n1-n5 --split training
+retrocast get-training-data reaction-holdout-n1-n5 --split training
 ```
 
 Download `Route` JSONL for a pinned release:
 
 ```bash
-curl -fsSL https://files.ischemist.com/retrocast/get-training-set.sh | bash -s -- reaction-holdout-n1-n5 --split validation --release v2026-05-12
+retrocast get-training-data reaction-holdout-n1-n5 --split validation --release v2026-05-12
 ```
 
 Download single-step mapped reaction SMILES:
 
 ```bash
-curl -fsSL https://files.ischemist.com/retrocast/get-training-set.sh | bash -s -- single-step-reaction-holdout-n1-n5 --split training --format rsmi
+retrocast get-training-data single-step-reaction-holdout-n1-n5 --split training --format rsmi
 ```
 
 Materialize into a project directory instead of the default cache:
 
 ```bash
-curl -fsSL https://files.ischemist.com/retrocast/get-training-set.sh | bash -s -- reaction-holdout-n1-n5 --split training --dir data/datasets/paroutes
+retrocast get-training-data reaction-holdout-n1-n5 --split training --dir data/datasets/paroutes
 ```
 
 ## Conditions

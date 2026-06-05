@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import gzip
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -10,7 +11,8 @@ import pytest
 
 from retrocast.adapters import PaRoutesAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.cli.main import main
+from retrocast.cli.main import _resolve_training_data_artifact_and_release, main
+from retrocast.exceptions import ConfigurationError
 from retrocast.io import (
     load_analysis_report,
     load_candidates,
@@ -116,6 +118,95 @@ def test_v2_list_adapters_cli_reports_canonical_names_and_aliases(monkeypatch, c
     output = capsys.readouterr().out
     assert "paroutes" in output
     assert "retro-star -> retrostar" in output
+
+
+def test_get_data_cli_dry_run_lists_matching_files(tmp_path, monkeypatch, capsys) -> None:
+    remote_root = tmp_path / "remote"
+    hosted_file = remote_root / "1-benchmarks" / "definitions" / "small.json.gz"
+    hosted_file.parent.mkdir(parents=True)
+    hosted_file.write_bytes(b"data")
+    write_sha256sums(
+        remote_root / "SHA256SUMS", root=remote_root, paths=[Path("1-benchmarks/definitions/small.json.gz")]
+    )
+
+    run_cli(
+        monkeypatch,
+        "get-data",
+        "definitions",
+        "--base-url",
+        remote_root.resolve().as_uri(),
+        "--cache-dir",
+        str(tmp_path / "cache"),
+        "--dry-run",
+    )
+
+    assert str(tmp_path / "cache" / "1-benchmarks" / "definitions" / "small.json.gz") in capsys.readouterr().out
+
+
+def test_get_data_cli_defaults_to_resolved_project_data_dir(tmp_path, monkeypatch, capsys) -> None:
+    remote_root = tmp_path / "remote"
+    hosted_file = remote_root / "1-benchmarks" / "definitions" / "small.json.gz"
+    hosted_file.parent.mkdir(parents=True)
+    hosted_file.write_bytes(b"data")
+    write_sha256sums(
+        remote_root / "SHA256SUMS", root=remote_root, paths=[Path("1-benchmarks/definitions/small.json.gz")]
+    )
+
+    run_cli(
+        monkeypatch,
+        "--data-dir",
+        str(tmp_path / "project-data"),
+        "get-data",
+        "definitions",
+        "--base-url",
+        remote_root.resolve().as_uri(),
+        "--dry-run",
+    )
+
+    assert str(tmp_path / "project-data" / "1-benchmarks" / "definitions" / "small.json.gz") in capsys.readouterr().out
+
+
+def test_get_training_data_cli_dry_run_lists_artifact_files(tmp_path, monkeypatch, capsys) -> None:
+    remote_root = tmp_path / "remote"
+    release_root = remote_root / "paroutes" / "v2026-05-12"
+    artifact_dir = release_root / "n1-routes"
+    artifact_dir.mkdir(parents=True)
+    (remote_root / "paroutes" / "latest.json").write_text(
+        json.dumps({"dataset": "paroutes", "latest_release": "v2026-05-12"}),
+        encoding="utf-8",
+    )
+    with gzip.open(artifact_dir / "all.jsonl.gz", "wt", encoding="utf-8") as handle:
+        handle.write("{}\n")
+    (artifact_dir / "manifest.json").write_text("{}", encoding="utf-8")
+    write_sha256sums(
+        release_root / "SHA256SUMS",
+        root=release_root,
+        paths=[Path("n1-routes/all.jsonl.gz"), Path("n1-routes/manifest.json")],
+    )
+
+    run_cli(
+        monkeypatch,
+        "get-training-data",
+        "n1-routes",
+        "--base-url",
+        remote_root.resolve().as_uri(),
+        "--cache-dir",
+        str(tmp_path / "cache"),
+        "--dry-run",
+    )
+
+    output = capsys.readouterr().out
+    assert str(tmp_path / "cache" / "paroutes" / "v2026-05-12" / "n1-routes" / "all.jsonl.gz") in output
+    assert str(tmp_path / "cache" / "paroutes" / "v2026-05-12" / "n1-routes" / "manifest.json") in output
+
+
+def test_get_training_data_release_positional_requires_date_tag() -> None:
+    assert _resolve_training_data_artifact_and_release("v2026-05-12", "latest") == (None, "v2026-05-12")
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        _resolve_training_data_artifact_and_release("validation", "latest")
+
+    assert exc_info.value.code == "dataset.unsupported_training_data_target"
 
 
 def test_v2_list_cli_reports_raw_manifests(tmp_path, monkeypatch, capsys) -> None:
@@ -331,3 +422,11 @@ def write_raw_job(data_dir: Path, *, model: str, dataset: str) -> None:
         ),
         encoding="utf-8",
     )
+
+
+def write_sha256sums(path: Path, *, root: Path, paths: list[Path]) -> None:
+    lines = []
+    for relative_path in paths:
+        digest = hashlib.sha256((root / relative_path).read_bytes()).hexdigest()
+        lines.append(f"{digest} {relative_path.as_posix()}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")

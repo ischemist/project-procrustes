@@ -4,10 +4,11 @@ import argparse
 import gzip
 import json
 import logging
+import re
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from rich.console import Console
@@ -23,6 +24,17 @@ from retrocast.cli.compare import handle_pareto_frontier
 from retrocast.cli.manifest import manifest_sidecar_path, write_manifest
 from retrocast.cli.progress import create_cli_progress, estimate_raw_route_entries, quiet_info_logs
 from retrocast.cli.report import create_analysis_table, generate_markdown_report
+from retrocast.datasets import (
+    DEFAULT_HOSTED_DATA_BASE_URL,
+    DEFAULT_TRAINING_SET_BASE_URL,
+    TRAINING_ARTIFACT_SPECS,
+    TrainingArtifactName,
+    TrainingDatasetName,
+    TrainingSetFormat,
+    TrainingSplitName,
+    download_hosted_data_target,
+    download_training_data,
+)
 from retrocast.exceptions import ConfigurationError, InputError, RetroCastException, SecurityError
 from retrocast.io import (
     load_benchmark,
@@ -97,6 +109,10 @@ def main() -> None:
                 handle_pareto_frontier(args)
         elif args.command == "list-adapters":
             handle_list_adapters()
+        elif args.command == "get-data":
+            handle_get_data(args)
+        elif args.command == "get-training-data":
+            handle_get_training_data(args)
         else:
             config = _load_config(args.config)
             config_data_dir = config.get("data_dir")
@@ -132,6 +148,49 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("config", help="Show resolved configuration and paths")
     subparsers.add_parser("list", help="List raw model manifests")
     subparsers.add_parser("list-adapters", help="List available adapters")
+
+    get_data = subparsers.add_parser("get-data", help="Download published RetroCast data")
+    get_data.add_argument(
+        "target",
+        choices=[
+            "all",
+            "benchmarks",
+            "definitions",
+            "stocks",
+            "mkt-lin-500",
+            "mkt-cnv-160",
+            "mkt-cnv-160-depth",
+            "mkt-cnv-160-leaf",
+            "mkt-cnv-160-leaf-depth",
+            "ref-lin-600",
+            "ref-cnv-400",
+            "ref-lng-84",
+            "raw",
+            "processed",
+            "scored",
+            "results",
+        ],
+    )
+    get_data.add_argument("--dir", dest="output_dir", type=Path, help="Override the project data directory")
+    get_data.add_argument("--cache-dir", type=Path, help="Override the hosted data cache directory")
+    get_data.add_argument("--base-url", default=None, help="Override the hosted data base URL")
+    get_data.add_argument("--dry-run", action="store_true", help="Show matching files without downloading")
+
+    get_training_data = subparsers.add_parser("get-training-data", help="Download published training data artifacts")
+    get_training_data.add_argument(
+        "artifact_or_release",
+        nargs="?",
+        help="Training artifact name, or vYYYY-MM-DD to download the full release",
+    )
+    get_training_data.add_argument("--split", choices=["all", "training", "validation"], help="Only download one split")
+    get_training_data.add_argument("--format", choices=["jsonl", "rsmi"], help="Only download one format")
+    get_training_data.add_argument("--omit", help="Comma-separated splits or formats to omit")
+    get_training_data.add_argument("--release", default="latest", help="Release tag, or latest")
+    get_training_data.add_argument("--dataset", default="paroutes", choices=["paroutes"])
+    get_training_data.add_argument("--dir", dest="output_dir", type=Path, help="Materialize into an explicit directory")
+    get_training_data.add_argument("--cache-dir", type=Path, help="Override the training data cache directory")
+    get_training_data.add_argument("--base-url", default=None, help="Override the training data base URL")
+    get_training_data.add_argument("--dry-run", action="store_true", help="Show matching files without downloading")
 
     adapt = subparsers.add_parser("adapt", help="Adapt raw planner output into v2 candidates")
     adapt.add_argument("--input", required=True, type=Path)
@@ -216,6 +275,69 @@ def _add_model_dataset_args(parser: argparse.ArgumentParser) -> None:
     dataset_group = parser.add_mutually_exclusive_group(required=True)
     dataset_group.add_argument("--dataset")
     dataset_group.add_argument("--all-datasets", action="store_true")
+
+
+def handle_get_data(args: argparse.Namespace) -> None:
+    output_dir = args.output_dir
+    cache_dir = args.cache_dir
+    if output_dir is None and cache_dir is None:
+        config = _load_config(args.config)
+        output_dir = resolve_data_dir(cli_arg=args.data_dir, config_value=config.get("data_dir"))
+    paths = download_hosted_data_target(
+        args.target,
+        cache_dir=cache_dir,
+        output_dir=output_dir,
+        base_url=args.base_url or DEFAULT_HOSTED_DATA_BASE_URL,
+        dry_run=args.dry_run,
+    )
+    for path in paths:
+        print(path)
+
+
+def handle_get_training_data(args: argparse.Namespace) -> None:
+    artifact, release = _resolve_training_data_artifact_and_release(args.artifact_or_release, args.release)
+    if artifact is None and args.release == "latest" and release == "latest":
+        raise ConfigurationError(
+            "specify a training artifact or an explicit release",
+            code="dataset.training_data_target_required",
+        )
+    paths = download_training_data(
+        cast(TrainingDatasetName, args.dataset),
+        artifact=artifact,
+        split=cast(TrainingSplitName | None, args.split),
+        format=cast(TrainingSetFormat | None, args.format),
+        release=release,
+        omit=_parse_csv_arg(args.omit),
+        cache_dir=args.cache_dir,
+        output_dir=args.output_dir,
+        base_url=args.base_url or DEFAULT_TRAINING_SET_BASE_URL,
+        dry_run=args.dry_run,
+    )
+    for path in paths:
+        print(path)
+
+
+def _resolve_training_data_artifact_and_release(
+    positional: str | None,
+    release: str,
+) -> tuple[TrainingArtifactName | None, str]:
+    if positional is None:
+        return None, release
+    if positional in TRAINING_ARTIFACT_SPECS:
+        return cast(TrainingArtifactName, positional), release
+    if re.fullmatch(r"v\d{4}-\d{2}-\d{2}", positional):
+        return None, positional
+    raise ConfigurationError(
+        f"unsupported training artifact or release: {positional}",
+        code="dataset.unsupported_training_data_target",
+        context={"target": positional, "supported_artifacts": sorted(TRAINING_ARTIFACT_SPECS)},
+    )
+
+
+def _parse_csv_arg(value: str | None) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    return tuple(part.strip() for part in value.split(",") if part.strip())
 
 
 def _load_config(config_path: Path) -> dict[str, Any]:
