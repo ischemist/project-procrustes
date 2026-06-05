@@ -14,9 +14,12 @@ from retrocast.datasets import (
     build_training_set_url,
     download_benchmark,
     download_benchmark_assets,
+    download_hosted_data_target,
     download_stock,
+    download_training_data,
     download_training_set,
     load_sha256sums,
+    published_training_files,
     resolve_expected_hash,
     resolve_hosted_data_root,
     resolve_latest_training_set_release,
@@ -89,6 +92,49 @@ def test_download_training_set_allows_n1_all_only_artifacts(tmp_path: Path) -> N
     with pytest.raises(ConfigurationError) as exc_info:
         validate_training_dataset_request(dataset="paroutes", artifact="n1-routes", split="training", format="jsonl")
     assert exc_info.value.code == "dataset.split_mismatch"
+
+
+def test_download_training_data_expands_artifact_from_release_checksums(tmp_path: Path) -> None:
+    remote_root = tmp_path / "remote"
+    write_mixed_training_release(remote_root)
+
+    paths = download_training_data(
+        "paroutes",
+        artifact="single-step-route-holdout-n1-n5",
+        format="jsonl",
+        omit=("validation",),
+        base_url=remote_root.resolve().as_uri(),
+        cache_dir=tmp_path / "cache",
+    )
+
+    assert paths == [
+        tmp_path / "cache" / "paroutes" / "v2026-05-12" / "single-step-route-holdout-n1-n5" / "all.jsonl.gz",
+        tmp_path / "cache" / "paroutes" / "v2026-05-12" / "single-step-route-holdout-n1-n5" / "training.jsonl.gz",
+        tmp_path / "cache" / "paroutes" / "v2026-05-12" / "single-step-route-holdout-n1-n5" / "manifest.json",
+    ]
+    assert all(path.exists() for path in paths)
+
+
+def test_published_training_files_include_manifest_for_artifact_defaults(tmp_path: Path) -> None:
+    remote_root = tmp_path / "remote"
+    write_mixed_training_release(remote_root)
+
+    files = published_training_files(
+        checksums_path=tmp_path / "cache" / "SHA256SUMS",
+        checksums_url=(remote_root / "paroutes" / "v2026-05-12" / "SHA256SUMS").resolve().as_uri(),
+        artifact="single-step-route-holdout-n1-n5",
+        split=None,
+        format=None,
+        omit=(),
+    )
+
+    assert [file.key for file in files] == [
+        "single-step-route-holdout-n1-n5/all.jsonl.gz",
+        "single-step-route-holdout-n1-n5/training.jsonl.gz",
+        "single-step-route-holdout-n1-n5/validation.jsonl.gz",
+        "single-step-route-holdout-n1-n5/all.rsmi.txt.gz",
+        "single-step-route-holdout-n1-n5/manifest.json",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -172,6 +218,23 @@ def test_download_benchmark_stock_and_assets(tmp_path: Path) -> None:
     assert assets.benchmark_path.exists()
     assert assets.stock_path is not None
     assert assets.stock_path.exists()
+
+
+def test_download_hosted_data_target_expands_benchmark_dependencies(tmp_path: Path) -> None:
+    remote_root = tmp_path / "remote-data"
+    write_hosted_data(remote_root, benchmark_name="mkt-lin-500", stock_name="buyables-stock")
+
+    paths = download_hosted_data_target(
+        "mkt-lin-500",
+        base_url=remote_root.resolve().as_uri(),
+        cache_dir=tmp_path / "cache",
+    )
+
+    assert paths == [
+        tmp_path / "cache" / "1-benchmarks" / "definitions" / "mkt-lin-500.json.gz",
+        tmp_path / "cache" / "1-benchmarks" / "stocks" / "buyables-stock.csv.gz",
+    ]
+    assert all(path.exists() for path in paths)
 
 
 def test_download_benchmark_and_stock_include_manifests_when_requested(tmp_path: Path) -> None:
@@ -383,11 +446,41 @@ def write_n1_test_release(remote_root: Path) -> None:
     )
 
 
+def write_mixed_training_release(remote_root: Path) -> None:
+    artifact_dir = remote_root / "paroutes" / "v2026-05-12" / "single-step-route-holdout-n1-n5"
+    artifact_dir.mkdir(parents=True)
+    (remote_root / "paroutes").mkdir(exist_ok=True)
+    (remote_root / "paroutes" / "latest.json").write_text(
+        json.dumps({"dataset": "paroutes", "latest_release": "v2026-05-12"}),
+        encoding="utf-8",
+    )
+    paths = [
+        Path("single-step-route-holdout-n1-n5/all.jsonl.gz"),
+        Path("single-step-route-holdout-n1-n5/training.jsonl.gz"),
+        Path("single-step-route-holdout-n1-n5/validation.jsonl.gz"),
+        Path("single-step-route-holdout-n1-n5/all.rsmi.txt.gz"),
+    ]
+    for path in paths:
+        with gzip.open(remote_root / "paroutes" / "v2026-05-12" / path, "wt", encoding="utf-8") as handle:
+            handle.write("{}\n")
+    (artifact_dir / "manifest.json").write_text('{"schema_version":"2"}', encoding="utf-8")
+    write_sha256sums(
+        remote_root / "paroutes" / "v2026-05-12" / "SHA256SUMS",
+        root=remote_root / "paroutes" / "v2026-05-12",
+        paths=[*paths, Path("single-step-route-holdout-n1-n5/manifest.json")],
+    )
+
+
 def write_hosted_data(
-    remote_root: Path, *, include_manifests: bool = False, benchmark_value: Benchmark | None = None
+    remote_root: Path,
+    *,
+    include_manifests: bool = False,
+    benchmark_value: Benchmark | None = None,
+    benchmark_name: str = "small",
+    stock_name: str = "test-stock",
 ) -> None:
-    benchmark_path = remote_root / "1-benchmarks" / "definitions" / "small.json.gz"
-    stock_path = remote_root / "1-benchmarks" / "stocks" / "test-stock.csv.gz"
+    benchmark_path = remote_root / "1-benchmarks" / "definitions" / f"{benchmark_name}.json.gz"
+    stock_path = remote_root / "1-benchmarks" / "stocks" / f"{stock_name}.csv.gz"
     benchmark_path.parent.mkdir(parents=True)
     stock_path.parent.mkdir(parents=True)
     save_benchmark(benchmark_value or benchmark(), benchmark_path)
@@ -396,18 +489,18 @@ def write_hosted_data(
         writer.writerow(["SMILES", "InChIKey"])
         writer.writerow(["C", get_inchi_key("C")])
     paths = [
-        Path("1-benchmarks/definitions/small.json.gz"),
-        Path("1-benchmarks/stocks/test-stock.csv.gz"),
+        Path(f"1-benchmarks/definitions/{benchmark_name}.json.gz"),
+        Path(f"1-benchmarks/stocks/{stock_name}.csv.gz"),
     ]
     if include_manifests:
-        benchmark_manifest = remote_root / "1-benchmarks" / "definitions" / "small.manifest.json"
-        stock_manifest = remote_root / "1-benchmarks" / "stocks" / "test-stock.manifest.json"
+        benchmark_manifest = remote_root / "1-benchmarks" / "definitions" / f"{benchmark_name}.manifest.json"
+        stock_manifest = remote_root / "1-benchmarks" / "stocks" / f"{stock_name}.manifest.json"
         benchmark_manifest.write_text('{"artifact":"benchmark"}', encoding="utf-8")
         stock_manifest.write_text('{"artifact":"stock"}', encoding="utf-8")
         paths.extend(
             [
-                Path("1-benchmarks/definitions/small.manifest.json"),
-                Path("1-benchmarks/stocks/test-stock.manifest.json"),
+                Path(f"1-benchmarks/definitions/{benchmark_name}.manifest.json"),
+                Path(f"1-benchmarks/stocks/{stock_name}.manifest.json"),
             ]
         )
     write_sha256sums(

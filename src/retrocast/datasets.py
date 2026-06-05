@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from io import BufferedWriter
 from pathlib import Path
@@ -50,6 +51,7 @@ DEFAULT_HOSTED_DATA_BASE_URL = os.environ.get(
 DEFAULT_HOSTED_DATA_CACHE_SUBDIR = "data"
 DEFAULT_DATASET_USER_AGENT = "retrocast/2"
 SUPPORTED_DATASETS: tuple[TrainingDatasetName, ...] = ("paroutes",)
+TRAINING_OMIT_PARTS = {"all", "training", "validation", "jsonl", "rsmi"}
 
 
 class LatestTrainingSetRelease(BaseModel):
@@ -63,6 +65,12 @@ class LatestTrainingSetRelease(BaseModel):
 class DownloadedBenchmarkAssets:
     benchmark_path: Path
     stock_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class PublishedFile:
+    key: str
+    sha256: str
 
 
 @dataclass(frozen=True)
@@ -191,6 +199,108 @@ def download_training_set(
     return artifact_path
 
 
+def download_training_data(
+    dataset: TrainingDatasetName,
+    *,
+    artifact: TrainingArtifactName | None = None,
+    split: TrainingSplitName | None = None,
+    release: str = "latest",
+    format: TrainingSetFormat | None = None,
+    omit: tuple[str, ...] = (),
+    cache_dir: Path | None = None,
+    output_dir: Path | None = None,
+    base_url: str = DEFAULT_TRAINING_SET_BASE_URL,
+    dry_run: bool = False,
+    show_progress: bool | None = None,
+) -> list[Path]:
+    if dataset not in SUPPORTED_DATASETS:
+        raise ConfigurationError(
+            f"unsupported training dataset: {dataset}",
+            code="dataset.unsupported_dataset",
+            context={"dataset": dataset, "supported_datasets": list(SUPPORTED_DATASETS)},
+        )
+    if artifact is not None and artifact not in TRAINING_ARTIFACT_SPECS:
+        raise ConfigurationError(
+            f"unsupported training artifact: {artifact}",
+            code="dataset.unsupported_artifact",
+            context={"artifact": artifact},
+        )
+    if split is not None and split not in {"all", "training", "validation"}:
+        raise ConfigurationError(
+            f"unsupported training split: {split}",
+            code="dataset.unsupported_split",
+            context={"split": split},
+        )
+    if format is not None and format not in {"jsonl", "rsmi"}:
+        raise ConfigurationError(
+            f"unsupported training dataset format: {format}",
+            code="dataset.unsupported_format",
+            context={"format": format},
+        )
+    validate_training_omit_parts(omit)
+
+    resolved_release = resolve_training_set_release(dataset=dataset, release=release, base_url=base_url)
+    release_dir = resolve_training_set_root(
+        dataset=dataset,
+        release=resolved_release,
+        cache_dir=cache_dir,
+        output_dir=output_dir,
+    )
+    checksums_path = release_dir / "SHA256SUMS"
+    checksums_url = build_training_set_url(
+        base_url=base_url,
+        dataset=dataset,
+        release=resolved_release,
+        filename="SHA256SUMS",
+    )
+    published_files = published_training_files(
+        checksums_path=checksums_path,
+        checksums_url=checksums_url,
+        artifact=artifact,
+        split=split,
+        format=format,
+        omit=omit,
+    )
+    if not published_files:
+        raise DatasetResolutionError(
+            "no published training data files match request",
+            code="dataset.no_matching_files",
+            context={
+                "dataset": dataset,
+                "release": resolved_release,
+                "artifact": artifact,
+                "split": split,
+                "format": format,
+                "omit": list(omit),
+            },
+        )
+
+    paths = [release_dir / file.key for file in published_files]
+    if dry_run:
+        return paths
+
+    for file, path in zip(published_files, paths, strict=True):
+        download_verified_file(
+            local_path=path,
+            checksums_path=checksums_path,
+            checksums_url=checksums_url,
+            checksum_key=file.key,
+            download_url=build_training_data_file_url(
+                base_url=base_url,
+                dataset=dataset,
+                release=resolved_release,
+                relative_path=Path(file.key),
+            ),
+            show_progress=should_show_download_progress(show_progress),
+            progress_description=f"downloading {file.key}",
+            missing_message=f"training data file is not published: {file.key}",
+            missing_context={"dataset": dataset, "release": resolved_release, "key": file.key},
+            mismatch_message=f"downloaded training data file failed integrity verification: {file.key}",
+            mismatch_context={"dataset": dataset, "release": resolved_release, "key": file.key},
+        )
+    return paths
+
+
 def download_benchmark(
     name: str,
     *,
@@ -275,6 +385,78 @@ def download_benchmark_assets(
     return DownloadedBenchmarkAssets(benchmark_path=benchmark_path, stock_path=stock_path)
 
 
+def download_hosted_data_target(
+    target: str,
+    *,
+    cache_dir: Path | None = None,
+    output_dir: Path | None = None,
+    base_url: str = DEFAULT_HOSTED_DATA_BASE_URL,
+    dry_run: bool = False,
+) -> list[Path]:
+    selector = hosted_data_target_selector(target)
+    root_dir = resolve_hosted_data_root(cache_dir=cache_dir, output_dir=output_dir)
+    checksums_path = root_dir / "SHA256SUMS"
+    checksums_url = build_hosted_data_url(base_url=base_url, relative_path=Path("SHA256SUMS"))
+    files = [file for file in published_hosted_data_files(checksums_path, checksums_url) if selector(file.key)]
+    if not files:
+        raise DatasetResolutionError(
+            f"no hosted data files match target: {target}",
+            code="dataset.no_matching_files",
+            context={"target": target},
+        )
+    paths = [root_dir / file.key for file in files]
+    if dry_run:
+        return paths
+    for file, path in zip(files, paths, strict=True):
+        download_verified_file(
+            local_path=path,
+            checksums_path=checksums_path,
+            checksums_url=checksums_url,
+            checksum_key=file.key,
+            download_url=build_hosted_data_url(base_url=base_url, relative_path=Path(file.key)),
+            missing_message=f"hosted data file is not published: {file.key}",
+            missing_context={"target": target, "relative_path": file.key},
+            mismatch_message=f"downloaded hosted data file failed integrity verification: {Path(file.key).name}",
+            mismatch_context={"target": target, "relative_path": file.key},
+        )
+    return paths
+
+
+def hosted_data_target_selector(target: str) -> Callable[[str], bool]:
+    benchmark_dependencies = {
+        "mkt-lin-500": ("mkt-lin-500.", "buyables-stock"),
+        "mkt-cnv-160": ("mkt-cnv-160.", "buyables-stock"),
+        "mkt-cnv-160-depth": ("mkt-cnv-160-depth.", "buyables-stock"),
+        "mkt-cnv-160-leaf": ("mkt-cnv-160-leaf.", "buyables-stock"),
+        "mkt-cnv-160-leaf-depth": ("mkt-cnv-160-leaf-depth.", "buyables-stock"),
+        "ref-lin-600": ("ref-lin-600", "n5-stock"),
+        "ref-cnv-400": ("ref-cnv-400", "n5-stock"),
+        "ref-lng-84": ("ref-lng-84", "n1-n5-stock"),
+    }
+    selectors: dict[str, Callable[[str], bool]] = {
+        "all": lambda key: True,
+        "benchmarks": lambda key: key.startswith("1-benchmarks"),
+        "definitions": lambda key: key.startswith("1-benchmarks/definitions"),
+        "stocks": lambda key: key.startswith("1-benchmarks/stocks"),
+        "raw": lambda key: key.startswith("2-raw"),
+        "processed": lambda key: key.startswith("3-processed"),
+        "scored": lambda key: key.startswith("4-scored"),
+        "results": lambda key: key.startswith("5-results"),
+    }
+    for name, parts in benchmark_dependencies.items():
+        selectors[name] = lambda key, required=parts: (
+            key.startswith("1-benchmarks/") and any(part in key for part in required)
+        )
+    try:
+        return selectors[target]
+    except KeyError as exc:
+        raise ConfigurationError(
+            f"unsupported hosted data target: {target}",
+            code="dataset.unsupported_target",
+            context={"target": target, "supported_targets": sorted(selectors)},
+        ) from exc
+
+
 def validate_training_dataset_request(
     *,
     dataset: str,
@@ -320,6 +502,64 @@ def validate_training_dataset_request(
             code="dataset.format_mismatch",
             context={"artifact": artifact, "format": format, "supported_formats": list(supported_formats)},
         )
+
+
+def validate_training_omit_parts(parts: tuple[str, ...]) -> None:
+    for part in parts:
+        if part not in TRAINING_OMIT_PARTS:
+            raise ConfigurationError(
+                f"unsupported omit part: {part}",
+                code="dataset.unsupported_omit_part",
+                context={"omit_part": part, "supported_omit_parts": sorted(TRAINING_OMIT_PARTS)},
+            )
+
+
+def published_training_files(
+    *,
+    checksums_path: Path,
+    checksums_url: str,
+    artifact: str | None,
+    split: str | None,
+    format: str | None,
+    omit: tuple[str, ...],
+) -> list[PublishedFile]:
+    hashes = load_or_download_checksums(checksums_path=checksums_path, checksums_url=checksums_url)
+    return [
+        PublishedFile(key=key, sha256=sha256)
+        for key, sha256 in hashes.items()
+        if training_file_matches(key=key, artifact=artifact, split=split, format=format, omit=omit)
+    ]
+
+
+def published_hosted_data_files(checksums_path: Path, checksums_url: str) -> list[PublishedFile]:
+    hashes = load_or_download_checksums(checksums_path=checksums_path, checksums_url=checksums_url)
+    return [PublishedFile(key=key, sha256=sha256) for key, sha256 in hashes.items()]
+
+
+def training_file_matches(
+    *,
+    key: str,
+    artifact: str | None,
+    split: str | None,
+    format: str | None,
+    omit: tuple[str, ...],
+) -> bool:
+    if artifact is not None and not key.startswith(f"{artifact}/"):
+        return False
+    filename = Path(key).name
+    if filename == "manifest.json":
+        return artifact is not None or (split is None and format is None)
+    if split is not None and not training_file_part_matches(filename, split):
+        return False
+    if format == "jsonl" and not filename.endswith(".jsonl.gz"):
+        return False
+    if format == "rsmi" and not filename.endswith(".rsmi.txt.gz"):
+        return False
+    return not any(training_file_part_matches(filename, part) for part in omit)
+
+
+def training_file_part_matches(filename: str, part: str) -> bool:
+    return filename == f"{part}.jsonl.gz" or filename == f"{part}.rsmi.txt.gz" or f".{part}." in filename
 
 
 def resolve_latest_training_set_release(
@@ -404,6 +644,17 @@ def build_training_set_url(
 
 def build_training_set_checksum_key(*, artifact: str, filename: str) -> str:
     return f"{artifact}/{filename}"
+
+
+def build_training_data_file_url(*, base_url: str, dataset: str, release: str, relative_path: Path) -> str:
+    return "/".join(
+        [
+            base_url.rstrip("/"),
+            quote(dataset, safe=""),
+            quote(release, safe=""),
+            *(quote(part, safe=".") for part in relative_path.parts),
+        ]
+    )
 
 
 def build_hosted_data_url(*, base_url: str, relative_path: Path) -> str:

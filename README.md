@@ -44,17 +44,11 @@ Markdown docs are formatted with `oxfmt` and kept unwrapped (`proseWrap: "never"
 
 **Latest Data (Updated Regularly)**
 
-For the most up-to-date benchmarks and stocks, use `get-data.sh`:
+For the most up-to-date benchmarks and stocks, use the RetroCast CLI:
 
 ```bash
-# Show available targets and their sizes
-curl -fsSL https://files.ischemist.com/retrocast/get-data.sh | bash -s
-
-# Check version and last update
-curl -fsSL https://files.ischemist.com/retrocast/get-data.sh | bash -s -- -V
-
 # Download a specific benchmark (includes definition + required stock)
-curl -fsSL https://files.ischemist.com/retrocast/get-data.sh | bash -s -- mkt-cnv-160
+retrocast get-data mkt-cnv-160
 ```
 
 **Publication Data (Frozen)**
