@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import gzip
-from dataclasses import asdict
 from typing import Literal
 
 import pytest
@@ -26,6 +25,7 @@ from retrocast.io import (
     save_collected_routes,
     save_csv_gz,
     save_evaluation,
+    save_execution_stats,
     save_json_gz,
     save_jsonl_gz,
     save_lines_gz,
@@ -244,7 +244,7 @@ def test_route_candidate_evaluation_analysis_and_execution_artifacts_round_trip(
     save_candidates(candidates, candidates_path)
     save_evaluation(evaluation, evaluation_path)
     save_analysis_report(analysis, analysis_path)
-    save_json_gz(asdict(execution), execution_path)
+    save_execution_stats(execution, execution_path)
 
     assert load_routes(routes_path) == routes
     assert load_candidates(candidates_path) == candidates
