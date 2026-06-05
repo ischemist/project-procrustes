@@ -126,17 +126,21 @@ class Target(BaseModel):
     annotations: dict[str, Any] = Field(default_factory=dict)
 
 
-class TaskConstraints(BaseModel):
-    stock: str | None = None
-    required_leaves_smiles: list[SmilesStr] | None = None
-    route_depth: int | Literal["short", "medium", "long"] | None = None
+class TaskConstraint(BaseModel):
+    kind: str
+    model_config = ConfigDict(extra="allow")
+
+
+class StockTerminationConstraint(TaskConstraint):
+    kind: Literal["retrocast.stock_termination"] = "retrocast.stock_termination"
+    stock: str
 
 
 class Task(BaseModel):
     name: str
     targets: dict[str, Target]
-    default_constraints: TaskConstraints = Field(default_factory=TaskConstraints)
-    constraints: dict[str, TaskConstraints] = Field(default_factory=dict)
+    default_constraints: list[TaskConstraint] = Field(default_factory=list)
+    constraints: dict[str, list[TaskConstraint]] = Field(default_factory=dict)
     metric_label: str | None = None
     annotations: dict[str, Any] = Field(default_factory=dict)
     schema_version: str = "2"

@@ -17,7 +17,7 @@ Use the library API when you want to run RetroCast inside notebooks, custom mode
 ```python
 from retrocast import get_adapter
 from retrocast.io import load_benchmark
-from retrocast.metrics.constraints import TaskConstraintChecker
+from retrocast.metrics import RequiredLeavesChecker, RouteDepthChecker, StockTerminationChecker
 from retrocast.workflow import analyze, ingest_candidates, score
 
 task = load_benchmark(benchmark_path)
@@ -27,7 +27,11 @@ predictions = ingest_candidates(raw_payload, adapter, task)
 evaluation = score(
     predictions,
     task,
-    constraint_checker=TaskConstraintChecker(stocks={"buyables": stock_inchikeys}),
+    constraint_checkers=[
+        StockTerminationChecker(stocks={"buyables": stock_inchikeys}),
+        RequiredLeavesChecker(),
+        RouteDepthChecker(),
+    ],
 )
 report = analyze(evaluation)
 ```

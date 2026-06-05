@@ -77,7 +77,10 @@ You can pass a custom `stratify_by` function:
 
 ```python
 def stock_label(target_result):
-    return target_result.effective_constraints.stock
+    for constraint in target_result.effective_constraints:
+        if constraint.kind == "retrocast.stock_termination":
+            return constraint.model_extra["stock"]
+    return None
 
 
 report = analyze(evaluation, stratify_by=stock_label)

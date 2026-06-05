@@ -4,11 +4,11 @@ icon: lucide/clipboard-check
 
 # Evaluation
 
-Evaluation scores collected `Candidate`s against a `Task`. It does not mutate route chemistry. Instead, scoring returns `ScoredCandidate`s inside an `Evaluation` artifact.
+Evaluation scores collected `Candidate`s against a `Task`.
 
 ## Tracking Runtime
 
-Model runtime is target-level data, not route chemistry. Use `ExecutionTimer` around model inference and pass the resulting `ExecutionStats` to `score(...)`. The timing values are copied onto each `TargetResult`, and `analyze(...)` summarizes them in the `AnalysisReport`.
+Use `ExecutionTimer` around model inference,
 
 ```python
 from retrocast.utils import ExecutionTimer
@@ -26,10 +26,14 @@ execution_stats = timer.to_model()
 Then pass `execution_stats` when scoring:
 
 ```python
+from retrocast.metrics import RequiredLeavesChecker, RouteDepthChecker, StockTerminationChecker
+
 evaluation = score(
     predictions,
     task,
-    constraint_checker=TaskConstraintChecker(stocks={"buyables": stock_inchikeys}),
+    constraint_checkers=[
+        StockTerminationChecker(stocks={"buyables": stock_inchikeys})
+    ],
     execution_stats=execution_stats,
 )
 
@@ -43,13 +47,17 @@ The CLI report prints runtime when the loaded `Evaluation` contains per-target `
 ## Score Collected Candidates
 
 ```python
-from retrocast.metrics.constraints import TaskConstraintChecker
+from retrocast.metrics import RequiredLeavesChecker, RouteDepthChecker, StockTerminationChecker
 from retrocast.workflow import score
 
 evaluation = score(
     predictions,
     task,
-    constraint_checker=TaskConstraintChecker(stocks={"buyables": stock_inchikeys}),
+    constraint_checkers=[
+        StockTerminationChecker(stocks={"buyables": stock_inchikeys}),
+        RequiredLeavesChecker(),
+        RouteDepthChecker(),
+    ],
 )
 ```
 
@@ -132,13 +140,11 @@ evaluation = score(
     predictions,
     task,
     tier_checkers=[MyTierOneChecker()],
-    constraint_checker=TaskConstraintChecker(stocks={"buyables": stock_inchikeys}),
+    constraint_checkers=[
+        StockTerminationChecker(stocks={"buyables": stock_inchikeys})
+    ],
 )
 ```
-
-## Convenience API
-
-For simple use, `retrocast.api.score_predictions(...)` builds a stock constraint checker for you.
 
 ```python
 from retrocast.api import score_predictions
@@ -146,7 +152,6 @@ from retrocast.api import score_predictions
 evaluation = score_predictions(
     predictions,
     task,
-    stock=stock_inchikeys,
-    stock_name="buyables",
+    stocks={"buyables": stock_inchikeys},
 )
 ```

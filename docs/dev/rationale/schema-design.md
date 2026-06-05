@@ -600,7 +600,7 @@ def score_candidate(
     target: Target,
     constraints: Sequence[TaskConstraint],
     tier_checkers: Sequence[TierChecker],
-    task_constraint_checkers: Sequence[TaskConstraintChecker],
+    constraint_checkers: Sequence[TaskConstraintChecker],
     acceptable_match_level: InChIKeyLevel | None = None,
     acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
 ) -> ScoredCandidate: ...
@@ -612,7 +612,7 @@ def score_target(
     target: Target,
     constraints: Sequence[TaskConstraint],
     tier_checkers: Sequence[TierChecker],
-    task_constraint_checkers: Sequence[TaskConstraintChecker],
+    constraint_checkers: Sequence[TaskConstraintChecker],
     acceptable_match_level: InChIKeyLevel | None = None,
     acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
 ) -> TargetResult: ...
@@ -623,7 +623,7 @@ def score(
     task: Task,
     *,
     tier_checkers: Sequence[TierChecker] = (),
-    task_constraint_checkers: Sequence[TaskConstraintChecker] = (),
+    constraint_checkers: Sequence[TaskConstraintChecker] = (),
     acceptable_match_level: InChIKeyLevel | None = None,
     acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
 ) -> Evaluation: ...
@@ -661,7 +661,7 @@ benchmark = Task(
 score(
     predictions,
     task=benchmark,
-    task_constraint_checkers=[
+    constraint_checkers=[
         StockTerminationChecker(
             stocks={"buyables-stock": buyables}, # buyables is Set[InChIKeyStr]
             match_level=InChIKeyLevel.FULL,
@@ -693,7 +693,7 @@ and scoring needs checkers for both kinds:
 score(
     predictions,
     task=benchmark,
-    task_constraint_checkers=[
+    constraint_checkers=[
         StockTerminationChecker(
             stocks={"buyables-stock": buyables},
             match_level=InChIKeyLevel.FULL,
