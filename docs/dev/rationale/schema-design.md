@@ -705,7 +705,7 @@ score(
 
 This architecture allows for definition of custom `TaskConstraint` for a given `Task` and so long as you define a complementary `TaskConstraintChecker`, you can use the general `score` workflow.
 
-Notably, the `score` workflow enforces that requirement. If you try to pass a `Task` with constraint of kind  `ariadne.reaction_count`, but did not specify a corresponding kind checker, you'd get a runtime error. RetroCast treats unverifiable constraints as unsolved by default.
+Notably, the `score` workflow enforces that requirement. If you try to pass a `Task` with constraint of kind `ariadne.reaction_count`, but did not specify a corresponding kind checker, you'd get a runtime error. RetroCast treats unverifiable constraints as unsolved by default.
 
 ## 4. Analyze
 

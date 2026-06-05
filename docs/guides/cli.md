@@ -163,8 +163,7 @@ Options:
 | `--ignore-stereo` | Use stereo-agnostic stock and acceptable-route matching |
 | `--acceptable-route-match prefix\|exact` | Match acceptable routes by target-rooted prefix (default) or exact full-route identity |
 
-`score-file` writes an `Evaluation` artifact. Tier-0 validity comes from adaptation success or failure; task satisfaction comes from the configured constraints.
-`--acceptable-route-match` is applied when this artifact is scored; rerunning `analyze` on an existing `Evaluation` does not retroactively change its stored acceptable-route matches.
+`score-file` writes an `Evaluation` artifact. Tier-0 validity comes from adaptation success or failure; task satisfaction comes from the configured constraints. `--acceptable-route-match` is applied when this artifact is scored; rerunning `analyze` on an existing `Evaluation` does not retroactively change its stored acceptable-route matches.
 
 ### `compare pareto-frontier` - Compare Reports
 
@@ -294,12 +293,12 @@ retrocast score \
 
 Useful options:
 
-| Option            | Meaning                                                      |
-| ----------------- | ------------------------------------------------------------ |
-| `--ignore-stereo` | Use stereo-agnostic stock and acceptable-route matching      |
+| Option | Meaning |
+| --- | --- |
+| `--ignore-stereo` | Use stereo-agnostic stock and acceptable-route matching |
 | `--acceptable-route-match prefix\|exact` | Match acceptable routes by target-rooted prefix (default) or exact full-route identity |
-| `--all-models`    | Score all processed models for the selected dataset(s)       |
-| `--all-datasets`  | Score the selected model(s) across all benchmark definitions |
+| `--all-models` | Score all processed models for the selected dataset(s) |
+| `--all-datasets` | Score the selected model(s) across all benchmark definitions |
 
 `--acceptable-route-match` is applied when the `Evaluation` is scored; rerun `score` before `analyze` to apply different matching semantics to existing processed candidates.
 
@@ -329,14 +328,14 @@ retrocast analyze \
 
 Useful options:
 
-| Option                   | Meaning                                                        |
-| ------------------------ | -------------------------------------------------------------- |
-| `--stock`                | Analyze one stock directory under `4-scored`                   |
-| `--top-k 1 5 10 50`      | K values for acceptable-route reconstruction                   |
-| `--prefix-depth 1 2 3`   | Depths for acceptable-route prefix reconstruction diagnostics  |
-| `--n-boot 10000`         | Number of bootstrap resamples                                  |
-| `--all-models`           | Analyze all scored models for the selected dataset(s)          |
-| `--all-datasets`         | Analyze the selected model(s) across all benchmark definitions |
+| Option                 | Meaning                                                        |
+| ---------------------- | -------------------------------------------------------------- |
+| `--stock`              | Analyze one stock directory under `4-scored`                   |
+| `--top-k 1 5 10 50`    | K values for acceptable-route reconstruction                   |
+| `--prefix-depth 1 2 3` | Depths for acceptable-route prefix reconstruction diagnostics  |
+| `--n-boot 10000`       | Number of bootstrap resamples                                  |
+| `--all-models`         | Analyze all scored models for the selected dataset(s)          |
+| `--all-datasets`       | Analyze the selected model(s) across all benchmark definitions |
 
 Outputs:
 
