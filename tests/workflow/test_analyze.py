@@ -136,6 +136,42 @@ def test_solv_rate_denominator_includes_failed_candidates() -> None:
     assert metric.ci_high is not None
 
 
+def test_analysis_report_metric_accessors_build_existing_metric_keys() -> None:
+    acceptable_route = route_from_reactants("C", "CO")
+    report = analyze(
+        evaluation(
+            {
+                "ethanol": result(
+                    target("ethanol", acceptable_routes=[acceptable_route]),
+                    [solved_candidate(1, candidate_route=acceptable_route, matches_acceptable=True)],
+                )
+            }
+        ),
+        ks=(1,),
+        prefix_depths=(1,),
+    )
+
+    assert report.validity_rate(0) == report.metrics["tier_0_validity_rate"]
+    assert report.mrr_validity(Tier.ZERO) == report.metrics["tier_0_validity_mrr"]
+    assert report.solv_rate(0) == report.metrics["solv_0[task]_rate"]
+    assert report.mrr_solv(Tier.ZERO) == report.metrics["solv_0[task]_mrr"]
+    assert report.reconstruction(1) == report.metrics["acceptable_reconstruction_top_1[task]"]
+    assert report.root_reconstruction(1) == report.metrics["acceptable_root_reconstruction_top_1[task]"]
+    assert report.reconstruction_given_root(1) == report.metrics["acceptable_reconstruction_given_root_top_1[task]"]
+    assert report.prefix_reconstruction(1, 1) == report.metrics["acceptable_prefix_reconstruction_depth_1_top_1[task]"]
+    assert report.distinct_root_reactions(1) == report.metrics["distinct_root_reactions_top_1[task]"]
+    assert report.solv_rate(1) is None
+
+
+def test_scored_candidate_tier_methods_accept_int_tiers() -> None:
+    candidate = solved_candidate(1)
+
+    assert candidate.tier_result(0).status == CheckStatus.PASS
+    assert candidate.satisfies_validity(0)
+    assert candidate.satisfies_solv(0)
+    assert not candidate.satisfies_validity(1)
+
+
 def test_tier_validity_is_reported_separately_from_solv() -> None:
     report = analyze(
         evaluation(
@@ -146,9 +182,9 @@ def test_tier_validity_is_reported_separately_from_solv() -> None:
     )
 
     assert report.metrics["tier_0_validity_rate"].value == 1.0
-    assert report.metrics["mrr_tier_0"].value == 1.0
+    assert report.metrics["tier_0_validity_mrr"].value == 1.0
     assert report.metrics["solv_0[task]_rate"].value == 0.0
-    assert report.metrics["mrr_solv_0[task]"].value == 0.0
+    assert report.metrics["solv_0[task]_mrr"].value == 0.0
 
 
 def test_mrr_uses_first_solv_satisfying_candidate() -> None:
@@ -163,7 +199,7 @@ def test_mrr_uses_first_solv_satisfying_candidate() -> None:
         )
     )
 
-    assert report.metrics["mrr_solv_0[task]"].value == approx(0.2)
+    assert report.metrics["solv_0[task]_mrr"].value == approx(0.2)
 
 
 def test_top_k_reconstruction_is_omitted_without_acceptable_routes() -> None:

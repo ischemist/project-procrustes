@@ -57,7 +57,6 @@ class ModelStatistics:
     top_k_accuracy: dict[int, StratifiedMetricSummary]
     solv_0: StratifiedMetricSummary | None = None
     tier_0_validity: StratifiedMetricSummary | None = None
-    mrr_solv_0: StratifiedMetricSummary | None = None
     total_wall_time: float | None = None
     mean_wall_time: float | None = None
     total_cpu_time: float | None = None
