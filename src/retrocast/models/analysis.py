@@ -75,5 +75,5 @@ def _tier_value(tier: TierInput) -> int:
 
 def _positive_int(value: int, name: str) -> int:
     if value < 1:
-        raise ValueError(f"{name} must be positive.")
+        raise ValueError(f"{name} must be positive, got {value!r}.")
     return value

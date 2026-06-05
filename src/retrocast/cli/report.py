@@ -580,7 +580,7 @@ def _plain_distinct_root_top_k_label(match: re.Match[str]) -> str:
 
 
 def _format_value(name: str, metric: MetricSummary) -> str:
-    if name.startswith("mrr_") or name.startswith("distinct_root_reactions_"):
+    if _formats_as_decimal(name):
         value = f"{metric.value:.3f}"
     else:
         value = f"{metric.value:.1%}"
@@ -590,7 +590,7 @@ def _format_value(name: str, metric: MetricSummary) -> str:
 def _format_ci(name: str, metric: MetricSummary, *, rich: bool = True) -> str:
     if metric.ci_low is None or metric.ci_high is None:
         return ""
-    if name.startswith("mrr_") or name.startswith("distinct_root_reactions_"):
+    if _formats_as_decimal(name):
         value = f"[{metric.ci_low:.3f}, {metric.ci_high:.3f}]"
     else:
         value = f"[{metric.ci_low:.1%}, {metric.ci_high:.1%}]"
@@ -600,6 +600,10 @@ def _format_ci(name: str, metric: MetricSummary, *, rich: bool = True) -> str:
 def _format_compact_ci(name: str, metric: MetricSummary) -> str:
     if metric.ci_low is None or metric.ci_high is None:
         return ""
-    if name.startswith("mrr_") or name.startswith("distinct_root_reactions_"):
+    if _formats_as_decimal(name):
         return f"[{metric.ci_low:.2f}, {metric.ci_high:.2f}]"
     return f"[{metric.ci_low * 100:.1f}, {metric.ci_high * 100:.1f}]"
+
+
+def _formats_as_decimal(name: str) -> bool:
+    return name.endswith("_mrr") or name.startswith("distinct_root_reactions_")

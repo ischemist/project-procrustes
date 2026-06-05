@@ -36,6 +36,8 @@ def test_generate_markdown_report_includes_strata_and_metric_groups() -> None:
     assert "Solv-0[test-stock]" in markdown
     assert "MRR Tier-0" in markdown
     assert "MRR Solv-0[test-stock]" in markdown
+    assert "| MRR Tier-0 | 0.250 | [0.000, 0.500] | 4 |  |" in markdown
+    assert "| MRR Solv-0[test-stock] | 0.500 | [0.250, 0.750] | 4 |  |" in markdown
     assert "Top-3" in markdown
     assert "Mean distinct roots" in markdown
     assert "| Top-3 | 75.0%! |  |  | 2.000 |" in markdown
@@ -55,6 +57,10 @@ def test_create_analysis_table_renders_metric_groups() -> None:
     assert "Benchmark Route" in output
     assert "Top-3" in output
     assert "75.0%" in output
+    assert "0.250" in output
+    assert "0.500" in output
+    assert "[0.000, 0.500]" in output
+    assert "[0.250, 0.750]" in output
     assert "Mean distinct roots" in output
     assert "2.000" in output
     assert "flags: ! low n / unstable ci" in output
