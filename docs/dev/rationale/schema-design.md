@@ -298,7 +298,7 @@ Raw planner payloads can be `adapt`ed into `Route` objects, which constitute ful
 
 Direct `adapt`ing is useful for single-target pipelines. For benchmarking, one can use `ingest` which is `adapt`ing and `collect`ing into `Benchmark` predictions.
 
-`Benchmark` predictions are keyed by target id. These predictions can be `score`d with Tier-N validity checks against `TaskConstraints`, resulting in Solv-N values. Predictions can also be compared against `Target.acceptable_routes` to obtain Top-K reconstruction accuracy.
+`Benchmark` predictions are keyed by target id. These predictions can be `score`d with Tier-N validity checks against `TaskConstraint` records, resulting in Solv-N values. Predictions can also be compared against `Target.acceptable_routes` to obtain Top-K reconstruction accuracy.
 
 ## 1. Adapt
 
@@ -380,7 +380,7 @@ collection rules:
 - if `candidate.route` exists, place it by `route.target`
 - otherwise place it by `candidate.failure.target_id` / `candidate.failure.target_inchikey`
 
-where `Task` is defined through `Target`s and `TaskConstraints`:
+where `Task` is defined through `Target`s and `TaskConstraint`s:
 
 ```python
 class Target(BaseModel):
@@ -391,23 +391,39 @@ class Target(BaseModel):
     annotations: dict[str, Any] = Field(default_factory=dict)
 
 
-class TaskConstraints(BaseModel):
-    stock: str | None = None
-    required_leaves_smiles: list[SmilesStr] | None = None
-    route_depth: int | Literal["short", "medium", "long"] | None = None
+class TaskConstraint(BaseModel):
+    kind: str
+    model_config = ConfigDict(extra="allow")
 
-    @cached_property
-    def required_leaf_inchikeys(self) -> tuple[InChIKeyStr, ...]: ...
+
+class StockTerminationConstraint(TaskConstraint):
+    kind: Literal["retrocast.stock_termination"] = "retrocast.stock_termination"
+    stock: str
+
+
+class RequiredLeavesConstraint(TaskConstraint):
+    kind: Literal["retrocast.required_leaves"] = "retrocast.required_leaves"
+    smiles: list[SmilesStr]
+
+
+class RouteDepthConstraint(TaskConstraint):
+    kind: Literal["retrocast.route_depth"] = "retrocast.route_depth"
+    max_depth: int | Literal["short", "medium", "long"]
 
 
 class Task(BaseModel):
     name: str
     targets: dict[str, Target]
-    default_constraints: TaskConstraints = Field(default_factory=TaskConstraints)
-    constraints: dict[str, TaskConstraints] = Field(default_factory=dict)
+    default_constraints: list[TaskConstraint] = Field(default_factory=list)
+    constraints: dict[str, list[TaskConstraint]] = Field(default_factory=dict)
     metric_label: str | None = None
     annotations: dict[str, Any] = Field(default_factory=dict)
     schema_version: str = "2"
+
+    def effective_constraints(self, target_id: str) -> list[TaskConstraint]:
+        by_kind = {constraint.kind: constraint for constraint in self.default_constraints}
+        by_kind.update({constraint.kind: constraint for constraint in self.constraints.get(target_id, [])})
+        return list(by_kind.values())
 
 
 class Benchmark(Task):
@@ -423,7 +439,9 @@ class Benchmark(Task):
 
 One benchmark is a `Task`. One daedalus query is also a `Task`, usually with one target.
 
-`metric_label` controls the bracketed task name in Solv-N metrics, e.g. `Solv-0[buyables]`. If unset, the label is derived from effective target constraints in fixed order: stock label, `leaf`, `depth`. For example, stock termination plus per-target route-depth constraints becomes `buyables+depth`; stock termination plus per-target required leaves becomes `buyables+leaf`.
+Within one target, constraints are keyed by `kind`. A target-specific constraint with the same `kind` overrides the default constraint. RetroCast-owned constraints use the `retrocast.` namespace. Custom constraints should use a project namespace, e.g. `ariadne.reaction_count`.
+
+`metric_label` controls the bracketed task name in Solv-N metrics, e.g. `Solv-0[buyables]`. If unset, the label is derived from effective target constraints in fixed order: stock label, `leaf`, `depth` (e.g. `buyables+depth` or `buyables+leaf`).
 
 ## 3. Ingest
 
@@ -531,7 +549,7 @@ class ScoredCandidate(BaseModel):
 ```py
 class TargetResult(BaseModel):
     target: Target
-    effective_constraints: TaskConstraints
+    effective_constraints: list[TaskConstraint]
     candidates: list[ScoredCandidate] = Field(default_factory=list)
 
 
@@ -560,30 +578,30 @@ class TierChecker(Protocol):
     def check_route(self, route: Route) -> RouteValidity: ...
 ```
 
-and to support extension to different problem settings:
+Similarly, we define a protocol for task constraint satisfaction:
 
 ```py
-class ConstraintChecker(Protocol):
-    name: str
+class TaskConstraintChecker(Protocol):
+    kind: str
 
     def check_route(
         self,
         route: Route,
-        constraints: TaskConstraints,
-    ) -> ConstraintResult: ...
+        constraint: TaskConstraint,
+    ) -> list[CheckResult]: ...
 ```
 
-which results in the following API:
+This results in the following API:
 
 ```py
 def score_candidate(
     candidate: Candidate,
     *,
     target: Target,
-    constraints: TaskConstraints,
+    constraints: Sequence[TaskConstraint],
     tier_checkers: Sequence[TierChecker],
-    constraint_checker: ConstraintChecker,
-    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    task_constraint_checkers: Sequence[TaskConstraintChecker],
+    acceptable_match_level: InChIKeyLevel | None = None,
     acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
 ) -> ScoredCandidate: ...
 
@@ -592,10 +610,10 @@ def score_target(
     candidates: Sequence[Candidate],
     *,
     target: Target,
-    constraints: TaskConstraints,
+    constraints: Sequence[TaskConstraint],
     tier_checkers: Sequence[TierChecker],
-    constraint_checker: ConstraintChecker,
-    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    task_constraint_checkers: Sequence[TaskConstraintChecker],
+    acceptable_match_level: InChIKeyLevel | None = None,
     acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
 ) -> TargetResult: ...
 
@@ -604,12 +622,90 @@ def score(
     predictions: Mapping[str, Sequence[Candidate]],
     task: Task,
     *,
-    tier_checkers: Sequence[TierChecker],
-    constraint_checker: ConstraintChecker,
-    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    tier_checkers: Sequence[TierChecker] = (),
+    task_constraint_checkers: Sequence[TaskConstraintChecker] = (),
+    acceptable_match_level: InChIKeyLevel | None = None,
     acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
 ) -> Evaluation: ...
 ```
+
+### How task constraint checkers work?
+
+There are two components. `Task.effective_constraints(target_id)` holds information on what constraint should be satisfied. That constraint is passed to `.check_route` within the score workflow. For example:
+
+```py
+constraints = benchmark.effective_constraints("target-1")
+# [
+#   StockTerminationConstraint(stock="buyables-stock"),
+#   RequiredLeavesConstraint(smiles=["CCO"]),
+# ]
+
+for constraint in constraints:
+    checker = registry[constraint.kind]
+    checks.extend(checker.check_route(route, constraint))
+```
+
+For example, for a regular retrosynthesis benchmark (task constraint is stock termination):
+
+For a stock-only task:
+
+```py
+benchmark = Task(
+    name="mkt-cnv-160",
+    targets=targets,
+    default_constraints=[
+        StockTerminationConstraint(stock="buyables-stock"),
+    ],
+)
+
+score(
+    predictions,
+    task=benchmark,
+    task_constraint_checkers=[
+        StockTerminationChecker(
+            stocks={"buyables-stock": buyables}, # buyables is Set[InChIKeyStr]
+            match_level=InChIKeyLevel.FULL,
+        ),
+    ],
+)
+```
+
+For a bidirectional search problem (stock-plus-required-leaf task):
+
+```py
+benchmark = Task(
+    name="mkt-cnv-160-leaf",
+    targets=targets,
+    default_constraints=[
+        StockTerminationConstraint(stock="buyables-stock"),
+    ],
+    constraints={
+        "target-1": [
+            RequiredLeavesConstraint(smiles=["CCO"]),
+        ],
+    },
+)
+```
+
+and scoring needs checkers for both kinds:
+
+```py
+score(
+    predictions,
+    task=benchmark,
+    task_constraint_checkers=[
+        StockTerminationChecker(
+            stocks={"buyables-stock": buyables},
+            match_level=InChIKeyLevel.FULL,
+        ),
+        RequiredLeavesChecker(match_level=InChIKeyLevel.FULL),
+    ],
+)
+```
+
+This architecture allows for definition of custom `TaskConstraint` for a given `Task` and so long as you define a complementary `TaskConstraintChecker`, you can use the general `score` workflow.
+
+Notably, the `score` workflow enforces that requirement. If you try to pass a `Task` with constraint of kind  `ariadne.reaction_count`, but did not specify a corresponding kind checker, you'd get a runtime error. RetroCast treats unverifiable constraints as unsolved by default.
 
 ## 4. Analyze
 
