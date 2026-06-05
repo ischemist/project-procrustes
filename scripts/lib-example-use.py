@@ -23,8 +23,8 @@ from retrocast.workflow import (
 
 RAW_PATH = Path("data/retrocast/2-raw/aizynthfinder-4.4.1-mcts-iter100-depth6/mkt-cnv-160/results.json.gz")
 BENCHMARK_PATH = Path("data/retrocast/1-benchmarks/definitions/mkt-cnv-160.json.gz")
-STOCK_NAME = "n5-stock"
-STOCK_PATH = Path("data/retrocast/1-benchmarks/stocks/n5-stock.csv.gz")
+STOCK_NAME = "buyables-stock"
+STOCK_PATH = Path("data/retrocast/1-benchmarks/stocks/buyables-stock.csv.gz")
 
 
 def main() -> None:

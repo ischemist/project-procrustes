@@ -124,11 +124,14 @@ def migrate_manifest(
             },
             "summary": {
                 **manifest.summary,
-                "migration": {
-                    "action": "scripts/migrations/05-migrate-task-constraints-to-records",
-                    "previous_schema_version": manifest.schema_version,
-                    "schema_version": benchmark.schema_version,
-                },
+                "migrations": [
+                    *manifest.summary.get("migrations", []),
+                    {
+                        "action": "scripts/migrations/05-migrate-task-constraints-to-records",
+                        "previous_schema_version": manifest.schema_version,
+                        "schema_version": benchmark.schema_version,
+                    },
+                ],
             },
         }
     )

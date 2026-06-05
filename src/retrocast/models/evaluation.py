@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, SerializeAsAny, field_validator, model_va
 
 from retrocast.models.candidates import FailureRecord
 from retrocast.models.route import InChIKeyLevel, ReactionId, Route
-from retrocast.models.task import Target, Task, TaskConstraint, _hydrate_task_constraints
+from retrocast.models.task import Target, Task, TaskConstraint, hydrate_task_constraints
 
 
 class CheckStatus(StrEnum):
@@ -109,7 +109,7 @@ class TargetResult(BaseModel):
     @field_validator("effective_constraints", mode="before")
     @classmethod
     def _parse_effective_constraints(cls, value: object) -> list[TaskConstraint]:
-        return _hydrate_task_constraints(value)
+        return hydrate_task_constraints(value)
 
 
 class Evaluation(BaseModel):

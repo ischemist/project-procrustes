@@ -16,7 +16,7 @@ from retrocast.models.task import (
     StockTerminationConstraint,
     TaskConstraint,
 )
-from retrocast.typing import InChIKeyStr
+from retrocast.typing import InChIKeyStr, SmilesStr
 
 ROUTE_DEPTH_RANGES = {
     "short": (1, 3),
@@ -48,11 +48,19 @@ class StockTerminationChecker:
 
     def check_route(self, route: Route, constraint: TaskConstraint) -> list[CheckResult]:
         parsed = cast(StockTerminationConstraint, constraint)
-        stock_keys = self._stock_keys_by_name.get(parsed.stock, set())
-        if not stock_keys:
+        if parsed.stock not in self._stock_keys_by_name:
             return [
                 CheckResult(
                     code="constraint.stock_termination.unregistered_stock",
+                    status=CheckStatus.FAIL,
+                    details={"stock": parsed.stock},
+                )
+            ]
+        stock_keys = self._stock_keys_by_name[parsed.stock]
+        if not stock_keys:
+            return [
+                CheckResult(
+                    code="constraint.stock_termination.empty_stock",
                     status=CheckStatus.FAIL,
                     details={"stock": parsed.stock},
                 )
@@ -77,10 +85,15 @@ class RequiredLeavesChecker:
 
     def __init__(self, *, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> None:
         self.match_level = match_level
+        self._required_leaf_keys_by_smiles: dict[tuple[SmilesStr, ...], list[InChIKeyStr]] = {}
 
     def check_route(self, route: Route, constraint: TaskConstraint) -> list[CheckResult]:
         parsed = cast(RequiredLeavesConstraint, constraint)
-        required_leaf_inchikeys = [InChIKeyStr(get_inchi_key(smiles)) for smiles in parsed.smiles]
+        smiles_key = tuple(parsed.smiles)
+        required_leaf_inchikeys = self._required_leaf_keys_by_smiles.get(smiles_key)
+        if required_leaf_inchikeys is None:
+            required_leaf_inchikeys = [InChIKeyStr(get_inchi_key(smiles)) for smiles in parsed.smiles]
+            self._required_leaf_keys_by_smiles[smiles_key] = required_leaf_inchikeys
         leaf_keys = {leaf.key(self.match_level) for leaf in route.iter_leaves()}
         missing_required_leaves = [
             inchikey

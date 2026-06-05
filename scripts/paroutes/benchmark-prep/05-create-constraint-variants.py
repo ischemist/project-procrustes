@@ -52,7 +52,7 @@ def create_variant(source: Benchmark, *, source_name: str, variant: Variant) -> 
         route = target.acceptable_routes[0]
         leaf = select_required_leaf(route)
         required_leaf_ids[target.id] = leaf.id()
-        target_constraints = []
+        target_constraints = [constraint.model_copy(deep=True) for constraint in source.constraints.get(target.id, [])]
         if "leaf" in variant:
             target_constraints.append(RequiredLeavesConstraint(smiles=[SmilesStr(leaf.value.smiles)]))
         if "depth" in variant:

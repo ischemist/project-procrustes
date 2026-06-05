@@ -59,7 +59,7 @@ _KNOWN_CONSTRAINTS: dict[str, type[TaskConstraint]] = {
 }
 
 
-def _hydrate_task_constraints(value: object) -> list[TaskConstraint]:
+def hydrate_task_constraints(value: object) -> list[TaskConstraint]:
     if value is None:
         return []
     if not isinstance(value, list):
@@ -67,6 +67,9 @@ def _hydrate_task_constraints(value: object) -> list[TaskConstraint]:
 
     constraints = []
     for item in value:
+        if isinstance(item, TaskConstraint) and type(item) is not TaskConstraint:
+            constraints.append(item)
+            continue
         if isinstance(item, TaskConstraint):
             data: dict[str, Any] = item.model_dump(mode="python")
         elif isinstance(item, dict):
@@ -93,7 +96,7 @@ class Task(BaseModel):
     @field_validator("default_constraints", mode="before")
     @classmethod
     def _parse_default_constraints(cls, value: object) -> list[TaskConstraint]:
-        return _hydrate_task_constraints(value)
+        return hydrate_task_constraints(value)
 
     @field_validator("constraints", mode="before")
     @classmethod
@@ -102,7 +105,7 @@ class Task(BaseModel):
             return {}
         if not isinstance(value, dict):
             raise TypeError(f"Task.constraints must be a dict, got {type(value).__name__}")
-        return {str(target_id): _hydrate_task_constraints(constraints) for target_id, constraints in value.items()}
+        return {str(target_id): hydrate_task_constraints(constraints) for target_id, constraints in value.items()}
 
     @model_validator(mode="after")
     def _validate_target_keys(self) -> Task:

@@ -76,10 +76,13 @@ for stratum, metrics in report.by_stratum.items():
 You can pass a custom `stratify_by` function:
 
 ```python
+from retrocast.models import StockTerminationConstraint
+
+
 def stock_label(target_result):
     for constraint in target_result.effective_constraints:
-        if constraint.kind == "retrocast.stock_termination":
-            return constraint.model_extra["stock"]
+        if isinstance(constraint, StockTerminationConstraint):
+            return constraint.stock
     return None
 
 

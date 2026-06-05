@@ -102,6 +102,18 @@ def test_stock_constraint_fails_clearly_when_named_stock_is_not_registered() -> 
     assert result.checks[0].details == {"stock": "stock-b"}
 
 
+def test_stock_constraint_fails_clearly_when_registered_stock_is_empty() -> None:
+    result = check_task_constraints(
+        route(),
+        [StockTerminationConstraint(stock="stock-a")],
+        [StockTerminationChecker(stocks={"stock-a": set()})],
+    )
+
+    assert result.status == CheckStatus.FAIL
+    assert result.checks[0].code == "constraint.stock_termination.empty_stock"
+    assert result.checks[0].details == {"stock": "stock-a"}
+
+
 def test_required_leaf_constraint_fails_when_required_leaf_is_missing() -> None:
     result = check_task_constraints(
         route(),
