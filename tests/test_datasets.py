@@ -137,6 +137,29 @@ def test_published_training_files_include_manifest_for_artifact_defaults(tmp_pat
     ]
 
 
+def test_published_training_files_refreshes_stale_local_checksums(tmp_path: Path) -> None:
+    remote_root = tmp_path / "remote"
+    write_mixed_training_release(remote_root)
+    checksums_path = tmp_path / "cache" / "SHA256SUMS"
+    checksums_path.parent.mkdir()
+    checksums_path.write_text("0" * 64 + " stale.jsonl.gz\n", encoding="utf-8")
+
+    files = published_training_files(
+        checksums_path=checksums_path,
+        checksums_url=(remote_root / "paroutes" / "v2026-05-12" / "SHA256SUMS").resolve().as_uri(),
+        artifact="single-step-route-holdout-n1-n5",
+        split="training",
+        format=None,
+        omit=(),
+    )
+
+    assert [file.key for file in files] == [
+        "single-step-route-holdout-n1-n5/training.jsonl.gz",
+        "single-step-route-holdout-n1-n5/manifest.json",
+    ]
+    assert "stale.jsonl.gz" not in checksums_path.read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize(
     ("kwargs", "code"),
     [

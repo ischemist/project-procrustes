@@ -4,6 +4,7 @@ import argparse
 import gzip
 import json
 import logging
+import re
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -324,7 +325,7 @@ def _resolve_training_data_artifact_and_release(
         return None, release
     if positional in TRAINING_ARTIFACT_SPECS:
         return cast(TrainingArtifactName, positional), release
-    if positional.startswith("v"):
+    if re.fullmatch(r"v\d{4}-\d{2}-\d{2}", positional):
         return None, positional
     raise ConfigurationError(
         f"unsupported training artifact or release: {positional}",

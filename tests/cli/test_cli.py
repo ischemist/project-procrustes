@@ -11,7 +11,8 @@ import pytest
 
 from retrocast.adapters import PaRoutesAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.cli.main import main
+from retrocast.cli.main import _resolve_training_data_artifact_and_release, main
+from retrocast.exceptions import ConfigurationError
 from retrocast.io import (
     load_analysis_report,
     load_candidates,
@@ -197,6 +198,15 @@ def test_get_training_data_cli_dry_run_lists_artifact_files(tmp_path, monkeypatc
     output = capsys.readouterr().out
     assert str(tmp_path / "cache" / "paroutes" / "v2026-05-12" / "n1-routes" / "all.jsonl.gz") in output
     assert str(tmp_path / "cache" / "paroutes" / "v2026-05-12" / "n1-routes" / "manifest.json") in output
+
+
+def test_get_training_data_release_positional_requires_date_tag() -> None:
+    assert _resolve_training_data_artifact_and_release("v2026-05-12", "latest") == (None, "v2026-05-12")
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        _resolve_training_data_artifact_and_release("validation", "latest")
+
+    assert exc_info.value.code == "dataset.unsupported_training_data_target"
 
 
 def test_v2_list_cli_reports_raw_manifests(tmp_path, monkeypatch, capsys) -> None:

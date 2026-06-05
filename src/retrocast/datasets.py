@@ -523,7 +523,7 @@ def published_training_files(
     format: str | None,
     omit: tuple[str, ...],
 ) -> list[PublishedFile]:
-    hashes = load_or_download_checksums(checksums_path=checksums_path, checksums_url=checksums_url)
+    hashes = download_sha256sums(checksums_url, checksums_path)
     return [
         PublishedFile(key=key, sha256=sha256)
         for key, sha256 in hashes.items()
@@ -532,7 +532,7 @@ def published_training_files(
 
 
 def published_hosted_data_files(checksums_path: Path, checksums_url: str) -> list[PublishedFile]:
-    hashes = load_or_download_checksums(checksums_path=checksums_path, checksums_url=checksums_url)
+    hashes = download_sha256sums(checksums_url, checksums_path)
     return [PublishedFile(key=key, sha256=sha256) for key, sha256 in hashes.items()]
 
 
