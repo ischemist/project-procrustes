@@ -7,7 +7,7 @@ import pytest
 
 from retrocast.cli.errors import format_cli_error
 from retrocast.exceptions import ArtifactDecodeError, ArtifactFormatError, RetroCastException
-from retrocast.io.blob import load_json_gz
+from retrocast.io import load_json_gz
 from retrocast.io.data import load_benchmark
 
 ROOT = Path(__file__).resolve().parents[1]

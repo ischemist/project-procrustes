@@ -16,11 +16,13 @@ from pathlib import Path
 from rich.console import Console
 
 from retrocast.cli.progress import step_progress
-from retrocast.curation.training import (
-    TrainingHoldoutMode,
+from retrocast.curation.training.reaction_release import (
     TrainingReactionReleaseBuilder,
-    TrainingSetBuildConfig,
     write_training_reaction_release,
+)
+from retrocast.curation.training.records import (
+    TrainingHoldoutMode,
+    TrainingSetBuildConfig,
 )
 from retrocast.io import load_training_route_records
 from retrocast.utils.logging import configure_script_logging, logger

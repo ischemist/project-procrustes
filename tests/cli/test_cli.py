@@ -20,8 +20,8 @@ from retrocast.io import (
     save_benchmark,
     save_candidates,
     save_evaluation,
+    save_json_gz,
 )
-from retrocast.io.blob import save_json_gz
 from retrocast.models import Benchmark, StockTerminationConstraint, Target
 from retrocast.models.analysis import AnalysisReport, MetricSummary
 from retrocast.models.candidates import Candidate

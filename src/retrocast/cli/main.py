@@ -15,8 +15,9 @@ from rich.panel import Panel
 from rich.table import Table
 
 from retrocast import __version__
-from retrocast.adapters import ADAPTER_TYPES, DEPRECATED_ADAPTER_SLUGS, get_adapter, normalize_adapter_slug
+from retrocast.adapters import ADAPTER_TYPES, get_adapter
 from retrocast.adapters.base import AdaptMode
+from retrocast.adapters.registry import DEPRECATED_ADAPTER_SLUGS, normalize_adapter_slug
 from retrocast.chem import get_inchi_key
 from retrocast.cli.compare import handle_pareto_frontier
 from retrocast.cli.manifest import manifest_sidecar_path, write_manifest
@@ -29,16 +30,16 @@ from retrocast.io import (
     load_collected_candidates,
     load_evaluation,
     load_execution_stats,
+    load_json_artifact,
     save_analysis_report,
     save_candidates,
     save_collected_candidates,
     save_evaluation,
 )
-from retrocast.io.blob import load_json_artifact
 from retrocast.io.data import load_stock_file
 from retrocast.metrics.constraints import RequiredLeavesChecker, RouteDepthChecker, StockTerminationChecker
 from retrocast.models.analysis import AnalysisReport
-from retrocast.models.evaluation import Evaluation
+from retrocast.models.evaluation import AcceptableRouteMatch, Evaluation
 from retrocast.models.provenance import VerificationReport
 from retrocast.models.route import InChIKeyLevel
 from retrocast.models.task import (
@@ -59,7 +60,6 @@ from retrocast.typing import InChIKeyStr
 from retrocast.utils.logging import configure_script_logging
 from retrocast.utils.timing import ExecutionStats
 from retrocast.workflow import (
-    AcceptableRouteMatch,
     adapt_candidates,
     analyze,
     collect_candidates,
