@@ -11,7 +11,7 @@ from retrocast.workflow.collect import (
 )
 from retrocast.workflow.ingest import ingest_candidates, ingest_routes
 from retrocast.workflow.score import (
-    ConstraintChecker,
+    TaskConstraintChecker,
     TierChecker,
     score,
     score_candidate,
@@ -22,9 +22,9 @@ from retrocast.workflow.stats import CandidateRunStatistics, candidate_statistic
 __all__ = [
     "CollectedCandidates",
     "CollectedRoutes",
-    "ConstraintChecker",
     "CandidateRunStatistics",
     "AcceptableRouteMatch",
+    "TaskConstraintChecker",
     "TierChecker",
     "adapt_candidates",
     "adapt_route",

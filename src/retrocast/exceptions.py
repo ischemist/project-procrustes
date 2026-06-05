@@ -83,6 +83,12 @@ class UnsupportedValidityTierError(WorkflowError, NotImplementedError):
     default_code = "validity.unsupported_tier"
 
 
+class UnsupportedTaskConstraintError(WorkflowError, NotImplementedError):
+    """Raised when a task contains a constraint without a checker."""
+
+    default_code = "constraint.unsupported"
+
+
 class BenchmarkCollectionError(WorkflowError):
     """Raised when benchmark collection cannot classify or place canonical routes."""
 

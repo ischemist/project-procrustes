@@ -27,7 +27,7 @@ def write_manifest(
         summary=summary,
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+    path.write_text(manifest.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
 
 
 def manifest_sidecar_path(output_path: Path) -> Path:

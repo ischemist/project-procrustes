@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Protocol, cast
 
 from retrocast.exceptions import UnsupportedValidityTierError
+from retrocast.metrics.constraints import TaskConstraintChecker, check_task_constraints
 from retrocast.models.candidates import Candidate
 from retrocast.models.evaluation import (
     AcceptableRouteMatch,
@@ -19,7 +20,7 @@ from retrocast.models.evaluation import (
     TierResult,
 )
 from retrocast.models.route import InChIKeyLevel, Route
-from retrocast.models.task import Target, Task, TaskConstraints
+from retrocast.models.task import Target, Task, TaskConstraint
 from retrocast.utils.timing import ExecutionStats
 
 
@@ -28,12 +29,6 @@ class TierChecker(Protocol):
     name: str
 
     def check_route(self, route: Route) -> RouteValidity: ...
-
-
-class ConstraintChecker(Protocol):
-    name: str
-
-    def check_route(self, route: Route, constraints: TaskConstraints) -> ConstraintResult: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,10 +42,10 @@ def score_candidate(
     candidate: Candidate,
     *,
     target: Target,
-    constraints: TaskConstraints,
+    constraints: Sequence[TaskConstraint],
     tier_checkers: Sequence[TierChecker],
-    constraint_checker: ConstraintChecker,
-    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    constraint_checkers: Sequence[TaskConstraintChecker],
+    acceptable_match_level: InChIKeyLevel | None = None,
     acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
     _acceptable_identities: Sequence[AcceptableRouteIdentity] | None = None,
 ) -> ScoredCandidate:
@@ -66,15 +61,14 @@ def score_candidate(
 
     route = cast(Route, candidate.route)
     _check_route_validity(route, tier_checkers, validity)
-    constraints_result = constraint_checker.check_route(route, constraints)
+    constraints_result = check_task_constraints(route, constraints, constraint_checkers)
+    route_match_level = acceptable_match_level or InChIKeyLevel.FULL
     acceptable_identities = (
         _acceptable_identities
         if _acceptable_identities is not None
-        else _acceptable_route_identities(target.acceptable_routes, acceptable_match_level)
+        else _acceptable_route_identities(target.acceptable_routes, route_match_level)
     )
-    matched_index = _acceptable_match_index(
-        route, acceptable_identities, acceptable_match_level, acceptable_route_match
-    )
+    matched_index = _acceptable_match_index(route, acceptable_identities, route_match_level, acceptable_route_match)
     return ScoredCandidate(
         rank=candidate.rank,
         route=route,
@@ -89,24 +83,25 @@ def score_target(
     candidates: Sequence[Candidate],
     *,
     target: Target,
-    constraints: TaskConstraints,
+    constraints: Sequence[TaskConstraint],
     tier_checkers: Sequence[TierChecker],
-    constraint_checker: ConstraintChecker,
-    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    constraint_checkers: Sequence[TaskConstraintChecker],
+    acceptable_match_level: InChIKeyLevel | None = None,
     acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
     wall_time: float | None = None,
     cpu_time: float | None = None,
 ) -> TargetResult:
     scored_candidates = []
-    acceptable_identities = _acceptable_route_identities(target.acceptable_routes, acceptable_match_level)
+    route_match_level = acceptable_match_level or InChIKeyLevel.FULL
+    acceptable_identities = _acceptable_route_identities(target.acceptable_routes, route_match_level)
     for candidate in candidates:
         scored_candidate = score_candidate(
             candidate,
             target=target,
             constraints=constraints,
             tier_checkers=tier_checkers,
-            constraint_checker=constraint_checker,
-            acceptable_match_level=acceptable_match_level,
+            constraint_checkers=constraint_checkers,
+            acceptable_match_level=route_match_level,
             acceptable_route_match=acceptable_route_match,
             _acceptable_identities=acceptable_identities,
         )
@@ -114,7 +109,7 @@ def score_target(
 
     return TargetResult(
         target=target,
-        effective_constraints=constraints,
+        effective_constraints=list(constraints),
         candidates=scored_candidates,
         wall_time=wall_time,
         cpu_time=cpu_time,
@@ -126,13 +121,14 @@ def score(
     task: Task,
     *,
     tier_checkers: Sequence[TierChecker] = (),
-    constraint_checker: ConstraintChecker,
-    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+    constraint_checkers: Sequence[TaskConstraintChecker] = (),
+    acceptable_match_level: InChIKeyLevel | None = None,
     acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
     execution_stats: ExecutionStats | None = None,
 ) -> Evaluation:
     tiers = [Tier.ZERO, *sorted({checker.tier for checker in tier_checkers})]
     target_results = {}
+    route_match_level = acceptable_match_level or InChIKeyLevel.FULL
     for target_id, target in task.targets.items():
         constraints = task.effective_constraints(target_id)
         target_results[target_id] = score_target(
@@ -140,8 +136,8 @@ def score(
             target=target,
             constraints=constraints,
             tier_checkers=tier_checkers,
-            constraint_checker=constraint_checker,
-            acceptable_match_level=acceptable_match_level,
+            constraint_checkers=constraint_checkers,
+            acceptable_match_level=route_match_level,
             acceptable_route_match=acceptable_route_match,
             wall_time=execution_stats.wall_time.get(target_id) if execution_stats is not None else None,
             cpu_time=execution_stats.cpu_time.get(target_id) if execution_stats is not None else None,
@@ -150,7 +146,7 @@ def score(
         task=task,
         tiers=tiers,
         metric_label=task.derived_metric_label(),
-        acceptable_match_level=acceptable_match_level,
+        acceptable_match_level=route_match_level,
         acceptable_route_match=acceptable_route_match,
         targets=target_results,
     )

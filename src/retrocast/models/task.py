@@ -128,12 +128,11 @@ class Task(BaseModel):
         has_depth = False
         for target_id in self.targets:
             for constraint in self.effective_constraints(target_id):
-                payload = constraint.model_dump(mode="python", exclude_none=True)
-                if constraint.kind == STOCK_TERMINATION and payload.get("stock") is not None:
-                    stocks.add(payload["stock"])
-                elif constraint.kind == REQUIRED_LEAVES:
+                if isinstance(constraint, StockTerminationConstraint):
+                    stocks.add(constraint.stock)
+                elif isinstance(constraint, RequiredLeavesConstraint):
                     has_leaf = True
-                elif constraint.kind == ROUTE_DEPTH:
+                elif isinstance(constraint, RouteDepthConstraint):
                     has_depth = True
 
         parts = []
