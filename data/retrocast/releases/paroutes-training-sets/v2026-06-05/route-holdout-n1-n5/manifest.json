@@ -1,0 +1,161 @@
+{
+  "schema_version": "2",
+  "retrocast_version": "0.7.0",
+  "created_at": "2026-06-05T16:57:55.997893Z",
+  "action": "scripts/paroutes/training-set-prep/create-training-release",
+  "parameters": {
+    "holdout_mode": "route",
+    "split": {
+      "val_fraction": 0.05,
+      "seed": 20260502
+    },
+    "progress": {
+      "enabled": true
+    },
+    "release_rules": {
+      "route_holdout": "exclude full n1 union n5 by route.signature()",
+      "reaction_holdout": "excise reactions present in n1 union n5 and keep surviving sub-routes",
+      "chemical_exact_dedup": "collapse exact route duplicates by structure, mapped reactions, and condition identity",
+      "transform_dedup": "collapse mapped-smiles variants by structure + condition identity"
+    }
+  },
+  "directives": {},
+  "release_name": "route-holdout-n1-n5",
+  "source_files": [
+    {
+      "path": "data/retrocast/0-assets/paroutes/all-routes.json.gz",
+      "file_hash": "d504e5964af1b09632d4048f6ab81d626babc5d344dff1be00ece312716f2405"
+    },
+    {
+      "path": "data/retrocast/0-assets/paroutes/n1-routes.json.gz",
+      "file_hash": "49d7e209328b7cf7edc09ca827b0a21938d520a6b1d2dc0a46a65c6f392c2c89"
+    },
+    {
+      "path": "data/retrocast/0-assets/paroutes/n5-routes.json.gz",
+      "file_hash": "5333b4aeb4e65a2c50e42a8f3a3701c75d76c8045280ec6cc460fbb3ebd605ad"
+    }
+  ],
+  "output_files": {
+    "all": {
+      "label": "all",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/route-holdout-n1-n5/all.jsonl.gz",
+      "file_hash": "acb8291198d3448d938264bbcce34d8d7dc45a50f16efeebae5194977aa2564d",
+      "content_hash": "7a7a2f6696b947c6c7a9c279df88f79c77ee6af91df5e19d004f7e1737c3412d"
+    },
+    "training": {
+      "label": "training",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/route-holdout-n1-n5/training.jsonl.gz",
+      "file_hash": "44132c32cf8bdce57076a662e359a4142238d339428dbb5973b9a56de0b6d0eb",
+      "content_hash": "03ca95d4f03907360a7bf0f28882009f0c75c84c59cb3fb319001a83a87822f7"
+    },
+    "validation": {
+      "label": "validation",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/route-holdout-n1-n5/validation.jsonl.gz",
+      "file_hash": "ba9fe1fcda491f43678b160c81a3993e559b5872e0d835f146ced11a4eecd1e8",
+      "content_hash": "cd62b974801a0a5bcb783d02302da2f971104f4493cfcb4c568d12e814587972"
+    }
+  },
+  "statistics": {
+    "all_records": {
+      "total": 169126,
+      "training": 160670,
+      "validation": 8456
+    },
+    "by_depth": {
+      "2": 104710,
+      "3": 37561,
+      "4": 15408,
+      "5": 6918,
+      "6": 2620,
+      "7": 1176,
+      "8": 421,
+      "9": 187,
+      "10": 84,
+      "11": 24,
+      "12": 17
+    }
+  },
+  "summary": {
+    "input": {
+      "all_routes": 457157
+    },
+    "adaptation": {
+      "all_routes": {
+        "raw_routes": 457166,
+        "adapted_routes": 457157,
+        "skipped_routes": 9,
+        "skipped_without_error_code": 0,
+        "failures_by_code": {
+          "adapter.cycle_detected": 3,
+          "chem.invalid_smiles": 6
+        },
+        "non_fatal_condition_slot_parse": {
+          "malformed_rsmi_count": 0,
+          "uncanonicalizable_token_count": 25634,
+          "uncanonicalizable_tokens": {
+            "CC(C)CC1=C(CC(C)C)[AlH3]1": 1,
+            "CC1=C[SiH2](C)(C)C(C)C(C)=C1C": 1,
+            "F[PH](F)(F)(F)(F)F": 25630,
+            "C[SiH](C)(C)(F)F": 1,
+            "CC1=C[SiH2](C)(C)[SiH](C)C(C)=C1C": 1
+          }
+        }
+      },
+      "n1": {
+        "raw_routes": 10000,
+        "adapted_routes": 10000,
+        "skipped_routes": 0,
+        "skipped_without_error_code": 0,
+        "failures_by_code": {},
+        "non_fatal_condition_slot_parse": {
+          "malformed_rsmi_count": 0,
+          "uncanonicalizable_token_count": 452,
+          "uncanonicalizable_tokens": {
+            "F[PH](F)(F)(F)(F)F": 452
+          }
+        }
+      },
+      "n5": {
+        "raw_routes": 10000,
+        "adapted_routes": 10000,
+        "skipped_routes": 0,
+        "skipped_without_error_code": 0,
+        "failures_by_code": {},
+        "non_fatal_condition_slot_parse": {
+          "malformed_rsmi_count": 0,
+          "uncanonicalizable_token_count": 663,
+          "uncanonicalizable_tokens": {
+            "F[PH](F)(F)(F)(F)F": 663
+          }
+        }
+      }
+    },
+    "postprocessing": {
+      "exact_route_matches_removed": 50026,
+      "duplicate_routes_removed": 238005,
+      "chemical_duplicates_removed": 237923,
+      "mapped_smiles_variants_collapsed": 82,
+      "reaction_overlap": null
+    },
+    "output": {
+      "all_records": {
+        "total": 169126,
+        "training": 160670,
+        "validation": 8456
+      },
+      "by_depth": {
+        "2": 104710,
+        "3": 37561,
+        "4": 15408,
+        "5": 6918,
+        "6": 2620,
+        "7": 1176,
+        "8": 421,
+        "9": 187,
+        "10": 84,
+        "11": 24,
+        "12": 17
+      }
+    }
+  }
+}

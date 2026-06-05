@@ -1,6 +1,6 @@
 {
   "schema_version": "2",
-  "retrocast_version": "0.5.0",
+  "retrocast_version": "0.7.0",
   "created_at": "2025-12-01T19:38:02.058557Z",
   "action": "scripts/paroutes/02-create-subsets",
   "parameters": {
@@ -41,6 +41,7 @@
         "previous_schema_version": "1.0",
         "schema_version": "2"
       }
-    ]
+    ],
+    "release": "retrocast-v0.7.0"
   }
 }

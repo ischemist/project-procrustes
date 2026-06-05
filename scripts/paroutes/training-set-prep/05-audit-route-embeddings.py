@@ -21,7 +21,7 @@ from retrocast.models.route import Route
 from retrocast.paths import benchmark_definitions_dir, paroutes_assets_dir, paroutes_training_release_file
 from retrocast.utils.logging import configure_script_logging, logger
 
-RELEASE_VERSION = "v2026-05-29"
+RELEASE_VERSION = "v2026-06-05"
 RELEASE_NAME = "route-holdout-n1-n5"
 RELEASE_PATH = paroutes_training_release_file(RELEASE_VERSION, RELEASE_NAME)
 BENCHMARKS = {"mkt-cnv-160": benchmark_definitions_dir() / "mkt-cnv-160.json.gz"}

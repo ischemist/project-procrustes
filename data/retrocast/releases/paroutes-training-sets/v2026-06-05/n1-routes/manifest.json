@@ -1,0 +1,74 @@
+{
+  "schema_version": "2",
+  "retrocast_version": "0.7.0",
+  "created_at": "2026-06-05T17:51:14.510990Z",
+  "action": "scripts/paroutes/training-set-prep/create-test-set-release",
+  "parameters": {
+    "dataset": "n1",
+    "artifact": "n1-routes"
+  },
+  "directives": {},
+  "release_name": "n1-routes",
+  "source_files": [
+    {
+      "path": "data/retrocast/0-assets/paroutes/n1-routes.json.gz",
+      "file_hash": "49d7e209328b7cf7edc09ca827b0a21938d520a6b1d2dc0a46a65c6f392c2c89"
+    }
+  ],
+  "output_files": {
+    "all": {
+      "label": "all",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/n1-routes/all.jsonl.gz",
+      "file_hash": "72286305ff3999ed164ca8abdaf9330d2f315500f3aca3af75a93f844c1d1069",
+      "content_hash": "83b1b44ad8dd5bb8814f5a1a25061df3b75524ecbbeec5d59eb5ebd8ba1bcc06"
+    }
+  },
+  "statistics": {
+    "all_records": {
+      "total": 10000
+    },
+    "by_depth": {
+      "2": 2881,
+      "3": 4439,
+      "4": 1780,
+      "5": 590,
+      "6": 213,
+      "7": 65,
+      "8": 21,
+      "9": 10,
+      "10": 1
+    }
+  },
+  "summary": {
+    "adaptation": {
+      "raw_routes": 10000,
+      "adapted_routes": 10000,
+      "skipped_routes": 0,
+      "skipped_without_error_code": 0,
+      "failures_by_code": {},
+      "non_fatal_condition_slot_parse": {
+        "malformed_rsmi_count": 0,
+        "uncanonicalizable_token_count": 452,
+        "uncanonicalizable_tokens": {
+          "F[PH](F)(F)(F)(F)F": 452
+        }
+      }
+    },
+    "output": {
+      "all_records": {
+        "total": 10000
+      },
+      "by_depth": {
+        "2": 2881,
+        "3": 4439,
+        "4": 1780,
+        "5": 590,
+        "6": 213,
+        "7": 65,
+        "8": 21,
+        "9": 10,
+        "10": 1
+      }
+    }
+  }
+}

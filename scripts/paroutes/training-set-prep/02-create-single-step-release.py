@@ -29,7 +29,7 @@ from retrocast.utils.logging import configure_script_logging, logger
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 DATA_DIR = BASE_DIR / "data" / "retrocast"
-RELEASE_VERSION = "v2026-05-29"
+RELEASE_VERSION = "v2026-06-05"
 DEFAULT_RELEASE_ROOT = DATA_DIR / "releases" / "paroutes-training-sets" / RELEASE_VERSION
 DEFAULT_HOLDOUT_MODES: tuple[TrainingHoldoutMode, ...] = ("route", "reaction")
 

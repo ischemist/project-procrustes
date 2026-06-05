@@ -1,0 +1,48 @@
+{
+  "schema_version": "2",
+  "retrocast_version": "0.7.0",
+  "created_at": "2026-06-05T17:51:23.254779Z",
+  "action": "scripts/paroutes/training-set-prep/create-test-set-release",
+  "parameters": {
+    "dataset": "n5",
+    "artifact": "n5-single-step-reactions"
+  },
+  "directives": {},
+  "release_name": "n5-single-step-reactions",
+  "source_files": [
+    {
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/n5-routes/all.jsonl.gz",
+      "file_hash": "ad8c8e3438b696e2055a33fac4adda6f2e8fe2f106e79027961fecd6aec24f3f"
+    },
+    {
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/n5-routes/manifest.json",
+      "file_hash": "3dc27c05c9ea0e5da25e7d79cc7162e221e1d2243b3dda0dc95a27575a5c6c4d"
+    }
+  ],
+  "output_files": {
+    "all": {
+      "label": "all",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/n5-single-step-reactions/all.jsonl.gz",
+      "file_hash": "4f0fc8a4faa6860815eb39171582673f36d68edb3ac2b5e84416a98f5f5c15ea",
+      "content_hash": "35423003175fa424e4924967223bbecab6ab28e99ffd0b3261807099af3b643f"
+    },
+    "all_rsmi": {
+      "label": "all_rsmi",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/n5-single-step-reactions/all.rsmi.txt.gz",
+      "file_hash": "5859e11dd9f8f8eeacea7e94513449c1289226e1382d829b358b5a9bdd22561b",
+      "content_hash": "26704ad8e14ab2e041b21930f595c762ee5d2c55f86fd919ad7e59130188d7c4"
+    }
+  },
+  "statistics": {
+    "all_records": {
+      "total": 38483
+    }
+  },
+  "summary": {
+    "output": {
+      "all_records": {
+        "total": 38483
+      }
+    }
+  }
+}

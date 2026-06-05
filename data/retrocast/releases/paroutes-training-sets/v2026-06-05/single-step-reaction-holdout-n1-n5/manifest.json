@@ -1,0 +1,103 @@
+{
+  "schema_version": "2",
+  "retrocast_version": "0.7.0",
+  "created_at": "2026-06-05T17:09:52.036250Z",
+  "action": "scripts/paroutes/training-set-prep/create-single-step-release",
+  "parameters": {
+    "holdout_mode": "reaction",
+    "split": {
+      "val_fraction": 0.05,
+      "seed": 20260502
+    },
+    "progress": {
+      "enabled": false
+    },
+    "release_rules": {
+      "route_holdout": "exclude full n1 union n5 by route.signature()",
+      "reaction_holdout": "excise reactions present in n1 union n5 and keep surviving sub-routes",
+      "chemical_exact_dedup": "collapse exact route duplicates by structure, mapped reactions, and condition identity",
+      "transform_dedup": "collapse mapped-smiles variants by structure + condition identity"
+    }
+  },
+  "directives": {},
+  "release_name": "single-step-reaction-holdout-n1-n5",
+  "source_files": [
+    {
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/reaction-holdout-n1-n5/training.jsonl.gz",
+      "file_hash": "bae4c87e2944acd78afd5be02ffd34f41a175c046ec97f9c41daaeb19ea5b6e2"
+    },
+    {
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/reaction-holdout-n1-n5/validation.jsonl.gz",
+      "file_hash": "c19a6b837b58b6a35f909222064f7e2a44518377bfcc3eeb28dc8d39731fbc33"
+    },
+    {
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/reaction-holdout-n1-n5/manifest.json",
+      "file_hash": "2b07cb083f90e9b71d06b9cd3f48b3ad4989b4a940d865fa756aab50dc032d9b"
+    }
+  ],
+  "output_files": {
+    "all": {
+      "label": "all",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/single-step-reaction-holdout-n1-n5/all.jsonl.gz",
+      "file_hash": "e91da845857463606db1c4c226d0fdb4a3de6a423c36a0ecfa9d33616f1657b5",
+      "content_hash": "348410e05974aaada20c035638e411dcd86771fc39073ca328423fb509c7da65"
+    },
+    "training": {
+      "label": "training",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/single-step-reaction-holdout-n1-n5/training.jsonl.gz",
+      "file_hash": "b6f17cb1d680db7c872fb3a79c41906e7a057b3ab47906c74b01bc82b778a0b0",
+      "content_hash": "40cbe4014f8aa577396cd4b97b252682029416942c8fc42a90822b39b10e5c81"
+    },
+    "validation": {
+      "label": "validation",
+      "path": "data/retrocast/releases/paroutes-training-sets/v2026-06-05/single-step-reaction-holdout-n1-n5/validation.jsonl.gz",
+      "file_hash": "7c287e48118aa77bad1f376f5b6bd78b7699de9d0804265eb7dcd39e5f500a26",
+      "content_hash": "5cc7cebcb20f34ef4f130ca35da2361daf376b0798231960462da31015264bbc"
+    }
+  },
+  "statistics": {
+    "all_records": {
+      "total": 299427,
+      "training": 286241,
+      "validation": 13186
+    }
+  },
+  "summary": {
+    "reaction_postprocessing": {
+      "training": {
+        "input_routes": 156723,
+        "flattened_reactions": 358928,
+        "chemical_duplicates_removed": 72609,
+        "mapped_smiles_variants_collapsed": 78,
+        "duplicate_reactions_removed": 72687
+      },
+      "validation": {
+        "input_routes": 8250,
+        "flattened_reactions": 18889,
+        "chemical_duplicates_removed": 729,
+        "mapped_smiles_variants_collapsed": 0,
+        "duplicate_reactions_removed": 729,
+        "overlap_removed_from_validation": 4974
+      },
+      "cross_split_overlap_before_cleanup": {
+        "shared_exact_reaction_signatures": 4963,
+        "shared_reaction_identities": 4974,
+        "training_records_with_shared_identity": 4974,
+        "validation_records_with_shared_identity": 4974
+      },
+      "cross_split_overlap_after_cleanup": {
+        "shared_exact_reaction_signatures": 0,
+        "shared_reaction_identities": 0,
+        "training_records_with_shared_identity": 0,
+        "validation_records_with_shared_identity": 0
+      }
+    },
+    "output": {
+      "all_records": {
+        "total": 299427,
+        "training": 286241,
+        "validation": 13186
+      }
+    }
+  }
+}

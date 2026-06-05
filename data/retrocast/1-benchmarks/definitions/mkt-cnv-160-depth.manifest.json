@@ -1,6 +1,6 @@
 {
   "schema_version": "2",
-  "retrocast_version": "0.7.0.dev18",
+  "retrocast_version": "0.7.0",
   "created_at": "2026-06-05T04:12:56.774638Z",
   "action": "scripts/paroutes/benchmark-prep/05-create-constraint-variants",
   "parameters": {
@@ -16,7 +16,7 @@
   ],
   "output_files": [
     {
-      "path": "retrocast/1-benchmarks/definitions/mkt-cnv-160-depth.json.gz",
+      "path": "1-benchmarks/definitions/mkt-cnv-160-depth.json.gz",
       "file_hash": "02513e4936183fb2e274e949d09522bb29e5487bfb441bbae3b30e1a43fc6156",
       "content_hash": "569c7c95558bf85929e46278659f887fec89f5c4915099b11bc6aed290cba9f4"
     }
@@ -26,5 +26,7 @@
     "n_constrained_targets": 160,
     "metric_label": "buyables-stock+depth"
   },
-  "summary": {}
+  "summary": {
+    "release": "retrocast-v0.7.0"
+  }
 }
