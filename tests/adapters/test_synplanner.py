@@ -148,7 +148,7 @@ def test_synplanner_skips_route_with_null_reaction_child(
     assert entries[0].payload.smiles == "CCO"
     assert entries[0].source_order == 2
     assert "skipping invalid synplanner route: target=Apararenone source_index=0 source_order=1" in caplog.text
-    assert "'loc': ('children', 0" in caplog.text
+    assert "children.0" in caplog.text
     assert "skipped 1 invalid synplanner route(s) for target Apararenone; valid_routes=1" in caplog.text
 
 
@@ -164,7 +164,7 @@ def test_synplanner_all_invalid_routes_raise_explicit_failure(raw_synplanner_nul
     assert exc_info.value.context["skipped_routes"] == 1
     assert exc_info.value.context["first_invalid_source_index"] == 0
     assert exc_info.value.context["first_invalid_source_order"] == 1
-    assert "'loc': ('children', 0" in exc_info.value.context["first_validation_error"]
+    assert "children.0" in exc_info.value.context["first_validation_error"]
 
 
 @pytest.mark.contract

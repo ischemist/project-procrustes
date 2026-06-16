@@ -59,7 +59,18 @@ class SynPlannerAdapter:
             except ValidationError as exc:
                 source_index = source_order - 1
                 errors = exc.errors(include_url=False)
-                summary = str(errors[0]) if errors else "validation failed"
+                if errors:
+                    first_error = errors[0]
+                    raw_location = first_error.get("loc", ())
+                    location = (
+                        ".".join(str(part) for part in raw_location)
+                        if isinstance(raw_location, tuple | list)
+                        else str(raw_location)
+                    )
+                    message = str(first_error.get("msg", "validation failed"))
+                    summary = f"{location}: {message}" if location else message
+                else:
+                    summary = "validation failed"
                 if len(errors) > 1:
                     summary = f"{summary} (+ {len(errors) - 1} more)"
                 invalid_count += 1
