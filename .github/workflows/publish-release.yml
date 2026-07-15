@@ -36,10 +36,13 @@ jobs:
           create-args: >-
             librdkit-dev=2026.03.4
             libboost-headers=1.90
-            ${{ runner.os == 'Linux' && 'patchelf pax-utils' || '' }}
           cache-environment: true
 
       - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux relocation tooling
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y patchelf pax-utils
 
       - name: Build standalone executable
         shell: bash -el {0}
