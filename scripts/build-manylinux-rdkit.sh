@@ -34,7 +34,10 @@ cmake -S "$source_root" -B "$build_root" -G Ninja \
 
 cmake --build "$build_root" --parallel "$(nproc)" --target Descriptors RDInchiLib
 
-mkdir -p "$native_root/lib"
+mkdir -p "$native_root/include/GraphMol" "$native_root/lib"
+# The source tree keeps this public header with the vendored InChI API, while
+# RDKit development packages install it under GraphMol/.
+cp "$source_root/External/INCHI-API/inchi.h" "$native_root/include/GraphMol/inchi.h"
 cp -a "$build_root/lib"/libRDKit*.so* "$native_root/lib/"
 
 for library in SmilesParse RDInchiLib Descriptors GraphMol RDGeneral; do

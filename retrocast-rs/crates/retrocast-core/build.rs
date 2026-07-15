@@ -33,6 +33,7 @@ fn main() {
         .file("cpp/chem.cpp")
         .include("cpp")
         .include(include)
+        .include(root.join("include"))
         .include(boost_include)
         .std("c++20")
         .flag_if_supported("-Wno-deprecated-declarations")
