@@ -18,7 +18,7 @@ v0.8.1 repairs corpus ownership across the Python-to-Rust boundary. Project comm
 
 ASKCOS pathway extraction now moves its provider graph once and retains only the nodes referenced by each pathway. This removes a full `uuid2smiles` and `node_dict` clone per candidate. Project-mode ingest, score, and analyze also expose `--workers` consistently.
 
-On the 160-target, 25,762-candidate ASKCOS `mkt-cnv-160` fixture, the 12-worker Python command completed in 19.36 seconds with 555 MiB peak RSS. v0.8.0 required 241.8 seconds and 8.56 GiB on the same machine. The standalone command completed in 19.26 seconds with 524 MiB; the one-worker Python command used 508 MiB. Candidate artifacts are identical across v0.8.0, worker counts, and the Python and standalone front ends.
+On the 160-target, 25,762-candidate ASKCOS `mkt-cnv-160` fixture, the 12-worker Python command completed in 19.36 seconds with 555 MiB peak RSS. The pre-Rust v0.7.1 pipeline required 558.2 seconds and 2.32 GiB; v0.8.0 required 241.8 seconds and 8.56 GiB on the same machine. The standalone command completed in 19.26 seconds with 524 MiB; the one-worker Python command used 508 MiB. Candidate artifacts are identical across versions, worker counts, and the Python and standalone front ends. See the [v0.7.1 through v0.8.1 benchmark](https://github.com/ischemist/project-procrustes/tree/master/benchmarks/0.8.1-native-boundary) for both adapters, aggregate throughput, RSS, and methodology.
 
 ## v0.8.0
 
