@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Iterator, Mapping
+from concurrent.futures import ProcessPoolExecutor
 from typing import Any
 
 from retrocast.adapters.base import Adapter, AdaptMode
@@ -15,6 +16,10 @@ from retrocast.workflow.collect import (
 )
 
 logger = logging.getLogger(__name__)
+
+_WORKER_ADAPTER: Adapter | None = None
+_WORKER_MODE: AdaptMode = "strict"
+_WORKER_MAX_CANDIDATES: int | None = None
 
 
 def ingest_routes(
@@ -51,8 +56,30 @@ def ingest_candidates(
     mode: AdaptMode = "strict",
     max_candidates: int | None = None,
     progress_callback: Callable[[], None] | None = None,
+    workers: int = 1,
 ) -> CollectedCandidates:
     """Adapt raw planner output into candidates and collect them by target id."""
+    from retrocast import native
+
+    if native._adapter_slug(adapter) is not None:
+        return native.ingest(
+            raw_payload,
+            adapter,
+            task,
+            mode=mode,
+            max_candidates=max_candidates,
+            workers=workers,
+        )
+    if workers > 1:
+        jobs = list(_target_payloads(raw_payload, task))
+        with ProcessPoolExecutor(
+            max_workers=workers,
+            initializer=_initialize_ingest_worker,
+            initargs=(adapter, mode, max_candidates),
+        ) as executor:
+            chunks = executor.map(_ingest_target_worker, jobs, chunksize=max(1, len(jobs) // (workers * 4)))
+            candidates = [candidate for chunk in chunks for candidate in chunk]
+        return collect_candidates(candidates, task)
     candidates = []
     for target, payload, source_key in _target_payloads(raw_payload, task):
         candidates.extend(
@@ -67,6 +94,27 @@ def ingest_candidates(
             )
         )
     return collect_candidates(candidates, task)
+
+
+def _initialize_ingest_worker(adapter: Adapter, mode: AdaptMode, max_candidates: int | None) -> None:
+    global _WORKER_ADAPTER, _WORKER_MODE, _WORKER_MAX_CANDIDATES
+    _WORKER_ADAPTER = adapter
+    _WORKER_MODE = mode
+    _WORKER_MAX_CANDIDATES = max_candidates
+
+
+def _ingest_target_worker(job: tuple[Target | None, Any, str | None]) -> list:
+    target, payload, source_key = job
+    if _WORKER_ADAPTER is None:
+        raise RuntimeError("ingest worker was not initialized")
+    return adapt_candidates(
+        payload,
+        _WORKER_ADAPTER,
+        mode=_WORKER_MODE,
+        target=target,
+        source_key=source_key,
+        max_candidates=_WORKER_MAX_CANDIDATES,
+    )
 
 
 def _target_payloads(raw_payload: Any, task: Task) -> Iterator[tuple[Target | None, Any, str | None]]:

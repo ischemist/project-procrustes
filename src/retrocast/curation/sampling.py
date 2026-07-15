@@ -1,6 +1,7 @@
+"""Python-facing deterministic sampling backed by Rust's CPython-compatible RNG."""
+
 from __future__ import annotations
 
-import random
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from typing import TypeVar
@@ -16,8 +17,9 @@ def sample_stratified_priority(
     seed: int,
 ) -> list[T]:
     """Sample target counts by group, exhausting pools in priority order."""
-    rng = random.Random(seed)
-    grouped_pools = []
+    from retrocast import native
+
+    grouped_pools: list[dict[G, list[T]]] = []
     for pool in pools:
         grouped: dict[G, list[T]] = defaultdict(list)
         for item in pool:
@@ -26,20 +28,23 @@ def sample_stratified_priority(
                 grouped[group].append(item)
         grouped_pools.append(grouped)
 
-    selected = []
-    for group, target_count in counts.items():
-        group_items = []
-        for grouped in grouped_pools:
-            needed = target_count - len(group_items)
-            if needed <= 0:
-                break
-            available = grouped[group]
-            group_items.extend(rng.sample(available, needed) if len(available) > needed else available)
-        selected.extend(group_items)
-    return selected
+    groups = list(counts)
+    coordinates = native.sample_stratified_priority_indices(
+        [[len(pool.get(group, ())) for pool in grouped_pools] for group in groups],
+        list(counts.values()),
+        seed,
+    )
+    return [
+        grouped_pools[pool_index][group][item_index]
+        for group, group_coordinates in zip(groups, coordinates, strict=True)
+        for pool_index, item_index in group_coordinates
+    ]
 
 
 def sample_random(items: Sequence[T], n: int, seed: int) -> list[T]:
+    """Return a deterministic sample using Rust's CPython-compatible RNG."""
     if n > len(items):
         raise ValueError(f"cannot sample {n} from {len(items)} items")
-    return random.Random(seed).sample(list(items), n)
+    from retrocast import native
+
+    return [items[index] for index in native.sample_indices(len(items), n, seed)]

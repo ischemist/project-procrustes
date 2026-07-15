@@ -1,5 +1,3 @@
-from unittest.mock import patch
-
 import pytest
 
 from retrocast.chem import (
@@ -8,7 +6,7 @@ from retrocast.chem import (
     get_inchi_key,
     get_molecular_weight,
 )
-from retrocast.exceptions import InvalidSmilesError, RetroCastException
+from retrocast.exceptions import InvalidSmilesError
 
 # ============================================================================
 # Tests for get_heavy_atom_count
@@ -37,18 +35,6 @@ def test_get_heavy_atom_count_invalid_smiles_raises_error() -> None:
     invalid_smiles = "C(C)C)C"
     with pytest.raises(InvalidSmilesError):
         get_heavy_atom_count(invalid_smiles)
-
-
-@pytest.mark.unit
-@patch("retrocast.chem.Chem.MolFromSmiles")
-def test_get_heavy_atom_count_raises_exception_on_generic_error(mock_molfromsmiles) -> None:
-    """Tests that generic errors are wrapped in RetroCastException."""
-    mock_molfromsmiles.side_effect = RuntimeError("unexpected rdkit error")
-    with pytest.raises(RetroCastException) as exc_info:
-        get_heavy_atom_count("CCO")
-    assert "An unexpected error occurred during HAC calculation" in str(exc_info.value)
-    assert exc_info.value.code == "chem.descriptor_failed"
-    assert exc_info.value.context == {"operation": "get_heavy_atom_count", "smiles": "CCO"}
 
 
 # ============================================================================
@@ -80,18 +66,6 @@ def test_get_molecular_weight_invalid_smiles_raises_error() -> None:
         get_molecular_weight(invalid_smiles)
 
 
-@pytest.mark.unit
-@patch("retrocast.chem.rdMolDescriptors.CalcExactMolWt")
-def test_get_molecular_weight_raises_exception_on_generic_error(mock_calc) -> None:
-    """Tests that generic errors are wrapped in RetroCastException."""
-    mock_calc.side_effect = RuntimeError("unexpected rdkit error")
-    with pytest.raises(RetroCastException) as exc_info:
-        get_molecular_weight("CCO")
-    assert "An unexpected error occurred during MW calculation" in str(exc_info.value)
-    assert exc_info.value.code == "chem.descriptor_failed"
-    assert exc_info.value.context == {"operation": "get_molecular_weight", "smiles": "CCO"}
-
-
 # ============================================================================
 # Tests for get_chiral_center_count
 # ============================================================================
@@ -119,18 +93,6 @@ def test_get_chiral_center_count_invalid_smiles_raises_error() -> None:
     invalid_smiles = "C(C)C)C"
     with pytest.raises(InvalidSmilesError):
         get_chiral_center_count(invalid_smiles)
-
-
-@pytest.mark.unit
-@patch("retrocast.chem.Chem.FindMolChiralCenters")
-def test_get_chiral_center_count_raises_exception_on_generic_error(mock_find) -> None:
-    """Tests that generic errors are wrapped in RetroCastException."""
-    mock_find.side_effect = RuntimeError("unexpected rdkit error")
-    with pytest.raises(RetroCastException) as exc_info:
-        get_chiral_center_count("CCO")
-    assert "An unexpected error occurred during chiral center count" in str(exc_info.value)
-    assert exc_info.value.code == "chem.descriptor_failed"
-    assert exc_info.value.context == {"operation": "get_chiral_center_count", "smiles": "CCO"}
 
 
 # ============================================================================

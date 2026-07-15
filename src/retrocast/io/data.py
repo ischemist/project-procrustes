@@ -26,7 +26,7 @@ from retrocast.models.route import Route
 from retrocast.models.task import Benchmark, RouteDepthConstraint, Task
 from retrocast.typing import InChIKeyStr, SmilesStr
 from retrocast.utils.timing import ExecutionStats
-from retrocast.workflow.collect import CollectedCandidates, CollectedRoutes
+from retrocast.workflow.collect import CollectedCandidates, CollectedRoutes, NativeCollectedCandidates
 
 _TASK_ADAPTER = TypeAdapter(Task)
 _BENCHMARK_ADAPTER = TypeAdapter(Benchmark)
@@ -240,6 +240,8 @@ def load_collected_candidates(path: Path) -> CollectedCandidates:
 
 
 def save_collected_candidates(candidates: CollectedCandidates, path: Path) -> None:
+    if isinstance(candidates, NativeCollectedCandidates):
+        candidates.materialize()
     _save_model(candidates, path, _COLLECTED_CANDIDATES_ADAPTER, artifact="collected_candidates")
 
 
@@ -248,6 +250,10 @@ def load_evaluation(path: Path) -> Evaluation:
 
 
 def save_evaluation(evaluation: Evaluation, path: Path) -> None:
+    from retrocast.native import NativeEvaluation
+
+    if isinstance(evaluation, NativeEvaluation):
+        evaluation.materialize()
     _save_model(evaluation, path, _EVALUATION_ADAPTER, artifact="evaluation")
 
 

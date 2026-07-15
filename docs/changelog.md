@@ -12,7 +12,30 @@ Practically speaking, you should treat `2-raw` (or wherever you store the raw pl
 
 For most use cases, this should not be a problem since the full pipeline of ingest, score, and analyze is decently fast. If you are using (or planning to use) RetroCast in production pipelines that will handle large volumes of data, please feel free [to get in touch](ischemist.com/contact).
 
-## v0.7.0 (in development, not yet released on PyPi)
+## v0.8.0
+
+v0.8.0 replaces the Python execution engine with one Rust core shared by the Python package and a standalone `retrocast` executable.
+
+### Highlights
+
+- Ported schema validation, every built-in planner adapter, route operations, ingest, scoring, analysis, statistics, artifact IO, provenance, datasets, curation, and training-release workflows to `retrocast-core`.
+- Added a standalone executable with direct-file and project-mode `adapt`, `collect`, `ingest`, `score`, `analyze`, `pipeline`, `verify`, and dataset commands.
+- Added PyO3 bindings behind the existing `import retrocast` interface. Untouched ingest and evaluation values remain Rust-owned between stages without intermediate JSON serialization.
+- Replaced Python RDKit with a narrow RDKit C++ bridge for canonical SMILES, InChIKeys, and molecular descriptors.
+- Added bounded native parallelism through `workers`, with the Python binding releasing the GIL while the core executes.
+- Added reproducible cross-platform wheel and standalone-bundle builds for Linux x86-64, Windows x86-64, macOS arm64, and macOS x86-64.
+
+### Performance
+
+On the 160-target, 1,830-candidate AiZynthFinder `mkt-cnv-160` fixture, the standalone executable processes 1,096.7 candidates/s with 12 workers in 1.669 seconds. The Python front end over the same core processes 743.0 candidates/s in 2.463 seconds. Candidate and evaluation artifacts are identical across worker counts and front ends; see the [recorded benchmark](https://github.com/ischemist/project-procrustes/tree/master/benchmarks/aizynth-mkt-cnv-160) for wall time, throughput, RSS, and semantic validation.
+
+### Distribution and migration
+
+`pip install retrocast` now installs a native wheel containing the PyO3 extension and repaired RDKit libraries. It no longer installs the Python `rdkit` package. Source installations require Rust, a C++20 compiler, Boost headers, and RDKit C++.
+
+Standalone archives contain the `retrocast` executable and its native libraries and do not require Python or Conda at runtime. This native packaging change is the reason for the minor-version bump.
+
+## v0.7.0
 
 v0.7.0 updates RetroCast to new [schema design](/dev/rationale/schema-design), check that page for the full mental model.
 

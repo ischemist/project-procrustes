@@ -1,18 +1,12 @@
 from __future__ import annotations
 
-import json
 import os
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from io import BufferedWriter
 from pathlib import Path
-from typing import Any, Literal
-from urllib.error import HTTPError, URLError
-from urllib.parse import quote
-from urllib.request import Request, urlopen
-
-from pydantic import BaseModel, ConfigDict, ValidationError
+from typing import Any, Literal, NoReturn
 
 from retrocast.exceptions import (
     ArtifactFormatError,
@@ -24,7 +18,7 @@ from retrocast.exceptions import (
 from retrocast.hashing import hash_file
 from retrocast.io import load_benchmark
 from retrocast.models import StockTerminationConstraint
-from retrocast.paths import resolve_cache_dir, validate_filename
+from retrocast.paths import validate_filename
 
 TrainingDatasetName = Literal["paroutes"]
 TrainingArtifactName = Literal[
@@ -54,11 +48,25 @@ SUPPORTED_DATASETS: tuple[TrainingDatasetName, ...] = ("paroutes",)
 TRAINING_OMIT_PARTS = {"all", "training", "validation", "jsonl", "rsmi"}
 
 
-class LatestTrainingSetRelease(BaseModel):
-    model_config = ConfigDict(extra="ignore", frozen=True)
+def _raise_native_dataset_error(error: object) -> NoReturn:
+    from retrocast import native
 
-    dataset: str
-    latest_release: str
+    assert isinstance(error, native.NativeDatasetError)
+    payload = error.payload
+    message = str(payload.get("message") or error)
+    code = str(payload.get("code") or "dataset.error")
+    context = payload.get("context")
+    context = context if isinstance(context, dict) else {}
+    retryable = bool(payload.get("retryable", False))
+    category = str(payload.get("category") or "")
+    error_type = {
+        "configuration": ConfigurationError,
+        "resolution": DatasetResolutionError,
+        "download": DatasetDownloadError,
+        "verification": DatasetVerificationError,
+        "artifact_format": ArtifactFormatError,
+    }.get(category, DatasetDownloadError)
+    raise error_type(message, code=code, context=context, retryable=retryable) from error
 
 
 @dataclass(frozen=True)
@@ -136,67 +144,25 @@ def download_training_set(
     base_url: str = DEFAULT_TRAINING_SET_BASE_URL,
     show_progress: bool | None = None,
 ) -> Path:
-    validate_training_dataset_request(dataset=dataset, artifact=artifact, split=split, format=format)
-    resolved_release = resolve_training_set_release(dataset=dataset, release=release, base_url=base_url)
-    release_dir = resolve_training_set_root(
-        dataset=dataset,
-        release=resolved_release,
-        cache_dir=cache_dir,
-        output_dir=output_dir,
-    )
-    filename = resolve_training_set_filename(artifact=artifact, split=split, format=format)
-    checksums_path = release_dir / "SHA256SUMS"
-    checksums_url = build_training_set_url(
-        base_url=base_url,
-        dataset=dataset,
-        release=resolved_release,
-        filename="SHA256SUMS",
-    )
-    artifact_dir = release_dir / artifact
-    artifact_path = artifact_dir / filename
+    from retrocast import native
 
-    download_verified_file(
-        local_path=artifact_path,
-        checksums_path=checksums_path,
-        checksums_url=checksums_url,
-        checksum_key=build_training_set_checksum_key(artifact=artifact, filename=filename),
-        download_url=build_training_set_url(
-            base_url=base_url,
-            dataset=dataset,
-            release=resolved_release,
-            artifact=artifact,
-            filename=filename,
-        ),
-        show_progress=should_show_download_progress(show_progress),
-        progress_description=f"downloading {artifact}/{filename}",
-        missing_message=f"artifact '{artifact}' release '{resolved_release}' does not publish '{filename}'",
-        missing_context={"dataset": dataset, "artifact": artifact, "release": resolved_release, "filename": filename},
-        mismatch_message=f"downloaded dataset file failed integrity verification: {filename}",
-        mismatch_context={"dataset": dataset, "artifact": artifact, "release": resolved_release, "filename": filename},
-    )
-    download_verified_file(
-        local_path=artifact_dir / "manifest.json",
-        checksums_path=checksums_path,
-        checksums_url=checksums_url,
-        checksum_key=build_training_set_checksum_key(artifact=artifact, filename="manifest.json"),
-        download_url=build_training_set_url(
-            base_url=base_url,
-            dataset=dataset,
-            release=resolved_release,
-            artifact=artifact,
-            filename="manifest.json",
-        ),
-        missing_message=f"artifact '{artifact}' release '{resolved_release}' does not publish 'manifest.json'",
-        missing_context={
-            "dataset": dataset,
-            "artifact": artifact,
-            "release": resolved_release,
-            "filename": "manifest.json",
-        },
-        mismatch_message="downloaded dataset manifest failed integrity verification",
-        mismatch_context={"dataset": dataset, "artifact": artifact, "release": resolved_release},
-    )
-    return artifact_path
+    try:
+        return Path(
+            native.dataset_download_training_set(
+                {
+                    "dataset": dataset,
+                    "artifact": artifact,
+                    "split": split,
+                    "release": release,
+                    "format": format,
+                    "cache_dir": str(cache_dir) if cache_dir is not None else None,
+                    "output_dir": str(output_dir) if output_dir is not None else None,
+                    "base_url": base_url,
+                }
+            )
+        )
+    except native.NativeDatasetError as error:
+        _raise_native_dataset_error(error)
 
 
 def download_training_data(
@@ -213,92 +179,28 @@ def download_training_data(
     dry_run: bool = False,
     show_progress: bool | None = None,
 ) -> list[Path]:
-    if dataset not in SUPPORTED_DATASETS:
-        raise ConfigurationError(
-            f"unsupported training dataset: {dataset}",
-            code="dataset.unsupported_dataset",
-            context={"dataset": dataset, "supported_datasets": list(SUPPORTED_DATASETS)},
-        )
-    if artifact is not None and artifact not in TRAINING_ARTIFACT_SPECS:
-        raise ConfigurationError(
-            f"unsupported training artifact: {artifact}",
-            code="dataset.unsupported_artifact",
-            context={"artifact": artifact},
-        )
-    if split is not None and split not in {"all", "training", "validation"}:
-        raise ConfigurationError(
-            f"unsupported training split: {split}",
-            code="dataset.unsupported_split",
-            context={"split": split},
-        )
-    if format is not None and format not in {"jsonl", "rsmi"}:
-        raise ConfigurationError(
-            f"unsupported training dataset format: {format}",
-            code="dataset.unsupported_format",
-            context={"format": format},
-        )
-    validate_training_omit_parts(omit)
+    from retrocast import native
 
-    resolved_release = resolve_training_set_release(dataset=dataset, release=release, base_url=base_url)
-    release_dir = resolve_training_set_root(
-        dataset=dataset,
-        release=resolved_release,
-        cache_dir=cache_dir,
-        output_dir=output_dir,
-    )
-    checksums_path = release_dir / "SHA256SUMS"
-    checksums_url = build_training_set_url(
-        base_url=base_url,
-        dataset=dataset,
-        release=resolved_release,
-        filename="SHA256SUMS",
-    )
-    published_files = published_training_files(
-        checksums_path=checksums_path,
-        checksums_url=checksums_url,
-        artifact=artifact,
-        split=split,
-        format=format,
-        omit=omit,
-    )
-    if not published_files:
-        raise DatasetResolutionError(
-            "no published training data files match request",
-            code="dataset.no_matching_files",
-            context={
-                "dataset": dataset,
-                "release": resolved_release,
-                "artifact": artifact,
-                "split": split,
-                "format": format,
-                "omit": list(omit),
-            },
-        )
-
-    paths = [release_dir / file.key for file in published_files]
-    if dry_run:
-        return paths
-
-    for file, path in zip(published_files, paths, strict=True):
-        download_verified_file(
-            local_path=path,
-            checksums_path=checksums_path,
-            checksums_url=checksums_url,
-            checksum_key=file.key,
-            download_url=build_training_data_file_url(
-                base_url=base_url,
-                dataset=dataset,
-                release=resolved_release,
-                relative_path=Path(file.key),
-            ),
-            show_progress=should_show_download_progress(show_progress),
-            progress_description=f"downloading {file.key}",
-            missing_message=f"training data file is not published: {file.key}",
-            missing_context={"dataset": dataset, "release": resolved_release, "key": file.key},
-            mismatch_message=f"downloaded training data file failed integrity verification: {file.key}",
-            mismatch_context={"dataset": dataset, "release": resolved_release, "key": file.key},
-        )
-    return paths
+    try:
+        return [
+            Path(path)
+            for path in native.dataset_download_training_data(
+                {
+                    "dataset": dataset,
+                    "artifact": artifact,
+                    "split": split,
+                    "release": release,
+                    "format": format,
+                    "omit": list(omit),
+                    "cache_dir": str(cache_dir) if cache_dir is not None else None,
+                    "output_dir": str(output_dir) if output_dir is not None else None,
+                    "base_url": base_url,
+                    "dry_run": dry_run,
+                }
+            )
+        ]
+    except native.NativeDatasetError as error:
+        _raise_native_dataset_error(error)
 
 
 def download_benchmark(
@@ -393,33 +295,23 @@ def download_hosted_data_target(
     base_url: str = DEFAULT_HOSTED_DATA_BASE_URL,
     dry_run: bool = False,
 ) -> list[Path]:
-    selector = hosted_data_target_selector(target)
-    root_dir = resolve_hosted_data_root(cache_dir=cache_dir, output_dir=output_dir)
-    checksums_path = root_dir / "SHA256SUMS"
-    checksums_url = build_hosted_data_url(base_url=base_url, relative_path=Path("SHA256SUMS"))
-    files = [file for file in published_hosted_data_files(checksums_path, checksums_url) if selector(file.key)]
-    if not files:
-        raise DatasetResolutionError(
-            f"no hosted data files match target: {target}",
-            code="dataset.no_matching_files",
-            context={"target": target},
-        )
-    paths = [root_dir / file.key for file in files]
-    if dry_run:
-        return paths
-    for file, path in zip(files, paths, strict=True):
-        download_verified_file(
-            local_path=path,
-            checksums_path=checksums_path,
-            checksums_url=checksums_url,
-            checksum_key=file.key,
-            download_url=build_hosted_data_url(base_url=base_url, relative_path=Path(file.key)),
-            missing_message=f"hosted data file is not published: {file.key}",
-            missing_context={"target": target, "relative_path": file.key},
-            mismatch_message=f"downloaded hosted data file failed integrity verification: {Path(file.key).name}",
-            mismatch_context={"target": target, "relative_path": file.key},
-        )
-    return paths
+    from retrocast import native
+
+    try:
+        return [
+            Path(path)
+            for path in native.dataset_download_hosted_data(
+                {
+                    "target": target,
+                    "cache_dir": str(cache_dir) if cache_dir is not None else None,
+                    "output_dir": str(output_dir) if output_dir is not None else None,
+                    "base_url": base_url,
+                    "dry_run": dry_run,
+                }
+            )
+        ]
+    except native.NativeDatasetError as error:
+        _raise_native_dataset_error(error)
 
 
 def hosted_data_target_selector(target: str) -> Callable[[str], bool]:
@@ -464,44 +356,12 @@ def validate_training_dataset_request(
     split: str,
     format: str,
 ) -> None:
-    if dataset not in SUPPORTED_DATASETS:
-        raise ConfigurationError(
-            f"unsupported training dataset: {dataset}",
-            code="dataset.unsupported_dataset",
-            context={"dataset": dataset, "supported_datasets": list(SUPPORTED_DATASETS)},
-        )
-    if artifact not in TRAINING_ARTIFACT_SPECS:
-        raise ConfigurationError(
-            f"unsupported training artifact: {artifact}",
-            code="dataset.unsupported_artifact",
-            context={"artifact": artifact},
-        )
-    if split not in {"all", "training", "validation"}:
-        raise ConfigurationError(
-            f"unsupported training split: {split}",
-            code="dataset.unsupported_split",
-            context={"split": split},
-        )
-    artifact_spec = TRAINING_ARTIFACT_SPECS[artifact]
-    if split not in artifact_spec.supported_splits:
-        raise ConfigurationError(
-            f"artifact '{artifact}' does not support split '{split}'",
-            code="dataset.split_mismatch",
-            context={"artifact": artifact, "split": split, "supported_splits": list(artifact_spec.supported_splits)},
-        )
-    if format not in {"jsonl", "rsmi"}:
-        raise ConfigurationError(
-            f"unsupported training dataset format: {format}",
-            code="dataset.unsupported_format",
-            context={"format": format},
-        )
-    supported_formats = artifact_spec.supported_formats
-    if format not in supported_formats:
-        raise ConfigurationError(
-            f"artifact '{artifact}' does not support format '{format}'",
-            code="dataset.format_mismatch",
-            context={"artifact": artifact, "format": format, "supported_formats": list(supported_formats)},
-        )
+    from retrocast import native
+
+    try:
+        native.dataset_validate_training_request(dataset, artifact, split, format)
+    except native.NativeDatasetError as error:
+        _raise_native_dataset_error(error)
 
 
 def validate_training_omit_parts(parts: tuple[str, ...]) -> None:
@@ -544,18 +404,15 @@ def training_file_matches(
     format: str | None,
     omit: tuple[str, ...],
 ) -> bool:
-    if artifact is not None and not key.startswith(f"{artifact}/"):
-        return False
-    filename = Path(key).name
-    if filename == "manifest.json":
-        return artifact is not None or (split is None and format is None)
-    if split is not None and not training_file_part_matches(filename, split):
-        return False
-    if format == "jsonl" and not filename.endswith(".jsonl.gz"):
-        return False
-    if format == "rsmi" and not filename.endswith(".rsmi.txt.gz"):
-        return False
-    return not any(training_file_part_matches(filename, part) for part in omit)
+    from retrocast import native
+
+    return native.dataset_training_file_matches(
+        key,
+        artifact=artifact,
+        split=split,
+        format=format,
+        omit=omit,
+    )
 
 
 def training_file_part_matches(filename: str, part: str) -> bool:
@@ -576,31 +433,21 @@ def resolve_training_set_release(
     release: str = "latest",
     base_url: str = DEFAULT_TRAINING_SET_BASE_URL,
 ) -> str:
-    if release != "latest":
-        return release
+    from retrocast import native
 
-    latest_url = build_training_set_url(base_url=base_url, dataset=dataset, filename="latest.json")
-    payload = load_json_url(latest_url)
     try:
-        latest = LatestTrainingSetRelease.model_validate(payload)
-    except ValidationError as exc:
-        raise ArtifactFormatError(
-            f"invalid latest release payload for training dataset '{dataset}'",
-            code="dataset.invalid_latest_payload",
-            context={"dataset": dataset, "url": latest_url},
-        ) from exc
-    if latest.dataset != dataset:
-        raise DatasetResolutionError(
-            f"latest release pointer dataset mismatch: expected '{dataset}', got '{latest.dataset}'",
-            code="dataset.latest_dataset_mismatch",
-            context={"dataset": dataset, "resolved_dataset": latest.dataset, "url": latest_url},
-        )
-    return latest.latest_release
+        return native.dataset_resolve_release(dataset, release, base_url)
+    except native.NativeDatasetError as error:
+        _raise_native_dataset_error(error)
 
 
 def resolve_training_set_filename(*, artifact: TrainingArtifactName, split: str, format: TrainingSetFormat) -> str:
-    suffix = TRAINING_ARTIFACT_SPECS[artifact].suffix_by_format[format]
-    return f"{split}{suffix}"
+    from retrocast import native
+
+    try:
+        return native.dataset_training_filename(artifact, split, format)
+    except native.NativeDatasetError as error:
+        _raise_native_dataset_error(error)
 
 
 def resolve_training_set_root(
@@ -610,19 +457,27 @@ def resolve_training_set_root(
     cache_dir: Path | None,
     output_dir: Path | None,
 ) -> Path:
-    if output_dir is not None:
-        return Path(output_dir) / release
-    if cache_dir is not None:
-        return Path(cache_dir) / dataset / release
-    return resolve_cache_dir(DEFAULT_TRAINING_SET_CACHE_SUBDIR) / dataset / release
+    from retrocast import native
+
+    return Path(
+        native.dataset_training_root(
+            dataset,
+            release,
+            str(cache_dir) if cache_dir is not None else None,
+            str(output_dir) if output_dir is not None else None,
+        )
+    )
 
 
 def resolve_hosted_data_root(*, cache_dir: Path | None, output_dir: Path | None) -> Path:
-    if output_dir is not None:
-        return Path(output_dir)
-    if cache_dir is not None:
-        return Path(cache_dir)
-    return resolve_cache_dir(DEFAULT_HOSTED_DATA_CACHE_SUBDIR)
+    from retrocast import native
+
+    return Path(
+        native.dataset_hosted_root(
+            str(cache_dir) if cache_dir is not None else None,
+            str(output_dir) if output_dir is not None else None,
+        )
+    )
 
 
 def build_training_set_url(
@@ -633,13 +488,15 @@ def build_training_set_url(
     release: str | None = None,
     artifact: str | None = None,
 ) -> str:
-    parts = [base_url.rstrip("/"), quote(dataset, safe="")]
+    from retrocast import native
+
+    parts = [dataset]
     if release is not None:
-        parts.append(quote(release, safe=""))
+        parts.append(release)
     if artifact is not None:
-        parts.append(quote(artifact, safe=""))
-    parts.append(quote(filename, safe="."))
-    return "/".join(parts)
+        parts.append(artifact)
+    parts.append(filename)
+    return native.dataset_build_url(base_url, parts)
 
 
 def build_training_set_checksum_key(*, artifact: str, filename: str) -> str:
@@ -647,18 +504,15 @@ def build_training_set_checksum_key(*, artifact: str, filename: str) -> str:
 
 
 def build_training_data_file_url(*, base_url: str, dataset: str, release: str, relative_path: Path) -> str:
-    return "/".join(
-        [
-            base_url.rstrip("/"),
-            quote(dataset, safe=""),
-            quote(release, safe=""),
-            *(quote(part, safe=".") for part in relative_path.parts),
-        ]
-    )
+    from retrocast import native
+
+    return native.dataset_build_url(base_url, [dataset, release, *relative_path.parts])
 
 
 def build_hosted_data_url(*, base_url: str, relative_path: Path) -> str:
-    return "/".join([base_url.rstrip("/"), *(quote(part, safe=".") for part in relative_path.parts)])
+    from retrocast import native
+
+    return native.dataset_build_url(base_url, relative_path.parts)
 
 
 def should_show_download_progress(show_progress: bool | None) -> bool:
@@ -677,22 +531,21 @@ def download_hosted_data_file(
     output_dir: Path | None,
     base_url: str,
 ) -> Path:
-    root_dir = resolve_hosted_data_root(cache_dir=cache_dir, output_dir=output_dir)
-    local_path = root_dir / relative_path
-    checksums_path = root_dir / "SHA256SUMS"
-    checksums_url = build_hosted_data_url(base_url=base_url, relative_path=Path("SHA256SUMS"))
-    download_verified_file(
-        local_path=local_path,
-        checksums_path=checksums_path,
-        checksums_url=checksums_url,
-        checksum_key=str(relative_path),
-        download_url=build_hosted_data_url(base_url=base_url, relative_path=relative_path),
-        missing_message=f"hosted data file is not published: {relative_path}",
-        missing_context={"relative_path": str(relative_path), "checksums_url": checksums_url},
-        mismatch_message=f"downloaded hosted data file failed integrity verification: {relative_path.name}",
-        mismatch_context={"relative_path": str(relative_path)},
-    )
-    return local_path
+    from retrocast import native
+
+    try:
+        return Path(
+            native.dataset_download_hosted_file(
+                {
+                    "relative_path": str(relative_path),
+                    "cache_dir": str(cache_dir) if cache_dir is not None else None,
+                    "output_dir": str(output_dir) if output_dir is not None else None,
+                    "base_url": base_url,
+                }
+            )
+        )
+    except native.NativeDatasetError as error:
+        _raise_native_dataset_error(error)
 
 
 def download_verified_file(
@@ -745,16 +598,13 @@ def resolve_expected_hash(
     missing_message: str,
     missing_context: dict[str, object],
 ) -> str:
-    hashes = load_or_download_checksums(checksums_path=checksums_path, checksums_url=checksums_url)
-    expected_hash = hashes.get(checksum_key)
-    if expected_hash is not None:
-        return expected_hash
+    from retrocast import native
 
-    hashes = download_sha256sums(checksums_url, checksums_path)
-    expected_hash = hashes.get(checksum_key)
-    if expected_hash is None:
-        raise DatasetResolutionError(missing_message, code="dataset.file_not_published", context=missing_context)
-    return expected_hash
+    del missing_message, missing_context
+    try:
+        return native.dataset_resolve_expected(str(checksums_path), checksums_url, checksum_key)
+    except native.NativeDatasetError as error:
+        _raise_native_dataset_error(error)
 
 
 def load_or_download_checksums(*, checksums_path: Path, checksums_url: str) -> dict[str, str]:
@@ -771,53 +621,50 @@ def download_sha256sums(url: str, destination: Path) -> dict[str, str]:
 
 
 def load_sha256sums(path: Path) -> dict[str, str]:
+    from retrocast import native
+
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
+        return native.dataset_load_sha256sums(str(path))
+    except native.NativeDatasetError as exc:
+        if exc.payload.get("kind") == "invalid_checksum":
+            line = exc.payload.get("line", "")
+            raise ArtifactFormatError(
+                f"invalid dataset checksum line: {line!r}",
+                code="dataset.invalid_checksums",
+                context={"path": str(path), "line": line},
+            ) from exc
         raise DatasetDownloadError(
             f"failed to read dataset checksums from {path}",
             code="dataset.checksums_read_failed",
             context={"path": str(path)},
         ) from exc
 
-    checksums = {}
-    for line in lines:
-        if not line.strip():
-            continue
-        try:
-            sha256, filename = line.split(maxsplit=1)
-        except ValueError as exc:
-            raise ArtifactFormatError(
-                f"invalid dataset checksum line: {line!r}",
-                code="dataset.invalid_checksums",
-                context={"path": str(path), "line": line},
-            ) from exc
-        checksums[filename.strip()] = sha256
-    return checksums
-
 
 def load_json_url(url: str) -> object:
+    from retrocast import native
+
     try:
-        with urlopen(Request(url, headers={"User-Agent": DEFAULT_DATASET_USER_AGENT})) as response:
-            return json.load(response)
-    except HTTPError as exc:
-        raise DatasetResolutionError(
-            f"failed to resolve hosted metadata at {url}: HTTP {exc.code}",
-            code="dataset.metadata_http_error",
-            context={"url": url, "status": exc.code},
-        ) from exc
-    except URLError as exc:
+        return native.dataset_load_json_url(url)
+    except native.NativeDatasetError as exc:
+        kind = exc.payload.get("kind")
+        if kind == "http_status":
+            status = exc.payload.get("status")
+            raise DatasetResolutionError(
+                f"failed to resolve hosted metadata at {url}: HTTP {status}",
+                code="dataset.metadata_http_error",
+                context={"url": url, "status": status},
+            ) from exc
+        if kind == "invalid_json":
+            raise ArtifactFormatError(
+                f"invalid json returned by hosted metadata endpoint {url}",
+                code="dataset.invalid_metadata_json",
+                context={"url": url},
+            ) from exc
         raise DatasetDownloadError(
-            f"failed to reach hosted metadata at {url}: {exc.reason}",
+            f"failed to reach hosted metadata at {url}: {exc}",
             code="dataset.metadata_unreachable",
             context={"url": url},
             retryable=True,
-        ) from exc
-    except json.JSONDecodeError as exc:
-        raise ArtifactFormatError(
-            f"invalid json returned by hosted metadata endpoint {url}",
-            code="dataset.invalid_metadata_json",
-            context={"url": url},
         ) from exc
 
 
@@ -828,52 +675,30 @@ def download_url_to_path(
     show_progress: bool = False,
     progress_description: str | None = None,
 ) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = destination.with_suffix(f"{destination.suffix}.tmp")
+    from retrocast import native
+
     try:
-        with (
-            urlopen(Request(url, headers={"User-Agent": DEFAULT_DATASET_USER_AGENT})) as response,
-            tmp_path.open("wb") as handle,
-        ):
-            if show_progress:
-                write_response_with_progress(
-                    response=response,
-                    handle=handle,
-                    description=progress_description or f"downloading {destination.name}",
-                )
-            else:
-                while chunk := response.read(8192):
-                    handle.write(chunk)
-    except HTTPError as exc:
-        tmp_path.unlink(missing_ok=True)
-        raise DatasetResolutionError(
-            f"failed to download hosted file from {url}: HTTP {exc.code}",
-            code="dataset.file_http_error",
-            context={"url": url, "status": exc.code},
-        ) from exc
-    except URLError as exc:
-        tmp_path.unlink(missing_ok=True)
+        native.dataset_download_url_to_path(url, str(destination))
+    except native.NativeDatasetError as exc:
+        kind = exc.payload.get("kind")
+        if kind == "http_status":
+            status = exc.payload.get("status")
+            raise DatasetResolutionError(
+                f"failed to download hosted file from {url}: HTTP {status}",
+                code="dataset.file_http_error",
+                context={"url": url, "status": status},
+            ) from exc
+        if kind == "write":
+            raise DatasetDownloadError(
+                f"failed to write downloaded hosted file to {destination}",
+                code="dataset.cache_write_failed",
+                context={"path": str(destination), "url": url},
+            ) from exc
         raise DatasetDownloadError(
-            f"failed to reach hosted file at {url}: {exc.reason}",
+            f"failed to reach hosted file at {url}: {exc}",
             code="dataset.file_unreachable",
             context={"url": url},
             retryable=True,
-        ) from exc
-    except OSError as exc:
-        tmp_path.unlink(missing_ok=True)
-        raise DatasetDownloadError(
-            f"failed to write downloaded hosted file to {destination}",
-            code="dataset.cache_write_failed",
-            context={"path": str(destination), "url": url},
-        ) from exc
-    try:
-        tmp_path.replace(destination)
-    except OSError as exc:
-        tmp_path.unlink(missing_ok=True)
-        raise DatasetDownloadError(
-            f"failed to write downloaded hosted file to {destination}",
-            code="dataset.cache_write_failed",
-            context={"path": str(destination), "url": url},
         ) from exc
 
 

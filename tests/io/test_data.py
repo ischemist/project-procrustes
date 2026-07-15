@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import json
 from typing import Literal
 
 import pytest
@@ -103,6 +104,18 @@ def test_schema_model_writes_are_deterministic(tmp_path) -> None:
     save_task(value, right)
 
     assert left.read_bytes() == right.read_bytes()
+
+
+def test_native_json_gzip_is_byte_compatible_with_legacy_python_writer(tmp_path) -> None:
+    expected = tmp_path / "python.json.gz"
+    actual = tmp_path / "rust.json.gz"
+    value = {"emoji": "🧪", "nested": [1, 2]}
+
+    with expected.open("wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as handle:
+        handle.write(json.dumps(value, indent=2).encode("utf-8"))
+    save_json_gz(value, actual)
+
+    assert actual.read_bytes() == expected.read_bytes()
 
 
 def test_stock_file_writes_are_deterministic(tmp_path) -> None:

@@ -34,28 +34,65 @@ graph TD
 
 Basic schema
 
-```python
-class Molecule(BaseModel):
-    smiles: SmilesStr
-    inchikey: InChIKeyStr
-    product_of: Reaction | None = None
-    annotations: dict[str, Any] = Field(default_factory=dict)
+=== "Python"
+
+    ```python
+    class Molecule(BaseModel):
+        smiles: SmilesStr
+        inchikey: InChIKeyStr
+        product_of: Reaction | None = None
+        annotations: dict[str, Any] = Field(default_factory=dict)
 
 
-class Reaction(BaseModel):
-    reactants: list[Molecule]
-    mapped_reaction_smiles: ReactionSmilesStr | None = None
-    template: str | None = None
-    reagents: list[SmilesStr] | None = None
-    solvents: list[SmilesStr] | None = None
-    annotations: dict[str, Any] = Field(default_factory=dict)
+    class Reaction(BaseModel):
+        reactants: list[Molecule]
+        mapped_reaction_smiles: ReactionSmilesStr | None = None
+        template: str | None = None
+        reagents: list[SmilesStr] | None = None
+        solvents: list[SmilesStr] | None = None
+        annotations: dict[str, Any] = Field(default_factory=dict)
 
 
-class Route(BaseModel):
-    target: Molecule
-    annotations: dict[str, Any] = Field(default_factory=dict)
-    schema_version: str = "2"
-```
+    class Route(BaseModel):
+        target: Molecule
+        annotations: dict[str, Any] = Field(default_factory=dict)
+        schema_version: str = "2"
+    ```
+
+=== "Rust"
+
+    ```rust
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Molecule {
+        pub smiles: CanonicalSmiles,
+        pub inchikey: InchiKey,
+        pub product_of: Option<Box<Reaction>>,
+        #[serde(default)]
+        pub annotations: Annotations,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Reaction {
+        pub reactants: Vec<Molecule>,
+        pub mapped_reaction_smiles: Option<ReactionSmiles>,
+        pub template: Option<String>,
+        pub reagents: Option<Vec<CanonicalSmiles>>,
+        pub solvents: Option<Vec<CanonicalSmiles>>,
+        #[serde(default)]
+        pub annotations: Annotations,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Route {
+        pub target: Molecule,
+        #[serde(default)]
+        pub annotations: Annotations,
+        #[serde(default = "schema_v2")]
+        pub schema_version: SchemaVersion,
+    }
+    ```
+
+The Rust constructors are the validation boundary. `CanonicalSmiles`, `InchiKey`, and `SchemaVersion` are validated newtypes rather than aliases for `String`. Serde deserialization calls the same validation path used by adapters, so loading an artifact cannot create a state that the public constructor would reject.
 
 Identical molecules in different positions (e.g. same building block used in two branches) are different nodes; whence a Route is a tree, not just a DAG. Primarily because enforcing a 1 molecule = 1 node would introduce operational (serialization, signatures) complexity without any clear/obvious benefit beyond just marginally smaller disk usage.
 
@@ -69,32 +106,52 @@ RetroCast uses deterministic paths to refer to molecules and reactions inside a 
 - `rc:r:/0` reaction producing `rc:m:/0`
 - `rc:m:/1/0` first child under `rc:m:/1`
 
-these IDs are derived in memory and are not serialized. internally, they should be represented as typed addresses, not repeatedly parsed strings:
+These IDs are derived in memory and are not serialized. Internally, they are typed addresses, not strings that each caller reparses.
 
-```python
-class RoutePath(BaseModel):
-    kind: Literal["m", "r"]
-    indices: tuple[int, ...] = ()
+=== "Python"
 
-    @classmethod
-    def parse(cls, value: str) -> RoutePath: ...
+    ```python
+    @dataclass(frozen=True)
+    class RoutePath:
+        kind: Literal["m", "r"]
+        indices: tuple[int, ...] = ()
 
-    @classmethod
-    def target(cls) -> RoutePath: ...
+        @classmethod
+        def parse(cls, value: str) -> RoutePath: ...
 
-    @classmethod
-    def root_reaction(cls) -> RoutePath: ...
+        @classmethod
+        def target(cls) -> RoutePath: ...
 
-    def id(self) -> str: ...
-    def depth(self) -> int: ...
+        @classmethod
+        def root_reaction(cls) -> RoutePath: ...
 
-    def is_molecule(self) -> bool: ...
-    def is_reaction(self) -> bool: ...
+        def id(self) -> str: ...
+        def depth(self) -> int: ...
+        def produced_by(self) -> RoutePath: ...
+        def product(self) -> RoutePath: ...
+        def reactant(self, index: int) -> RoutePath: ...
+    ```
 
-    def produced_by(self) -> RoutePath: ...
-    def product(self) -> RoutePath: ...
-    def reactant(self, index: int) -> RoutePath: ...
-```
+=== "Rust"
+
+    ```rust
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    pub enum RoutePath {
+        Molecule(Box<[usize]>),
+        Reaction(Box<[usize]>),
+    }
+
+    impl RoutePath {
+        pub fn parse(value: &str) -> Result<Self, RoutePathError>;
+        pub fn target() -> Self;
+        pub fn root_reaction() -> Self;
+        pub fn id(&self) -> String;
+        pub fn depth(&self) -> usize;
+        pub fn produced_by(&self) -> Result<Self, RoutePathError>;
+        pub fn product(&self) -> Result<Self, RoutePathError>;
+        pub fn reactant(&self, index: usize) -> Result<Self, RoutePathError>;
+    }
+    ```
 
 semantics:
 
@@ -104,24 +161,28 @@ semantics:
 - `RoutePath.parse("rc:r:/1/0").product()` is `rc:m:/1/0`
 - `RoutePath.parse("rc:r:/1/0").reactant(2)` is `rc:m:/1/0/2`
 
-for convenience, we define the following subtypes:
+For serialized IDs, Python exposes validated strings and Rust exposes newtypes:
 
-```py
-def validate_reaction_id(value: str) -> str:
-    path = RoutePath.parse(value)
-    if not path.is_reaction():
-        raise ValueError("reaction id must identify a reaction node, e.g. 'rc:r:/1/0'")
-    return value
+=== "Python"
 
-def validate_molecule_id(value: str) -> str:
-    path = RoutePath.parse(value)
-    if not path.is_molecule():
-        raise ValueError("molecule id must identify a molecule node, e.g. 'rc:m:/1/0'")
-    return value
+    ```python
+    ReactionId = Annotated[str, AfterValidator(validate_reaction_id)]
+    MoleculeId = Annotated[str, AfterValidator(validate_molecule_id)]
+    ```
 
-ReactionId = Annotated[str, AfterValidator(validate_reaction_id)]
-MoleculeId = Annotated[str, AfterValidator(validate_molecule_id)]
-```
+=== "Rust"
+
+    ```rust
+    #[derive(Clone, Debug, Deserialize, Eq, Hash, Serialize)]
+    #[serde(try_from = "String", into = "String")]
+    pub struct ReactionId(RoutePath);
+
+    #[derive(Clone, Debug, Deserialize, Eq, Hash, Serialize)]
+    #[serde(try_from = "String", into = "String")]
+    pub struct MoleculeId(RoutePath);
+    ```
+
+An invalid kind is rejected when the ID enters the core. Downstream scoring code cannot accidentally put a molecule address into `ReactionValidity`.
 
 ## Route Signatures
 
@@ -158,60 +219,71 @@ At the most basic structural level, a reaction identity is defined by the struct
 - treat `Reaction` as a Route-specific occurrence object (with an explicit pointer to its product), but that requires writing custom serialization logic and ensuring loaded Reaction objects are always "hydrated" with proper parent references. Violates the spirit of [SRP](https://en.wikipedia.org/wiki/Single-responsibility_principle) and I'm a bit WebDev-brained not to think of the Data-View split analogy, so instead
 - we create a `ReactionView` model that provides a required route-contextual representation of a `Reaction`.
 
-```python
-class ReactionView:
-    route: Route
-    path: RoutePath
-    value: Reaction
+=== "Python"
 
-    def product(self) -> MoleculeView: ...
-    def reactants(self) -> list[MoleculeView]: ...
+    ```python
+    class ReactionView:
+        route: Route
+        path: RoutePath
+        value: Reaction
 
-    def key(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> tuple:
-        return (
-            "rxn",
-            self.product().key(match_level),
-            tuple(sorted(r.key(match_level) for r in self.reactants())),
-        )
+        def product(self) -> MoleculeView: ...
+        def reactants(self) -> list[MoleculeView]: ...
+        def key(self, match_level=InChIKeyLevel.FULL) -> tuple: ...
+        def signature(self, match_level=InChIKeyLevel.FULL) -> str: ...
+    ```
 
-    def signature(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> str:
-        return stable_hash(self.key(match_level))
-```
+=== "Rust"
+
+    ```rust
+    pub struct ReactionView<'route> {
+        pub route: &'route Route,
+        pub path: RoutePath,
+        pub value: &'route Reaction,
+    }
+
+    impl ReactionView<'_> {
+        pub fn product(&self) -> MoleculeView<'_>;
+        pub fn reactants(&self) -> Vec<MoleculeView<'_>>;
+        pub fn key(&self, level: InchiKeyLevel) -> ReactionKey;
+        pub fn signature(&self, level: InchiKeyLevel) -> Signature;
+    }
+    ```
 
 for consistency in api design and ease of subtree comparison, we also define a similar view model for `Molecule`.
 
-```python
-class MoleculeView:
-    route: Route
-    path: RoutePath
-    value: Molecule
+=== "Python"
 
-    def key(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> str:
-        return self.value.key(match_level)
+    ```python
+    class MoleculeView:
+        route: Route
+        path: RoutePath
+        value: Molecule
 
-    def produced_by(self) -> ReactionView | None: ...
+        def key(self, match_level=InChIKeyLevel.FULL) -> str: ...
+        def produced_by(self) -> ReactionView | None: ...
+        def subtree_key(self, match_level=InChIKeyLevel.FULL, *, depth=None) -> tuple: ...
+        def subtree_signature(self, match_level=InChIKeyLevel.FULL, *, depth=None) -> str: ...
+    ```
 
-    def subtree_key(self, match_level=InChIKeyLevel.FULL, *, depth=None):
-        if self.value.product_of is None or depth == 0:
-            return ("mol", self.key(match_level))
+=== "Rust"
 
-        next_depth = None if depth is None else depth - 1
-        reaction = self.produced_by()
-        child_sigs = sorted(
-            reactant.subtree_signature(match_level, depth=next_depth)
-            for reactant in reaction.reactants()
-        )
+    ```rust
+    pub struct MoleculeView<'route> {
+        pub route: &'route Route,
+        pub path: RoutePath,
+        pub value: &'route Molecule,
+    }
 
-        return (
-            "mol",
-            self.key(match_level),
-            reaction.key(match_level),
-            tuple(child_sigs),
-        )
+    impl MoleculeView<'_> {
+        pub fn key(&self, level: InchiKeyLevel) -> MoleculeKey;
+        pub fn produced_by(&self) -> Option<ReactionView<'_>>;
+        pub fn subtree_key(&self, level: InchiKeyLevel, depth: Option<usize>) -> SubtreeKey;
+        pub fn subtree_signature(&self, level: InchiKeyLevel, depth: Option<usize>) -> Signature;
+    }
+    ```
 
-    def subtree_signature(self, match_level=InChIKeyLevel.FULL, *, depth=None):
-        return stable_hash(self.subtree_key(match_level, depth=depth))
-```
+Rust views borrow the route. They cannot outlive it and they do not introduce parent pointers into the serialized tree.
 
 ### Route Identity
 
@@ -219,26 +291,21 @@ With the primitives above, full route equality is established by the subtree sig
 
 We often might be interested in asking how far along the plan (starting from the target) do any two Routes agree? Such prefix matching is simply a subtree signature of fixed depth `k` rooted at the target.
 
-```python
-class Route(BaseModel):
-    ...
+=== "Python"
 
-    def key(
-        self,
-        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
-        *,
-        depth: int | None = None,
-    ) -> tuple:
-        return self.target().subtree_key(match_level, depth=depth)
+    ```python
+    route.key(match_level=InChIKeyLevel.FULL, depth=None) -> tuple
+    route.signature(match_level=InChIKeyLevel.FULL, depth=None) -> str
+    ```
 
-    def signature(
-        self,
-        match_level: InChIKeyLevel = InChIKeyLevel.FULL,
-        *,
-        depth: int | None = None,
-    ) -> str:
-        return stable_hash(self.key(match_level, depth=depth))
-```
+=== "Rust"
+
+    ```rust
+    impl Route {
+        pub fn key(&self, level: InchiKeyLevel, depth: Option<usize>) -> SubtreeKey;
+        pub fn signature(&self, level: InchiKeyLevel, depth: Option<usize>) -> Signature;
+    }
+    ```
 
 ### Content Signatures
 
@@ -261,36 +328,100 @@ Route embedding asks whether one route occurs inside another route.
 
 `retrocast.curation.embedding` uses route views, paths, molecule keys, reaction signatures, and subtree signatures to produce audit traces:
 
-```python
-class EmbeddingMatch:
-    query_path: RoutePath
-    container_path: RoutePath
-    matched_reactions: int
-    leaf_extensions: tuple[LeafExtension, ...]
+=== "Python"
 
-    @property
-    def root_shifted(self) -> bool: ...
-    @property
-    def leaf_extended(self) -> bool: ...
+    ```python
+    class EmbeddingMatch:
+        query_path: RoutePath
+        container_path: RoutePath
+        matched_reactions: int
+        leaf_extensions: tuple[LeafExtension, ...]
 
-def find_route_embeddings(
-    query: Route,
-    container: Route,
-    match_level: InChIKeyLevel = InChIKeyLevel.FULL,
-    *,
-    allow_leaf_extension: bool = True,
-) -> tuple[EmbeddingMatch, ...]: ...
+    find_route_embeddings(query, container, *, allow_leaf_extension=True) -> tuple[EmbeddingMatch, ...]
+    route_embeds_at(query_view, container_view, *, allow_leaf_extension=True) -> EmbeddingMatch | None
+    ```
 
-def route_embeds_at(
-    query: MoleculeView,
-    container: MoleculeView,
-    match_level: InChIKeyLevel = InChIKeyLevel.FULL,
-    *,
-    allow_leaf_extension: bool = True,
-) -> EmbeddingMatch | None: ...
-```
+=== "Rust"
+
+    ```rust
+    pub struct EmbeddingMatch {
+        pub query_path: RoutePath,
+        pub container_path: RoutePath,
+        pub matched_reactions: usize,
+        pub leaf_extensions: Vec<LeafExtension>,
+    }
+
+    pub fn find_route_embeddings(
+        query: &Route,
+        container: &Route,
+        options: &EmbeddingOptions,
+    ) -> Vec<EmbeddingMatch>;
+
+    pub fn route_embeds_at(
+        query: MoleculeView<'_>,
+        container: MoleculeView<'_>,
+        options: &EmbeddingOptions,
+    ) -> Option<EmbeddingMatch>;
+    ```
 
 The detailed matching rules live in [Route Embedding](../reference/route-embedding.md). The important schema-design point is small: exact subtree equality is a signature check; embedding is a route-to-route matching check.
+
+## Ownership and data flow
+
+The public Python API and the standalone command execute the same functions in `retrocast-core`. Python names below are views over Rust-owned values; they are not a second set of workflow models.
+
+```mermaid
+flowchart LR
+    raw["Raw planner payload"] --> adapter["Adapter"]
+    adapter --> candidates["CandidateSet"]
+    task["Task"] --> collect["Collect by target"]
+    candidates --> collect
+    collect --> predictions["Predictions"]
+    predictions --> scorer["Scorer"]
+    task --> scorer
+    registry["Checker registry"] --> scorer
+    scorer --> evaluation["Evaluation"]
+    evaluation --> analyzer["Analyzer"]
+    analyzer --> report["AnalysisReport"]
+
+    io["Artifact I/O"] <--> candidates
+    io <--> task
+    io <--> evaluation
+    io <--> report
+```
+
+Each arrow is a concrete read/write boundary:
+
+| Stage | Reads | Writes | Invariant established |
+| --- | --- | --- | --- |
+| Load | bytes and artifact kind | validated schema value | invalid serialized states stop here |
+| Adapt | planner payload and adapter options | ranked `Candidate`s | every raw rank becomes exactly one route or failure |
+| Collect | candidates and task target index | target-keyed predictions | every candidate belongs to a known target |
+| Score | predictions, task, checker registry | `Evaluation` | requested checks and effective constraints are recorded |
+| Analyze | evaluation and metric options | `AnalysisReport` | every metric records its denominator and reliability |
+| Write | any artifact value | bytes plus manifest metadata | content hash covers the serialized artifact |
+
+No workflow serializes an intermediate value to call the next workflow. Artifact I/O is a leaf operation at the edge of the graph. This is what lets a single `retrocast pipeline` invocation keep routes in memory from adaptation through analysis.
+
+The core API reflects that ownership:
+
+=== "Python"
+
+    ```python
+    candidates = retrocast.ingest(raw, task, adapter="aizynthfinder")
+    evaluation = retrocast.score(candidates, task, registry=registry)
+    report = retrocast.analyze(evaluation)
+    ```
+
+=== "Rust"
+
+    ```rust
+    let candidates = ingest(raw, &task, &adapter, &ingest_options)?;
+    let evaluation = score(&candidates, &task, &registry, &score_options)?;
+    let report = analyze(&evaluation, &analysis_options)?;
+    ```
+
+The values on both tabs have the same owner: `retrocast-core`.
 
 ## Workflows
 
@@ -304,53 +435,123 @@ Direct `adapt`ing is useful for single-target pipelines. For benchmarking, one c
 
 By default, adapt tries to turn raw planner output into canonical `Route` objects and if fails, returns None. While it's a reasonable default for regular planning, it inflates the Tier-0 validity of the planner's predictions for strict benchmarking. As such, `adapt` can be configured to return `Candidate` objects which either hold a `Route` or a `FailureRecord` that specifies `target_{id,smiles,inchikey}` for proper accounting of failed predictions.
 
-```python
-class FailureRecord(BaseModel):
-    code: ErrorCode
-    message: str | None = None
-    target_id: str | None = None
-    target_smiles: SmilesStr | None = None
-    target_inchikey: InChIKeyStr | None = None
-    context: dict[str, Any] = Field(default_factory=dict)
+=== "Python"
+
+    ```python
+    class FailureRecord(BaseModel):
+        code: ErrorCode
+        message: str | None = None
+        target_id: str | None = None
+        target_smiles: SmilesStr | None = None
+        target_inchikey: InChIKeyStr | None = None
+        context: dict[str, Any] = Field(default_factory=dict)
 
 
-class Candidate(BaseModel):
-    rank: int
-    route: Route | None = None
-    failure: FailureRecord | None = None
-```
+    class Candidate(BaseModel):
+        rank: int
+        route: Route | None = None
+        failure: FailureRecord | None = None
+    ```
+
+=== "Rust"
+
+    ```rust
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct FailureRecord {
+        pub code: ErrorCode,
+        pub message: Option<String>,
+        pub target_id: Option<TargetId>,
+        pub target_smiles: Option<CanonicalSmiles>,
+        pub target_inchikey: Option<InchiKey>,
+        #[serde(default)]
+        pub context: Annotations,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Candidate {
+        pub rank: NonZeroUsize,
+        #[serde(flatten)]
+        pub outcome: CandidateOutcome,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[serde(untagged)]
+    pub enum CandidateOutcome {
+        Route { route: Route },
+        Failure { failure: FailureRecord },
+    }
+    ```
+
+The JSON shape stays compatible, but Rust represents the exclusive-or directly: a `Candidate` cannot contain both a route and a failure, or neither. Rank zero cannot be constructed.
 
 ### Adapt modes
 
 By default, `adapt` returns a `FailureRecord` if even a single SMILES is invalid. Model developers might sometimes be interested in the validity of predictions up to the corrupted SMILES, and `AdaptMode` allows them to relax adapters to return `Route`/`Candidate` objects that contain the longest-possible valid prefix `Route` with the corrupted SMILES node and all its children pruned out.
 
-```python
-AdaptMode = Literal["strict", "prune"]
-```
+=== "Python"
+
+    ```python
+    AdaptMode = Literal["strict", "prune"]
+    ```
+
+=== "Rust"
+
+    ```rust
+    #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+    #[serde(rename_all = "snake_case")]
+    pub enum AdaptMode {
+        #[default]
+        Strict,
+        Prune,
+    }
+    ```
 
 ### Adapt API
 
-```python
-adapt_route(raw_route_payload, adapter, *, mode: AdaptMode = "strict") -> Route | None
+=== "Python"
 
-# for route-first inspection and ad hoc use
-adapt_routes(
-    raw_payload,
-    adapter,
-    *,
-    mode: AdaptMode = "strict",
-    max_routes: int | None = None,
-) -> list[Route]
+    ```python
+    adapt_route(raw_route_payload, adapter, *, mode="strict") -> Route | None
 
-# for benchmarking and honest solv/tier-N metrics
-adapt_candidates(
-    raw_payload,
-    adapter,
-    *,
-    mode: AdaptMode = "strict",
-    max_candidates: int | None = None,
-) -> list[Candidate]
-```
+    adapt_routes(
+        raw_payload,
+        adapter,
+        *,
+        mode="strict",
+        max_routes=None,
+    ) -> list[Route]
+
+    adapt_candidates(
+        raw_payload,
+        adapter,
+        *,
+        mode="strict",
+        max_candidates=None,
+    ) -> list[Candidate]
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub trait Adapter: Send + Sync {
+        type RawRoute;
+
+        fn entries(&self, payload: RawPayload) -> Result<Vec<RawRouteEntry<Self::RawRoute>>>;
+        fn adapt_route(&self, raw: Self::RawRoute, mode: AdaptMode) -> Result<Route>;
+    }
+
+    pub fn adapt_routes<A: Adapter>(
+        payload: RawPayload,
+        adapter: &A,
+        options: &AdaptRouteOptions,
+    ) -> Result<Vec<Route>>;
+
+    pub fn adapt_candidates<A: Adapter>(
+        payload: RawPayload,
+        adapter: &A,
+        options: &AdaptCandidateOptions,
+    ) -> Result<Vec<Candidate>>;
+    ```
 
 `max_routes` is a route-first convenience limit: failures are skipped and only successful `Route`s count toward the limit. `max_candidates` is the benchmark-safe limit: it processes the first N raw candidate slots and preserves failures, so Tier-0 validity and MRR remain honest.
 
@@ -360,20 +561,32 @@ Benchmark CLI ingestion uses the candidate-preserving path. Route-only adaptatio
 
 Collection maps adapted outputs onto known targets.
 
-```python
-CollectedCandidates = dict[str, list[Candidate]] # where str is target_id
-CollectedRoutes = dict[str, list[Route]]
+=== "Python"
 
-collect_candidates(
-    candidates: Iterable[Candidate],
-    task: Task,
-) -> CollectedCandidates
+    ```python
+    CollectedCandidates = dict[str, list[Candidate]]
+    CollectedRoutes = dict[str, list[Route]]
 
-collect_routes(
-    routes: Iterable[Route],
-    task: Task,
-) -> CollectedRoutes
-```
+    collect_candidates(candidates, task) -> CollectedCandidates
+    collect_routes(routes, task) -> CollectedRoutes
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub type CollectedCandidates = BTreeMap<TargetId, Vec<Candidate>>;
+    pub type CollectedRoutes = BTreeMap<TargetId, Vec<Route>>;
+
+    pub fn collect_candidates(
+        candidates: impl IntoIterator<Item = Candidate>,
+        task: &Task,
+    ) -> Result<CollectedCandidates>;
+
+    pub fn collect_routes(
+        routes: impl IntoIterator<Item = Route>,
+        task: &Task,
+    ) -> Result<CollectedRoutes>;
+    ```
 
 collection rules:
 
@@ -382,54 +595,104 @@ collection rules:
 
 where `Task` is defined through `Target`s and `TaskConstraint`s:
 
-```python
-class Target(BaseModel):
-    id: str
-    smiles: SmilesStr
-    inchikey: InChIKeyStr
-    acceptable_routes: list[Route] = Field(default_factory=list)
-    annotations: dict[str, Any] = Field(default_factory=dict)
+=== "Python"
+
+    ```python
+    class Target(BaseModel):
+        id: str
+        smiles: SmilesStr
+        inchikey: InChIKeyStr
+        acceptable_routes: list[Route] = Field(default_factory=list)
+        annotations: dict[str, Any] = Field(default_factory=dict)
 
 
-class TaskConstraint(BaseModel):
-    kind: str
-    model_config = ConfigDict(extra="allow")
+    class TaskConstraint(BaseModel):
+        kind: str
+        model_config = ConfigDict(extra="allow")
 
 
-class StockTerminationConstraint(TaskConstraint):
-    kind: Literal["retrocast.stock_termination"] = "retrocast.stock_termination"
-    stock: str
+    class StockTerminationConstraint(TaskConstraint):
+        kind: Literal["retrocast.stock_termination"] = "retrocast.stock_termination"
+        stock: str
 
 
-class RequiredLeavesConstraint(TaskConstraint):
-    kind: Literal["retrocast.required_leaves"] = "retrocast.required_leaves"
-    smiles: list[SmilesStr]
+    class RequiredLeavesConstraint(TaskConstraint):
+        kind: Literal["retrocast.required_leaves"] = "retrocast.required_leaves"
+        smiles: list[SmilesStr]
 
 
-class RouteDepthConstraint(TaskConstraint):
-    kind: Literal["retrocast.route_depth"] = "retrocast.route_depth"
-    max_depth: int | Literal["short", "medium", "long"]
+    class RouteDepthConstraint(TaskConstraint):
+        kind: Literal["retrocast.route_depth"] = "retrocast.route_depth"
+        max_depth: int | Literal["short", "medium", "long"]
 
 
-class Task(BaseModel):
-    name: str
-    targets: dict[str, Target]
-    default_constraints: list[TaskConstraint] = Field(default_factory=list)
-    constraints: dict[str, list[TaskConstraint]] = Field(default_factory=dict)
-    metric_label: str | None = None
-    annotations: dict[str, Any] = Field(default_factory=dict)
-    schema_version: str = "2"
+    class Task(BaseModel):
+        name: str
+        targets: dict[str, Target]
+        default_constraints: list[TaskConstraint] = Field(default_factory=list)
+        constraints: dict[str, list[TaskConstraint]] = Field(default_factory=dict)
+        metric_label: str | None = None
+        annotations: dict[str, Any] = Field(default_factory=dict)
+        schema_version: str = "2"
 
-    def effective_constraints(self, target_id: str) -> list[TaskConstraint]:
-        by_kind = {constraint.kind: constraint for constraint in self.default_constraints}
-        by_kind.update({constraint.kind: constraint for constraint in self.constraints.get(target_id, [])})
-        return list(by_kind.values())
+        def effective_constraints(self, target_id: str) -> list[TaskConstraint]: ...
 
 
-class Benchmark(Task):
-    name: str
-    description: str
-```
+    class Benchmark(Task):
+        description: str
+    ```
+
+=== "Rust"
+
+    ```rust
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Target {
+        pub id: TargetId,
+        pub smiles: CanonicalSmiles,
+        pub inchikey: InchiKey,
+        #[serde(default)]
+        pub acceptable_routes: Vec<Route>,
+        #[serde(default)]
+        pub annotations: Annotations,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    #[serde(tag = "kind")]
+    pub enum TaskConstraint {
+        #[serde(rename = "retrocast.stock_termination")]
+        StockTermination { stock: StockId },
+        #[serde(rename = "retrocast.required_leaves")]
+        RequiredLeaves { smiles: Vec<CanonicalSmiles> },
+        #[serde(rename = "retrocast.route_depth")]
+        RouteDepth { max_depth: DepthConstraint },
+        #[serde(untagged)]
+        Extension(ExtensionConstraint),
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Task {
+        pub name: String,
+        pub targets: BTreeMap<TargetId, Target>,
+        #[serde(default)]
+        pub default_constraints: Vec<TaskConstraint>,
+        #[serde(default)]
+        pub constraints: BTreeMap<TargetId, Vec<TaskConstraint>>,
+        pub metric_label: Option<String>,
+        #[serde(default)]
+        pub annotations: Annotations,
+        #[serde(default = "schema_v2")]
+        pub schema_version: SchemaVersion,
+    }
+
+    impl Task {
+        pub fn effective_constraints(
+            &self,
+            target_id: &TargetId,
+        ) -> Result<Vec<&TaskConstraint>>;
+    }
+    ```
+
+The Rust enum validates built-in fields while `ExtensionConstraint` preserves a namespaced kind and JSON object for third-party constraints. `Task::new` and deserialization reject duplicate kinds within one scope and target-map keys that disagree with `Target.id`.
 
 `route_depth` integers are inclusive maximum depths. Named depth constraints are ranges:
 
@@ -447,14 +710,54 @@ Within one target, constraints are keyed by `kind`. A target-specific constraint
 
 Ingest is just the convenience alias for `adapt + collect`
 
-```python
-# when the user wants only valid canonical routes
-ingest_routes(raw_payload, adapter, task, *, max_routes: int | None = None) -> CollectedRoutes
-# when the user wants an honest evaluation artifact
-ingest_candidates(raw_payload, adapter, task, *, max_candidates: int | None = None) -> CollectedCandidates
-```
+=== "Python"
+
+    ```python
+    ingest_routes(raw, adapter, task, *, max_routes=None) -> CollectedRoutes
+    ingest_candidates(raw, adapter, task, *, max_candidates=None) -> CollectedCandidates
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub fn ingest_routes<A: Adapter>(
+        raw: RawPayload,
+        adapter: &A,
+        task: &Task,
+        options: &IngestRouteOptions,
+    ) -> Result<CollectedRoutes>;
+
+    pub fn ingest_candidates<A: Adapter>(
+        raw: RawPayload,
+        adapter: &A,
+        task: &Task,
+        options: &IngestCandidateOptions,
+    ) -> Result<CollectedCandidates>;
+    ```
 
 `max_candidates` is applied per target during benchmark ingestion. It is intentionally first-N by raw planner rank; random candidate sampling is not part of benchmark ingestion because planner rank is part of the measured behavior.
+
+### In-process ownership
+
+Artifacts use schema-v2 JSON, but an in-process pipeline does not use JSON as an internal transport. Both front ends keep the Rust values returned by each stage:
+
+=== "Python"
+
+    ```python
+    predictions = retrocast.ingest_candidates(raw, adapter, task)
+    evaluation = retrocast.score(predictions, task)
+    report = retrocast.analyze(evaluation)
+    ```
+
+=== "Rust"
+
+    ```rust
+    let predictions = ingest(raw, adapter, &task, mode, limit, workers)?;
+    let evaluation = score(&predictions, &task, &stocks, level, matching, None, workers)?;
+    let report = analyze(&evaluation, &ks, &prefix_depths, n_boot, seed, workers)?;
+    ```
+
+The Python variables are lazy compatibility views over opaque Rust handles. Passing an untouched value to the next stage hands that handle back to `retrocast-core`. Reading or mutating the mapping/model first materializes the established Python DTO and permanently drops the shortcut for that value. The next stage then validates that DTO through the normal serialized boundary. This rule prevents a mutable Python object and a stale Rust graph from ever claiming to represent the same value.
 
 ## 4. Score
 
@@ -466,101 +769,191 @@ Solv-i[task] = Tier-i validity + satisfaction of task constraints.
 
 Tier-N validity is stored as `TierResult`. `RouteValidity` stores the validity of a `Route` as a whole and of all individual `Reactions` that compose it.
 
-```py
-class CheckStatus(StrEnum):
-    PASS = "pass"
-    FAIL = "fail"
-    NOT_EVALUATED = "not_evaluated"
+=== "Python"
+
+    ```python
+    class CheckStatus(StrEnum):
+        PASS = "pass"
+        FAIL = "fail"
+        NOT_EVALUATED = "not_evaluated"
 
 
-class Tier(IntEnum):
-    ZERO = 0
-    ONE = 1
-    TWO = 2
-    THREE = 3
-
-class CheckResult(BaseModel):
-    code: str
-    status: CheckStatus = CheckStatus.FAIL
-    message: str | None = None
-    details: dict[str, Any] = Field(default_factory=dict)
+    class Tier(IntEnum):
+        ZERO = 0
+        ONE = 1
+        TWO = 2
+        THREE = 3
 
 
-class TierResult(BaseModel):
-    status: CheckStatus
-    checks: list[CheckResult] = Field(default_factory=list)
+    class CheckResult(BaseModel):
+        code: str
+        status: CheckStatus = CheckStatus.FAIL
+        message: str | None = None
+        details: dict[str, Any] = Field(default_factory=dict)
 
 
-class ReactionValidity(BaseModel):
-    reaction_id: ReactionId  # rc:r:/1/0
-    tiers: dict[Tier, TierResult] = Field(default_factory=dict)
+    class TierResult(BaseModel):
+        status: CheckStatus
+        checks: list[CheckResult] = Field(default_factory=list)
 
 
-class RouteValidity(BaseModel):
-    tiers: dict[Tier, TierResult] = Field(default_factory=dict)
-    reactions: list[ReactionValidity] = Field(default_factory=list)
-```
+    class ReactionValidity(BaseModel):
+        reaction_id: ReactionId
+        tiers: dict[Tier, TierResult] = Field(default_factory=dict)
+
+
+    class RouteValidity(BaseModel):
+        tiers: dict[Tier, TierResult] = Field(default_factory=dict)
+        reactions: list[ReactionValidity] = Field(default_factory=list)
+    ```
+
+=== "Rust"
+
+    ```rust
+    #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+    #[serde(rename_all = "snake_case")]
+    pub enum CheckStatus {
+        Pass,
+        Fail,
+        NotEvaluated,
+    }
+
+    #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+    #[repr(u8)]
+    pub enum Tier {
+        Zero = 0,
+        One = 1,
+        Two = 2,
+        Three = 3,
+    }
+
+    pub struct CheckResult {
+        pub code: CheckCode,
+        pub status: CheckStatus,
+        pub message: Option<String>,
+        pub details: Annotations,
+    }
+
+    pub struct TierResult {
+        pub status: CheckStatus,
+        pub checks: Vec<CheckResult>,
+    }
+
+    pub struct ReactionValidity {
+        pub reaction_id: ReactionId,
+        pub tiers: BTreeMap<Tier, TierResult>,
+    }
+
+    pub struct RouteValidity {
+        pub tiers: BTreeMap<Tier, TierResult>,
+        pub reactions: Vec<ReactionValidity>,
+    }
+    ```
 
 Task constraint satisfaction is stored separately:
 
-```py
-class ConstraintResult(BaseModel):
-    status: CheckStatus
-    checks: list[CheckResult] = Field(default_factory=list)
-```
+=== "Python"
+
+    ```python
+    class ConstraintResult(BaseModel):
+        status: CheckStatus
+        checks: list[CheckResult] = Field(default_factory=list)
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub struct ConstraintResult {
+        pub status: CheckStatus,
+        pub checks: Vec<CheckResult>,
+    }
+    ```
 
 A `Candidate` that undergoes scoring becomes `ScoredCandidate`.
 
-```py
-class ScoredCandidate(BaseModel):
-    rank: int
-    route: Route | None = None
-    failure: FailureRecord | None = None
+=== "Python"
 
-    validity: RouteValidity = Field(default_factory=RouteValidity)
-    constraints: ConstraintResult = Field(
-        default_factory=lambda: ConstraintResult(status="not_evaluated")
-    )
+    ```python
+    class ScoredCandidate(BaseModel):
+        rank: int
+        route: Route | None = None
+        failure: FailureRecord | None = None
+        validity: RouteValidity = Field(default_factory=RouteValidity)
+        constraints: ConstraintResult
+        matches_acceptable: bool = False
+        matched_acceptable_index: int | None = None
 
-    matches_acceptable: bool = False
-    matched_acceptable_index: int | None = None
+        def satisfies_validity(self, tier: Tier | int) -> bool: ...
+        def satisfies_task(self) -> bool: ...
+        def satisfies_solv(self, tier: Tier | int) -> bool: ...
+    ```
 
-    def has_route(self) -> bool: ...
+=== "Rust"
 
-    def failed_adaptation(self) -> bool: ...
+    ```rust
+    pub struct ScoredCandidate {
+        pub rank: NonZeroUsize,
+        #[serde(flatten)]
+        pub outcome: CandidateOutcome,
+        pub validity: RouteValidity,
+        pub constraints: ConstraintResult,
+        pub matches_acceptable: bool,
+        pub matched_acceptable_index: Option<usize>,
+    }
 
-    def tier_result(self, tier: Tier | int) -> TierResult: ...
-
-    def reaction_tier_result(
-        self,
-        reaction_id: ReactionId,
-        tier: Tier | int,
-    ) -> TierResult | None: ...
-
-    def satisfies_validity(self, tier: Tier | int) -> bool: ...
-
-    def satisfies_task(self) -> bool: ...
-
-    def satisfies_solv(self, tier: Tier | int) -> bool: ...
-```
+    impl ScoredCandidate {
+        pub fn satisfies_validity(&self, tier: Tier) -> bool;
+        pub fn satisfies_task(&self) -> bool;
+        pub fn satisfies_solv(&self, tier: Tier) -> bool;
+    }
+    ```
 
 `ScoredCandidate`s are collected into `TargetResult`, which in turn is collected into `Evaluation`.
 
-```py
-class TargetResult(BaseModel):
-    target: Target
-    effective_constraints: list[TaskConstraint]
-    candidates: list[ScoredCandidate] = Field(default_factory=list)
+=== "Python"
+
+    ```python
+    class TargetResult(BaseModel):
+        target: Target
+        effective_constraints: list[TaskConstraint]
+        candidates: list[ScoredCandidate] = Field(default_factory=list)
+        wall_time: float | None = None
+        cpu_time: float | None = None
 
 
-class Evaluation(BaseModel):
-    task: Task
-    tiers: list[Tier] = Field(default_factory=list)
-    acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL
-    acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.EXACT
-    targets: dict[str, TargetResult] = Field(default_factory=dict)
-    schema_version: str = "2"
-```
+    class Evaluation(BaseModel):
+        task: Task
+        tiers: list[Tier] = Field(default_factory=list)
+        metric_label: str
+        acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL
+        acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.EXACT
+        targets: dict[str, TargetResult] = Field(default_factory=dict)
+        schema_version: str = "2"
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub struct TargetResult {
+        pub target: Target,
+        pub effective_constraints: Vec<TaskConstraint>,
+        pub candidates: Vec<ScoredCandidate>,
+        pub wall_time: Option<f64>,
+        pub cpu_time: Option<f64>,
+    }
+
+    pub struct Evaluation {
+        pub task: Task,
+        pub tiers: Vec<Tier>,
+        pub metric_label: String,
+        pub acceptable_match_level: InchiKeyLevel,
+        pub acceptable_route_match: AcceptableRouteMatch,
+        pub targets: BTreeMap<TargetId, TargetResult>,
+        pub schema_version: SchemaVersion,
+    }
+    ```
+
+`TargetResult.effective_constraints` is a snapshot, not a cache. Analysis reads what scoring actually enforced even if a task definition is later edited.
 
 !!! note "An intentional violation of single-responsibility principle"
 
@@ -570,64 +963,94 @@ class Evaluation(BaseModel):
 
 Because we're far from having a universal Tier-2 validity checker, it is natural to expect multiple solutions emerging from different research groups. To enable modularity of scoring, we define a `TierChecker` protocol.
 
-```py
-class TierChecker(Protocol):
-    tier: Tier
-    name: str
+=== "Python"
 
-    def check_route(self, route: Route) -> RouteValidity: ...
-```
+    ```python
+    class TierChecker(Protocol):
+        tier: Tier
+        name: str
+
+        def check_route(self, route: Route) -> RouteValidity: ...
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub trait TierChecker: Send + Sync {
+        fn tier(&self) -> Tier;
+        fn name(&self) -> &str;
+        fn check_route(&self, route: &Route) -> Result<RouteValidity>;
+    }
+    ```
 
 Similarly, we define a protocol for task constraint satisfaction:
 
-```py
-class TaskConstraintChecker(Protocol):
-    kind: str
+=== "Python"
 
-    def check_route(
-        self,
-        route: Route,
-        constraint: TaskConstraint,
-    ) -> list[CheckResult]: ...
-```
+    ```python
+    class TaskConstraintChecker(Protocol):
+        kind: str
+
+        def check_route(
+            self,
+            route: Route,
+            constraint: TaskConstraint,
+        ) -> list[CheckResult]: ...
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub trait ConstraintChecker: Send + Sync {
+        fn kind(&self) -> &str;
+        fn check_route(
+            &self,
+            route: &Route,
+            constraint: &TaskConstraint,
+        ) -> Result<Vec<CheckResult>>;
+    }
+    ```
 
 This results in the following API:
 
-```py
-def score_candidate(
-    candidate: Candidate,
-    *,
-    target: Target,
-    constraints: Sequence[TaskConstraint],
-    tier_checkers: Sequence[TierChecker],
-    constraint_checkers: Sequence[TaskConstraintChecker],
-    acceptable_match_level: InChIKeyLevel | None = None,
-    acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
-) -> ScoredCandidate: ...
+=== "Python"
 
+    ```python
+    def score_candidate(candidate, *, target, constraints, registry, options=None) -> ScoredCandidate: ...
 
-def score_target(
-    candidates: Sequence[Candidate],
-    *,
-    target: Target,
-    constraints: Sequence[TaskConstraint],
-    tier_checkers: Sequence[TierChecker],
-    constraint_checkers: Sequence[TaskConstraintChecker],
-    acceptable_match_level: InChIKeyLevel | None = None,
-    acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
-) -> TargetResult: ...
+    def score_target(candidates, *, target, constraints, registry, options=None) -> TargetResult: ...
 
+    def score(predictions, task, *, registry, options=None) -> Evaluation: ...
+    ```
 
-def score(
-    predictions: Mapping[str, Sequence[Candidate]],
-    task: Task,
-    *,
-    tier_checkers: Sequence[TierChecker] = (),
-    constraint_checkers: Sequence[TaskConstraintChecker] = (),
-    acceptable_match_level: InChIKeyLevel | None = None,
-    acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.PREFIX,
-) -> Evaluation: ...
-```
+=== "Rust"
+
+    ```rust
+    pub fn score_candidate(
+        candidate: Candidate,
+        target: &Target,
+        constraints: &[TaskConstraint],
+        registry: &CheckerRegistry,
+        options: &ScoreOptions,
+    ) -> Result<ScoredCandidate>;
+
+    pub fn score_target(
+        candidates: Vec<Candidate>,
+        target: &Target,
+        constraints: &[TaskConstraint],
+        registry: &CheckerRegistry,
+        options: &ScoreOptions,
+    ) -> Result<TargetResult>;
+
+    pub fn score(
+        predictions: CollectedCandidates,
+        task: &Task,
+        registry: &CheckerRegistry,
+        options: &ScoreOptions,
+    ) -> Result<Evaluation>;
+    ```
+
+The registry is validated before target work begins. A missing checker is one configuration error for the evaluation, not a separate failed route check for every candidate.
 
 ### How task constraint checkers work?
 
@@ -707,31 +1130,133 @@ This architecture allows for definition of custom `TaskConstraint` for a given `
 
 Notably, the `score` workflow enforces that requirement. If you try to pass a `Task` with constraint of kind `ariadne.reaction_count`, but did not specify a corresponding kind checker, you'd get a runtime error. RetroCast treats unverifiable constraints as unsolved by default.
 
-## 4. Analyze
+## 5. Analyze
 
-`analyze` should derive benchmark-style metrics from `Evaluation`.
+`analyze` derives benchmark-style metrics from `Evaluation`.
 
-```python
-class MetricSummary(BaseModel):
-    value: float
-    count: int
-    ci_low: float | None = None
-    ci_high: float | None = None
+=== "Python"
+
+    ```python
+    class ReliabilityFlag(BaseModel):
+        code: Literal["OK", "LOW_N", "EXTREME_P"]
+        message: str
 
 
-class AnalysisReport(BaseModel):
-    metrics: dict[str, MetricSummary] = Field(default_factory=dict)
-    by_stratum: dict[str, dict[str, MetricSummary]] = Field(default_factory=dict)
-```
+    class MetricSummary(BaseModel):
+        value: float
+        count: int
+        ci_low: float | None = None
+        ci_high: float | None = None
+        reliability: ReliabilityFlag | None = None
 
-```python
-analyze(
-    evaluation: Evaluation,
-    *,
-    ks: Sequence[int] = (1, 5, 10, 50),
-    prefix_depths: Sequence[int] = (1, 2, 3),
-    stratify_by: Callable[[TargetResult], str | None] | None = None,
-) -> AnalysisReport
-```
+
+    class AnalysisReport(BaseModel):
+        metrics: dict[str, MetricSummary] = Field(default_factory=dict)
+        by_stratum: dict[str, dict[str, MetricSummary]] = Field(default_factory=dict)
+        bootstrap_resamples: int
+        runtime: RuntimeSummary | None = None
+        schema_version: str = "2"
+
+
+    analyze(evaluation, *, ks=(1, 5, 10, 50), prefix_depths=(1, 2, 3)) -> AnalysisReport
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub struct ReliabilityFlag {
+        pub code: ReliabilityCode,
+        pub message: String,
+    }
+
+    pub struct MetricSummary {
+        pub value: f64,
+        pub count: usize,
+        pub ci_low: Option<f64>,
+        pub ci_high: Option<f64>,
+        pub reliability: Option<ReliabilityFlag>,
+    }
+
+    pub struct AnalysisReport {
+        pub metrics: BTreeMap<MetricName, MetricSummary>,
+        pub by_stratum: BTreeMap<Stratum, BTreeMap<MetricName, MetricSummary>>,
+        pub bootstrap_resamples: usize,
+        pub runtime: Option<RuntimeSummary>,
+        pub schema_version: SchemaVersion,
+    }
+
+    pub fn analyze(
+        evaluation: &Evaluation,
+        options: &AnalysisOptions,
+    ) -> Result<AnalysisReport>;
+    ```
+
+Analysis reads only the evaluation artifact. It does not reopen planner output, stocks, or task files. `MetricSummary.count` is the metric denominator, and a confidence interval without its count is therefore not a valid summary.
+
+Stage-manifest statistics are derived by the same core rather than recomputed by a front end:
+
+=== "Python"
+
+    ```python
+    statistics = evaluation_statistics(evaluation)
+    # evaluation can still retain its opaque Rust handle
+    ```
+
+=== "Rust"
+
+    ```rust
+    let statistics = evaluation_statistics(&evaluation);
+    ```
+
+This includes candidate and failure counts, per-target candidate distributions, recorded wall/CPU summaries, and target-level Solv-N counts. These values are provenance data, so Python and the standalone executable must not have separate rounding or denominator rules.
 
 Top-K reconstruction metrics are emitted only for targets with acceptable_routes; if no target has acceptable_routes, reconstruction metrics are omitted. Reconstruction diagnostics use `Evaluation.acceptable_match_level`, so route, root-reaction, and prefix comparisons stay on the same molecular identity basis. `Evaluation.acceptable_route_match` records whether headline acceptable-route reconstruction used target-rooted prefix matching or exact full-route identity. Its model default is `EXACT` so legacy artifacts without the field are interpreted according to their original scoring semantics; new scoring writes the selected mode explicitly.
+
+## Artifact I/O and provenance
+
+Schema values do not know where they came from. Provenance is recorded beside an artifact rather than injected into every route and metric.
+
+=== "Python"
+
+    ```python
+    class FileInfo(BaseModel):
+        label: str
+        path: str
+        sha256: str
+        content_sha256: str | None = None
+
+
+    class Manifest(BaseModel):
+        action: str
+        source: list[FileInfo] = Field(default_factory=list)
+        output: list[FileInfo] = Field(default_factory=list)
+        parameters: dict[str, Any] = Field(default_factory=dict)
+        statistics: dict[str, Any] = Field(default_factory=dict)
+        schema_version: str = "2"
+    ```
+
+=== "Rust"
+
+    ```rust
+    pub struct FileInfo {
+        pub label: String,
+        pub path: Utf8PathBuf,
+        pub sha256: Sha256Digest,
+        pub content_sha256: Option<Sha256Digest>,
+    }
+
+    pub struct Manifest {
+        pub action: ActionName,
+        pub source: Vec<FileInfo>,
+        pub output: Vec<FileInfo>,
+        pub parameters: Annotations,
+        pub statistics: Annotations,
+        pub schema_version: SchemaVersion,
+    }
+    ```
+
+The physical hash covers the stored bytes. The optional content hash covers the decompressed canonical JSON representation, so equivalent `.json` and `.json.gz` artifacts can be related without pretending their files are identical.
+
+Readers determine the artifact kind from the requested operation or an explicit kind, not by trying every schema until one happens to validate. Writers use one canonical JSON policy for field names, enum values, map ordering, and omitted optionals. Gzip metadata is fixed so writing the same value twice produces the same bytes.
+
+Verification walks manifest edges and checks both physical files and the logical content-hash chain. It never repairs files as a side effect. The CLI and Python API return the same structured `VerificationReport`; only the front-end presentation differs.

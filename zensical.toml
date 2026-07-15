@@ -46,6 +46,7 @@ nav = [
     { "Rationale" = [
       "dev/rationale/solv-n-evaluation.md",
       "dev/rationale/schema-design.md",
+      "dev/rationale/rust-engine.md",
       "dev/rationale/training-set-releases.md",
     ] },
     { "Reference" = [
@@ -57,6 +58,14 @@ nav = [
     ] },
   ] },
 ]
+
+# Language variants in rationale pages use linked content tabs. Python stays
+# first because it is the public API; Rust shows the implementation contract.
+[project.markdown_extensions.pymdownx.superfences]
+
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+
 # With the "extra_css" option you can add your own CSS styling to customize
 # your Zensical project according to your needs. You can add any number of
 # CSS files.

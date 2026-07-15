@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import random
+
 import pytest
 
 from retrocast.curation.sampling import sample_random, sample_stratified_priority
@@ -46,3 +48,11 @@ def test_sample_random_is_seeded_and_rejects_oversampling() -> None:
 
     with pytest.raises(ValueError, match="cannot sample 5 from 4 items"):
         sample_random([1, 2, 3, 4], 5, seed=1)
+
+
+@pytest.mark.parametrize("population_size", [0, 1, 5, 21, 22, 100])
+@pytest.mark.parametrize("seed", [0, 1, 7, -1, 2**80 + 17])
+def test_sample_random_matches_python_for_pool_and_rejection_paths(population_size: int, seed: int) -> None:
+    values = list(range(population_size))
+    for sample_size in range(min(population_size, 9) + 1):
+        assert sample_random(values, sample_size, seed) == random.Random(seed).sample(values, sample_size)

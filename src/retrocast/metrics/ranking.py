@@ -1,12 +1,7 @@
-from __future__ import annotations
-
+import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TypeVar
-
-import numpy as np
-
-from retrocast.metrics.bootstrap import get_bootstrap_distribution
 
 T = TypeVar("T")
 
@@ -37,28 +32,24 @@ def compute_probabilistic_ranking(
     n_boot: int = 10000,
     seed: int = 42,
 ) -> list[RankResult]:
-    model_names = sorted(model_results)
-    n_models = len(model_names)
-    if n_models == 0:
-        return []
+    from retrocast import _native
 
-    boot_matrix = np.zeros((n_boot, n_models))
-    for index, name in enumerate(model_names):
-        boot_matrix[:, index] = get_bootstrap_distribution(
-            model_results[name],
-            metric_extractor,
-            n_boot=n_boot,
-            seed=seed + index,
+    values = {name: [metric_extractor(target) for target in targets] for name, targets in model_results.items()}
+    payload = json.loads(
+        _native.probabilistic_ranking_json(
+            json.dumps(values, separators=(",", ":")),
+            n_boot,
+            seed,
         )
-
-    ranks = np.argsort(np.argsort(-boot_matrix, axis=1), axis=1) + 1
-    results = []
-    for index, name in enumerate(model_names):
-        model_ranks = ranks[:, index]
-        probabilities = {rank: float(np.mean(model_ranks == rank)) for rank in range(1, n_models + 1)}
-        expected_rank = sum(rank * probability for rank, probability in probabilities.items())
-        results.append(RankResult(model_name=name, rank_probs=probabilities, expected_rank=expected_rank))
-    return sorted(results, key=lambda result: (result.expected_rank, result.model_name))
+    )
+    return [
+        RankResult(
+            model_name=result["model_name"],
+            rank_probs={int(rank): probability for rank, probability in result["rank_probs"].items()},
+            expected_rank=result["expected_rank"],
+        )
+        for result in payload
+    ]
 
 
 def compute_pairwise_tournament(
@@ -104,45 +95,36 @@ def compute_paired_difference(
     n_boot: int = 10000,
     seed: int = 42,
 ) -> PairwiseComparison:
+    from retrocast import _native
+
     get_id = id_extractor or _default_target_id
     left = {get_id(target): target for target in targets_a}
     right = {get_id(target): target for target in targets_b}
     target_ids = sorted(set(left) & set(right))
     if not target_ids:
         raise ValueError("no common targets found between models")
-
-    values_a = np.array([metric_extractor(left[target_id]) for target_id in target_ids])
-    values_b = np.array([metric_extractor(right[target_id]) for target_id in target_ids])
-    diffs = _paired_bootstrap_difference(values_a, values_b, n_boot=n_boot, seed=seed)
-    ci_low = float(np.percentile(diffs, 2.5))
-    ci_high = float(np.percentile(diffs, 97.5))
-    diff_mean = float(np.mean(values_b) - np.mean(values_a))
-    return PairwiseComparison(
-        metric=metric_name,
-        model_a=model_a_name,
-        model_b=model_b_name,
-        diff_mean=diff_mean,
-        diff_ci_low=ci_low,
-        diff_ci_high=ci_high,
-        is_significant=not (ci_low <= 0 <= ci_high),
-        count=len(target_ids),
+    values_a = [metric_extractor(left[target_id]) for target_id in target_ids]
+    values_b = [metric_extractor(right[target_id]) for target_id in target_ids]
+    payload = json.loads(
+        _native.paired_difference_json(
+            json.dumps(values_a, separators=(",", ":")),
+            json.dumps(values_b, separators=(",", ":")),
+            model_a_name,
+            model_b_name,
+            metric_name,
+            n_boot,
+            seed,
+        )
     )
-
-
-def _paired_bootstrap_difference(values_a: np.ndarray, values_b: np.ndarray, *, n_boot: int, seed: int) -> np.ndarray:
-    rng = np.random.default_rng(seed)
-    indices = rng.integers(0, len(values_a), (n_boot, len(values_a)))
-    return np.mean(values_b[indices], axis=1) - np.mean(values_a[indices], axis=1)
+    return PairwiseComparison(**payload)
 
 
 def _default_target_id(target: object) -> str:
     target_id = getattr(target, "target_id", None)
     if isinstance(target_id, str):
         return target_id
-
     nested_target = getattr(target, "target", None)
     nested_id = getattr(nested_target, "id", None)
     if isinstance(nested_id, str):
         return nested_id
-
     raise TypeError("target id is not discoverable; pass id_extractor")

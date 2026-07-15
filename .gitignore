@@ -4,6 +4,10 @@ __pycache__/
 build/
 dist/
 wheels/
+target/
+*.so
+*.dylib
+*.dll
 *.egg-info
 .mypy_cache/
 .ruff_cache/
@@ -69,6 +73,7 @@ data/index.html
 #data/SHA256SUMS
 
 data/tmp
+benchmarks/**/runs/
 
 prompts/
 site/

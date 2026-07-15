@@ -1,32 +1,225 @@
-name: Publish Release
+name: Publish standalone CLI bundles
+
 on:
   release:
-    types: [published] # Runs when a draft is published
+    types: [published]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  create_python_package:
-    runs-on: ubuntu-latest
+  cli:
+    name: ${{ matrix.platform }} CLI
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            os: ubuntu-24.04
+          - platform: macos-arm64
+            os: macos-15
+          - platform: macos-x86_64
+            os: macos-15-intel
+          - platform: windows-x86_64
+            os: windows-2022
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name || github.ref }}
           fetch-depth: 0
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+
+      - uses: mamba-org/setup-micromamba@v2
+        id: native-env
         with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
+          environment-name: cli-build
+          create-args: >-
+            librdkit-dev=2026.03.4
+            libboost-headers=1.90
+          cache-environment: true
 
-      - name: Set up Python
-        run: uv python install 3.13
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Build
-        run: uv build
+      - name: Install Linux relocation tooling
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y patchelf pax-utils
 
-      - name: Upload artifacts to release
+      - name: Build standalone executable
+        shell: bash -el {0}
+        if: runner.os != 'Windows'
+        run: |
+          export RDKIT_ROOT="$CONDA_PREFIX"
+          export BOOST_ROOT="$CONDA_PREFIX"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=-Wl,-headerpad_max_install_names"
+          fi
+          cargo build --locked --release --manifest-path retrocast-rs/Cargo.toml -p retrocast-cli
+
+      - name: Build standalone executable (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:RDKIT_ROOT = '${{ steps.native-env.outputs.environment-path }}'
+          $env:BOOST_ROOT = '${{ steps.native-env.outputs.environment-path }}'
+          "RDKIT_ROOT=$env:RDKIT_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BOOST_ROOT=$env:BOOST_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
+          cargo build --locked --release --manifest-path retrocast-rs/Cargo.toml -p retrocast-cli
+
+      - name: Install macOS relocation tooling
+        if: runner.os == 'macOS'
+        shell: bash -el {0}
+        run: python -m pip install 'delocate>=0.13.0'
+
+      - name: Assemble relocatable Unix bundle
+        if: runner.os != 'Windows'
+        shell: bash -el {0}
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: |
+          set -euo pipefail
+          release_tag="${RELEASE_TAG//\//-}"
+          bundle="$GITHUB_WORKSPACE/dist/retrocast-${release_tag}-${PLATFORM}"
+          mkdir -p "$bundle/lib"
+          cp retrocast-rs/target/release/retrocast "$bundle/retrocast"
+          cp LICENSE README.md THIRD_PARTY_LICENSES.md "$bundle/"
+          cp -R licenses "$bundle/"
+
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            export DYLD_LIBRARY_PATH="$CONDA_PREFIX/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+            delocate-path -L "$bundle/lib" "$bundle"
+          else
+            while IFS= read -r dependency; do
+              [[ "$dependency" == "$CONDA_PREFIX"/* ]] || continue
+              soname="$(patchelf --print-soname "$dependency")"
+              [[ -n "$soname" ]] || soname="$(basename "$dependency")"
+              cp -L "$dependency" "$bundle/lib/$soname"
+            done < <(LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" lddtree -l "$bundle/retrocast" | sort -u)
+            # The loader, not the shell, expands ORIGIN.
+            # shellcheck disable=SC2016
+            patchelf --set-rpath '$ORIGIN/lib' "$bundle/retrocast"
+            # shellcheck disable=SC2016
+            find "$bundle/lib" -type f -exec patchelf --set-rpath '$ORIGIN' {} \;
+          fi
+
+          env -i PATH=/usr/bin:/bin "$bundle/retrocast" --version
+          env -i PATH=/usr/bin:/bin "$bundle/retrocast" list-adapters | grep aizynthfinder >/dev/null
+          env -i PATH=/usr/bin:/bin "$bundle/retrocast" adapt \
+            --input tests/testing_data/aizynth-smoke.json \
+            --adapter aizynthfinder \
+            --output "$bundle/smoke.json" \
+            --max-candidates 1
+          test -s "$bundle/smoke.json"
+          rm "$bundle/smoke.json" "$bundle/smoke.manifest.json"
+          tar -C dist -czf "$bundle.tar.gz" "$(basename "$bundle")"
+
+      - name: Assemble relocatable Windows bundle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releaseTag = $env:RELEASE_TAG.Replace('/', '-')
+          $bundleName = "retrocast-$releaseTag-$env:PLATFORM"
+          $bundle = Join-Path dist $bundleName
+          New-Item -ItemType Directory -Force -Path $bundle | Out-Null
+          Copy-Item retrocast-rs\target\release\retrocast.exe $bundle
+          Copy-Item LICENSE, README.md, THIRD_PARTY_LICENSES.md $bundle
+          Copy-Item licenses $bundle -Recurse
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe' |
+            Select-Object -First 1
+          if (-not $dumpbin) {
+            throw 'could not locate dumpbin.exe'
+          }
+
+          $availableDlls = @{}
+          Get-ChildItem "$env:RDKIT_ROOT\Library\bin\*.dll" | ForEach-Object {
+            $availableDlls[$_.Name.ToLowerInvariant()] = $_.FullName
+          }
+          $pending = [System.Collections.Generic.Queue[string]]::new()
+          $pending.Enqueue((Resolve-Path "$bundle\retrocast.exe").Path)
+          $copied = @{}
+          while ($pending.Count -gt 0) {
+            $binary = $pending.Dequeue()
+            $dependencies = & $dumpbin /nologo /dependents $binary
+            if ($LASTEXITCODE -ne 0) {
+              throw "dumpbin failed for $binary"
+            }
+            foreach ($line in $dependencies) {
+              if ($line -notmatch '^\s+([A-Za-z0-9_.+-]+\.dll)\s*$') {
+                continue
+              }
+              $name = $Matches[1]
+              $key = $name.ToLowerInvariant()
+              if ($key.StartsWith('api-ms-win-') -or $key -eq 'ucrtbase.dll') {
+                continue
+              }
+              if ($availableDlls.ContainsKey($key) -and -not $copied.ContainsKey($key)) {
+                $source = $availableDlls[$key]
+                Copy-Item $source $bundle
+                $copied[$key] = $true
+                $pending.Enqueue($source)
+              }
+            }
+          }
+          & "$bundle\retrocast.exe" --version
+          if ($LASTEXITCODE -ne 0) {
+            throw 'standalone version smoke failed'
+          }
+          $adapters = & "$bundle\retrocast.exe" list-adapters
+          if ($LASTEXITCODE -ne 0) {
+            throw 'standalone adapter registry command failed'
+          }
+          if (-not ($adapters | Select-String aizynthfinder)) {
+            throw 'standalone adapter registry smoke failed'
+          }
+          & "$bundle\retrocast.exe" adapt `
+            --input tests\testing_data\aizynth-smoke.json `
+            --adapter aizynthfinder `
+            --output "$bundle\smoke.json" `
+            --max-candidates 1
+          if ($LASTEXITCODE -ne 0) {
+            throw 'standalone adapt smoke failed'
+          }
+          if (-not (Test-Path "$bundle\smoke.json" -PathType Leaf)) {
+            throw 'standalone adapt smoke output was not created'
+          }
+          Remove-Item "$bundle\smoke.json", "$bundle\smoke.manifest.json"
+          Compress-Archive -Path $bundle -DestinationPath "$bundle.zip"
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: retrocast-cli-${{ matrix.platform }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'release'
+    needs: cli
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: retrocast-cli-*
+          path: dist
+          merge-multiple: true
+      - name: Write checksums
+        working-directory: dist
+        run: sha256sum retrocast-* > SHA256SUMS
+      - name: Upload CLI bundles to release
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/*
+          files: |
+            dist/retrocast-*
+            dist/SHA256SUMS

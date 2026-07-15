@@ -1,9 +1,7 @@
-import csv
-import gzip
 import json
 import logging
+import re
 from collections.abc import Iterable, Iterator
-from io import TextIOWrapper
 from pathlib import Path
 from typing import Any
 
@@ -25,13 +23,12 @@ def load_json_artifact(path: Path) -> Any:
         return list(_iter_jsonl(path, compressed=False))
 
     if name.endswith((".json", ".json.gz")):
-        if path.suffix == ".gz":
-            return load_json_gz(path)
         _ensure_exists(path)
         try:
-            with open(path, encoding="utf-8") as handle:
-                return json.load(handle)
-        except (OSError, json.JSONDecodeError) as e:
+            from retrocast import native
+
+            return native.read_json(str(path))
+        except (OSError, RuntimeError, json.JSONDecodeError) as e:
             raise ArtifactDecodeError(
                 f"Failed to load {path}: {e}",
                 code="io.decode_failed",
@@ -52,16 +49,15 @@ def save_json_gz(data: Any, path: Path) -> None:
     """
     path = Path(path)
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(data, BaseModel):
             json_obj = data.model_dump(mode="json", exclude_none=True, exclude_computed_fields=True)
         else:
             json_obj = data
-        json_str = json.dumps(json_obj, indent=2)
-        with open(path, "wb") as raw_f, gzip.GzipFile(filename="", mode="wb", fileobj=raw_f, mtime=0) as gz_f:
-            gz_f.write(json_str.encode("utf-8"))
+        from retrocast import native
+
+        native.write_json_gz(str(path), json_obj)
         logger.debug(f"Saved {path}")
-    except (OSError, TypeError, ValueError) as e:
+    except (OSError, RuntimeError, TypeError, ValueError) as e:
         raise ArtifactWriteError(
             f"Failed to save {path}: {e}",
             code="io.write_failed",
@@ -75,20 +71,18 @@ def save_jsonl_gz(rows: Iterable[Any], path: Path) -> int:
 
     n_rows = 0
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "wb") as raw_f, gzip.GzipFile(filename="", mode="wb", fileobj=raw_f, mtime=0) as gz_f:
-            for row in rows:
-                if isinstance(row, BaseModel):
-                    json_obj = row.model_dump(mode="json", exclude_none=True, exclude_computed_fields=True)
-                else:
-                    json_obj = row
-                payload = json.dumps(json_obj, sort_keys=True, separators=(",", ":"))
-                gz_f.write(payload.encode("utf-8"))
-                gz_f.write(b"\n")
-                n_rows += 1
+        serialized = [
+            row.model_dump(mode="json", exclude_none=True, exclude_computed_fields=True)
+            if isinstance(row, BaseModel)
+            else row
+            for row in rows
+        ]
+        from retrocast import native
+
+        n_rows = native.write_jsonl_gz(str(path), serialized)
         logger.debug(f"Saved {n_rows} rows to {path}")
         return n_rows
-    except (OSError, TypeError, ValueError) as e:
+    except (OSError, RuntimeError, TypeError, ValueError) as e:
         raise ArtifactWriteError(
             f"Failed to save {path}: {e}",
             code="io.write_failed",
@@ -102,15 +96,12 @@ def save_lines_gz(lines: Iterable[str], path: Path) -> int:
 
     n_lines = 0
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "wb") as raw_f, gzip.GzipFile(filename="", mode="wb", fileobj=raw_f, mtime=0) as gz_f:
-            for line in lines:
-                gz_f.write(line.encode("utf-8"))
-                gz_f.write(b"\n")
-                n_lines += 1
+        from retrocast import native
+
+        n_lines = native.write_lines_gz(str(path), list(lines))
         logger.debug(f"Saved {n_lines} lines to {path}")
         return n_lines
-    except (OSError, AttributeError, TypeError, ValueError) as e:
+    except (OSError, RuntimeError, AttributeError, TypeError, ValueError) as e:
         raise ArtifactWriteError(
             f"Failed to save {path}: {e}",
             code="io.write_failed",
@@ -124,19 +115,13 @@ def save_csv_gz(rows: Iterable[Iterable[Any]], path: Path) -> int:
 
     n_rows = 0
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with (
-            open(path, "wb") as raw_f,
-            gzip.GzipFile(filename="", mode="wb", fileobj=raw_f, mtime=0) as gz_f,
-            TextIOWrapper(gz_f, encoding="utf-8", newline="") as text_f,
-        ):
-            writer = csv.writer(text_f)
-            for row in rows:
-                writer.writerow(row)
-                n_rows += 1
+        from retrocast import native
+
+        serialized = [["" if value is None else str(value) for value in row] for row in rows]
+        n_rows = native.write_csv_gz(str(path), serialized)
         logger.debug(f"Saved {n_rows} CSV rows to {path}")
         return n_rows
-    except (OSError, AttributeError, TypeError, ValueError) as e:
+    except (OSError, RuntimeError, AttributeError, TypeError, ValueError) as e:
         raise ArtifactWriteError(
             f"Failed to save {path}: {e}",
             code="io.write_failed",
@@ -150,9 +135,10 @@ def load_json_gz(path: Path) -> Any:
     _ensure_exists(path)
 
     try:
-        with gzip.open(path, "rt", encoding="utf-8") as f:
-            return json.load(f)
-    except (EOFError, OSError, json.JSONDecodeError) as e:
+        from retrocast import native
+
+        return native.read_json(str(path))
+    except (EOFError, OSError, RuntimeError, json.JSONDecodeError) as e:
         raise ArtifactDecodeError(
             f"Failed to load {path}: {e}",
             code="io.decode_failed",
@@ -176,26 +162,20 @@ def _iter_jsonl(path: Path, *, compressed: bool, skip_empty: bool = True) -> Ite
     _ensure_exists(path)
 
     try:
-        opener = gzip.open if compressed else open
-        with opener(path, "rt", encoding="utf-8") as handle:
-            for line_number, line in enumerate(handle, start=1):
-                line_text = line.strip()
-                if not line_text:
-                    if not skip_empty:
-                        raise ArtifactDecodeError(
-                            f"Empty JSONL row {line_number} in {path}",
-                            code="io.decode_failed",
-                            context={"path": str(path), "line_number": line_number},
-                        )
-                    continue
-                try:
-                    yield json.loads(line_text)
-                except json.JSONDecodeError as e:
-                    raise ArtifactDecodeError(
-                        f"Failed to decode JSONL row {line_number} from {path}: {e}",
-                        code="io.decode_failed",
-                        context={"path": str(path), "line_number": line_number, "line_text": line_text},
-                    ) from e
+        from retrocast import native
+
+        yield from native.read_jsonl(str(path), skip_empty=skip_empty)
+    except RuntimeError as e:
+        match = re.search(r"JSONL row (\d+):", str(e))
+        line_number = int(match.group(1)) if match else None
+        context: dict[str, Any] = {"path": str(path)}
+        if line_number is not None:
+            context["line_number"] = line_number
+        raise ArtifactDecodeError(
+            f"Failed to load {path}: {e}",
+            code="io.decode_failed",
+            context=context,
+        ) from e
     except (EOFError, OSError) as e:
         raise ArtifactDecodeError(
             f"Failed to load {path}: {e}",
@@ -215,10 +195,10 @@ def iter_lines_gz(path: Path) -> Iterator[str]:
     _ensure_exists(path)
 
     try:
-        with gzip.open(path, "rt", encoding="utf-8") as f:
-            for line in f:
-                yield line.rstrip("\n")
-    except (EOFError, OSError) as e:
+        from retrocast import native
+
+        yield from native.read_lines_gz(str(path))
+    except (EOFError, OSError, RuntimeError) as e:
         raise ArtifactDecodeError(
             f"Failed to load {path}: {e}",
             code="io.decode_failed",

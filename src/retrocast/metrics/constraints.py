@@ -1,28 +1,18 @@
-from __future__ import annotations
-
+import json
 from collections.abc import Mapping, Sequence
-from typing import Protocol, cast
+from typing import Protocol
 
-from retrocast.chem import get_inchi_key, reduce_inchikey
+from retrocast.chem import InChIKeyLevel
 from retrocast.exceptions import UnsupportedTaskConstraintError
 from retrocast.models.evaluation import CheckResult, CheckStatus, ConstraintResult
-from retrocast.models.route import InChIKeyLevel, Route
+from retrocast.models.route import Route
 from retrocast.models.task import (
     REQUIRED_LEAVES,
     ROUTE_DEPTH,
     STOCK_TERMINATION,
-    RequiredLeavesConstraint,
-    RouteDepthConstraint,
-    StockTerminationConstraint,
     TaskConstraint,
 )
-from retrocast.typing import InChIKeyStr, SmilesStr
-
-ROUTE_DEPTH_RANGES = {
-    "short": (1, 3),
-    "medium": (4, 6),
-    "long": (7, None),
-}
+from retrocast.typing import InChIKeyStr
 
 
 class TaskConstraintChecker(Protocol):
@@ -42,42 +32,20 @@ class StockTerminationChecker:
     ) -> None:
         self.match_level = match_level
         self._stock_keys_by_name = {
-            stock_name: {str(reduce_inchikey(inchikey, match_level)) for inchikey in stock_values}
-            for stock_name, stock_values in stocks.items()
+            stock_name: {str(inchikey) for inchikey in stock_values} for stock_name, stock_values in stocks.items()
         }
 
-    def check_route(self, route: Route, constraint: TaskConstraint) -> list[CheckResult]:
-        parsed = cast(StockTerminationConstraint, constraint)
-        if parsed.stock not in self._stock_keys_by_name:
-            return [
-                CheckResult(
-                    code="constraint.stock_termination.unregistered_stock",
-                    status=CheckStatus.FAIL,
-                    details={"stock": parsed.stock},
-                )
-            ]
-        stock_keys = self._stock_keys_by_name[parsed.stock]
-        if not stock_keys:
-            return [
-                CheckResult(
-                    code="constraint.stock_termination.empty_stock",
-                    status=CheckStatus.FAIL,
-                    details={"stock": parsed.stock},
-                )
-            ]
+    @property
+    def stock_keys_by_name(self) -> Mapping[str, set[str]]:
+        return self._stock_keys_by_name
 
-        missing_leaves = sorted(
-            {leaf.value.inchikey for leaf in route.iter_leaves() if leaf.key(self.match_level) not in stock_keys}
-        )
-        if not missing_leaves:
-            return []
-        return [
-            CheckResult(
-                code="constraint.stock_termination.missing_leaf",
-                status=CheckStatus.FAIL,
-                details={"missing_leaf_inchikeys": missing_leaves},
-            )
-        ]
+    def check_route(self, route: Route, constraint: TaskConstraint) -> list[CheckResult]:
+        return _native_check(
+            route,
+            constraint,
+            stocks=self._stock_keys_by_name,
+            match_level=self.match_level,
+        ).checks
 
 
 class RequiredLeavesChecker:
@@ -85,58 +53,16 @@ class RequiredLeavesChecker:
 
     def __init__(self, *, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> None:
         self.match_level = match_level
-        self._required_leaf_keys_by_smiles: dict[tuple[SmilesStr, ...], list[InChIKeyStr]] = {}
 
     def check_route(self, route: Route, constraint: TaskConstraint) -> list[CheckResult]:
-        parsed = cast(RequiredLeavesConstraint, constraint)
-        smiles_key = tuple(parsed.smiles)
-        required_leaf_inchikeys = self._required_leaf_keys_by_smiles.get(smiles_key)
-        if required_leaf_inchikeys is None:
-            required_leaf_inchikeys = [InChIKeyStr(get_inchi_key(smiles)) for smiles in parsed.smiles]
-            self._required_leaf_keys_by_smiles[smiles_key] = required_leaf_inchikeys
-        leaf_keys = {leaf.key(self.match_level) for leaf in route.iter_leaves()}
-        missing_required_leaves = [
-            inchikey
-            for inchikey in required_leaf_inchikeys
-            if str(reduce_inchikey(inchikey, self.match_level)) not in leaf_keys
-        ]
-        if not missing_required_leaves:
-            return []
-        return [
-            CheckResult(
-                code="constraint.required_leaf.missing",
-                status=CheckStatus.FAIL,
-                details={"missing_leaf_inchikeys": missing_required_leaves},
-            )
-        ]
+        return _native_check(route, constraint, match_level=self.match_level).checks
 
 
 class RouteDepthChecker:
     kind = ROUTE_DEPTH
 
     def check_route(self, route: Route, constraint: TaskConstraint) -> list[CheckResult]:
-        parsed = cast(RouteDepthConstraint, constraint)
-        route_depth = route.depth()
-        if isinstance(parsed.max_depth, int):
-            if route_depth <= parsed.max_depth:
-                return []
-            return [
-                CheckResult(
-                    code="constraint.route_depth.exceeded",
-                    status=CheckStatus.FAIL,
-                    details={"route_depth": route_depth, "max_depth": parsed.max_depth},
-                )
-            ]
-        min_depth, max_depth = ROUTE_DEPTH_RANGES[parsed.max_depth]
-        if route_depth >= min_depth and (max_depth is None or route_depth <= max_depth):
-            return []
-        return [
-            CheckResult(
-                code="constraint.route_depth.out_of_range",
-                status=CheckStatus.FAIL,
-                details={"route_depth": route_depth, "min_depth": min_depth, "max_depth": max_depth},
-            )
-        ]
+        return _native_check(route, constraint).checks
 
 
 def check_task_constraints(
@@ -146,7 +72,6 @@ def check_task_constraints(
 ) -> ConstraintResult:
     registry = {checker.kind: checker for checker in checkers}
     checks = []
-
     for constraint in constraints:
         checker = registry.get(constraint.kind)
         if checker is None:
@@ -155,6 +80,25 @@ def check_task_constraints(
                 context={"kind": constraint.kind},
             )
         checks.extend(checker.check_route(route, constraint))
+    return ConstraintResult(status=CheckStatus.FAIL if checks else CheckStatus.PASS, checks=checks)
 
-    status = CheckStatus.FAIL if checks else CheckStatus.PASS
-    return ConstraintResult(status=status, checks=checks)
+
+def _native_check(
+    route: Route,
+    constraint: TaskConstraint,
+    *,
+    stocks: Mapping[str, set[str]] | None = None,
+    match_level: InChIKeyLevel = InChIKeyLevel.FULL,
+) -> ConstraintResult:
+    from retrocast import _native
+
+    payload = _native.check_task_constraints_json(
+        route.model_dump_json(exclude_none=True),
+        json.dumps([constraint.model_dump(mode="json")], separators=(",", ":")),
+        json.dumps(
+            {name: sorted(values) for name, values in (stocks or {}).items()},
+            separators=(",", ":"),
+        ),
+        match_level=match_level.value,
+    )
+    return ConstraintResult.model_validate_json(payload)

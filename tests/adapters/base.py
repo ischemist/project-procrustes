@@ -5,10 +5,14 @@ from typing import Any
 
 import pytest
 
+from retrocast import native
 from retrocast.adapters.base import Adapter
+from retrocast.adapters.registry import ADAPTER_TYPES
 from retrocast.exceptions import AdapterError, AdapterLogicError, AdapterSchemaError, ChemError
 from retrocast.models.route import Route
-from retrocast.models.task import Target
+from retrocast.models.task import Target, Task
+from retrocast.workflow.adapt import adapt_candidates
+from retrocast.workflow.ingest import ingest_candidates
 
 
 @dataclass(frozen=True)
@@ -153,3 +157,78 @@ class AdapterContractSuite:
 
         root_reactants = [reactant.value.smiles for reactant in route.reaction_at("rc:r:/").reactants()]
         assert root_reactants == invalid_smiles.expected_pruned_root_reactants
+
+    @pytest.mark.contract
+    @pytest.mark.skipif(not native.available(), reason="native extension is not built")
+    def test_public_adapter_uses_native_engine(self, adapter_contract_case: AdapterContractCase) -> None:
+        case = adapter_contract_case
+        adapter_type = type(case.adapter)
+        adapter_slug = next(slug for slug, factory in ADAPTER_TYPES.items() if type(factory()) is adapter_type)
+        kwargs = {
+            "target": case.casting.target,
+            "source_key": case.extraction.source_key,
+        }
+
+        public_candidates = adapt_candidates(case.extraction.valid_payload, case.adapter, **kwargs)
+        rust_candidates = native.adapt(
+            case.extraction.valid_payload,
+            case.adapter,
+            **kwargs,
+        )
+
+        assert adapter_slug
+        assert [
+            (candidate.rank, candidate.failure.code if candidate.failure else None) for candidate in rust_candidates
+        ] == [
+            (candidate.rank, candidate.failure.code if candidate.failure else None) for candidate in public_candidates
+        ]
+        assert [candidate.route.model_dump(mode="json") for candidate in rust_candidates if candidate.route] == [
+            candidate.route.model_dump(mode="json") for candidate in public_candidates if candidate.route
+        ]
+
+    @pytest.mark.contract
+    @pytest.mark.skipif(not native.available(), reason="native extension is not built")
+    def test_native_target_mismatch_matches_public_contract(self, adapter_contract_case: AdapterContractCase) -> None:
+        case = adapter_contract_case
+        kwargs = {
+            "target": case.casting.mismatched_target,
+            "source_key": case.extraction.source_key,
+        }
+
+        public_candidates = adapt_candidates(case.extraction.valid_payload, case.adapter, **kwargs)
+        rust_candidates = native.adapt(
+            case.extraction.valid_payload,
+            case.adapter,
+            **kwargs,
+        )
+        public_failures = [
+            candidate.failure.model_dump(mode="json") for candidate in public_candidates if candidate.failure
+        ]
+        rust_failures = [
+            candidate.failure.model_dump(mode="json") for candidate in rust_candidates if candidate.failure
+        ]
+
+        assert rust_failures == public_failures
+
+    @pytest.mark.contract
+    @pytest.mark.skipif(not native.available(), reason="native extension is not built")
+    def test_public_ingest_uses_native_engine(self, adapter_contract_case: AdapterContractCase) -> None:
+        case = adapter_contract_case
+        target = case.casting.target
+        task = Task(name="adapter-contract", targets={target.id: target})
+        raw_payload = {target.id: case.extraction.valid_payload}
+
+        public_candidates = ingest_candidates(raw_payload, case.adapter, task, workers=2)
+        rust_candidates = native.ingest(raw_payload, case.adapter, task, workers=2)
+
+        for target_id in task.targets:
+            public_target = public_candidates[target_id]
+            rust_target = rust_candidates[target_id]
+            assert [
+                (candidate.rank, candidate.failure.code if candidate.failure else None) for candidate in rust_target
+            ] == [
+                (candidate.rank, candidate.failure.code if candidate.failure else None) for candidate in public_target
+            ]
+            assert [candidate.route.model_dump(mode="json") for candidate in rust_target if candidate.route] == [
+                candidate.route.model_dump(mode="json") for candidate in public_target if candidate.route
+            ]

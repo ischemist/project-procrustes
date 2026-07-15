@@ -1,0 +1,20 @@
+[package]
+name = "retrocast-python"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+description = "Python bindings for retrocast-core"
+
+[lib]
+name = "retrocast_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { workspace = true, features = ["extension-module"] }
+retrocast-core = { path = "../retrocast-core" }
+serde.workspace = true
+serde_json.workspace = true

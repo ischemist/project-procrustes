@@ -21,6 +21,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: native-build
+          create-args: >-
+            librdkit-dev=2026.03.4
+            libboost-headers=1.90
+          cache-environment: true
+
+      - name: Configure RDKit C++ build
+        shell: bash -el {0}
+        run: |
+          echo "RDKIT_ROOT=$CONDA_PREFIX" >> "$GITHUB_ENV"
+          echo "BOOST_ROOT=$CONDA_PREFIX" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+
       - name: Set up Python 3.13
         uses: actions/setup-python@v6
         with:
@@ -49,6 +66,9 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --extra viz
+
+      - name: Test Rust workspace
+        run: cargo test --manifest-path retrocast-rs/Cargo.toml --workspace --all-targets --locked
 
       - name: Run tests
         run: uv run pytest -v
