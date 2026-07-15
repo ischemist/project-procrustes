@@ -99,7 +99,7 @@ class NativeEvaluation(Evaluation):
             other._ensure_materialized()
         if not isinstance(other, Evaluation):
             return False
-        return self.__dict__ == other.__dict__ and self.__pydantic_extra__ == other.__pydantic_extra__
+        return self.__dict__ == other.__dict__ and (self.__pydantic_extra__ or {}) == (other.__pydantic_extra__ or {})
 
     def __repr__(self) -> str:
         self._ensure_materialized()

@@ -99,6 +99,9 @@ fn artifact_read_error(error: retrocast_core::error::EngineError) -> PyErr {
         retrocast_core::error::EngineError::Json(error) if error.is_data() => {
             PyValueError::new_err(error.to_string())
         }
+        retrocast_core::error::EngineError::UnsafePathComponent { .. } => {
+            PyValueError::new_err(error.to_string())
+        }
         retrocast_core::error::EngineError::Io(error) => PyOSError::new_err(error.to_string()),
         error => python_error(error),
     }
@@ -863,6 +866,7 @@ fn score_project_native(
             let mut stocks = BTreeMap::new();
             let mut stock_paths = Vec::new();
             for name in stock_names {
+                io::validate_path_component(&name, "stock name")?;
                 let path = stocks_dir.join(format!("{name}.csv.gz"));
                 stocks.extend(io::read_stock(&path, &name)?);
                 stock_paths.push(path);
@@ -883,7 +887,7 @@ fn score_project_native(
             )?;
             Ok::<_, retrocast_core::error::EngineError>((evaluation, label, stock_paths))
         })
-        .map_err(python_error)?;
+        .map_err(artifact_read_error)?;
     Ok((
         NativeEvaluation {
             value: Arc::new(value),

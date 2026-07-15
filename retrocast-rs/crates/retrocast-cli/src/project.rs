@@ -7,7 +7,7 @@ use std::{
 use anyhow::{Context, bail};
 use retrocast_core::{
     adapt, adapters, analyze,
-    io::{read_json, read_stock, write_json},
+    io::{read_json, read_stock, validate_path_component, write_json},
     model::{AnalysisReport, Evaluation, ExecutionStats, Predictions, Task},
     provenance::{ContentType, ManifestOutput, create_manifest},
     route::AdaptMode,
@@ -631,15 +631,7 @@ fn file_name(path: &Path) -> anyhow::Result<String> {
 }
 
 fn safe_name(value: &str, label: &str) -> anyhow::Result<String> {
-    if value.is_empty()
-        || value == "."
-        || value == ".."
-        || value.contains('/')
-        || value.contains('\\')
-        || value.contains('\0')
-    {
-        bail!("unsafe {label}: {value:?}");
-    }
+    validate_path_component(value, label)?;
     Ok(value.to_owned())
 }
 

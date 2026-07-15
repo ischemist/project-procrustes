@@ -103,13 +103,11 @@ An artifact path crosses the Python binding as a path, not as its contents. Rust
 
 Project-mode commands follow this ownership sequence:
 
-```text
-compressed raw file
-  -> Rust provider payload
-  -> Rust Predictions
-  -> Rust Evaluation
-  -> small AnalysisReport returned for presentation
-```
+    compressed raw file
+      -> Rust provider payload
+      -> Rust Predictions
+      -> Rust Evaluation
+      -> small AnalysisReport returned for presentation
 
 Each arrow consumes the previous corpus-sized value when the previous value is no longer needed. Scoring moves candidates into the evaluation. The pipeline writes predictions before that move and writes the evaluation before analysis releases it. Manifest generation hashes the written artifacts and receives only small statistics; it does not convert a typed artifact into a second generic JSON tree.
 
