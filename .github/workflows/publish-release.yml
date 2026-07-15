@@ -129,7 +129,14 @@ jobs:
           Copy-Item LICENSE, README.md, THIRD_PARTY_LICENSES.md $bundle
           Copy-Item "$env:RDKIT_ROOT\Library\bin\*.dll" $bundle
           & "$bundle\retrocast.exe" --version
-          if (-not (& "$bundle\retrocast.exe" list-adapters | Select-String aizynthfinder)) {
+          if ($LASTEXITCODE -ne 0) {
+            throw 'standalone version smoke failed'
+          }
+          $adapters = & "$bundle\retrocast.exe" list-adapters
+          if ($LASTEXITCODE -ne 0) {
+            throw 'standalone adapter registry command failed'
+          }
+          if (-not ($adapters | Select-String aizynthfinder)) {
             throw 'standalone adapter registry smoke failed'
           }
           & "$bundle\retrocast.exe" adapt `
@@ -137,6 +144,9 @@ jobs:
             --adapter aizynthfinder `
             --output "$bundle\smoke.json" `
             --max-candidates 1
+          if ($LASTEXITCODE -ne 0) {
+            throw 'standalone adapt smoke failed'
+          }
           if (-not (Test-Path "$bundle\smoke.json" -PathType Leaf)) {
             throw 'standalone adapt smoke output was not created'
           }
