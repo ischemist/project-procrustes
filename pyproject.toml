@@ -99,6 +99,8 @@ python-source = "src"
 include = [
   { path = "LICENSE", format = ["sdist", "wheel"] },
   { path = "THIRD_PARTY_LICENSES.md", format = ["sdist", "wheel"] },
+  { path = "licenses/LLVM-LICENSE.txt", format = ["sdist", "wheel"] },
+  { path = "licenses/LGPL-2.1.txt", format = ["sdist", "wheel"] },
   { path = "retrocast-rs/**", format = "sdist" },
 ]
 

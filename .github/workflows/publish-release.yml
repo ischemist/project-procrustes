@@ -84,6 +84,7 @@ jobs:
           mkdir -p "$bundle/lib"
           cp retrocast-rs/target/release/retrocast "$bundle/retrocast"
           cp LICENSE README.md THIRD_PARTY_LICENSES.md "$bundle/"
+          cp -R licenses "$bundle/"
 
           if [[ "$RUNNER_OS" == "macOS" ]]; then
             export DYLD_LIBRARY_PATH="$CONDA_PREFIX/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
@@ -127,6 +128,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $bundle | Out-Null
           Copy-Item retrocast-rs\target\release\retrocast.exe $bundle
           Copy-Item LICENSE, README.md, THIRD_PARTY_LICENSES.md $bundle
+          Copy-Item licenses $bundle -Recurse
 
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $dumpbin = & $vswhere -latest -products * `

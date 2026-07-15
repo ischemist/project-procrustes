@@ -1,6 +1,8 @@
 # Third-party licenses
 
 RetroCast binary distributions include native code from the projects below.
+Platform-specific bundles may also include the runtime libraries listed at the
+end of this file.
 
 ## RDKit
 
@@ -81,3 +83,22 @@ SHALL THE COPYRIGHT HOLDERS OR ANYONE DISTRIBUTING THE SOFTWARE BE LIABLE FOR
 ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
+
+## LLVM libc++
+
+macOS artifacts may include LLVM libc++. It is distributed under the Apache
+License 2.0 with LLVM Exceptions. The complete terms are in
+`licenses/LLVM-LICENSE.txt`.
+
+## GNU libiconv
+
+macOS artifacts may include GNU libiconv as a dynamically linked shared
+library. It is distributed under the GNU Lesser General Public License 2.1 or
+later. The complete LGPL 2.1 terms are in `licenses/LGPL-2.1.txt`; replacement
+of the shared library is permitted by the bundle layout.
+
+## Microsoft Visual C++ runtime
+
+Windows artifacts may include Microsoft Visual C++ Redistributable runtime
+files needed by RDKit. Those files are distributed under the Microsoft Visual
+Studio license terms that permit redistribution with compiled applications.
