@@ -51,6 +51,9 @@ jobs:
         run: |
           export RDKIT_ROOT="$CONDA_PREFIX"
           export BOOST_ROOT="$CONDA_PREFIX"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=-Wl,-headerpad_max_install_names"
+          fi
           cargo build --locked --release --manifest-path retrocast-rs/Cargo.toml -p retrocast-cli
 
       - name: Build standalone executable (Windows)
@@ -76,10 +79,11 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
-          bundle="dist/retrocast-${RELEASE_TAG}-${PLATFORM}"
+          release_tag="${RELEASE_TAG//\//-}"
+          bundle="$GITHUB_WORKSPACE/dist/retrocast-${release_tag}-${PLATFORM}"
           mkdir -p "$bundle/lib"
           cp retrocast-rs/target/release/retrocast "$bundle/retrocast"
-          cp LICENSE README.md "$bundle/"
+          cp LICENSE README.md THIRD_PARTY_LICENSES.md "$bundle/"
 
           if [[ "$RUNNER_OS" == "macOS" ]]; then
             export DYLD_LIBRARY_PATH="$CONDA_PREFIX/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
@@ -90,7 +94,7 @@ jobs:
               soname="$(patchelf --print-soname "$dependency")"
               [[ -n "$soname" ]] || soname="$(basename "$dependency")"
               cp -L "$dependency" "$bundle/lib/$soname"
-            done < <(lddtree -l "$bundle/retrocast" | sort -u)
+            done < <(LD_LIBRARY_PATH="$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" lddtree -l "$bundle/retrocast" | sort -u)
             # The loader, not the shell, expands ORIGIN.
             # shellcheck disable=SC2016
             patchelf --set-rpath '$ORIGIN/lib' "$bundle/retrocast"
@@ -117,11 +121,12 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $bundleName = "retrocast-$env:RELEASE_TAG-$env:PLATFORM"
+          $releaseTag = $env:RELEASE_TAG.Replace('/', '-')
+          $bundleName = "retrocast-$releaseTag-$env:PLATFORM"
           $bundle = Join-Path dist $bundleName
           New-Item -ItemType Directory -Force -Path $bundle | Out-Null
           Copy-Item retrocast-rs\target\release\retrocast.exe $bundle
-          Copy-Item LICENSE, README.md $bundle
+          Copy-Item LICENSE, README.md, THIRD_PARTY_LICENSES.md $bundle
           Copy-Item "$env:RDKIT_ROOT\Library\bin\*.dll" $bundle
           & "$bundle\retrocast.exe" --version
           if (-not (& "$bundle\retrocast.exe" list-adapters | Select-String aizynthfinder)) {

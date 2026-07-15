@@ -15,7 +15,7 @@ fn main() {
         });
     let lib = env::var_os("RDKIT_LIB_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|| first_existing(&[root.join("lib"), root.join("Library/lib")]));
+        .unwrap_or_else(|| first_existing(&[root.join("Library/lib"), root.join("lib")]));
     let boost_root = env::var_os("BOOST_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| root.clone());
@@ -28,15 +28,19 @@ fn main() {
         "boost/version.hpp",
     );
 
-    cxx_build::bridge("src/chem.rs")
+    let mut bridge = cxx_build::bridge("src/chem.rs");
+    bridge
         .file("cpp/chem.cpp")
         .include("cpp")
         .include(include)
         .include(boost_include)
         .std("c++20")
         .flag_if_supported("-Wno-deprecated-declarations")
-        .flag_if_supported("-Wno-deprecated-copy")
-        .compile("retrocast-rdkit");
+        .flag_if_supported("-Wno-deprecated-copy");
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        bridge.define("RDKIT_DYN_LINK", None);
+    }
+    bridge.compile("retrocast-rdkit");
 
     println!("cargo:rustc-link-search=native={}", lib.display());
     for name in [

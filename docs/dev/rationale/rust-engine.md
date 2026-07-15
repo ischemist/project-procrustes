@@ -141,6 +141,8 @@ The project publishes two forms of the same core:
 
 Release automation builds and smoke-tests Windows x86-64, Linux x86-64, macOS arm64, and macOS x86-64 artifacts. Native dependencies are repaired into the wheel or CLI bundle for each platform. Source builds remain available for other targets and require Rust, a C++20 compiler, Boost headers, and RDKit C++.
 
+Linux wheels build the pinned RDKit release from source with the manylinux toolchain. This avoids inheriting Conda's newer `libstdc++` baseline while still calling the same C++ API; RetroCast does not import or install the Python `rdkit` package at runtime.
+
 The Python wheel and standalone archive for one release are built from the same workspace revision and report the same RetroCast and RDKit versions.
 
 ## Regression rule

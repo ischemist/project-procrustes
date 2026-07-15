@@ -98,6 +98,7 @@ module-name = "retrocast._native"
 python-source = "src"
 include = [
   { path = "LICENSE", format = ["sdist", "wheel"] },
+  { path = "THIRD_PARTY_LICENSES.md", format = ["sdist", "wheel"] },
   { path = "retrocast-rs/**", format = "sdist" },
 ]
 

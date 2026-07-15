@@ -73,9 +73,16 @@ jobs:
       - name: Prepare manylinux-native dependencies
         if: runner.os == 'Linux'
         shell: bash -el {0}
-        run: >-
-          micromamba create -y -p "$GITHUB_WORKSPACE/.wheel-env"
-          librdkit-dev=2026.03.4 libboost-headers=1.90
+        run: |
+          native_root="$GITHUB_WORKSPACE/.wheel-native"
+          micromamba create -y --no-deps -p "$native_root" libboost-devel=1.90 libboost-headers=1.90
+          curl --fail --location --silent --show-error \
+            https://github.com/rdkit/rdkit/archive/8afba32ec539dcb2369bc84549d802aca3f7eb39.tar.gz \
+            --output "$GITHUB_WORKSPACE/.wheel-rdkit-src.tar.gz"
+          echo "77693b9a797377d073f8453944dfa08b7ec91ea0cdc1bd08502e32a241d876dd  $GITHUB_WORKSPACE/.wheel-rdkit-src.tar.gz" | sha256sum --check
+          mkdir -p "$GITHUB_WORKSPACE/.wheel-rdkit-src"
+          tar -xzf "$GITHUB_WORKSPACE/.wheel-rdkit-src.tar.gz" \
+            -C "$GITHUB_WORKSPACE/.wheel-rdkit-src" --strip-components=1
 
       - name: Build and repair Linux wheel
         if: runner.os == 'Linux'
@@ -83,16 +90,20 @@ jobs:
         with:
           command: build
           manylinux: "2_28"
+          before-script-linux: bash scripts/build-manylinux-rdkit.sh
           docker-options: >-
-            -e RDKIT_ROOT=${{ github.workspace }}/.wheel-env
-            -e BOOST_ROOT=${{ github.workspace }}/.wheel-env
-            -e LD_LIBRARY_PATH=${{ github.workspace }}/.wheel-env/lib
+            -e RDKIT_ROOT=${{ github.workspace }}/.wheel-native
+            -e RDKIT_INCLUDE_DIR=${{ github.workspace }}/.wheel-rdkit-src/Code
+            -e RDKIT_LIB_DIR=${{ github.workspace }}/.wheel-native/lib
+            -e BOOST_ROOT=${{ github.workspace }}/.wheel-native
+            -e LD_LIBRARY_PATH=${{ github.workspace }}/.wheel-native/lib
           args: --release --out dist --interpreter python3.11
 
       - name: Build and repair macOS wheel
         if: runner.os == 'macOS'
         shell: bash -el {0}
         run: |
+          export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=-Wl,-headerpad_max_install_names"
           maturin build --release --out wheel-raw --interpreter python
           export DYLD_LIBRARY_PATH="$CONDA_PREFIX/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
           delocate-wheel --require-archs "${{ matrix.wheel_arch }}" -w dist wheel-raw/*.whl
