@@ -16,7 +16,7 @@ jobs:
             os: ubuntu-24.04
             wheel_arch: x86_64
           - platform: macos-arm64
-            os: macos-14
+            os: macos-15
             wheel_arch: arm64
           - platform: macos-x86_64
             os: macos-15-intel
@@ -34,6 +34,7 @@ jobs:
           fetch-depth: 0
 
       - uses: mamba-org/setup-micromamba@v2
+        id: native-env
         with:
           environment-name: wheel-build
           create-args: >-
@@ -56,8 +57,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          "RDKIT_ROOT=$env:CONDA_PREFIX" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "BOOST_ROOT=$env:CONDA_PREFIX" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "RDKIT_ROOT=${{ steps.native-env.outputs.environment-path }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BOOST_ROOT=${{ steps.native-env.outputs.environment-path }}" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Install wheel tooling
         shell: bash -el {0}
@@ -79,12 +80,13 @@ jobs:
       - name: Build and repair Linux wheel
         if: runner.os == 'Linux'
         uses: PyO3/maturin-action@v1
-        env:
-          RDKIT_ROOT: /io/.wheel-env
-          BOOST_ROOT: /io/.wheel-env
         with:
           command: build
           manylinux: "2_28"
+          docker-options: >-
+            -e RDKIT_ROOT=${{ github.workspace }}/.wheel-env
+            -e BOOST_ROOT=${{ github.workspace }}/.wheel-env
+            -e LD_LIBRARY_PATH=${{ github.workspace }}/.wheel-env/lib
           args: --release --out dist --interpreter python3.11
 
       - name: Build and repair macOS wheel
@@ -92,6 +94,7 @@ jobs:
         shell: bash -el {0}
         run: |
           maturin build --release --out wheel-raw --interpreter python
+          export DYLD_LIBRARY_PATH="$CONDA_PREFIX/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
           delocate-wheel --require-archs "${{ matrix.wheel_arch }}" -w dist wheel-raw/*.whl
 
       - name: Build and repair Windows wheel
@@ -99,7 +102,7 @@ jobs:
         shell: pwsh
         run: |
           maturin build --release --out wheel-raw --interpreter python
-          delvewheel repair --add-path "$env:CONDA_PREFIX\Library\bin" --wheel-dir dist (Get-ChildItem wheel-raw\*.whl)
+          delvewheel repair --add-path "$env:RDKIT_ROOT\Library\bin" --wheel-dir dist (Get-ChildItem wheel-raw\*.whl)
 
       - name: Smoke-test installed wheel
         if: runner.os != 'Windows'

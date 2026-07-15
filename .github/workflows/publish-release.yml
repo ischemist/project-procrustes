@@ -18,7 +18,7 @@ jobs:
           - platform: linux-x86_64
             os: ubuntu-24.04
           - platform: macos-arm64
-            os: macos-14
+            os: macos-15
           - platform: macos-x86_64
             os: macos-15-intel
           - platform: windows-x86_64
@@ -31,6 +31,7 @@ jobs:
           fetch-depth: 0
 
       - uses: mamba-org/setup-micromamba@v2
+        id: native-env
         with:
           environment-name: cli-build
           create-args: >-
@@ -56,8 +57,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $env:RDKIT_ROOT = $env:CONDA_PREFIX
-          $env:BOOST_ROOT = $env:CONDA_PREFIX
+          $env:RDKIT_ROOT = '${{ steps.native-env.outputs.environment-path }}'
+          $env:BOOST_ROOT = '${{ steps.native-env.outputs.environment-path }}'
+          "RDKIT_ROOT=$env:RDKIT_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BOOST_ROOT=$env:BOOST_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
           cargo build --locked --release --manifest-path retrocast-rs/Cargo.toml -p retrocast-cli
 
       - name: Install macOS relocation tooling
@@ -79,6 +82,7 @@ jobs:
           cp LICENSE README.md "$bundle/"
 
           if [[ "$RUNNER_OS" == "macOS" ]]; then
+            export DYLD_LIBRARY_PATH="$CONDA_PREFIX/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
             delocate-path -L "$bundle/lib" "$bundle"
           else
             while IFS= read -r dependency; do
@@ -87,7 +91,10 @@ jobs:
               [[ -n "$soname" ]] || soname="$(basename "$dependency")"
               cp -L "$dependency" "$bundle/lib/$soname"
             done < <(lddtree -l "$bundle/retrocast" | sort -u)
+            # The loader, not the shell, expands ORIGIN.
+            # shellcheck disable=SC2016
             patchelf --set-rpath '$ORIGIN/lib' "$bundle/retrocast"
+            # shellcheck disable=SC2016
             find "$bundle/lib" -type f -exec patchelf --set-rpath '$ORIGIN' {} \;
           fi
 
@@ -115,7 +122,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $bundle | Out-Null
           Copy-Item retrocast-rs\target\release\retrocast.exe $bundle
           Copy-Item LICENSE, README.md $bundle
-          Copy-Item "$env:CONDA_PREFIX\Library\bin\*.dll" $bundle
+          Copy-Item "$env:RDKIT_ROOT\Library\bin\*.dll" $bundle
           & "$bundle\retrocast.exe" --version
           if (-not (& "$bundle\retrocast.exe" list-adapters | Select-String aizynthfinder)) {
             throw 'standalone adapter registry smoke failed'
