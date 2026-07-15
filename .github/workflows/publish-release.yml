@@ -127,7 +127,46 @@ jobs:
           New-Item -ItemType Directory -Force -Path $bundle | Out-Null
           Copy-Item retrocast-rs\target\release\retrocast.exe $bundle
           Copy-Item LICENSE, README.md, THIRD_PARTY_LICENSES.md $bundle
-          Copy-Item "$env:RDKIT_ROOT\Library\bin\*.dll" $bundle
+
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe' |
+            Select-Object -First 1
+          if (-not $dumpbin) {
+            throw 'could not locate dumpbin.exe'
+          }
+
+          $availableDlls = @{}
+          Get-ChildItem "$env:RDKIT_ROOT\Library\bin\*.dll" | ForEach-Object {
+            $availableDlls[$_.Name.ToLowerInvariant()] = $_.FullName
+          }
+          $pending = [System.Collections.Generic.Queue[string]]::new()
+          $pending.Enqueue((Resolve-Path "$bundle\retrocast.exe").Path)
+          $copied = @{}
+          while ($pending.Count -gt 0) {
+            $binary = $pending.Dequeue()
+            $dependencies = & $dumpbin /nologo /dependents $binary
+            if ($LASTEXITCODE -ne 0) {
+              throw "dumpbin failed for $binary"
+            }
+            foreach ($line in $dependencies) {
+              if ($line -notmatch '^\s+([A-Za-z0-9_.+-]+\.dll)\s*$') {
+                continue
+              }
+              $name = $Matches[1]
+              $key = $name.ToLowerInvariant()
+              if ($key.StartsWith('api-ms-win-') -or $key -eq 'ucrtbase.dll') {
+                continue
+              }
+              if ($availableDlls.ContainsKey($key) -and -not $copied.ContainsKey($key)) {
+                $source = $availableDlls[$key]
+                Copy-Item $source $bundle
+                $copied[$key] = $true
+                $pending.Enqueue($source)
+              }
+            }
+          }
           & "$bundle\retrocast.exe" --version
           if ($LASTEXITCODE -ne 0) {
             throw 'standalone version smoke failed'
