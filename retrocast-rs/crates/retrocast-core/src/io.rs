@@ -16,10 +16,7 @@ use crate::{
 };
 
 pub fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
-    let mut reader = open_reader(path)?;
-    let mut payload = String::new();
-    reader.read_to_string(&mut payload)?;
-    Ok(serde_json::from_str(&payload)?)
+    Ok(serde_json::from_reader(open_reader(path)?)?)
 }
 
 pub fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
@@ -224,7 +221,7 @@ fn read_stock_smiles(path: &Path) -> Result<BTreeSet<String>> {
     Ok(keys)
 }
 
-fn open_reader(path: &Path) -> Result<Box<dyn Read>> {
+pub(crate) fn open_reader(path: &Path) -> Result<Box<dyn Read>> {
     let file = File::open(path)?;
     if path.extension().is_some_and(|extension| extension == "gz") {
         Ok(Box::new(GzDecoder::new(BufReader::new(file))))

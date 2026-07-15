@@ -7,7 +7,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    adapt::ingest,
+    adapt::ingest_file,
     adapters,
     analyze::analyze,
     error::{EngineError, Result},
@@ -15,7 +15,7 @@ use crate::{
     model::{ExecutionStats, Task},
     provenance::{ContentType, ManifestOutput, create_manifest},
     route::AdaptMode,
-    score::score,
+    score::score_owned,
 };
 
 #[derive(Debug, Serialize)]
@@ -56,7 +56,6 @@ pub fn run_pipeline(
 ) -> Result<PipelineStats> {
     let started = Instant::now();
     let raw_path = resolve_raw_path(raw_path)?;
-    let raw: Value = read_json(&raw_path)?;
     let mut task: Task = read_json(benchmark_path)?;
     let stock_name = stock_name.map(str::to_owned).unwrap_or_else(|| {
         stock_path
@@ -76,8 +75,8 @@ pub fn run_pipeline(
         name: options.adapter.to_owned(),
         available: "aizynthfinder, askcos, directmultistep, dreamretroer, molbuilder, multistepttl, paroutes, retrochimera, retrostar, synllama, synplanner, syntheseus, ursa".to_owned(),
     })?;
-    let predictions = ingest(
-        raw,
+    let predictions = ingest_file(
+        &raw_path,
         adapter.as_ref(),
         &task,
         options.mode,
@@ -85,13 +84,15 @@ pub fn run_pipeline(
         options.workers,
     )?;
     let ingest_seconds = ingest_started.elapsed().as_secs_f64();
+    let targets = task.targets.len();
+    let candidates = predictions.values().map(Vec::len).sum();
     write_json(&output_dir.join("candidates.json.gz"), &predictions)?;
 
     let score_started = Instant::now();
     let stocks = read_stock(stock_path, &stock_name)?;
-    let evaluation = score(
-        &predictions,
-        &task,
+    let evaluation = score_owned(
+        predictions,
+        task,
         &stocks,
         options.match_level,
         options.acceptable_route_match,
@@ -111,11 +112,10 @@ pub fn run_pipeline(
         options.workers,
     )?;
     let analyze_seconds = analyze_started.elapsed().as_secs_f64();
+    drop(evaluation);
     write_json(&output_dir.join("analysis.json.gz"), &report)?;
 
     let total_seconds = started.elapsed().as_secs_f64();
-    let targets = task.targets.len();
-    let candidates = predictions.values().map(Vec::len).sum();
     let stats = PipelineStats {
         engine: "rust",
         workers: options.workers,
@@ -135,9 +135,6 @@ pub fn run_pipeline(
         stock_path,
         execution_stats_path,
         output_dir,
-        &predictions,
-        &evaluation,
-        &report,
         &stats,
         options,
     )?;
@@ -181,9 +178,6 @@ fn write_pipeline_manifest(
     stock_path: &Path,
     execution_stats_path: Option<&Path>,
     output_dir: &Path,
-    predictions: &crate::model::Predictions,
-    evaluation: &crate::model::Evaluation,
-    report: &crate::model::AnalysisReport,
     stats: &PipelineStats,
     options: &PipelineOptions<'_>,
 ) -> Result<()> {
@@ -195,21 +189,21 @@ fn write_pipeline_manifest(
         ManifestOutput {
             label: None,
             path: candidates_path,
-            value: serde_json::to_value(predictions)?,
+            value: Value::Null,
             content_type: ContentType::Unknown,
             content_hash: None,
         },
         ManifestOutput {
             label: None,
             path: evaluation_path,
-            value: serde_json::to_value(evaluation)?,
+            value: Value::Null,
             content_type: ContentType::Unknown,
             content_hash: None,
         },
         ManifestOutput {
             label: None,
             path: analysis_path,
-            value: serde_json::to_value(report)?,
+            value: Value::Null,
             content_type: ContentType::Unknown,
             content_hash: None,
         },

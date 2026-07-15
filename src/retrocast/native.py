@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 from pydantic import PrivateAttr
@@ -96,7 +97,9 @@ class NativeEvaluation(Evaluation):
         self._ensure_materialized()
         if isinstance(other, NativeEvaluation):
             other._ensure_materialized()
-        return super().__eq__(other)
+        if not isinstance(other, Evaluation):
+            return False
+        return self.__dict__ == other.__dict__ and self.__pydantic_extra__ == other.__pydantic_extra__
 
     def __repr__(self) -> str:
         self._ensure_materialized()
@@ -206,6 +209,44 @@ def ingest(
     return NativeCollectedCandidates(handle)
 
 
+def ingest_file(
+    raw_path: Path,
+    adapter: Adapter,
+    task_path: Path,
+    *,
+    mode: AdaptMode = "strict",
+    max_candidates: int | None = None,
+    workers: int = 1,
+) -> CollectedCandidates:
+    """Ingest an artifact without constructing its raw graph in Python."""
+    require_native()
+    assert _native is not None
+    adapter_slug = _adapter_slug(adapter)
+    if adapter_slug is None:
+        raise NotImplementedError("the native engine cannot execute a custom Python adapter")
+    handle = _native.ingest_file_native(
+        raw_path,
+        adapter_slug,
+        task_path,
+        mode=mode,
+        max_candidates=max_candidates,
+        workers=workers,
+    )
+    return NativeCollectedCandidates(handle)
+
+
+def load_predictions_file(path: Path) -> CollectedCandidates:
+    require_native()
+    assert _native is not None
+    return NativeCollectedCandidates(_native.load_predictions_native(path))
+
+
+def load_evaluation_file(path: Path) -> Evaluation:
+    require_native()
+    assert _native is not None
+    return NativeEvaluation.from_native_handle(_native.load_evaluation_native(path))
+
+
 def score(
     predictions: Mapping[str, Sequence[Candidate]],
     task: Task,
@@ -261,6 +302,31 @@ def score(
     return Evaluation.model_validate_json(payload)
 
 
+def score_project_files(
+    predictions_path: Path,
+    task_path: Path,
+    stocks_dir: Path,
+    *,
+    execution_stats_path: Path | None,
+    acceptable_match_level: InChIKeyLevel,
+    acceptable_route_match: AcceptableRouteMatch,
+    workers: int = 1,
+) -> tuple[Evaluation, str, list[Path]]:
+    """Score project artifacts while every corpus-sized value remains in Rust."""
+    require_native()
+    assert _native is not None
+    handle, label, stock_paths = _native.score_project_native(
+        predictions_path,
+        task_path,
+        stocks_dir,
+        execution_stats_path=execution_stats_path,
+        match_level=acceptable_match_level.value,
+        acceptable_route_match=acceptable_route_match.value,
+        workers=workers,
+    )
+    return NativeEvaluation.from_native_handle(handle), label, [Path(path) for path in stock_paths]
+
+
 def analyze(
     evaluation: Evaluation,
     *,
@@ -292,6 +358,75 @@ def analyze(
             workers=workers,
         )
     return AnalysisReport.model_validate_json(payload)
+
+
+def analyze_file(
+    evaluation_path: Path,
+    *,
+    ks: Sequence[int],
+    prefix_depths: Sequence[int],
+    execution_stats_path: Path | None,
+    n_boot: int,
+    seed: int = 42,
+    workers: int = 1,
+) -> AnalysisReport:
+    """Analyze an evaluation artifact without materializing it in Python."""
+    require_native()
+    assert _native is not None
+    payload = _native.analyze_file_json(
+        evaluation_path,
+        list(ks),
+        list(prefix_depths),
+        execution_stats_path=execution_stats_path,
+        n_boot=n_boot,
+        seed=seed,
+        workers=workers,
+    )
+    return AnalysisReport.model_validate_json(payload)
+
+
+def run_pipeline(
+    raw_path: Path,
+    benchmark_path: Path,
+    stock_path: Path,
+    output_dir: Path,
+    *,
+    stock_name: str | None,
+    execution_stats_path: Path | None,
+    adapter: str,
+    workers: int,
+    mode: AdaptMode,
+    max_candidates: int | None,
+    match_level: InChIKeyLevel,
+    acceptable_route_match: AcceptableRouteMatch,
+    ks: Sequence[int],
+    prefix_depths: Sequence[int],
+    n_boot: int,
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Run the file pipeline without transferring corpus-sized values to Python."""
+    require_native()
+    assert _native is not None
+    return json.loads(
+        _native.run_pipeline_json(
+            raw_path,
+            benchmark_path,
+            stock_path,
+            output_dir,
+            stock_name=stock_name,
+            execution_stats_path=execution_stats_path,
+            adapter=adapter,
+            workers=workers,
+            mode=mode,
+            max_candidates=max_candidates,
+            match_level=match_level.value,
+            acceptable_route_match=acceptable_route_match.value,
+            ks=list(ks),
+            prefix_depths=list(prefix_depths),
+            n_boot=n_boot,
+            seed=seed,
+        )
+    )
 
 
 def verify_manifest(

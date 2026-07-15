@@ -6,6 +6,7 @@ import retrocast
 from retrocast import native
 from retrocast.adapters.aizynth import AiZynthFinderAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
+from retrocast.io import load_collected_candidates, load_evaluation, save_collected_candidates, save_evaluation
 from retrocast.metrics.constraints import RequiredLeavesChecker, RouteDepthChecker, StockTerminationChecker
 from retrocast.models.evaluation import AcceptableRouteMatch
 from retrocast.models.route import InChIKeyLevel
@@ -170,3 +171,37 @@ def test_workflow_statistics_preserve_opaque_rust_values(monkeypatch) -> None:
         "n_solv_0": 1,
     }
     assert evaluation.native_handle() is not None
+
+
+def test_file_artifacts_round_trip_without_materializing_native_graphs(tmp_path, monkeypatch) -> None:
+    adapter = AiZynthFinderAdapter()
+    task = _benchmark()
+    predictions_path = tmp_path / "candidates.json.gz"
+    evaluation_path = tmp_path / "evaluation.json.gz"
+
+    predictions = retrocast.ingest_candidates({"ethanol": [_raw_route()]}, adapter, task)
+    save_collected_candidates(predictions, predictions_path)
+    loaded_predictions = load_collected_candidates(predictions_path)
+    assert loaded_predictions.native_handle() is not None
+
+    def reject_materialization(*args, **kwargs):
+        raise AssertionError("file-native artifact was serialized through Python")
+
+    monkeypatch.setattr(type(loaded_predictions), "_ensure_materialized", reject_materialization)
+    stock = {InChIKeyStr(get_inchi_key("C")), InChIKeyStr(get_inchi_key("CC"))}
+    evaluation = retrocast.score(
+        loaded_predictions,
+        task,
+        constraint_checkers=[
+            StockTerminationChecker(stocks={"test-stock": stock}),
+            RequiredLeavesChecker(),
+            RouteDepthChecker(),
+        ],
+        acceptable_match_level=InChIKeyLevel.FULL,
+        acceptable_route_match=AcceptableRouteMatch.PREFIX,
+    )
+    save_evaluation(evaluation, evaluation_path)
+    loaded_evaluation = load_evaluation(evaluation_path)
+    assert loaded_evaluation.native_handle() is not None
+    monkeypatch.setattr(type(loaded_evaluation), "_ensure_materialized", reject_materialization)
+    assert retrocast.analyze(loaded_evaluation, n_boot=10).metrics

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use retrocast_core::{
-    adapt::ingest,
+    adapt::ingest_file,
     adapters,
     analyze::analyze,
     dataset::{
@@ -397,11 +397,16 @@ fn main() -> anyhow::Result<()> {
             match (input, benchmark, output) {
                 (Some(input), Some(benchmark), Some(output)) => {
                     let adapter = adapter.context("file-mode ingest requires --adapter")?;
-                    let raw: Value = read_json(&input)?;
                     let task: Task = read_json(&benchmark)?;
                     let resolved = resolve_adapter(&adapter)?;
-                    let predictions =
-                        ingest(raw, resolved.as_ref(), &task, mode, max_candidates, workers)?;
+                    let predictions = ingest_file(
+                        &input,
+                        resolved.as_ref(),
+                        &task,
+                        mode,
+                        max_candidates,
+                        workers,
+                    )?;
                     write_json(&output, &predictions)?;
                     write_sidecar_manifest(
                         "[cli]ingest",

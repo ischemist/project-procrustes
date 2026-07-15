@@ -26,7 +26,59 @@ pub fn score(
     workers: usize,
 ) -> Result<Evaluation> {
     let runtime_stocks = runtime_stocks(stocks, match_level);
-    let jobs: Vec<_> = task
+    let results = with_pool(workers, || {
+        task.targets
+            .par_iter()
+            .map(|(target_id, target)| {
+                let constraints = task.effective_constraints(target_id);
+                let scored = score_target(
+                    predictions
+                        .get(target_id)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default(),
+                    target,
+                    &constraints,
+                    &runtime_stocks,
+                    match_level,
+                    acceptable_route_match,
+                )?;
+                Ok((
+                    target_id.clone(),
+                    TargetResult {
+                        target: target.clone(),
+                        effective_constraints: constraints,
+                        candidates: scored,
+                        wall_time: execution_stats
+                            .and_then(|stats| stats.wall_time.get(target_id).copied()),
+                        cpu_time: execution_stats
+                            .and_then(|stats| stats.cpu_time.get(target_id).copied()),
+                    },
+                ))
+            })
+            .collect::<Result<Vec<_>>>()
+    })??;
+    Ok(Evaluation {
+        task: task.clone(),
+        tiers: vec![0],
+        metric_label: task.derived_metric_label(),
+        acceptable_match_level: match_level.to_owned(),
+        acceptable_route_match: acceptable_route_match.to_owned(),
+        targets: results.into_iter().collect(),
+        schema_version: Default::default(),
+    })
+}
+
+pub fn score_owned(
+    mut predictions: Predictions,
+    task: Task,
+    stocks: &Stocks,
+    match_level: &str,
+    acceptable_route_match: &str,
+    execution_stats: Option<&ExecutionStats>,
+    workers: usize,
+) -> Result<Evaluation> {
+    let runtime_stocks = runtime_stocks(stocks, match_level);
+    let jobs = task
         .targets
         .iter()
         .map(|(target_id, target)| {
@@ -34,15 +86,15 @@ pub fn score(
                 target_id.clone(),
                 target.clone(),
                 task.effective_constraints(target_id),
-                predictions.get(target_id).cloned().unwrap_or_default(),
+                predictions.remove(target_id).unwrap_or_default(),
             )
         })
-        .collect();
+        .collect::<Vec<_>>();
     let results = with_pool(workers, || {
         jobs.into_par_iter()
             .map(|(target_id, target, constraints, candidates)| {
-                let scored = score_target(
-                    &candidates,
+                let scored = score_target_owned(
+                    candidates,
                     &target,
                     &constraints,
                     &runtime_stocks,
@@ -65,9 +117,9 @@ pub fn score(
             .collect::<Result<Vec<_>>>()
     })??;
     Ok(Evaluation {
-        task: task.clone(),
-        tiers: vec![0],
         metric_label: task.derived_metric_label(),
+        task,
+        tiers: vec![0],
         acceptable_match_level: match_level.to_owned(),
         acceptable_route_match: acceptable_route_match.to_owned(),
         targets: results.into_iter().collect(),
@@ -137,6 +189,85 @@ fn score_target(
             Ok(ScoredCandidate {
                 rank: candidate.rank,
                 route: Some(route.clone()),
+                failure: None,
+                validity: RouteValidity {
+                    tiers: BTreeMap::from([(
+                        0,
+                        TierResult {
+                            status: "pass".to_owned(),
+                            checks: Vec::new(),
+                        },
+                    )]),
+                    reactions: Vec::new(),
+                },
+                constraints: constraint_result,
+                matches_acceptable: matched.is_some(),
+                matched_acceptable_index: matched,
+            })
+        })
+        .collect()
+}
+
+fn score_target_owned(
+    candidates: Vec<Candidate>,
+    target: &Target,
+    constraints: &[Constraint],
+    stocks: &RuntimeStocks,
+    match_level: &str,
+    acceptable_route_match: &str,
+) -> Result<Vec<ScoredCandidate>> {
+    let identities: Vec<_> = target
+        .acceptable_routes
+        .iter()
+        .enumerate()
+        .map(|(index, route)| {
+            (
+                index,
+                route_depth(route),
+                route_signature(route, match_level, None),
+            )
+        })
+        .collect();
+    candidates
+        .into_iter()
+        .map(|candidate| {
+            if let Some(failure) = candidate.failure {
+                let check = CheckResult {
+                    code: failure.code.clone(),
+                    status: "fail".to_owned(),
+                    message: failure.message.clone(),
+                    details: failure.context.clone(),
+                };
+                return Ok(ScoredCandidate {
+                    rank: candidate.rank,
+                    route: None,
+                    failure: Some(failure),
+                    validity: RouteValidity {
+                        tiers: BTreeMap::from([(
+                            0,
+                            TierResult {
+                                status: "fail".to_owned(),
+                                checks: vec![check],
+                            },
+                        )]),
+                        reactions: Vec::new(),
+                    },
+                    constraints: ConstraintResult {
+                        status: "not_evaluated".to_owned(),
+                        checks: Vec::new(),
+                    },
+                    matches_acceptable: false,
+                    matched_acceptable_index: None,
+                });
+            }
+            let route = candidate.route.expect("candidate has route or failure");
+            let constraint_result =
+                check_task_constraints_runtime(&route, constraints, stocks, match_level)?;
+            let matched =
+                acceptable_match(&route, &identities, match_level, acceptable_route_match);
+            Ok(ScoredCandidate {
+                rank: candidate.rank,
+                route: Some(route),
                 failure: None,
                 validity: RouteValidity {
                     tiers: BTreeMap::from([(
@@ -328,4 +459,61 @@ fn acceptable_match(
         })
         .max_by_key(|(_, reference_depth, _)| *reference_depth)
         .map(|value| value.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use serde_json::json;
+
+    use super::{Stocks, score, score_owned};
+    use crate::{adapt::ingest, adapters::AiZynthFinderAdapter, model::Task, route::AdaptMode};
+
+    #[test]
+    fn owned_scoring_matches_the_borrowed_api() {
+        let task: Task = serde_json::from_value(json!({
+            "name": "owned-score-test",
+            "targets": {
+                "ethanol": {
+                    "id": "ethanol",
+                    "smiles": "CCO",
+                    "inchikey": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
+                }
+            }
+        }))
+        .unwrap();
+        let raw = json!({
+            "ethanol": [{
+                "type": "mol",
+                "smiles": "OCC",
+                "children": [{
+                    "type": "reaction",
+                    "smiles": "CCO",
+                    "children": [
+                        {"type": "mol", "smiles": "C"},
+                        {"type": "mol", "smiles": "CC"}
+                    ]
+                }]
+            }]
+        });
+        let predictions = ingest(
+            raw,
+            &AiZynthFinderAdapter,
+            &task,
+            AdaptMode::Strict,
+            None,
+            2,
+        )
+        .unwrap();
+        let stocks: Stocks = BTreeMap::new();
+
+        let borrowed = score(&predictions, &task, &stocks, "full", "prefix", None, 2).unwrap();
+        let owned = score_owned(predictions, task, &stocks, "full", "prefix", None, 2).unwrap();
+
+        assert_eq!(
+            serde_json::to_value(borrowed).unwrap(),
+            serde_json::to_value(owned).unwrap()
+        );
+    }
 }

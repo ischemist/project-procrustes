@@ -12,6 +12,14 @@ Practically speaking, you should treat `2-raw` (or wherever you store the raw pl
 
 For most use cases, this should not be a problem since the full pipeline of ingest, score, and analyze is decently fast. If you are using (or planning to use) RetroCast in production pipelines that will handle large volumes of data, please feel free [to get in touch](ischemist.com/contact).
 
+## v0.8.1 (unreleased)
+
+v0.8.1 repairs corpus ownership across the Python-to-Rust boundary. Project commands and `retrocast pipeline` now pass artifact paths into Rust, which reads compressed inputs, writes native outputs, and consumes predictions into evaluations without constructing parallel Python or JSON graphs. Opaque values loaded through the Python API remain native through save, score, and analysis until their fields are explicitly inspected.
+
+ASKCOS pathway extraction now moves its provider graph once and retains only the nodes referenced by each pathway. This removes a full `uuid2smiles` and `node_dict` clone per candidate. Project-mode ingest, score, and analyze also expose `--workers` consistently.
+
+On the 160-target, 25,762-candidate ASKCOS `mkt-cnv-160` fixture, the 12-worker Python command completed in 19.36 seconds with 555 MiB peak RSS. v0.8.0 required 241.8 seconds and 8.56 GiB on the same machine. The standalone command completed in 19.26 seconds with 524 MiB; the one-worker Python command used 508 MiB. Candidate artifacts are identical across v0.8.0, worker counts, and the Python and standalone front ends.
+
 ## v0.8.0
 
 v0.8.0 replaces the Python execution engine with one Rust core shared by the Python package and a standalone `retrocast` executable.

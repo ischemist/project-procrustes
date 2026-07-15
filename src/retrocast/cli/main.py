@@ -5,9 +5,7 @@ import gzip
 import json
 import logging
 import re
-import time
-from collections.abc import Callable, Iterable, Iterator
-from contextlib import contextmanager
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, cast
 
@@ -23,7 +21,7 @@ from retrocast.adapters.registry import DEPRECATED_ADAPTER_SLUGS, normalize_adap
 from retrocast.chem import get_inchi_key
 from retrocast.cli.compare import handle_pareto_frontier
 from retrocast.cli.manifest import manifest_sidecar_path, write_manifest
-from retrocast.cli.progress import create_cli_progress, estimate_raw_route_entries, quiet_info_logs
+from retrocast.cli.progress import create_cli_progress, quiet_info_logs
 from retrocast.cli.report import create_analysis_table, generate_markdown_report
 from retrocast.datasets import (
     DEFAULT_HOSTED_DATA_BASE_URL,
@@ -41,8 +39,6 @@ from retrocast.io import (
     load_benchmark,
     load_candidates,
     load_collected_candidates,
-    load_evaluation,
-    load_execution_stats,
     load_json_artifact,
     save_analysis_report,
     save_candidates,
@@ -52,7 +48,7 @@ from retrocast.io import (
 from retrocast.io.data import load_stock_file
 from retrocast.metrics.constraints import RequiredLeavesChecker, RouteDepthChecker, StockTerminationChecker
 from retrocast.models.analysis import AnalysisReport
-from retrocast.models.evaluation import AcceptableRouteMatch, Evaluation
+from retrocast.models.evaluation import AcceptableRouteMatch
 from retrocast.models.provenance import VerificationReport
 from retrocast.models.route import InChIKeyLevel
 from retrocast.models.task import (
@@ -60,6 +56,10 @@ from retrocast.models.task import (
     Benchmark,
     StockTerminationConstraint,
 )
+from retrocast.native import analyze_file as native_analyze_file
+from retrocast.native import ingest_file as native_ingest_file
+from retrocast.native import run_pipeline as native_run_pipeline
+from retrocast.native import score_project_files as native_score_project_files
 from retrocast.paths import (
     DEFAULT_DATA_DIR,
     ENV_VAR_NAME,
@@ -71,12 +71,9 @@ from retrocast.paths import (
 )
 from retrocast.typing import InChIKeyStr
 from retrocast.utils.logging import configure_script_logging
-from retrocast.utils.timing import ExecutionStats
 from retrocast.workflow import (
     adapt_candidates,
-    analyze,
     collect_candidates,
-    ingest_candidates,
     score,
 )
 from retrocast.workflow.stats import candidate_statistics, collected_candidate_statistics, evaluation_statistics
@@ -217,8 +214,8 @@ def _build_parser() -> argparse.ArgumentParser:
     score_file.add_argument("--ignore-stereo", action="store_true", help="Use stereo-agnostic stock matching")
     _add_acceptable_route_match_arg(score_file)
 
-    pipeline = subparsers.add_parser("pipeline", help="Run AiZynthFinder ingest, score, and analysis in one process")
-    pipeline.add_argument("--raw", required=True, type=Path, help="AiZynthFinder results file or raw run directory")
+    pipeline = subparsers.add_parser("pipeline", help="Run ingest, score, and analysis in one native process")
+    pipeline.add_argument("--raw", required=True, type=Path, help="Planner results file or raw run directory")
     pipeline.add_argument("--benchmark", required=True, type=Path)
     pipeline.add_argument("--stock", required=True, type=Path)
     pipeline.add_argument("--execution-stats", type=Path)
@@ -249,11 +246,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--max-candidates", type=_non_negative_int, help="Ingest only the first N raw candidate slots per target"
     )
     ingest.add_argument("--no-progress", action="store_true", help="Disable progress bars during ingestion")
+    ingest.add_argument("--workers", type=_positive_int, default=1)
 
     score_parser = subparsers.add_parser("score", help="Score v2 processed candidates")
     _add_model_dataset_args(score_parser)
     score_parser.add_argument("--ignore-stereo", action="store_true", help="Use stereo-agnostic stock matching")
     _add_acceptable_route_match_arg(score_parser)
+    score_parser.add_argument("--workers", type=_positive_int, default=1)
 
     analyze_parser = subparsers.add_parser("analyze", help="Analyze v2 evaluation artifacts")
     _add_model_dataset_args(analyze_parser)
@@ -261,6 +260,7 @@ def _build_parser() -> argparse.ArgumentParser:
     analyze_parser.add_argument("--top-k", nargs="+", type=int, default=[1, 3, 5, 10, 20, 50, 100])
     analyze_parser.add_argument("--prefix-depth", nargs="+", type=int, default=[1, 2, 3])
     analyze_parser.add_argument("--n-boot", type=int, default=10000)
+    analyze_parser.add_argument("--workers", type=_positive_int, default=1)
 
     verify_parser = subparsers.add_parser("verify", help="Verify artifact manifests and lineage")
     verify_target = verify_parser.add_mutually_exclusive_group(required=True)
@@ -457,110 +457,27 @@ def handle_score_file(args: argparse.Namespace) -> None:
 
 
 def handle_pipeline(args: argparse.Namespace) -> None:
-    """Run the three schema-v2 stages without interpreter startup between them."""
-    started = time.perf_counter()
-    raw_path = _resolve_pipeline_raw_path(args.raw)
-    raw_payload = load_json_artifact(raw_path)
-    benchmark = load_benchmark(args.benchmark)
+    """Run the complete pipeline in the native engine."""
     stock_name = validate_filename(args.stock_name or _stock_name_from_path(args.stock), param_name="stock-name")
-    task = _task_with_stock(benchmark, stock_name)
-    adapter = get_adapter(args.adapter)
-    execution_stats = load_execution_stats(args.execution_stats) if args.execution_stats else None
     match_level = InChIKeyLevel.NO_STEREO if args.ignore_stereo else InChIKeyLevel.FULL
-    stock = _load_stock_path(args.stock)
-    checkers = [
-        StockTerminationChecker(stocks={stock_name: stock}, match_level=match_level),
-        RequiredLeavesChecker(match_level=match_level),
-        RouteDepthChecker(),
-    ]
-
-    ingest_started = time.perf_counter()
-    candidates = ingest_candidates(
-        raw_payload,
-        adapter,
-        task,
+    stats = native_run_pipeline(
+        args.raw,
+        args.benchmark,
+        args.stock,
+        args.output_dir,
+        stock_name=stock_name,
+        execution_stats_path=args.execution_stats,
+        adapter=args.adapter,
+        workers=args.workers,
         mode=args.mode,
         max_candidates=args.max_candidates,
-        workers=args.workers,
-    )
-    ingest_seconds = time.perf_counter() - ingest_started
-
-    score_started = time.perf_counter()
-    evaluation = score(
-        candidates,
-        task,
-        constraint_checkers=checkers,
-        acceptable_match_level=match_level,
+        match_level=match_level,
         acceptable_route_match=AcceptableRouteMatch(args.acceptable_route_match),
-        execution_stats=execution_stats,
-        workers=args.workers,
-    )
-    score_seconds = time.perf_counter() - score_started
-
-    analyze_started = time.perf_counter()
-    report = analyze(
-        evaluation,
         ks=args.top_k,
         prefix_depths=args.prefix_depth,
         n_boot=args.n_boot,
-        workers=args.workers,
-    )
-    analyze_seconds = time.perf_counter() - analyze_started
-
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    save_collected_candidates(candidates, args.output_dir / "candidates.json.gz")
-    save_evaluation(evaluation, args.output_dir / "evaluation.json.gz")
-    save_analysis_report(report, args.output_dir / "analysis.json.gz")
-    total_seconds = time.perf_counter() - started
-    candidate_count = sum(len(target_candidates) for target_candidates in candidates.values())
-    stats = {
-        "engine": "rust",
-        "workers": args.workers,
-        "targets": len(task.targets),
-        "candidates": candidate_count,
-        "ingest_seconds": ingest_seconds,
-        "score_seconds": score_seconds,
-        "analyze_seconds": analyze_seconds,
-        "total_seconds": total_seconds,
-        "targets_per_second": len(task.targets) / total_seconds,
-        "candidates_per_second": candidate_count / total_seconds,
-    }
-    stats_path = args.output_dir / "pipeline-stats.json"
-    stats_path.write_text(json.dumps(stats, indent=2) + "\n", encoding="utf-8")
-    sources = [raw_path, args.benchmark, args.stock]
-    if args.execution_stats:
-        sources.append(args.execution_stats)
-    write_manifest(
-        args.output_dir / "manifest.json",
-        action="pipeline:v2",
-        sources=sources,
-        outputs=[
-            args.output_dir / "candidates.json.gz",
-            args.output_dir / "evaluation.json.gz",
-            args.output_dir / "analysis.json.gz",
-            stats_path,
-        ],
-        root_dir=args.output_dir.resolve(),
-        parameters={
-            "adapter": normalize_adapter_slug(args.adapter),
-            "mode": args.mode,
-            "workers": args.workers,
-            "match_level": match_level.value,
-            "acceptable_route_match": args.acceptable_route_match,
-            "n_boot": args.n_boot,
-            "seed": 42,
-        },
-        statistics={"targets": len(task.targets), "candidates": candidate_count},
     )
     print(json.dumps(stats, indent=2))
-
-
-def _resolve_pipeline_raw_path(path: Path) -> Path:
-    if not path.is_dir():
-        return path
-    manifest = path / "manifest.json"
-    filename = _manifest_directive(manifest, "raw_results_filename") if manifest.exists() else None
-    return path / (filename or "results.json.gz")
 
 
 def _stock_name_from_path(path: Path) -> str:
@@ -620,13 +537,13 @@ def handle_ingest(args: argparse.Namespace, config: dict[str, Any]) -> None:
             task_id = progress.add_task("Ingesting model/dataset jobs", total=total_jobs)
             for model_name in models:
                 for benchmark_name in benchmarks:
-                    _ingest_one(model_name, benchmark_name, paths, args, show_route_progress=False)
+                    _ingest_one(model_name, benchmark_name, paths, args)
                     progress.advance(task_id)
         return
 
     for model_name in models:
         for benchmark_name in benchmarks:
-            _ingest_one(model_name, benchmark_name, paths, args, show_route_progress=show_progress)
+            _ingest_one(model_name, benchmark_name, paths, args)
 
 
 def _ingest_one(
@@ -634,8 +551,6 @@ def _ingest_one(
     benchmark_name: str,
     paths: dict[str, Path],
     args: argparse.Namespace,
-    *,
-    show_route_progress: bool,
 ) -> None:
     raw_dir = paths["raw"] / model_name / benchmark_name
     if not raw_dir.exists():
@@ -652,31 +567,17 @@ def _ingest_one(
         return
 
     task_path = paths["benchmarks"] / f"{benchmark_name}.json.gz"
-    task = load_benchmark(task_path)
-    raw_payload = load_json_artifact(raw_path)
     adapter = get_adapter(adapter_name)
     output_dir = paths["processed"] / benchmark_name / model_name
     output_dir.mkdir(parents=True, exist_ok=True)
-    progress_total = estimate_raw_route_entries(
-        raw_payload,
-        input_kind="target-keyed-provider-output",
-        benchmark_targets=task.targets,
-        max_entries_per_target=args.max_candidates,
+    collected = native_ingest_file(
+        raw_path,
+        adapter,
+        task_path,
+        mode=args.mode,
+        max_candidates=args.max_candidates,
+        workers=args.workers,
     )
-
-    with _route_progress(
-        enabled=show_route_progress,
-        description=f"Ingesting {model_name}/{benchmark_name}",
-        total=progress_total,
-    ) as advance_progress:
-        collected = ingest_candidates(
-            raw_payload=raw_payload,
-            adapter=adapter,
-            task=task,
-            mode=args.mode,
-            max_candidates=args.max_candidates,
-            progress_callback=advance_progress,
-        )
 
     output_path = output_dir / "candidates.json.gz"
     save_collected_candidates(collected, output_path)
@@ -694,6 +595,7 @@ def _ingest_one(
             "adapter": normalize_adapter_slug(adapter_name),
             "mode": args.mode,
             "max_candidates": args.max_candidates,
+            "workers": args.workers,
         },
         statistics=stats,
     )
@@ -714,27 +616,21 @@ def _score_one(model_name: str, benchmark_name: str, paths: dict[str, Path], arg
         logger.warning("Skipping %s/%s: no processed candidates", model_name, benchmark_name)
         return
 
-    predictions = load_collected_candidates(candidates_path)
-    task = load_benchmark(task_path)
-    stock_registry, stock_paths, output_label = _load_stock_registry(task, paths)
     match_level = InChIKeyLevel.NO_STEREO if args.ignore_stereo else InChIKeyLevel.FULL
-    evaluation = score(
-        predictions=predictions,
-        task=task,
-        constraint_checkers=[
-            StockTerminationChecker(stocks=stock_registry, match_level=match_level),
-            RequiredLeavesChecker(match_level=match_level),
-            RouteDepthChecker(),
-        ],
+    execution_stats_path = _execution_stats_path(paths, model_name, benchmark_name)
+    evaluation, output_label, stock_paths = native_score_project_files(
+        candidates_path,
+        task_path,
+        paths["stocks"],
+        execution_stats_path=execution_stats_path if execution_stats_path.exists() else None,
         acceptable_match_level=match_level,
         acceptable_route_match=AcceptableRouteMatch(args.acceptable_route_match),
-        execution_stats=_load_execution_stats_if_present(_execution_stats_path(paths, model_name, benchmark_name)),
+        workers=args.workers,
     )
 
     output_dir = paths["scored"] / benchmark_name / model_name / output_label
     output_path = output_dir / "evaluation.json.gz"
     save_evaluation(evaluation, output_path)
-    execution_stats_path = _execution_stats_path(paths, model_name, benchmark_name)
     sources = [task_path, candidates_path, *stock_paths]
     if execution_stats_path.exists():
         sources.append(execution_stats_path)
@@ -750,6 +646,7 @@ def _score_one(model_name: str, benchmark_name: str, paths: dict[str, Path], arg
             "stock": output_label,
             "ignore_stereo": args.ignore_stereo,
             "acceptable_route_match": args.acceptable_route_match,
+            "workers": args.workers,
         },
         statistics=evaluation_statistics(evaluation),
     )
@@ -803,16 +700,14 @@ def _analyze_one(
         logger.warning("Skipping missing evaluation %s", evaluation_path)
         return None
 
-    evaluation = load_evaluation(evaluation_path)
     execution_stats_path = _execution_stats_path(paths, model_name, benchmark_name)
-    execution_stats = _load_execution_stats_if_present(execution_stats_path)
-    if execution_stats is not None:
-        evaluation = _evaluation_with_execution_stats(evaluation, execution_stats)
-    report = analyze(
-        evaluation,
+    report = native_analyze_file(
+        evaluation_path,
         ks=args.top_k,
         prefix_depths=args.prefix_depth,
+        execution_stats_path=execution_stats_path if execution_stats_path.exists() else None,
         n_boot=args.n_boot,
+        workers=args.workers,
     )
     output_dir = paths["results"] / benchmark_name / model_name / stock_name
     analysis_path = output_dir / "analysis.json.gz"
@@ -823,7 +718,7 @@ def _analyze_one(
         encoding="utf-8",
     )
     sources = [evaluation_path]
-    if execution_stats is not None:
+    if execution_stats_path.exists():
         sources.append(execution_stats_path)
     write_manifest(
         output_dir / "manifest.json",
@@ -838,6 +733,7 @@ def _analyze_one(
             "top_k": args.top_k,
             "prefix_depth": args.prefix_depth,
             "n_boot": args.n_boot,
+            "workers": args.workers,
         },
         statistics={"n_metrics": len(report.metrics), "n_strata": len(report.by_stratum)},
     )
@@ -846,32 +742,6 @@ def _analyze_one(
 
 def _execution_stats_path(paths: dict[str, Path], model_name: str, benchmark_name: str) -> Path:
     return paths["raw"] / model_name / benchmark_name / "execution_stats.json.gz"
-
-
-def _load_execution_stats_if_present(path: Path) -> ExecutionStats | None:
-    if not path.exists():
-        return None
-    return load_execution_stats(path)
-
-
-def _evaluation_with_execution_stats(evaluation: Evaluation, execution_stats: ExecutionStats) -> Evaluation:
-    targets = {}
-    changed = False
-    for target_id, target_result in evaluation.targets.items():
-        wall_time = target_result.wall_time
-        cpu_time = target_result.cpu_time
-        if wall_time is None:
-            wall_time = execution_stats.wall_time.get(target_id)
-        if cpu_time is None:
-            cpu_time = execution_stats.cpu_time.get(target_id)
-        if wall_time == target_result.wall_time and cpu_time == target_result.cpu_time:
-            targets[target_id] = target_result
-            continue
-        targets[target_id] = target_result.model_copy(update={"wall_time": wall_time, "cpu_time": cpu_time})
-        changed = True
-    if not changed:
-        return evaluation
-    return evaluation.model_copy(update={"targets": targets})
 
 
 def handle_config(config: dict[str, Any]) -> None:
@@ -1098,46 +968,6 @@ def _manifest_directive(path: Path, key: str) -> str | None:
         return None
     value = payload.get("directives", {}).get(key)
     return str(value) if value is not None else None
-
-
-def _load_stock_registry(
-    task: Benchmark,
-    paths: dict[str, Path],
-) -> tuple[dict[str, set[InChIKeyStr]], list[Path], str]:
-    stock_names = _effective_stock_names(task)
-    stock_paths = []
-    stock_registry = {}
-    for stock_name in sorted(stock_names):
-        stock_path = paths["stocks"] / f"{stock_name}.csv.gz"
-        stock_registry[stock_name] = set(load_stock_file(stock_path, return_as="inchikey"))
-        stock_paths.append(stock_path)
-
-    return stock_registry, stock_paths, task.derived_metric_label()
-
-
-def _effective_stock_names(task: Benchmark) -> set[str]:
-    stock_names = set()
-    for target_id in task.targets:
-        for constraint in task.effective_constraints(target_id):
-            if isinstance(constraint, StockTerminationConstraint):
-                stock_names.add(constraint.stock)
-    return stock_names
-
-
-@contextmanager
-def _route_progress(
-    *,
-    enabled: bool,
-    description: str,
-    total: int | None,
-) -> Iterator[Callable[[], None] | None]:
-    if not enabled:
-        yield None
-        return
-
-    with create_cli_progress(console=console, unit="routes") as progress, quiet_info_logs("retrocast"):
-        task_id = progress.add_task(description, total=total)
-        yield lambda: progress.advance(task_id)
 
 
 if __name__ == "__main__":
