@@ -9,7 +9,6 @@ dependencies = [
   "packaging>=25.0",
   "pydantic",
   "pyyaml>=6.0.3",
-  "rdkit",
   "rich>=14.2.0",
   "tqdm>=4.67.1",
 ]
@@ -29,12 +28,14 @@ viz = ["ischemist>=0.2.0", "kaleido>=1.1.0", "plotly>=6.3.0"]
 dev = [
   "hypothesis>=6.148.2",
   "ipykernel>=6.29.5",
+  "maturin>=1.10.2",
   "pandas<2.2",
   "pytest",
   "pytest-cov",
   "pytest-mock>=3.14.1",
   "pytest-sugar>=1.1.1",
   "requests>=2.32.5",
+  "psutil>=7.2.1",
   "rich>=13.9.4",
   "ruff",
   "ty>=0.0.1a24",
@@ -44,8 +45,8 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling>=1.27.0", "hatch-vcs>=0.5.0"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.10.2,<2"]
+build-backend = "maturin"
 
 [tool.coverage.run]
 omit = [
@@ -90,22 +91,14 @@ lint.select = [
 ]
 lint.ignore = ["E501", "SIM108"]
 
-[tool.hatch.version]
-source = "vcs"
-
-[tool.hatch.version.raw-options]
-version_scheme = "guess-next-dev"
-local_scheme = "no-local-version"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/retrocast"]
-
-[tool.hatch.build.targets.sdist]
+[tool.maturin]
+bindings = "pyo3"
+manifest-path = "retrocast-rs/crates/retrocast-python/Cargo.toml"
+module-name = "retrocast._native"
+python-source = "src"
 include = [
-  "/LICENSE",
-  "/README.md",
-  "/pyproject.toml",
-  "/src/retrocast",
+  { path = "LICENSE", format = ["sdist", "wheel"] },
+  { path = "retrocast-rs/**", format = "sdist" },
 ]
 
 [tool.ty.src]

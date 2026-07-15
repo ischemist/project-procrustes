@@ -20,6 +20,7 @@ The field of retrosynthesis is fragmented.
 
 - **Universal Adapters:** "Air-gapped" translation layers for _AiZynthFinder_, \*Retro\**, *DirectMultiStep*, *SynPlanner*, *Syntheseus*, *ASKCOS*, *RetroChimera*, *DreamRetro*, *MultiStepTTL*, *SynLlama*, and *PaRoutes\*.
 - **Canonical Schema:** All routes are cast into a strict schema-2 `Molecule` / `Reaction` tree.
+- **Rust Core:** Every built-in planner adapter, ingest, scoring, and analysis runs in Rust, with canonical SMILES, InChIKeys, and molecular descriptors calculated through RDKit C++.
 - **Curated Benchmarks:** Includes the **Reference Series** (for algorithm comparison) and **Market Series** (for practical utility), stratified by route length and topology to eliminate statistical noise.
 - **Rigorous Statistics:** Built-in bootstrapping (95% CI), pairwise tournaments, and probabilistic ranking. No more "Model A is 0.1% better than Model B" without significance testing.
 - **Reproducibility:** Every artifact is tracked via cryptographic manifests (`SHA256`).
@@ -28,15 +29,17 @@ The field of retrosynthesis is fragmented.
 
 ## Installation
 
-We recommend using [uv](https://github.com/astral-sh/uv) for fast, reliable dependency management.
+The Python package includes the native engine and its RDKit C++ libraries; it does not install Python RDKit. It is the right installation when you want both `import retrocast` and the compatibility CLI:
 
 ```bash
-# Install as a standalone tool
+# Install the Python package as a command-line tool
 uv tool install retrocast
 
-# Or add to your project
+# Or add the importable library to a project
 uv add retrocast
 ```
+
+The standalone Rust executable is published separately on the [GitHub Releases page](https://github.com/ischemist/project-procrustes/releases). Download the archive for `linux-x86_64`, `macos-arm64`, `macos-x86_64`, or `windows-x86_64`; each archive contains `retrocast` and the RDKit libraries it was built and smoke-tested with. It does not require Python, Conda, Rust, or a separately installed RDKit.
 
 Markdown docs are formatted with `oxfmt` and kept unwrapped (`proseWrap: "never"`). Use `pnpm docs:fmt` to normalize docs formatting or `pnpm docs:fmt:check` to verify it in review/CI.
 
@@ -139,6 +142,18 @@ retrocast score --model dms-explorer --dataset ref-lin-600
 retrocast analyze --model dms-explorer --dataset ref-lin-600
 ```
 
+The all-in-one command keeps Rust-owned routes in memory between stages and uses one bounded worker pool:
+
+```bash
+retrocast pipeline \
+  --raw data/retrocast/2-raw/aizynthfinder-run/mkt-cnv-160 \
+  --adapter aizynthfinder \
+  --benchmark data/retrocast/1-benchmarks/definitions/mkt-cnv-160.json.gz \
+  --stock data/retrocast/1-benchmarks/stocks/buyables-stock.csv.gz \
+  --output-dir native-results \
+  --workers 12
+```
+
 **Output:** A schema-v2 analysis report in `data/retrocast/5-results/`.
 
 ---
@@ -172,8 +187,10 @@ _Target Audience: Computational Chemists_ Designed to assess practical utility. 
 
 RetroCast is also a library. You can use it to integrate standardization directly into your training or inference loops.
 
+`adapt`, `ingest_candidates`, `score`, and `analyze` use the same Rust core as the standalone `retrocast` executable for every built-in adapter. There is no Python/Rust engine selector: Python is an interface to the same implementation.
+
 ```python
-from retrocast import adapt_route
+from retrocast import adapt
 from retrocast.adapters import DirectMultiStepAdapter
 
 # Your model's raw output (any supported format)
@@ -184,7 +201,8 @@ raw_output = {
 
 # Cast to the canonical Route object
 adapter = DirectMultiStepAdapter()
-route = adapt_route(raw_output, adapter)
+candidate = adapt([raw_output], adapter)[0]
+route = candidate.route
 
 if route is None:
     raise ValueError("Could not adapt route")

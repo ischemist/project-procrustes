@@ -120,6 +120,40 @@ def test_v2_list_adapters_cli_reports_canonical_names_and_aliases(monkeypatch, c
     assert "retro-star -> retrostar" in output
 
 
+def test_pipeline_cli_writes_all_schema_v2_artifacts(tmp_path, monkeypatch, capsys) -> None:
+    benchmark_path = tmp_path / "benchmark.json.gz"
+    raw_path = tmp_path / "results.json.gz"
+    stock_path = tmp_path / "test-stock.csv.gz"
+    output_dir = tmp_path / "output"
+    save_benchmark(benchmark(), benchmark_path)
+    save_json_gz({"ethanol": [raw_route()]}, raw_path)
+    write_stock(stock_path)
+
+    run_cli(
+        monkeypatch,
+        "pipeline",
+        "--raw",
+        str(raw_path),
+        "--benchmark",
+        str(benchmark_path),
+        "--stock",
+        str(stock_path),
+        "--output-dir",
+        str(output_dir),
+        "--n-boot",
+        "10",
+    )
+
+    assert len(load_collected_candidates(output_dir / "candidates.json.gz")["ethanol"]) == 1
+    assert "ethanol" in load_evaluation(output_dir / "evaluation.json.gz").targets
+    assert load_analysis_report(output_dir / "analysis.json.gz").bootstrap_resamples == 10
+    stats = json.loads((output_dir / "pipeline-stats.json").read_text(encoding="utf-8"))
+    assert stats["targets"] == 1
+    assert stats["candidates"] == 1
+    assert stats["engine"] == "rust"
+    assert '"targets": 1' in capsys.readouterr().out
+
+
 def test_get_data_cli_dry_run_lists_matching_files(tmp_path, monkeypatch, capsys) -> None:
     remote_root = tmp_path / "remote"
     hosted_file = remote_root / "1-benchmarks" / "definitions" / "small.json.gz"

@@ -21,6 +21,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Install RDKit C++ build dependencies
+        run: sudo apt-get update && sudo apt-get install -y librdkit-dev libboost-dev
+
+      - name: Configure RDKit C++ build
+        run: |
+          echo "RDKIT_ROOT=/usr" >> "$GITHUB_ENV"
+          echo "RDKIT_INCLUDE_DIR=/usr/include/rdkit" >> "$GITHUB_ENV"
+          echo "RDKIT_LIB_DIR=/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
+          echo "BOOST_ROOT=/usr" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+
       - name: Set up Python 3.13
         uses: actions/setup-python@v6
         with:
@@ -49,6 +61,9 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --extra viz
+
+      - name: Test Rust workspace
+        run: cargo test --manifest-path retrocast-rs/Cargo.toml --workspace --all-targets --locked
 
       - name: Run tests
         run: uv run pytest -v

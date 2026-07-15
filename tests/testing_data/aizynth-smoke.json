@@ -1,0 +1,16 @@
+[
+  {
+    "type": "mol",
+    "smiles": "CCO",
+    "children": [
+      {
+        "type": "reaction",
+        "smiles": "CCO>>C.O",
+        "children": [
+          { "type": "mol", "smiles": "C", "in_stock": true },
+          { "type": "mol", "smiles": "O", "in_stock": true }
+        ]
+      }
+    ]
+  }
+]

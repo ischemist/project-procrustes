@@ -5,6 +5,7 @@ import gzip
 import json
 import logging
 import re
+import time
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -113,6 +114,8 @@ def main() -> None:
             handle_get_data(args)
         elif args.command == "get-training-data":
             handle_get_training_data(args)
+        elif args.command == "pipeline":
+            handle_pipeline(args)
         else:
             config = _load_config(args.config)
             config_data_dir = config.get("data_dir")
@@ -214,6 +217,23 @@ def _build_parser() -> argparse.ArgumentParser:
     score_file.add_argument("--ignore-stereo", action="store_true", help="Use stereo-agnostic stock matching")
     _add_acceptable_route_match_arg(score_file)
 
+    pipeline = subparsers.add_parser("pipeline", help="Run AiZynthFinder ingest, score, and analysis in one process")
+    pipeline.add_argument("--raw", required=True, type=Path, help="AiZynthFinder results file or raw run directory")
+    pipeline.add_argument("--benchmark", required=True, type=Path)
+    pipeline.add_argument("--stock", required=True, type=Path)
+    pipeline.add_argument("--execution-stats", type=Path)
+    pipeline.add_argument("--output-dir", required=True, type=Path)
+    pipeline.add_argument("--adapter", default="aizynthfinder")
+    pipeline.add_argument("--stock-name", help="Constraint stock name; defaults to the stock filename")
+    pipeline.add_argument("--workers", type=_positive_int, default=1)
+    pipeline.add_argument("--mode", choices=["strict", "prune"], default="strict")
+    pipeline.add_argument("--max-candidates", type=_non_negative_int)
+    pipeline.add_argument("--ignore-stereo", action="store_true")
+    pipeline.add_argument("--top-k", nargs="+", type=int, default=[1, 3, 5, 10, 20, 50, 100])
+    pipeline.add_argument("--prefix-depth", nargs="+", type=int, default=[1, 2, 3])
+    pipeline.add_argument("--n-boot", type=_non_negative_int, default=10000)
+    _add_acceptable_route_match_arg(pipeline)
+
     compare_parser = subparsers.add_parser("compare", help="Compare schema v2 analysis reports")
     compare_subparsers = compare_parser.add_subparsers(dest="compare_command", required=True)
     pareto = compare_subparsers.add_parser("pareto-frontier", help="Plot metric against configured cost or time")
@@ -256,6 +276,13 @@ def _non_negative_int(value: str) -> int:
     parsed = int(value)
     if parsed < 0:
         raise argparse.ArgumentTypeError("must be non-negative")
+    return parsed
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be positive")
     return parsed
 
 
@@ -427,6 +454,113 @@ def handle_score_file(args: argparse.Namespace) -> None:
         statistics=evaluation_statistics(evaluation),
     )
     logger.info("Scored collected candidates to %s", args.output)
+
+
+def handle_pipeline(args: argparse.Namespace) -> None:
+    """Run the three schema-v2 stages without interpreter startup between them."""
+    started = time.perf_counter()
+    raw_path = _resolve_pipeline_raw_path(args.raw)
+    raw_payload = load_json_artifact(raw_path)
+    benchmark = load_benchmark(args.benchmark)
+    stock_name = validate_filename(args.stock_name or _stock_name_from_path(args.stock), param_name="stock-name")
+    task = _task_with_stock(benchmark, stock_name)
+    adapter = get_adapter(args.adapter)
+    execution_stats = load_execution_stats(args.execution_stats) if args.execution_stats else None
+    match_level = InChIKeyLevel.NO_STEREO if args.ignore_stereo else InChIKeyLevel.FULL
+    stock = _load_stock_path(args.stock)
+    checkers = [
+        StockTerminationChecker(stocks={stock_name: stock}, match_level=match_level),
+        RequiredLeavesChecker(match_level=match_level),
+        RouteDepthChecker(),
+    ]
+
+    ingest_started = time.perf_counter()
+    candidates = ingest_candidates(
+        raw_payload,
+        adapter,
+        task,
+        mode=args.mode,
+        max_candidates=args.max_candidates,
+        workers=args.workers,
+    )
+    ingest_seconds = time.perf_counter() - ingest_started
+
+    score_started = time.perf_counter()
+    evaluation = score(
+        candidates,
+        task,
+        constraint_checkers=checkers,
+        acceptable_match_level=match_level,
+        acceptable_route_match=AcceptableRouteMatch(args.acceptable_route_match),
+        execution_stats=execution_stats,
+        workers=args.workers,
+    )
+    score_seconds = time.perf_counter() - score_started
+
+    analyze_started = time.perf_counter()
+    report = analyze(
+        evaluation,
+        ks=args.top_k,
+        prefix_depths=args.prefix_depth,
+        n_boot=args.n_boot,
+        workers=args.workers,
+    )
+    analyze_seconds = time.perf_counter() - analyze_started
+
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    save_collected_candidates(candidates, args.output_dir / "candidates.json.gz")
+    save_evaluation(evaluation, args.output_dir / "evaluation.json.gz")
+    save_analysis_report(report, args.output_dir / "analysis.json.gz")
+    total_seconds = time.perf_counter() - started
+    candidate_count = sum(len(target_candidates) for target_candidates in candidates.values())
+    stats = {
+        "engine": "rust",
+        "workers": args.workers,
+        "targets": len(task.targets),
+        "candidates": candidate_count,
+        "ingest_seconds": ingest_seconds,
+        "score_seconds": score_seconds,
+        "analyze_seconds": analyze_seconds,
+        "total_seconds": total_seconds,
+        "targets_per_second": len(task.targets) / total_seconds,
+        "candidates_per_second": candidate_count / total_seconds,
+    }
+    stats_path = args.output_dir / "pipeline-stats.json"
+    stats_path.write_text(json.dumps(stats, indent=2) + "\n", encoding="utf-8")
+    sources = [raw_path, args.benchmark, args.stock]
+    if args.execution_stats:
+        sources.append(args.execution_stats)
+    write_manifest(
+        args.output_dir / "manifest.json",
+        action="pipeline:v2",
+        sources=sources,
+        outputs=[
+            args.output_dir / "candidates.json.gz",
+            args.output_dir / "evaluation.json.gz",
+            args.output_dir / "analysis.json.gz",
+            stats_path,
+        ],
+        root_dir=args.output_dir.resolve(),
+        parameters={
+            "adapter": normalize_adapter_slug(args.adapter),
+            "mode": args.mode,
+            "workers": args.workers,
+            "match_level": match_level.value,
+            "acceptable_route_match": args.acceptable_route_match,
+            "n_boot": args.n_boot,
+            "seed": 42,
+        },
+        statistics={"targets": len(task.targets), "candidates": candidate_count},
+    )
+    print(json.dumps(stats, indent=2))
+
+
+def _resolve_pipeline_raw_path(path: Path) -> Path:
+    if not path.is_dir():
+        return path
+    manifest = path / "manifest.json"
+    filename = _manifest_directive(manifest, "raw_results_filename") if manifest.exists() else None
+    return path / (filename or "results.json.gz")
 
 
 def _stock_name_from_path(path: Path) -> str:

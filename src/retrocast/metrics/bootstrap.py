@@ -1,18 +1,19 @@
-from __future__ import annotations
-
+import json
 from collections import defaultdict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
-import numpy as np
-import numpy.typing as npt
-
 from retrocast.models.analysis import MetricSummary, ReliabilityFlag
-from retrocast.models.evaluation import TargetResult, Tier
+from retrocast.models.evaluation import TargetResult
 
 T = TypeVar("T")
-BOOTSTRAP_CHUNK_SIZE = 1000
+
+
+class BootstrapDistribution(list[float]):
+    @property
+    def shape(self) -> tuple[int]:
+        return (len(self),)
 
 
 @dataclass(frozen=True)
@@ -23,18 +24,9 @@ class StratifiedMetricSummary:
 
 
 def check_reliability(n: int, p: float) -> ReliabilityFlag:
-    if n < 30:
-        return ReliabilityFlag(code="LOW_N", message=f"Small sample size (N={n} < 30). CIs may be unstable.")
+    from retrocast import _native
 
-    successes = n * p
-    failures = n * (1 - p)
-    if successes < 5 or failures < 5:
-        return ReliabilityFlag(
-            code="EXTREME_P",
-            message=f"Extreme value (p={p:.1%}) for N={n}. Boundary effects likely.",
-        )
-
-    return ReliabilityFlag(code="OK", message="Reliable.")
+    return ReliabilityFlag.model_validate_json(_native.reliability_flag_json(n, p))
 
 
 def summarize_values(
@@ -45,22 +37,16 @@ def summarize_values(
     alpha: float = 0.05,
     reliability: bool = True,
 ) -> MetricSummary:
-    data: npt.NDArray[np.float64] = np.array(values, dtype=np.float64)
-    if len(data) == 0:
-        return MetricSummary(
-            value=0.0,
-            count=0,
-            reliability=ReliabilityFlag(code="LOW_N", message="No data.") if reliability else None,
-        )
+    from retrocast import _native
 
-    distribution = _bootstrap_mean(data, n_boot=n_boot, seed=seed)
-    value = float(np.mean(data))
-    return MetricSummary(
-        value=value,
-        count=len(data),
-        ci_low=float(np.percentile(distribution, 100 * alpha / 2)),
-        ci_high=float(np.percentile(distribution, 100 * (1 - alpha / 2))),
-        reliability=check_reliability(len(data), value) if reliability else None,
+    return MetricSummary.model_validate_json(
+        _native.summarize_values_json(
+            json.dumps(list(values), separators=(",", ":")),
+            n_boot,
+            seed,
+            alpha=alpha,
+            reliability=reliability,
+        )
     )
 
 
@@ -87,14 +73,16 @@ def compute_metric_with_ci(
 
 
 def get_is_solvable(target: TargetResult) -> float:
-    return 1.0 if any(candidate.satisfies_solv(Tier.ZERO) for candidate in target.candidates) else 0.0
+    from retrocast import _native
+
+    return _native.target_metric_json(target.model_dump_json(exclude_none=True), "is_solvable")
 
 
 def make_get_top_k(k: int) -> Callable[[TargetResult], float]:
     def get_top_k(target: TargetResult) -> float:
-        ranked = sorted(target.candidates, key=lambda candidate: candidate.rank)
-        candidates = [candidate for candidate in ranked if candidate.satisfies_task()]
-        return 1.0 if any(candidate.matches_acceptable for candidate in candidates[:k]) else 0.0
+        from retrocast import _native
+
+        return _native.target_metric_json(target.model_dump_json(exclude_none=True), "top_k", k=k)
 
     return get_top_k
 
@@ -105,22 +93,13 @@ def get_bootstrap_distribution(
     *,
     n_boot: int = 10000,
     seed: int = 42,
-) -> npt.NDArray[np.float64]:
-    values: npt.NDArray[np.float64] = np.array([extractor(target) for target in targets], dtype=np.float64)
-    if len(values) == 0:
-        return np.zeros(n_boot, dtype=np.float64)
+) -> BootstrapDistribution:
+    from retrocast import _native
 
-    return _bootstrap_mean(values, n_boot=n_boot, seed=seed)
-
-
-def _bootstrap_mean(values: npt.NDArray[np.float64], *, n_boot: int, seed: int) -> npt.NDArray[np.float64]:
-    if len(values) == 0:
-        return np.zeros(n_boot, dtype=np.float64)
-
-    rng = np.random.default_rng(seed)
-    means = np.empty(n_boot, dtype=np.float64)
-    for start in range(0, n_boot, BOOTSTRAP_CHUNK_SIZE):
-        stop = min(start + BOOTSTRAP_CHUNK_SIZE, n_boot)
-        indices = rng.integers(0, len(values), (stop - start, len(values)))
-        means[start:stop] = np.mean(values[indices], axis=1)
-    return means
+    values = [extractor(target) for target in targets]
+    raw = _native.bootstrap_distribution_json(
+        json.dumps(values, separators=(",", ":")),
+        n_boot,
+        seed,
+    )
+    return BootstrapDistribution(json.loads(raw))

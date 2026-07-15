@@ -1,33 +1,164 @@
-name: "Publish to PyPI"
+name: Build native wheels and publish to PyPI
 
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 jobs:
-  run:
-    runs-on: ubuntu-latest
+  wheels:
+    name: ${{ matrix.platform }} wheel
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            os: ubuntu-24.04
+            wheel_arch: x86_64
+          - platform: macos-arm64
+            os: macos-14
+            wheel_arch: arm64
+          - platform: macos-x86_64
+            os: macos-15-intel
+            wheel_arch: x86_64
+          - platform: windows-x86_64
+            os: windows-2022
+            wheel_arch: x86_64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+          fetch-depth: 0
+
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: wheel-build
+          create-args: >-
+            python=3.11
+            rdkit=2026.03.4
+            boost-cpp
+            pip
+          cache-environment: true
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Configure native dependency paths
+        if: runner.os != 'Windows'
+        shell: bash -el {0}
+        run: |
+          echo "RDKIT_ROOT=$CONDA_PREFIX" >> "$GITHUB_ENV"
+          echo "BOOST_ROOT=$CONDA_PREFIX" >> "$GITHUB_ENV"
+
+      - name: Configure native dependency paths (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "RDKIT_ROOT=$env:CONDA_PREFIX" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BOOST_ROOT=$env:CONDA_PREFIX" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install wheel tooling
+        shell: bash -el {0}
+        if: runner.os != 'Windows'
+        run: python -m pip install "maturin>=1.10.2,<2" delocate
+
+      - name: Install wheel tooling (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python -m pip install "maturin>=1.10.2,<2" delvewheel
+
+      - name: Prepare manylinux-native dependencies
+        if: runner.os == 'Linux'
+        shell: bash -el {0}
+        run: micromamba create -y -p "$GITHUB_WORKSPACE/.wheel-env" rdkit=2026.03.4 boost-cpp
+
+      - name: Build and repair Linux wheel
+        if: runner.os == 'Linux'
+        uses: PyO3/maturin-action@v1
+        env:
+          RDKIT_ROOT: /io/.wheel-env
+          BOOST_ROOT: /io/.wheel-env
+        with:
+          command: build
+          manylinux: "2_28"
+          args: --release --out dist --interpreter python3.11
+
+      - name: Build and repair macOS wheel
+        if: runner.os == 'macOS'
+        shell: bash -el {0}
+        run: |
+          maturin build --release --out wheel-raw --interpreter python
+          delocate-wheel --require-archs "${{ matrix.wheel_arch }}" -w dist wheel-raw/*.whl
+
+      - name: Build and repair Windows wheel
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          maturin build --release --out wheel-raw --interpreter python
+          delvewheel repair --add-path "$env:CONDA_PREFIX\Library\bin" --wheel-dir dist (Get-ChildItem wheel-raw\*.whl)
+
+      - name: Smoke-test installed wheel
+        if: runner.os != 'Windows'
+        shell: bash -el {0}
+        run: |
+          python -m venv wheel-smoke
+          wheel-smoke/bin/python -m pip install dist/*.whl
+          cd "$(mktemp -d)"
+          "$GITHUB_WORKSPACE/wheel-smoke/bin/python" "$GITHUB_WORKSPACE/scripts/smoke-native-wheel.py" "$GITHUB_WORKSPACE/tests/testing_data/aizynth-smoke.json" --rdkit-version 2026.03.4
+
+      - name: Smoke-test installed wheel (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m venv wheel-smoke
+          wheel-smoke\Scripts\python -m pip install (Get-ChildItem dist\*.whl)
+          Set-Location $env:TEMP
+          & "$env:GITHUB_WORKSPACE\wheel-smoke\Scripts\python.exe" "$env:GITHUB_WORKSPACE\scripts\smoke-native-wheel.py" "$env:GITHUB_WORKSPACE\tests\testing_data\aizynth-smoke.json" --rdkit-version 2026.03.4
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: retrocast-${{ matrix.platform }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: python -m pip install "maturin>=1.10.2,<2"
+      - run: maturin sdist --out dist
+      - uses: actions/upload-artifact@v6
+        with:
+          name: retrocast-sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'release'
+    needs: [wheels, sdist]
+    runs-on: ubuntu-24.04
     environment:
       name: pypi
     permissions:
       id-token: write
       contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
         with:
-          ref: ${{ github.event.release.tag_name }}
-          fetch-depth: 0  # Full history needed for VCS-derived package versions
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-      - name: Install Python 3.13
-        run: uv python install 3.13
-      - name: Build
-        run: uv build
-      # Check that basic features work and we didn't miss to include crucial files
-      - name: Smoke test (wheel)
-        run: uv run --isolated --no-project --with dist/*.whl --with pytest pytest tests/smoke_test.py
-      - name: Smoke test (source distribution)
-        run: uv run --isolated --no-project --with dist/*.tar.gz --with pytest pytest tests/smoke_test.py
-      - name: Publish
-        run: uv publish
+          pattern: retrocast-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
