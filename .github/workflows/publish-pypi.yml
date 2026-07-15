@@ -39,7 +39,7 @@ jobs:
           create-args: >-
             python=3.11
             rdkit=2026.03.4
-            boost-cpp
+            libboost-headers
             pip
           cache-environment: true
 
@@ -72,7 +72,7 @@ jobs:
       - name: Prepare manylinux-native dependencies
         if: runner.os == 'Linux'
         shell: bash -el {0}
-        run: micromamba create -y -p "$GITHUB_WORKSPACE/.wheel-env" rdkit=2026.03.4 boost-cpp
+        run: micromamba create -y -p "$GITHUB_WORKSPACE/.wheel-env" rdkit=2026.03.4 libboost-headers
 
       - name: Build and repair Linux wheel
         if: runner.os == 'Linux'

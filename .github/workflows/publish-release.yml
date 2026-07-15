@@ -35,7 +35,7 @@ jobs:
           environment-name: cli-build
           create-args: >-
             rdkit=2026.03.4
-            boost-cpp
+            libboost-headers
             ${{ runner.os == 'Linux' && 'patchelf pax-utils' || '' }}
           cache-environment: true
 
