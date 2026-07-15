@@ -21,15 +21,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Install RDKit C++ build dependencies
-        run: sudo apt-get update && sudo apt-get install -y librdkit-dev libboost-dev
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: native-build
+          create-args: >-
+            librdkit-dev=2026.03.4
+            libboost-headers=1.90
+          cache-environment: true
 
       - name: Configure RDKit C++ build
+        shell: bash -el {0}
         run: |
-          echo "RDKIT_ROOT=/usr" >> "$GITHUB_ENV"
-          echo "RDKIT_INCLUDE_DIR=/usr/include/rdkit" >> "$GITHUB_ENV"
-          echo "RDKIT_LIB_DIR=/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
-          echo "BOOST_ROOT=/usr" >> "$GITHUB_ENV"
+          echo "RDKIT_ROOT=$CONDA_PREFIX" >> "$GITHUB_ENV"
+          echo "BOOST_ROOT=$CONDA_PREFIX" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
 
       - uses: dtolnay/rust-toolchain@stable
 
