@@ -73,7 +73,6 @@ data/index.html
 #data/SHA256SUMS
 
 data/tmp
-benchmarks/**/runs/
 
 prompts/
 site/

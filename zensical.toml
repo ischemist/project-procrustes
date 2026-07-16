@@ -49,6 +49,10 @@ nav = [
       "dev/rationale/rust-engine.md",
       "dev/rationale/training-set-releases.md",
     ] },
+    { "Performance" = [
+      "dev/benchmarks/v0.8.1-native-boundary.md",
+      "dev/benchmarks/v0.8.0-aizynthfinder.md",
+    ] },
     { "Reference" = [
       "dev/reference/adapters.md",
       "dev/reference/route-node-ids.md",
