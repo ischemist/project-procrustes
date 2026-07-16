@@ -4,7 +4,7 @@ use proptest::{collection, prelude::*};
 use retrocast_core::{
     adapt::{ingest, ingest_file},
     adapters::{self, AiZynthFinderAdapter, adapt_candidates_with_workers},
-    analyze::analyze,
+    analyze::{analyze, summarize_target_results},
     chem,
     error::EngineError,
     io::{read_json_value, read_jsonl_values, write_json, write_json_gz, write_jsonl_gz},
@@ -365,6 +365,11 @@ fn zero_bootstrap_resamples_is_rejected_instead_of_panicking() {
 
     let error = analyze(&evaluation, &[1], &[1], 0, 42, 1).unwrap_err();
 
+    assert!(matches!(error, EngineError::InvalidBootstrapResamples(0)));
+
+    let targets = evaluation.targets.into_values().collect::<Vec<_>>();
+    let error =
+        summarize_target_results(&targets, &[0], &[1], &[1], "task", "full", 0, 42, 1).unwrap_err();
     assert!(matches!(error, EngineError::InvalidBootstrapResamples(0)));
 }
 

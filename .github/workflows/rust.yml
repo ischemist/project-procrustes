@@ -12,7 +12,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 concurrency:
   group: rust-${{ github.workflow }}-${{ github.ref }}
@@ -28,6 +27,8 @@ jobs:
     name: RetroCast (Rust) Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      coverage_report: ${{ steps.coverage.outputs.report }}
 
     steps:
       - name: Checkout
@@ -109,11 +110,24 @@ jobs:
           PROPTEST_CASES: "512"
         run: cargo test --manifest-path packages/retrocast-rs/Cargo.toml -p retrocast-core --locked
 
+  coverage-comment:
+    name: Update Rust coverage report
+    needs: test
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      # Required only to update the coverage report on trusted same-repository PRs.
+      pull-requests: write
+
+    steps:
       - name: Add coverage report as a PR comment
-        if: github.event_name == 'pull_request'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
-          COVERAGE_REPORT: ${{ steps.coverage.outputs.report }}
+          COVERAGE_REPORT: ${{ needs.test.outputs.coverage_report }}
           MIN_LINE_COVERAGE: ${{ env.RUST_MIN_LINE_COVERAGE }}
         with:
           script: |
