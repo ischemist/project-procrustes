@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -94,6 +97,43 @@ def test_native_handles_keep_pipeline_state_in_rust(tmp_path: Path) -> None:
 
     report = retrocast.analyze(evaluation, n_boot=16, workers=2)
     assert report["metrics"]["solv_0[test-stock]_rate"]["value"] == 1.0
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="requires a POSIX FIFO")
+def test_failed_score_does_not_consume_predictions_while_write_is_active(tmp_path: Path) -> None:
+    predictions = retrocast.ingest(
+        {TARGET_ID: raw() * 2_048},
+        "aizynthfinder",
+        task(),
+        workers=2,
+    )
+    fifo = tmp_path / "predictions.pipe"
+    os.mkfifo(fifo)
+    reader_opened = threading.Event()
+    release_reader = threading.Event()
+
+    def drain_fifo() -> None:
+        with fifo.open("rb") as stream:
+            reader_opened.set()
+            release_reader.wait(timeout=5)
+            while stream.read(64 * 1_024):
+                pass
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        writer = pool.submit(predictions.write, fifo)
+        reader = pool.submit(drain_fifo)
+        try:
+            assert reader_opened.wait(timeout=5)
+            with pytest.raises(RuntimeError, match="currently in use"):
+                retrocast.score(predictions, task(), stock(), workers=2)
+            assert predictions.to_dict()[TARGET_ID][0]["rank"] == 1
+        finally:
+            release_reader.set()
+        writer.result(timeout=5)
+        reader.result(timeout=5)
+
+    evaluation = retrocast.score(predictions, task(), stock(), workers=2)
+    assert isinstance(evaluation, retrocast.NativeEvaluation)
 
 
 def test_file_pipeline_runs_without_python_materialization(tmp_path: Path) -> None:

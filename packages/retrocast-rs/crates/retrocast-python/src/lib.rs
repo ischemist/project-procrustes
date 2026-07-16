@@ -40,15 +40,19 @@ impl NativePredictions {
     }
 
     fn take(&self) -> PyResult<Predictions> {
-        let value = self
-            .value
-            .lock()
-            .map_err(python_error)?
+        let mut guard = self.value.lock().map_err(python_error)?;
+        let value = guard
             .take()
             .ok_or_else(|| PyRuntimeError::new_err("predictions were consumed by score()"))?;
-        Arc::try_unwrap(value).map_err(|_| {
-            PyRuntimeError::new_err("predictions are currently in use by another Python call")
-        })
+        match Arc::try_unwrap(value) {
+            Ok(predictions) => Ok(predictions),
+            Err(value) => {
+                *guard = Some(value);
+                Err(PyRuntimeError::new_err(
+                    "predictions are currently in use by another Python call",
+                ))
+            }
+        }
     }
 }
 
