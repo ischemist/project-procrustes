@@ -20,15 +20,19 @@ The full port removes that split. A value created by an adapter remains the same
 
 ## Workspace shape
 
-The Rust workspace has one substantial crate and two deliberately small front-end crates:
+The repository keeps the Python interface and Rust implementation in sibling package trees. The root `pyproject.toml` coordinates the mixed-language build so wheels and source distributions include both trees from one revision.
 
 ```text
-retrocast-rs/
-├── crates/
-│   ├── retrocast-core/       schemas, chemistry, adapters, I/O, workflows
-│   ├── retrocast-cli/        argument parsing and terminal presentation
-│   └── retrocast-python/     PyO3 types and Python-callable functions
-└── Cargo.toml
+packages/
+├── retrocast-py/
+│   ├── src/retrocast/        public Python package
+│   └── tests/                Python API and cross-language contracts
+└── retrocast-rs/
+    ├── crates/
+    │   ├── retrocast-core/   schemas, chemistry, adapters, I/O, workflows
+    │   ├── retrocast-cli/    argument parsing and terminal presentation
+    │   └── retrocast-python/ PyO3 types and Python-callable functions
+    └── Cargo.toml
 ```
 
 `retrocast-core` is an ordinary Rust library. It does not import PyO3 or Clap. That keeps the domain model usable from other Rust programs and makes the core testable without starting Python or a process.

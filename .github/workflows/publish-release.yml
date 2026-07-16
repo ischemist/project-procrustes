@@ -54,7 +54,7 @@ jobs:
           if [[ "$RUNNER_OS" == "macOS" ]]; then
             export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=-Wl,-headerpad_max_install_names"
           fi
-          cargo build --locked --release --manifest-path retrocast-rs/Cargo.toml -p retrocast-cli
+          cargo build --locked --release --manifest-path packages/retrocast-rs/Cargo.toml -p retrocast-cli
 
       - name: Build standalone executable (Windows)
         if: runner.os == 'Windows'
@@ -64,7 +64,7 @@ jobs:
           $env:BOOST_ROOT = '${{ steps.native-env.outputs.environment-path }}'
           "RDKIT_ROOT=$env:RDKIT_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
           "BOOST_ROOT=$env:BOOST_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
-          cargo build --locked --release --manifest-path retrocast-rs/Cargo.toml -p retrocast-cli
+          cargo build --locked --release --manifest-path packages/retrocast-rs/Cargo.toml -p retrocast-cli
 
       - name: Install macOS relocation tooling
         if: runner.os == 'macOS'
@@ -82,7 +82,7 @@ jobs:
           release_tag="${RELEASE_TAG//\//-}"
           bundle="$GITHUB_WORKSPACE/dist/retrocast-${release_tag}-${PLATFORM}"
           mkdir -p "$bundle/lib"
-          cp retrocast-rs/target/release/retrocast "$bundle/retrocast"
+          cp packages/retrocast-rs/target/release/retrocast "$bundle/retrocast"
           cp LICENSE README.md THIRD_PARTY_LICENSES.md "$bundle/"
           cp -R licenses "$bundle/"
 
@@ -106,7 +106,7 @@ jobs:
           env -i PATH=/usr/bin:/bin "$bundle/retrocast" --version
           env -i PATH=/usr/bin:/bin "$bundle/retrocast" list-adapters | grep aizynthfinder >/dev/null
           env -i PATH=/usr/bin:/bin "$bundle/retrocast" adapt \
-            --input tests/testing_data/aizynth-smoke.json \
+            --input packages/retrocast-py/tests/testing_data/aizynth-smoke.json \
             --adapter aizynthfinder \
             --output "$bundle/smoke.json" \
             --max-candidates 1
@@ -126,7 +126,7 @@ jobs:
           $bundleName = "retrocast-$releaseTag-$env:PLATFORM"
           $bundle = Join-Path dist $bundleName
           New-Item -ItemType Directory -Force -Path $bundle | Out-Null
-          Copy-Item retrocast-rs\target\release\retrocast.exe $bundle
+          Copy-Item packages\retrocast-rs\target\release\retrocast.exe $bundle
           Copy-Item LICENSE, README.md, THIRD_PARTY_LICENSES.md $bundle
           Copy-Item licenses $bundle -Recurse
 
@@ -181,7 +181,7 @@ jobs:
             throw 'standalone adapter registry smoke failed'
           }
           & "$bundle\retrocast.exe" adapt `
-            --input tests\testing_data\aizynth-smoke.json `
+            --input packages\retrocast-py\tests\testing_data\aizynth-smoke.json `
             --adapter aizynthfinder `
             --output "$bundle\smoke.json" `
             --max-candidates 1

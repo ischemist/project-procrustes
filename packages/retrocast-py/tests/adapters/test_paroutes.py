@@ -34,7 +34,7 @@ def target_for_entry(entry) -> Target:
 
 
 def load_real_paroutes_payload() -> dict:
-    path = Path("tests/testing_data/paroutes.json.gz")
+    path = Path(__file__).resolve().parents[1] / "testing_data" / "paroutes.json.gz"
     with gzip.open(path, "rt", encoding="utf-8") as file:
         return json.load(file)
 
