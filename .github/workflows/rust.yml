@@ -21,7 +21,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
-  RUST_MIN_LINE_COVERAGE: "50"
+  RUST_MIN_LINE_COVERAGE: "60"
 
 jobs:
   test:
