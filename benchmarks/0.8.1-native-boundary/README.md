@@ -34,6 +34,21 @@ Aggregate throughput divides the 27,592 candidate slots by summed wall time. Mea
 
 The Python and standalone v0.8.1 commands are nearly identical because Python is now only an API and CLI layer over the file-native Rust pipeline. Against the pre-Rust baseline, the 12-worker Python path is 4.5x faster on AiZynthFinder and 28.8x faster on ASKCOS. It also uses 49% and 77% less peak RSS, respectively.
 
+## Repeated Python-boundary check
+
+The release-build table above uses one measured run so v0.7.1, v0.8.0, and v0.8.1 share one methodology. A separate boundary check measured only the v0.8.1 Python package and standalone executable with one warm-up followed by three runs. The table reports medians. RSS is the peak aggregate resident set of the process tree, sampled every 10 ms.
+
+| adapter | front end | workers | median wall (s) | candidates/s | median peak RSS (MiB) | maximum peak RSS (MiB) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| AiZynthFinder | Python package | 12 | 1.909 | 958.7 | 155.4 | 156.1 |
+| AiZynthFinder | standalone | 12 | 1.768 | 1,034.9 | 119.1 | 119.3 |
+| ASKCOS | Python package | 12 | 20.755 | 1,241.2 | 565.6 | 577.8 |
+| ASKCOS | standalone | 12 | 20.508 | 1,256.2 | 543.2 | 544.7 |
+
+Across both fixtures, Python processed 27,592 candidates in 22.664 seconds and standalone Rust took 22.276 seconds. Python added 1.7% wall time. Its unweighted mean median peak RSS was 360.5 MiB, 29.3 MiB above standalone. All candidate, evaluation, and analysis artifacts were exactly equal. The Python overhead stays small on the graph-shaped ASKCOS workload, so it does not indicate a second corpus-sized representation at the binding boundary.
+
+The exact samples are recorded in [`python-vs-standalone-sample.json`](python-vs-standalone-sample.json).
+
 ## Methodology boundary
 
 v0.7.1 has no one-process `pipeline` command. Its wall value is therefore the sum of the supported `ingest`, `score`, and `analyze` commands, and its peak RSS is the maximum of those three processes. v0.8.0 was measured through the equivalent three Python stage commands. v0.8.1 uses the supported one-process `pipeline` command. This compares the real end-to-end interfaces available in each release, but it should not be mistaken for a microbenchmark of engine code alone.

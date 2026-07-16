@@ -20,6 +20,8 @@ ASKCOS pathway extraction now moves its provider graph once and retains only the
 
 On the 160-target, 25,762-candidate ASKCOS `mkt-cnv-160` fixture, the 12-worker Python command completed in 19.36 seconds with 555 MiB peak RSS. The pre-Rust v0.7.1 pipeline required 558.2 seconds and 2.32 GiB; v0.8.0 required 241.8 seconds and 8.56 GiB on the same machine. The standalone command completed in 19.26 seconds with 524 MiB; the one-worker Python command used 508 MiB. Candidate artifacts are identical across versions, worker counts, and the Python and standalone front ends. See the [v0.7.1 through v0.8.1 benchmark](https://github.com/ischemist/project-procrustes/tree/master/benchmarks/0.8.1-native-boundary) for both adapters, aggregate throughput, RSS, and methodology.
 
+A repeated Python-boundary check used one warm-up and three measured 12-worker runs per front end. On ASKCOS, the Python package had 1.2% more wall time and 22.3 MiB more median peak RSS than the standalone executable: 20.755 seconds and 565.6 MiB versus 20.508 seconds and 543.2 MiB. On the smaller AiZynthFinder fixture, Python added 0.141 seconds and 36.3 MiB. Candidate, evaluation, and analysis artifacts were exactly equal. The Python process therefore pays a small interpreter and binding cost without recreating a corpus-sized graph.
+
 ## v0.8.0
 
 v0.8.0 replaces the Python execution engine with one Rust core shared by the Python package and a standalone `retrocast` executable.

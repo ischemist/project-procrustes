@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "machine": {
+    "cpu": "Apple M4 Max",
+    "logical_cpus": 16,
+    "memory_gib": 64.0,
+    "platform": "macOS 26.5.2 arm64",
+    "python": "3.11.12",
+    "native_engine": "0.8.1",
+    "rdkit": "RDKit C++ 2026.03.4"
+  },
+  "methodology": {
+    "warmups": 1,
+    "repetitions": 3,
+    "workers": 12,
+    "bootstrap_resamples": 10000,
+    "wall": "End-to-end wall time including process startup and artifact IO",
+    "rss": "Peak aggregate resident set of the process tree, sampled every 10 ms",
+    "python": "python -m retrocast.cli.main pipeline",
+    "standalone": "retrocast pipeline"
+  },
+  "fixtures": [
+    {
+      "adapter": "aizynthfinder",
+      "benchmark": "mkt-cnv-160",
+      "targets": 160,
+      "candidates": 1830,
+      "results": [
+        {
+          "front_end": "python-package",
+          "wall_seconds": [1.8975034580216743, 1.9088383329799399, 1.9247487499960698],
+          "peak_rss_bytes": [162938880, 163676160, 162873344],
+          "median_wall_seconds": 1.9088383329799399,
+          "median_candidates_per_second": 958.6982660512359,
+          "median_peak_rss_bytes": 162938880,
+          "maximum_peak_rss_bytes": 163676160
+        },
+        {
+          "front_end": "standalone",
+          "wall_seconds": [1.756794125016313, 1.7682527920114808, 1.7759567920002155],
+          "peak_rss_bytes": [125042688, 124878848, 124633088],
+          "median_wall_seconds": 1.7682527920114808,
+          "median_candidates_per_second": 1034.919898482546,
+          "median_peak_rss_bytes": 124878848,
+          "maximum_peak_rss_bytes": 125042688
+        }
+      ]
+    },
+    {
+      "adapter": "askcos",
+      "benchmark": "mkt-cnv-160",
+      "targets": 160,
+      "candidates": 25762,
+      "results": [
+        {
+          "front_end": "python-package",
+          "wall_seconds": [20.755162207991816, 20.842393375001848, 20.74392929201713],
+          "peak_rss_bytes": [605880320, 578486272, 593035264],
+          "median_wall_seconds": 20.755162207991816,
+          "median_candidates_per_second": 1241.2333732607635,
+          "median_peak_rss_bytes": 593035264,
+          "maximum_peak_rss_bytes": 605880320
+        },
+        {
+          "front_end": "standalone",
+          "wall_seconds": [20.447253874968737, 20.50792620901484, 20.807258207991254],
+          "peak_rss_bytes": [569606144, 571129856, 544374784],
+          "median_wall_seconds": 20.50792620901484,
+          "median_candidates_per_second": 1256.1972252794426,
+          "median_peak_rss_bytes": 569606144,
+          "maximum_peak_rss_bytes": 571129856
+        }
+      ]
+    }
+  ],
+  "aggregate": {
+    "candidates": 27592,
+    "python_median_wall_seconds": 22.664000540971756,
+    "standalone_median_wall_seconds": 22.27617900102632,
+    "python_candidates_per_second": 1217.437316510801,
+    "standalone_candidates_per_second": 1238.6325320302358,
+    "python_wall_overhead_ratio": 1.0174096975934503,
+    "python_mean_median_peak_rss_bytes": 377987072,
+    "standalone_mean_median_peak_rss_bytes": 347242496,
+    "python_mean_median_peak_rss_ratio": 1.0885392092101538
+  },
+  "semantic_validation": {
+    "candidates_equal": true,
+    "evaluations_equal": true,
+    "analyses_equal": true,
+    "analysis_max_abs_numeric_delta": 0.0
+  }
+}
