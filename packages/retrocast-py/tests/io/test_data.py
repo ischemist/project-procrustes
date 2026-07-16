@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import gzip
-import json
 from typing import Literal
 
 import pytest
@@ -104,18 +103,6 @@ def test_schema_model_writes_are_deterministic(tmp_path) -> None:
     save_task(value, right)
 
     assert left.read_bytes() == right.read_bytes()
-
-
-def test_native_json_gzip_is_byte_compatible_with_legacy_python_writer(tmp_path) -> None:
-    expected = tmp_path / "python.json.gz"
-    actual = tmp_path / "rust.json.gz"
-    value = {"emoji": "🧪", "nested": [1, 2]}
-
-    with expected.open("wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as handle:
-        handle.write(json.dumps(value, indent=2).encode("utf-8"))
-    save_json_gz(value, actual)
-
-    assert actual.read_bytes() == expected.read_bytes()
 
 
 def test_stock_file_writes_are_deterministic(tmp_path) -> None:
@@ -264,18 +251,6 @@ def test_route_candidate_evaluation_analysis_and_execution_artifacts_round_trip(
     assert load_evaluation(evaluation_path) == evaluation
     assert load_json_artifact(analysis_path) == analysis.model_dump(mode="json", exclude_none=True)
     assert load_execution_stats(execution_path) == execution
-
-
-def test_native_evaluation_loader_preserves_artifact_error_contract(tmp_path) -> None:
-    invalid_shape = tmp_path / "invalid-evaluation.json.gz"
-    corrupt = tmp_path / "corrupt-evaluation.json.gz"
-    save_json_gz({}, invalid_shape)
-    corrupt.write_bytes(b"not gzip")
-
-    with pytest.raises(ArtifactFormatError):
-        load_evaluation(invalid_shape)
-    with pytest.raises(ArtifactDecodeError):
-        load_evaluation(corrupt)
 
 
 def test_benchmark_results_loader_exposes_evaluation_sequence_and_statistics(tmp_path) -> None:

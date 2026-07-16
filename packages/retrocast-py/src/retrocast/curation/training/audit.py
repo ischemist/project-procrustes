@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from retrocast.curation.training.records import TrainingReactionRecord
+from retrocast.curation.training.route_release import _route_transform_key
 from retrocast.exceptions import TrainingReleaseError
 from retrocast.io import iter_jsonl_gz, load_lines_gz
 from retrocast.markdown import format_integer, markdown_table
@@ -114,12 +115,19 @@ def render_route_release_split_audit_markdown(
 
 
 def audit_route_release_sanity(*, release_name: str, files: RouteReleaseFiles) -> None:
-    from retrocast import native
-
-    try:
-        native.audit_route_release(release_name, files.all, files.training, files.validation)
-    except native.NativeTrainingError as error:
-        raise _training_release_error(error) from error
+    failures = _split_file_failures(files)
+    training_route_identities = [_route_transform_key(record.route) for record in files.training]
+    if duplicate_training_route_identities := duplicate_count(training_route_identities):
+        failures["duplicate_training_route_identities"] = duplicate_training_route_identities
+    validation_route_identities = [_route_transform_key(record.route) for record in files.validation]
+    if duplicate_validation_route_identities := duplicate_count(validation_route_identities):
+        failures["duplicate_validation_route_identities"] = duplicate_validation_route_identities
+    if failures:
+        raise TrainingReleaseError(
+            f"{release_name} failed route release sanity checks",
+            code="workflow.route_release_audit_failed",
+            context={"release_name": release_name, "failures": failures},
+        )
 
 
 def audit_single_step_release_if_present(
@@ -131,30 +139,45 @@ def audit_single_step_release_if_present(
     release_dir = release_root / release_name
     if not (release_dir / "all.jsonl.gz").exists():
         return None
+    allow_cross_split_overlap = release_name == "single-step-route-holdout-n1-n5"
     files = load_single_step_release_files(release_dir)
-    from retrocast import native
-
-    try:
-        return native.audit_single_step_release(
-            release_dir.name,
-            files.all,
-            files.training,
-            files.validation,
-            files.all_rsmi_count,
-            files.training_rsmi_count,
-            files.validation_rsmi_count,
-            parent_route_ids,
+    failures = _split_file_failures(files, check_split_duplicate_ids=False)
+    rsmi_count_mismatches = {
+        "all": len(files.all) - files.all_rsmi_count,
+        "training": len(files.training) - files.training_rsmi_count,
+        "validation": len(files.validation) - files.validation_rsmi_count,
+    }
+    if any(rsmi_count_mismatches.values()):
+        failures["rsmi_count_mismatches"] = rsmi_count_mismatches
+    training_exact_reaction_keys = [exact_reaction_record_key(record) for record in files.training]
+    if duplicate_training_exact_reaction_keys := duplicate_count(training_exact_reaction_keys):
+        failures["duplicate_training_exact_reaction_keys"] = duplicate_training_exact_reaction_keys
+    validation_exact_reaction_keys = [exact_reaction_record_key(record) for record in files.validation]
+    if duplicate_validation_exact_reaction_keys := duplicate_count(validation_exact_reaction_keys):
+        failures["duplicate_validation_exact_reaction_keys"] = duplicate_validation_exact_reaction_keys
+    training_identities = {reaction_record_identity_key(record) for record in files.training}
+    validation_identities = {reaction_record_identity_key(record) for record in files.validation}
+    shared = training_identities & validation_identities
+    if shared and not allow_cross_split_overlap:
+        failures["cross_split_reaction_identity_overlap"] = len(shared)
+    if missing_sources := sum(
+        source.route_id not in parent_route_ids for record in files.all for source in record.sources
+    ):
+        failures["missing_parent_route_sources"] = missing_sources
+    if failures:
+        raise TrainingReleaseError(
+            f"{release_name} failed single-step sanity checks",
+            code="workflow.single_step_release_audit_failed",
+            context={"release_name": release_dir.name, "failures": failures},
         )
-    except native.NativeTrainingError as error:
-        raise _training_release_error(error) from error
-
-
-def _training_release_error(error) -> TrainingReleaseError:
-    return TrainingReleaseError(
-        str(error.payload.get("message", error)),
-        code=str(error.payload.get("code", "workflow.training_release_error")),
-        context=error.payload.get("context") if isinstance(error.payload.get("context"), dict) else {},
-    )
+    return {
+        "release_name": release_dir.name,
+        "total": len(files.all),
+        "training": len(files.training),
+        "validation": len(files.validation),
+        "parent_routes": len(parent_route_ids),
+        "cross_split_reaction_identity_overlap": len(shared),
+    }
 
 
 def load_single_step_release_files(release_dir: Path) -> SingleStepReleaseFiles:

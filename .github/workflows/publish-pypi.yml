@@ -121,7 +121,7 @@ jobs:
           python -m venv wheel-smoke
           wheel-smoke/bin/python -m pip install dist/*.whl
           cd "$(mktemp -d)"
-          "$GITHUB_WORKSPACE/wheel-smoke/bin/python" "$GITHUB_WORKSPACE/scripts/smoke-native-wheel.py" "$GITHUB_WORKSPACE/packages/retrocast-py/tests/testing_data/aizynth-smoke.json" --rdkit-version 2026.03.4
+          "$GITHUB_WORKSPACE/wheel-smoke/bin/python" "$GITHUB_WORKSPACE/scripts/smoke-native-wheel.py" "$GITHUB_WORKSPACE/packages/retrocast-rs/tests/testing_data/aizynth-smoke.json" --rdkit-version 2026.03.4
 
       - name: Smoke-test installed wheel (Windows)
         if: runner.os == 'Windows'
@@ -130,7 +130,7 @@ jobs:
           python -m venv wheel-smoke
           wheel-smoke\Scripts\python -m pip install (Get-ChildItem dist\*.whl)
           Set-Location $env:TEMP
-          & "$env:GITHUB_WORKSPACE\wheel-smoke\Scripts\python.exe" "$env:GITHUB_WORKSPACE\scripts\smoke-native-wheel.py" "$env:GITHUB_WORKSPACE\packages\retrocast-py\tests\testing_data\aizynth-smoke.json" --rdkit-version 2026.03.4
+          & "$env:GITHUB_WORKSPACE\wheel-smoke\Scripts\python.exe" "$env:GITHUB_WORKSPACE\scripts\smoke-native-wheel.py" "$env:GITHUB_WORKSPACE\packages\retrocast-rs\tests\testing_data\aizynth-smoke.json" --rdkit-version 2026.03.4
 
       - uses: actions/upload-artifact@v6
         with:

@@ -71,8 +71,8 @@ exclude_lines = [
   "logger\\.",
 ]
 
-[tool.pytest]
-testpaths = ["packages/retrocast-py/tests"]
+[tool.pytest.ini_options]
+testpaths = ["packages/retrocast-rs/tests"]
 markers = [
   "unit: runs in <10ms, tests single functions/classes, no IO",
   "integration: tests workflow glue, uses tmp_path",
@@ -82,7 +82,7 @@ markers = [
 
 [tool.ruff]
 line-length = 120
-src = ["packages/retrocast-py/src"]
+src = ["packages/retrocast-rs/python"]
 lint.select = [
   "E", # pycodestyle
   "F", # Pyflakes
@@ -97,7 +97,7 @@ lint.ignore = ["E501", "SIM108"]
 bindings = "pyo3"
 manifest-path = "packages/retrocast-rs/crates/retrocast-python/Cargo.toml"
 module-name = "retrocast._native"
-python-source = "packages/retrocast-py/src"
+python-source = "packages/retrocast-rs/python"
 include = [
   { path = "LICENSE", format = ["sdist", "wheel"] },
   { path = "THIRD_PARTY_LICENSES.md", format = ["sdist", "wheel"] },
@@ -107,7 +107,7 @@ include = [
 ]
 
 [tool.ty.src]
-exclude = ["packages/retrocast-py/tests", "scripts"]
+exclude = ["packages/retrocast-rs/tests", "packages/retrocast-py", "scripts"]
 
 [tool.uv]
 # Require a short cooling-off window before newly uploaded artifacts are eligible.

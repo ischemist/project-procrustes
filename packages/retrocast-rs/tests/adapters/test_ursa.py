@@ -1,0 +1,202 @@
+from __future__ import annotations
+
+import pytest
+
+from retrocast.adapters.ursa import UrsaAdapter
+from retrocast.chem import canonicalize_smiles, get_inchi_key
+from retrocast.exceptions import AdapterLogicError, AdapterSchemaError, InvalidSmilesError
+from retrocast.models.task import Target
+from retrocast.typing import SmilesStr
+from tests.adapters.base import (
+    AdapterContractCase,
+    AdapterContractSuite,
+    CastContractCase,
+    InvalidSmilesContractCase,
+    RawExtractionContractCase,
+)
+
+
+def target_for(smiles: str) -> Target:
+    canon_smiles = canonicalize_smiles(smiles)
+    return Target(id="ursa-target", smiles=canon_smiles, inchikey=get_inchi_key(canon_smiles))
+
+
+def completion(*reactants: str, product: str = "CCO") -> str:
+    reactant_blocks = "".join(f"<reactant><smiles>{reactant}</smiles></reactant>" for reactant in reactants)
+    return f"<synthesis_step><product><smiles>{product}</smiles></product>{reactant_blocks}</synthesis_step>"
+
+
+@pytest.fixture
+def raw_ursa_payload() -> list[dict]:
+    return [
+        {"completion": completion("C", "CC"), "meta": {"product_smiles": "CCO"}},
+        {"completion": completion("C"), "meta": {"product_smiles": "CCO"}},
+    ]
+
+
+@pytest.fixture
+def ursa_route_payload(raw_ursa_payload):
+    return next(UrsaAdapter().iter_raw_routes(raw_ursa_payload, source_key="ursa-run")).payload
+
+
+@pytest.fixture
+def ursa_invalid_leaf_payload():
+    return completion("C", "not-smiles")
+
+
+class TestUrsaAdapterContract(AdapterContractSuite):
+    @pytest.fixture
+    def adapter_contract_case(
+        self, raw_ursa_payload, ursa_route_payload, ursa_invalid_leaf_payload
+    ) -> AdapterContractCase:
+        return AdapterContractCase(
+            adapter=UrsaAdapter(),
+            extraction=RawExtractionContractCase(
+                raw_ursa_payload, [{"completion": 123}], "ursa-run", 2, ["ursa-run", "ursa-run"], 1
+            ),
+            casting=CastContractCase(
+                ursa_route_payload,
+                {"not": "completion"},
+                target_for("CCO"),
+                Target(id="ursa-target", smiles=SmilesStr("CCC"), inchikey=get_inchi_key("CCC")),
+                2,
+            ),
+            invalid_smiles=InvalidSmilesContractCase(ursa_invalid_leaf_payload, ["C"]),
+        )
+
+
+@pytest.mark.contract
+def test_ursa_iter_raw_routes_preserves_row_index_and_target_hint(raw_ursa_payload) -> None:
+    entries = list(UrsaAdapter().iter_raw_routes(raw_ursa_payload, source_key="ursa-run"))
+    assert [entry.source_row_index for entry in entries] == [1, 2]
+    assert [entry.target_hint_smiles for entry in entries] == ["CCO", "CCO"]
+
+
+@pytest.mark.contract
+def test_ursa_iter_raw_routes_allows_missing_target_hint() -> None:
+    entries = list(UrsaAdapter().iter_raw_routes([{"completion": completion("C")}]))
+
+    assert entries[0].target_hint_smiles is None
+
+
+@pytest.mark.contract
+def test_ursa_iter_raw_routes_rejects_invalid_meta_product() -> None:
+    with pytest.raises(AdapterSchemaError) as exc_info:
+        list(UrsaAdapter().iter_raw_routes([{"completion": completion("C"), "meta": {"product_smiles": "bad"}}]))
+    assert exc_info.value.code == "adapter.schema_invalid"
+
+
+@pytest.mark.contract
+def test_ursa_iter_raw_routes_rejects_non_list_payload() -> None:
+    with pytest.raises(AdapterSchemaError) as exc_info:
+        list(UrsaAdapter().iter_raw_routes({"completion": completion("C")}))
+    assert exc_info.value.code == "adapter.schema_invalid"
+
+
+@pytest.mark.contract
+def test_ursa_iter_raw_routes_rejects_non_dict_record() -> None:
+    with pytest.raises(AdapterSchemaError) as exc_info:
+        list(UrsaAdapter().iter_raw_routes(["not-a-record"]))
+    assert exc_info.value.code == "adapter.schema_invalid"
+
+
+@pytest.mark.contract
+def test_ursa_iter_raw_routes_allows_non_dict_meta() -> None:
+    entries = list(UrsaAdapter().iter_raw_routes([{"completion": completion("C"), "meta": "not-a-dict"}]))
+
+    assert entries[0].target_hint_smiles is None
+
+
+@pytest.mark.contract
+def test_ursa_iter_raw_routes_allows_meta_without_product() -> None:
+    entries = list(UrsaAdapter().iter_raw_routes([{"completion": completion("C"), "meta": {}}]))
+
+    assert entries[0].target_hint_smiles is None
+
+
+@pytest.mark.contract
+def test_ursa_iter_raw_routes_rejects_non_string_meta_product() -> None:
+    with pytest.raises(AdapterSchemaError) as exc_info:
+        list(UrsaAdapter().iter_raw_routes([{"completion": completion("C"), "meta": {"product_smiles": 123}}]))
+    assert exc_info.value.code == "adapter.schema_invalid"
+
+
+@pytest.mark.contract
+def test_ursa_rejects_missing_target() -> None:
+    with pytest.raises(AdapterLogicError) as exc_info:
+        UrsaAdapter().cast(completion("C"))
+    assert exc_info.value.code == "adapter.route_transform_failed"
+
+
+@pytest.mark.contract
+def test_ursa_rejects_completion_without_target_step() -> None:
+    with pytest.raises(AdapterLogicError) as exc_info:
+        UrsaAdapter().cast(completion("C", product="CCC"), target=target_for("CCO"))
+    assert exc_info.value.code == "adapter.target_mismatch"
+
+
+@pytest.mark.contract
+def test_ursa_strict_rejects_invalid_product_smiles() -> None:
+    with pytest.raises(InvalidSmilesError) as exc_info:
+        UrsaAdapter().cast(completion("C", product="not-smiles"), target=target_for("CCO"))
+    assert exc_info.value.code == "chem.invalid_smiles"
+
+
+@pytest.mark.contract
+def test_ursa_ignores_steps_without_product() -> None:
+    raw_completion = "<synthesis_step><reactant><smiles>C</smiles></reactant></synthesis_step>" + completion("C")
+
+    route = UrsaAdapter().cast(raw_completion, target=target_for("CCO"))
+
+    assert route.target.smiles == "CCO"
+
+
+@pytest.mark.contract
+def test_ursa_ignores_steps_without_product_smiles() -> None:
+    raw_completion = (
+        "<synthesis_step><product></product><reactant><smiles>C</smiles></reactant></synthesis_step>" + completion("C")
+    )
+
+    route = UrsaAdapter().cast(raw_completion, target=target_for("CCO"))
+
+    assert route.target.smiles == "CCO"
+
+
+@pytest.mark.contract
+def test_ursa_prune_ignores_invalid_product_step() -> None:
+    raw_completion = completion("C", product="not-smiles") + completion("C")
+
+    route = UrsaAdapter().cast(raw_completion, target=target_for("CCO"), mode="prune")
+
+    assert route.target.smiles == "CCO"
+
+
+@pytest.mark.contract
+def test_ursa_prune_rejects_target_when_all_reactants_are_invalid() -> None:
+    with pytest.raises(AdapterLogicError) as exc_info:
+        UrsaAdapter().cast(completion("not-smiles"), target=target_for("CCO"), mode="prune")
+    assert exc_info.value.code == "adapter.target_pruned"
+
+
+@pytest.mark.contract
+def test_ursa_ignores_reactants_without_smiles() -> None:
+    raw_completion = "<synthesis_step><product><smiles>CCO</smiles></product><reactant></reactant><reactant><smiles>C</smiles></reactant></synthesis_step>"
+
+    route = UrsaAdapter().cast(raw_completion, target=target_for("CCO"))
+
+    assert [reactant.value.smiles for reactant in route.reaction_at("rc:r:/").reactants()] == ["C"]
+
+
+@pytest.mark.contract
+def test_ursa_parses_tokenized_smiles() -> None:
+    raw_completion = "<synthesis_step><product><smiles><sm_C><sm_C><sm_O></smiles></product><reactant><smiles><sm_C></smiles></reactant></synthesis_step>"
+    route = UrsaAdapter().cast(raw_completion, target=target_for("CCO"))
+    assert [reactant.value.smiles for reactant in route.reaction_at("rc:r:/").reactants()] == ["C"]
+
+
+@pytest.mark.contract
+def test_ursa_rejects_cycles_after_canonicalization() -> None:
+    raw_completion = completion("OCC")
+    with pytest.raises(AdapterLogicError) as exc_info:
+        UrsaAdapter().cast(raw_completion, target=target_for("CCO"))
+    assert exc_info.value.code == "adapter.cycle_detected"

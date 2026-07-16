@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import json
+import statistics
 from collections.abc import Mapping, Sequence
-from typing import cast
 
 from pydantic import BaseModel, Field
 
 from retrocast.models.candidates import Candidate
-from retrocast.models.evaluation import Evaluation
-from retrocast.workflow.collect import NativeCollectedCandidates
+from retrocast.models.evaluation import Evaluation, Tier
 
 
 class CandidateRunStatistics(BaseModel):
@@ -27,64 +25,87 @@ class CandidateRunStatistics(BaseModel):
 
     @property
     def min_candidates_per_target(self) -> int:
-        return cast(int, self._manifest()["min_candidates_per_target"])
+        return min(self.candidates_per_target.values()) if self.candidates_per_target else 0
 
     @property
     def max_candidates_per_target(self) -> int:
-        return cast(int, self._manifest()["max_candidates_per_target"])
+        return max(self.candidates_per_target.values()) if self.candidates_per_target else 0
 
     @property
     def avg_candidates_per_target(self) -> float:
-        return cast(float, self._manifest()["avg_candidates_per_target"])
+        if not self.candidates_per_target:
+            return 0.0
+        return round(statistics.mean(self.candidates_per_target.values()), 2)
 
     @property
     def median_candidates_per_target(self) -> float:
-        return cast(float, self._manifest()["median_candidates_per_target"])
+        if not self.candidates_per_target:
+            return 0.0
+        return round(statistics.median(self.candidates_per_target.values()), 2)
 
     def to_manifest_dict(self) -> dict[str, object]:
-        return self._manifest()
-
-    def _manifest(self) -> dict[str, object]:
-        from retrocast import _native
-
-        payload = self.model_dump_json(exclude_none=True)
-        return dict(json.loads(_native.candidate_run_manifest_json(payload)))
+        return {
+            "total_candidates_seen": self.total_candidates_seen,
+            "successful_candidates": self.successful_candidates,
+            "failed_candidates": self.failed_candidates,
+            "final_candidates_saved": self.final_candidates_saved,
+            "num_targets_with_at_least_one_candidate": self.num_targets_with_candidates,
+            "min_candidates_per_target": self.min_candidates_per_target,
+            "max_candidates_per_target": self.max_candidates_per_target,
+            "avg_candidates_per_target": self.avg_candidates_per_target,
+            "median_candidates_per_target": self.median_candidates_per_target,
+            "failures_by_code": dict(sorted(self.failures_by_code.items())),
+        }
 
 
 def candidate_statistics(candidates: Sequence[Candidate]) -> CandidateRunStatistics:
-    from retrocast import _native
-
-    payload = json.dumps(
-        [candidate.model_dump(mode="json", exclude_none=True) for candidate in candidates],
-        separators=(",", ":"),
-    )
-    return CandidateRunStatistics.model_validate_json(_native.candidate_statistics_json(payload))
+    stats = CandidateRunStatistics(total_candidates_seen=len(candidates), final_candidates_saved=len(candidates))
+    for candidate in candidates:
+        if candidate.failure is None:
+            stats.successful_candidates += 1
+        else:
+            stats.failed_candidates += 1
+            code = str(candidate.failure.code)
+            stats.failures_by_code[code] = stats.failures_by_code.get(code, 0) + 1
+    return stats
 
 
 def collected_candidate_statistics(candidates_by_target: Mapping[str, Sequence[Candidate]]) -> CandidateRunStatistics:
-    from retrocast import _native
-
-    handle = (
-        candidates_by_target.native_handle() if isinstance(candidates_by_target, NativeCollectedCandidates) else None
-    )
-    if handle is not None:
-        payload = _native.collected_candidate_statistics_native(handle)
-    else:
-        predictions = {
-            target_id: [candidate.model_dump(mode="json", exclude_none=True) for candidate in candidates]
-            for target_id, candidates in candidates_by_target.items()
-        }
-        payload = _native.collected_candidate_statistics_json(json.dumps(predictions, separators=(",", ":")))
-    return CandidateRunStatistics.model_validate_json(payload)
+    flat_candidates = [candidate for candidates in candidates_by_target.values() for candidate in candidates]
+    stats = candidate_statistics(flat_candidates)
+    for target_id, candidates in candidates_by_target.items():
+        if candidates:
+            stats.targets_with_at_least_one_candidate.add(target_id)
+            stats.candidates_per_target[target_id] = len(candidates)
+        for candidate in candidates:
+            if candidate.failure is None:
+                continue
+            code = str(candidate.failure.code)
+            target_failures = stats.failures_by_target.setdefault(target_id, {})
+            target_failures[code] = target_failures.get(code, 0) + 1
+    return stats
 
 
 def evaluation_statistics(evaluation: Evaluation) -> dict[str, object]:
-    from retrocast import _native
-    from retrocast.native import NativeEvaluation
-
-    handle = evaluation.native_handle() if isinstance(evaluation, NativeEvaluation) else None
-    if handle is not None:
-        payload = _native.evaluation_statistics_native(handle)
-    else:
-        payload = _native.evaluation_statistics_json(evaluation.model_dump_json(exclude_none=True))
-    return dict(json.loads(payload))
+    candidates = [candidate for target in evaluation.targets.values() for candidate in target.candidates]
+    stats: dict[str, object] = {
+        "n_targets": len(evaluation.targets),
+        "n_candidates": len(candidates),
+        "n_failed_candidates": sum(1 for candidate in candidates if candidate.failed_adaptation()),
+    }
+    wall_times = [target.wall_time for target in evaluation.targets.values() if target.wall_time is not None]
+    cpu_times = [target.cpu_time for target in evaluation.targets.values() if target.cpu_time is not None]
+    if wall_times:
+        stats["total_wall_time_seconds"] = round(sum(wall_times), 6)
+        stats["mean_wall_time_seconds"] = round(sum(wall_times) / len(wall_times), 6)
+    if cpu_times:
+        stats["total_cpu_time_seconds"] = round(sum(cpu_times), 6)
+        stats["mean_cpu_time_seconds"] = round(sum(cpu_times) / len(cpu_times), 6)
+    for tier in evaluation.tiers:
+        key = int(tier)
+        stats[f"n_solv_{key}"] = sum(
+            1
+            for target in evaluation.targets.values()
+            if any(candidate.satisfies_solv(Tier(key)) for candidate in target.candidates)
+        )
+    return stats

@@ -1,0 +1,71 @@
+[project]
+name = "retrocast"
+version = "0.7.1"
+description = "Frozen pure-Python RetroCast 0.7.1 reference implementation"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Anton Morgunov", email = "anton@ischemist.com" }]
+dependencies = [
+  "packaging>=25.0",
+  "pydantic",
+  "pyyaml>=6.0.3",
+  "rdkit",
+  "rich>=14.2.0",
+  "tqdm>=4.67.1",
+]
+
+[project.scripts]
+retrocast = "retrocast.cli.main:main"
+
+[project.optional-dependencies]
+viz = ["ischemist>=0.2.0", "kaleido>=1.1.0", "plotly>=6.3.0"]
+
+[dependency-groups]
+dev = [
+  "hypothesis>=6.148.2",
+  "pandas<2.2",
+  "pytest",
+  "pytest-cov",
+  "pytest-mock>=3.14.1",
+  "pytest-sugar>=1.1.1",
+  "requests>=2.32.5",
+  "ruff",
+  "ty>=0.0.1a24",
+  "types-pyyaml>=6.0.12.20250822",
+  "types-tqdm>=4.67.0.20241221",
+]
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/retrocast"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "unit: runs in <10ms, tests single functions/classes, no IO",
+  "integration: tests workflow glue, uses tmp_path",
+  "contract: verifies adapters output valid retrocast objects",
+  "regression: runs against frozen json.gz files",
+]
+
+[tool.ruff]
+line-length = 120
+src = ["src"]
+lint.select = ["E", "F", "UP", "B", "SIM", "I"]
+lint.ignore = ["E501", "SIM108"]
+
+[tool.ty.src]
+exclude = ["tests"]
+
+[tool.uv]
+required-version = ">=0.9.17"
+exclude-newer = "7 days"
+exclude-newer-package = {urllib3 = "2026-05-07T16:13:19.596909Z"}
+constraint-dependencies = ["urllib3==2.7.0"]
+
+[tool.uv.extra-build-dependencies]
+torch-scatter = ["torch"]

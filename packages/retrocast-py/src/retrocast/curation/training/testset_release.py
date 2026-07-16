@@ -23,31 +23,21 @@ TEST_RELEASE_ACTION = "scripts/paroutes/training-set-prep/create-test-set-releas
 def build_test_route_records(
     *, dataset: TestSetName, routes: Sequence[AdaptedTrainingRoute], route_prefix: str = "paroutes"
 ) -> list[TestRouteRecord]:
-    from retrocast import native
-
+    width = max(5, len(str(len(routes))))
     return [
-        TestRouteRecord.model_validate(record)
-        for record in native.build_test_route_records(dataset, routes, route_prefix)
+        TestRouteRecord(
+            id=f"{route_prefix}-{dataset}-routes-{index:0{width}d}",
+            dataset=dataset,
+            route=route.route,
+            sources=[route.source],
+        )
+        for index, route in enumerate(routes, start=1)
     ]
 
 
 def build_test_reaction_records(
     *, dataset: TestSetName, route_records: Sequence[TestRouteRecord], route_prefix: str = "paroutes"
 ) -> list[TestReactionRecord]:
-    from retrocast import native
-
-    try:
-        return [
-            TestReactionRecord.model_validate(record)
-            for record in native.build_test_reaction_records(dataset, route_records, route_prefix)
-        ]
-    except native.NativeTrainingError as error:
-        raise TrainingReleaseError(
-            str(error.payload.get("message", error)),
-            code=str(error.payload.get("code", "workflow.training_release_error")),
-            context=error.payload.get("context") if isinstance(error.payload.get("context"), dict) else {},
-        ) from error
-
     records: list[TestReactionRecord] = []
     for route_record in route_records:
         if route_record.dataset != dataset:

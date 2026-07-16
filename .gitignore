@@ -57,6 +57,7 @@ archive-v2
 collectors/
 
 packages/retrocast-py/tests/testing_data/**/results.json
+packages/retrocast-rs/tests/testing_data/**/results.json
 docs/coding-style.md
 
 data/statistics

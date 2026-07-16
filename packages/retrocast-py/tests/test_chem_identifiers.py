@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
@@ -12,7 +14,7 @@ from retrocast.chem import (
     get_molecular_weight,
     reduce_inchikey,
 )
-from retrocast.exceptions import InvalidInchiKeyError, InvalidSmilesError
+from retrocast.exceptions import ChemRuntimeError, InvalidInchiKeyError, InvalidSmilesError, RetroCastException
 
 # ============================================================================
 # canonicalization
@@ -380,6 +382,43 @@ def test_reduce_inchikey_rejects_malformed_input(bad_key: str) -> None:
 
 
 @pytest.mark.unit
+@patch("retrocast.chem.Chem.MolToInchiKey")
+def test_rdkit_empty_result_guarded(mock_inchi) -> None:
+    mock_inchi.return_value = ""
+    with pytest.raises(RetroCastException, match="Empty InChIKey") as exc_info:
+        get_inchi_key("C")
+    assert exc_info.value.code == "chem.inchikey_empty"
+
+
+@pytest.mark.unit
+@patch("retrocast.chem.rdinchi.MolToInchi")
+def test_no_stereo_inchi_generation_failure_preserves_ret_code(mock_moltoinchi) -> None:
+    mock_moltoinchi.return_value = ("", 2, "bad", "", "")
+
+    with pytest.raises(ChemRuntimeError) as exc_info:
+        get_inchi_key("C", level=InChIKeyLevel.NO_STEREO)
+
+    assert exc_info.value.code == "chem.inchi_generation_failed"
+    assert exc_info.value.context["ret_code"] == 2
+
+
+@pytest.mark.unit
 def test_reduce_inchikey_rejects_unknown_runtime_level() -> None:
     with pytest.raises(ValueError, match="unknown inchikey level"):
         reduce_inchikey("UHOVQNZJYSORNB-UHFFFAOYSA-N", "bad-level")  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+@patch("retrocast.chem.rdinchi.MolToInchi")
+def test_no_stereo_uses_snon_flag(mock_moltoinchi) -> None:
+    """
+    contract test: verifies NO_STEREO level actually calls rdkit with '-SNon' option.
+    """
+    mock_moltoinchi.return_value = ("InChI=1S/C3H6O3/c1-2(4)3(5)6/h2,4H,1H3,(H,5,6)", 0, "", "", "")
+
+    get_inchi_key("C[C@H](O)C(=O)O", level=InChIKeyLevel.NO_STEREO)
+
+    # verify it was called with the -SNon option
+    mock_moltoinchi.assert_called_once()
+    args, kwargs = mock_moltoinchi.call_args
+    assert kwargs.get("options") == "-SNon"

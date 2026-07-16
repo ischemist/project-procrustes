@@ -106,7 +106,7 @@ jobs:
           env -i PATH=/usr/bin:/bin "$bundle/retrocast" --version
           env -i PATH=/usr/bin:/bin "$bundle/retrocast" list-adapters | grep aizynthfinder >/dev/null
           env -i PATH=/usr/bin:/bin "$bundle/retrocast" adapt \
-            --input packages/retrocast-py/tests/testing_data/aizynth-smoke.json \
+            --input packages/retrocast-rs/tests/testing_data/aizynth-smoke.json \
             --adapter aizynthfinder \
             --output "$bundle/smoke.json" \
             --max-candidates 1
@@ -181,7 +181,7 @@ jobs:
             throw 'standalone adapter registry smoke failed'
           }
           & "$bundle\retrocast.exe" adapt `
-            --input packages\retrocast-py\tests\testing_data\aizynth-smoke.json `
+            --input packages\retrocast-rs\tests\testing_data\aizynth-smoke.json `
             --adapter aizynthfinder `
             --output "$bundle\smoke.json" `
             --max-candidates 1

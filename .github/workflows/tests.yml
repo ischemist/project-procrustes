@@ -1,4 +1,4 @@
-name: RetroCast (Python) Tests
+name: RetroCast (Rust Python API) Tests
 
 on:
   push:
@@ -12,7 +12,7 @@ on:
 
 jobs:
   test:
-    name: RetroCast (Python) Tests
+    name: RetroCast (Rust Python API) Tests
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -91,7 +91,7 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: tj-actions/changed-files@v47 # check for the latest version, they update a lot
         with:
-          files: packages/retrocast-py/src/**
+          files: packages/retrocast-rs/python/**
 
       - name: print coverage report to logs
         run: |

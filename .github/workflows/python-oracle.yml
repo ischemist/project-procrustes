@@ -1,0 +1,50 @@
+name: RetroCast (Python 0.7.1 Oracle) Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: RetroCast (Python 0.7.1 Oracle) Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Install oracle dependencies
+        run: uv sync --extra viz
+        working-directory: packages/retrocast-py
+
+      - name: Test frozen implementation
+        run: uv run pytest
+        working-directory: packages/retrocast-py
+
+      - name: Lint frozen implementation
+        run: uv run ruff check src tests
+        working-directory: packages/retrocast-py
+
+      - name: Check frozen implementation formatting
+        run: uv run ruff format --check src tests
+        working-directory: packages/retrocast-py
