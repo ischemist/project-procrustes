@@ -27,25 +27,11 @@ The field of retrosynthesis evaluation is fragmented:
 
 ## Installation
 
-=== "uv (recommended)"
+=== "Standalone CLI"
 
-    We recommend using [uv](https://github.com/astral-sh/uv) for fast, reliable dependency management:
+    Download the archive for your platform from [GitHub Releases](https://github.com/ischemist/project-procrustes/releases). It includes the executable and required RDKit libraries.
 
-    ```bash
-    # Install as a standalone tool
-    uv tool install retrocast
-
-    # Or add to your project
-    uv add retrocast
-    ```
-
-    If you don't have `uv`, install it in one minute:
-
-    ```bash
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
-
-=== "pip"
+=== "Python binding"
 
     ```bash
     pip install retrocast

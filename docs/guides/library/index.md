@@ -4,69 +4,50 @@ icon: lucide/cable
 
 # Python Library
 
-RetroCast can be used as a normal Python library. The public schema-2 workflow is the same one used by the CLI:
+The published Python package is a direct binding to `retrocast-core`. The wheel contains the native extension, a generated import shim, and bundled RDKit C++ libraries; it does not contain the old Python implementation.
 
-```text
-adapt -> collect -> score -> analyze
-```
-
-Use the library API when you want to run RetroCast inside notebooks, custom model loops, training-set curation scripts, or your own file layout.
-
-## Minimal Example
+Inputs at the Python boundary are JSON-compatible dictionaries and lists. Corpus-sized intermediate values stay in Rust:
 
 ```python
-from retrocast import get_adapter
-from retrocast.io import load_benchmark
-from retrocast.metrics import RequiredLeavesChecker, RouteDepthChecker, StockTerminationChecker
-from retrocast.workflow import analyze, ingest_candidates, score
+import json
 
-task = load_benchmark(benchmark_path)
-adapter = get_adapter("paroutes")
+import retrocast
 
-predictions = ingest_candidates(raw_payload, adapter, task)
-evaluation = score(
-    predictions,
-    task,
-    constraint_checkers=[
-        StockTerminationChecker(stocks={"buyables": stock_inchikeys}),
-        RequiredLeavesChecker(),
-        RouteDepthChecker(),
-    ],
+raw = json.loads(raw_path.read_text())
+task = json.loads(benchmark_path.read_text())
+stocks = {"buyables": list(stock_inchikeys)}
+
+predictions = retrocast.ingest(raw, "aizynthfinder", task, workers=12)
+evaluation = retrocast.score(predictions, task, stocks, workers=12)
+report = retrocast.analyze(evaluation, n_boot=10_000, workers=12)
+```
+
+`predictions` is a `NativePredictions` handle. `score` consumes it and moves the route graph into a `NativeEvaluation`, avoiding a second corpus-sized representation. `report` is a normal Python dictionary because analysis output is small.
+
+Call `.write(path)` on a native handle to write schema-v2 JSON or JSON gzip directly from Rust. `.to_dict()` and `.json()` create explicit snapshots for inspection.
+
+For large files, avoid constructing the raw payload in Python:
+
+```python
+predictions = retrocast.ingest_file(
+    raw_path,
+    "aizynthfinder",
+    benchmark_path,
+    workers=12,
 )
-report = analyze(evaluation)
 ```
 
-## Main Objects
+The all-in-one file API keeps all three stages native and writes their artifacts:
 
-| Object | Role |
-| --- | --- |
-| `Route` | Canonical chemistry tree: `Molecule -> Reaction -> Molecule`. |
-| `Candidate` | One ranked prediction slot: either a valid `Route` or a `FailureRecord`. |
-| `Task` / `Benchmark` | Targets plus task constraints. |
-| `ScoredCandidate` | A ranked candidate with validity, constraint, and acceptable-route annotations. |
-| `Evaluation` | Scored candidates grouped by target for one task. |
-| `AnalysisReport` | Solv-N, MRR@Solv-N, acceptable-route reconstruction, and confidence intervals. |
-
-## Choose A Guide
-
-| Task | Start here |
-| --- | --- |
-| Choose between route-only and candidate-preserving adaptation | [Adaptation](adaptation.md) |
-| Score collected candidates and inspect validity results | [Evaluation](evaluation.md) |
-| Compute and interpret metric summaries | [Statistics](statistics.md) |
-| Make plots from reports or legacy statistics objects | [Visualization](visualization.md) |
-| Look up public functions quickly | [Reference](reference.md) |
-
-## Mental Model
-
-`Route` is chemistry only. It does not know its planner rank, benchmark target, stock result, or validity status.
-
-`Candidate` is the evaluation accounting object. It keeps planner rank and contains either a route or a typed adaptation failure. Use candidates whenever failed prediction slots should count toward Solv-0 and MRR.
-
-`Evaluation` stores scoring results without changing the route tree. Tier validity and task-constraint satisfaction are separate so Solv-N stays explicit:
-
-```text
-Solv-i[task] = Tier-i route validity + task constraint satisfaction
+```python
+stats = retrocast.pipeline(
+    raw_path,
+    benchmark_path,
+    stock_path,
+    output_dir,
+    adapter="aizynthfinder",
+    workers=12,
+)
 ```
 
-For the deeper data-model rationale, see [Schema Design](/dev/rationale/schema-design).
+See the [Library Reference](reference.md) for signatures and ownership behavior, and [Schema Design](/dev/rationale/schema-design) for artifact shapes.

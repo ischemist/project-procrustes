@@ -20,7 +20,7 @@ The full port removes that split. A value created by an adapter remains the same
 
 ## Workspace shape
 
-The published package lives under `retrocast-rs`. Its Python source is the facade over the PyO3 extension, so the wheel and the standalone executable are built from one implementation tree. The root `pyproject.toml` coordinates that mixed-language build.
+The published package lives under `retrocast-rs`. The wheel and standalone executable are built from the same Rust workspace; there is no second Python implementation in the published package. The root `pyproject.toml` configures Maturin to build the PyO3 crate as the top-level `retrocast` module.
 
 ```text
 packages/
@@ -32,9 +32,9 @@ packages/
     ├── crates/
     │   ├── retrocast-core/   schemas, chemistry, adapters, I/O, workflows
     │   ├── retrocast-cli/    argument parsing and terminal presentation
-    │   └── retrocast-python/ PyO3 types and Python-callable functions
-    ├── python/retrocast/     published Python facade
-    ├── tests/                Python API and cross-language contracts
+    │   └── retrocast-python/ top-level PyO3 module `retrocast`
+    ├── python-tests/         direct binding contracts
+    ├── test-data/            binding and release smoke fixtures
     └── Cargo.toml
 ```
 
@@ -55,7 +55,7 @@ retrocast analyze --evaluation evaluation.json.gz --output analysis.json.gz
 
 `retrocast pipeline` chains the last three stages without writing and re-reading the intermediate Rust values. `--adapter` resolves through the same built-in registry used by the Python binding.
 
-`retrocast-python` builds `retrocast._native`. It converts Python arguments at the boundary and returns Python views over Rust-owned values. It does not route work back through the Python implementation.
+`retrocast-python` builds the importable `retrocast` module directly. It converts JSON-compatible Python inputs at the boundary and returns opaque Rust-owned workflow values. It contains no imports from, or fallback to, the frozen Python implementation.
 
 ```mermaid
 flowchart LR
@@ -72,9 +72,9 @@ The dependency arrows only point inward. In particular, `retrocast-core` never d
 
 The word _port_ applies to behavior that defines a RetroCast result: schema validation, chemistry, adaptation, collection, scoring, statistics, analysis, artifact I/O, dataset selection, curation, and provenance. Both front ends call that behavior in `retrocast-core`.
 
-Front ends still own interaction with their host. Clap owns standalone argument parsing and terminal messages. Pydantic exposes familiar Python objects after a caller inspects a native value. Rich and Plotly can render Markdown, tables, or an optional Pareto chart from a core-produced `AnalysisReport`. Those renderers may differ without creating a second engine because they cannot alter the report.
+Front ends still own interaction with their host. Clap owns standalone argument parsing and terminal messages. PyO3 converts Python arguments, exposes native handles, and translates Rust errors into Python exceptions. These boundaries do not validate schemas, adapt routes, or calculate results.
 
-The standalone executable covers all engine and data-management commands: `adapt`, `collect`, `ingest`, `score`, `analyze`, `pipeline`, `verify`, `get-data`, `get-training-data`, `config`, `list`, and `list-adapters`. `compare pareto-frontier` remains an optional Python visualization command; it reads analysis artifacts and writes HTML, but owns no evaluation or comparison metric.
+The standalone executable covers all engine and data-management commands: `adapt`, `collect`, `ingest`, `score`, `analyze`, `pipeline`, `verify`, `get-data`, `get-training-data`, `config`, `list`, and `list-adapters`.
 
 ## Data ownership
 
@@ -89,14 +89,12 @@ let report = analyze(&evaluation, &analysis_options)?;
 Python presents equivalent calls:
 
 ```python
-candidates = retrocast.ingest(raw, task, adapter="aizynthfinder")
-evaluation = retrocast.score(candidates, task, registry=registry)
+candidates = retrocast.ingest(raw, "aizynthfinder", task)
+evaluation = retrocast.score(candidates, task, stocks)
 report = retrocast.analyze(evaluation)
 ```
 
-The Python variables above wrap the Rust values. Passing `candidates` into `score` does not serialize JSON and does not reconstruct a parallel Pydantic tree. `model_dump()` and artifact writers materialize Python or JSON data only when requested.
-
-The compatibility views are deliberately one-way. Their first field, mapping, or mutation access materializes the Python DTO and discards the opaque handle. An untouched value can be handed to the next native stage; an inspected value takes the validated DTO path. RetroCast never tries to detect arbitrary nested Python mutations and never runs a later stage against a stale native copy.
+The Python variables above are `NativePredictions` and `NativeEvaluation` handles. Passing `candidates` into `score` moves the prediction graph into the evaluation; the consumed predictions handle then rejects further access. This does not serialize JSON or construct a parallel Python object tree. `.to_dict()`, `.json()`, and `.write()` materialize snapshots only when explicitly requested.
 
 Workflow statistics follow the same rule. Candidate counts, failure distributions, timing summaries, and Solv counts are computed against the Rust value. Requesting them does not materialize an otherwise untouched prediction or evaluation.
 
@@ -120,7 +118,7 @@ Project-mode commands follow this ownership sequence:
 
 Each arrow consumes the previous corpus-sized value when the previous value is no longer needed. Scoring moves candidates into the evaluation. The pipeline writes predictions before that move and writes the evaluation before analysis releases it. Manifest generation hashes the written artifacts and receives only small statistics; it does not convert a typed artifact into a second generic JSON tree.
 
-The in-memory Python API accepts dictionaries and Pydantic models for compatibility. Those calls must serialize caller-owned Python values because Python already owns the input. Project-mode stage commands and `pipeline` are the normal large-corpus path and never take that detour. The invariant is one corpus-sized representation per active stage, plus bounded input, output, and worker-local buffers.
+The in-memory Python API accepts JSON-compatible dictionaries and lists. Those calls must serialize caller-owned Python values because Python already owns the input. File-based stage calls and `pipeline` are the normal large-corpus path and never take that detour. The invariant is one corpus-sized representation per active stage, plus bounded input, output, and worker-local buffers.
 
 ## Extensibility boundary
 
@@ -147,7 +145,7 @@ pub fn inchi_key(smiles: &str, level: InchiKeyLevel) -> Result<String>;
 pub fn descriptors(smiles: &str) -> Result<MolecularDescriptors>;
 ```
 
-The release implementation is RDKit C++. Public Python chemistry helpers translate native errors into RetroCast's stable exception types; they do not perform chemistry themselves.
+The release implementation is RDKit C++. Public Python chemistry helpers translate invalid chemical input into `ValueError` and native operational failures into `RuntimeError`; they do not perform chemistry themselves.
 
 ## Parallel execution
 
@@ -163,7 +161,7 @@ The Python binding releases the GIL for a core operation. It does not create a P
 
 The project publishes two forms of the same core:
 
-- Python wheels contain `retrocast._native`, its repaired RDKit C++ libraries, and the small Python compatibility layer. `pip install retrocast` needs no Rust compiler, separate RDKit installation, or Python `rdkit` package.
+- Python wheels contain the `retrocast` extension, Maturin's generated import shim, and repaired RDKit C++ libraries. They contain no handwritten Python implementation or compatibility facade. `pip install retrocast` needs no Rust compiler, separate RDKit installation, or Python `rdkit` package.
 - standalone archives contain the `retrocast` executable and its required native libraries. They can also feed package managers such as Homebrew, Scoop, and winget.
 
 Release automation builds and smoke-tests Windows x86-64, Linux x86-64, macOS arm64, and macOS x86-64 artifacts. Native dependencies are repaired into the wheel or CLI bundle for each platform. Source builds remain available for other targets and require Rust, a C++20 compiler, Boost headers, and RDKit C++.

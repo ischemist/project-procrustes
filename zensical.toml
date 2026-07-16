@@ -31,10 +31,6 @@ nav = [
     ] },
     { "Python Library" = [
       "guides/library/index.md",
-      "guides/library/adaptation.md",
-      "guides/library/evaluation.md",
-      "guides/library/statistics.md",
-      "guides/library/visualization.md",
       "guides/library/reference.md",
     ] },
     { "Benchmarks and Data" = [
@@ -54,6 +50,7 @@ nav = [
       "dev/reference/route-node-ids.md",
       "dev/reference/route-embedding.md",
       "dev/reference/errors.md",
+      "dev/reference/public-api.md",
       "dev/reference/deprecations.md",
     ] },
   ] },

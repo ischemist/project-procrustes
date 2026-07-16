@@ -4,61 +4,43 @@ icon: lucide/book-open-text
 
 # Library Reference
 
-This page lists the main schema-2 entry points. See the neighboring guides for context and examples.
-
-## Adaptation
-
-| Function | Purpose | Returns |
-| --- | --- | --- | --- |
-| `adapt_route(raw_route, adapter)` | Adapt one raw route record | `Route | None` |
-| `adapt_routes(raw_payload, adapter)` | Adapt a raw artifact and keep only successful routes | `list[Route]` |
-| `adapt_candidates(raw_payload, adapter)` | Adapt a raw artifact while preserving failed prediction slots | `list[Candidate]` |
-| `collect_candidates(candidates, task)` | Map candidates onto task targets | `dict[str, list[Candidate]]` |
-| `collect_routes(routes, task)` | Map route-only outputs onto task targets | `dict[str, list[Route]]` |
-| `ingest_candidates(raw_payload, adapter, task)` | `adapt_candidates + collect_candidates` | `dict[str, list[Candidate]]` |
-| `ingest_routes(raw_payload, adapter, task)` | `adapt_routes + collect_routes` | `dict[str, list[Route]]` |
-
-## Scoring and Analysis
+## Workflow
 
 | Function | Purpose | Returns |
 | --- | --- | --- |
-| `score(predictions, task, constraint_checkers=...)` | Score collected candidates | `Evaluation` |
-| `score_candidate(candidate, target=..., constraints=..., ...)` | Score one candidate | `ScoredCandidate` |
-| `score_target(candidates, target=..., constraints=..., ...)` | Score one target's candidates | `TargetResult` |
-| `analyze(evaluation, ks=(1, 5, 10, 50), n_boot=10000)` | Summarize an evaluation | `AnalysisReport` |
-| `score_predictions(predictions, task, stocks=...)` | Convenience wrapper that builds default task constraint checkers | `Evaluation` |
-| `analyze_evaluation(evaluation, n_boot=10000)` | Convenience wrapper around `analyze(...)` | `AnalysisReport` |
+| `adapt(raw, adapter, *, mode="strict", target=None, source_key=None, max_candidates=None, workers=1)` | Adapt one planner payload | `list[dict]` |
+| `ingest(raw, adapter, task, *, mode="strict", max_candidates=None, workers=1)` | Adapt and collect in-memory input | `NativePredictions` |
+| `ingest_file(raw_path, adapter, task_path, *, mode="strict", max_candidates=None, workers=1)` | Read, adapt, and collect in Rust | `NativePredictions` |
+| `score(predictions, task, stocks, *, match_level="full", acceptable_route_match="prefix", execution_stats=None, workers=1)` | Consume predictions and score them | `NativeEvaluation` |
+| `analyze(evaluation, *, ks=..., prefix_depths=..., n_boot=10000, seed=42, workers=1)` | Calculate metrics and intervals | `dict` |
+| `analyze_file(evaluation_path, *, ..., execution_stats_path=None)` | Read and analyze an evaluation in Rust | `dict` |
+| `pipeline(raw_path, benchmark_path, stock_path, output_dir, *, ...)` | Run ingest, score, and analysis in one native process | `dict` of timing and throughput statistics |
 
-## IO
+Adapter names are stable lowercase strings: `aizynthfinder`, `askcos`, `directmultistep`, `dreamretroer`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, and `ursa`.
 
-| Function | Purpose | Shape |
-| --- | --- | --- |
-| `load_benchmark(path)` / `save_benchmark(...)` | Benchmark artifacts | `Benchmark` |
-| `load_candidates(path)` / `save_candidates(...)` | Flat candidate artifacts | `list[Candidate]` |
-| `load_collected_candidates(path)` / `save_collected_candidates(...)` | Collected candidate artifacts | `dict[str, list[Candidate]]` |
-| `load_evaluation(path)` / `save_evaluation(...)` | Scored artifacts | `Evaluation` |
-| `load_analysis_report(path)` / `save_analysis_report(...)` | Analysis artifacts | `AnalysisReport` |
-| `load_stock_file(path)` | Stock files | `set[InChIKeyStr]` or `set[SmilesStr]` |
+## Native Handles
 
-## Core Models
+`NativePredictions` exposes:
 
-| Model                                                            | Purpose                    |
-| ---------------------------------------------------------------- | -------------------------- |
-| `Route`, `Molecule`, `Reaction`                                  | Canonical route tree       |
-| `RoutePath`, `ReactionId`, `MoleculeId`                          | Route-local addressing     |
-| `Candidate`, `FailureRecord`                                     | Adaptation accounting      |
-| `Target`, `TaskConstraint`, `Task`, `Benchmark`                  | Problem definition         |
-| `CheckResult`, `TierResult`, `RouteValidity`, `ConstraintResult` | Scoring details            |
-| `ScoredCandidate`, `TargetResult`, `Evaluation`                  | Scored prediction artifact |
-| `MetricSummary`, `AnalysisReport`                                | Analysis artifact          |
+- `write(path)` to write JSON or JSON gzip from Rust
+- `to_dict()` to create a Python snapshot
+- `json()` to create a JSON string
 
-## Adapters
+`score` consumes the prediction payload. Later access through the old handle raises `RuntimeError`.
 
-```python
-from retrocast.adapters import ADAPTER_TYPES, get_adapter
+`NativeEvaluation` exposes the same three materialization methods plus `metric_label()`. Analysis borrows the evaluation because its result is small.
 
-print(sorted(ADAPTER_TYPES))
-adapter = get_adapter("paroutes")
-```
+## Chemistry
 
-Supported adapters include `aizynthfinder`, `askcos`, `directmultistep`, `dreamretroer`, `molbuilder`, `multistepttl`, `paroutes`, `retrochimera`, `retrostar`, `synllama`, `synplanner`, `syntheseus`, and `ursa`.
+| Function | Purpose |
+| --- | --- |
+| `canonicalize_smiles(smiles, remove_mapping=False, ignore_stereo=False)` | Canonicalize with RDKit C++ |
+| `get_inchi_key(smiles, level="full")` | Calculate an InChIKey |
+| `reduce_inchi_key(inchikey, level)` | Reduce to `no_stereo` or `connectivity` |
+| `molecular_descriptors(smiles)` | Return heavy atoms, molecular weight, and chiral centers |
+
+Invalid chemical input raises `ValueError`. Schema, adapter, and native workflow failures raise `RuntimeError`; missing artifact paths raise `OSError`.
+
+## Runtime Identity
+
+`retrocast.__version__` reports the package version and `retrocast.__engine__` is always `"rust"`. `retrocast.engine_info()` returns the RetroCast version, `"RDKit C++"`, and the linked RDKit version.

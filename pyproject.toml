@@ -5,24 +5,12 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{ name = "Anton Morgunov", email = "anton@ischemist.com" }]
-dependencies = [
-  "packaging>=25.0",
-  "pydantic",
-  "pyyaml>=6.0.3",
-  "rich>=14.2.0",
-  "tqdm>=4.67.1",
-]
+dependencies = []
 dynamic = ["version"]
 
 [project.urls]
 Homepage = "https://github.com/ischemist/project-procrustes"
 Issues = "https://github.com/ischemist/project-procrustes/issues"
-
-[project.scripts]
-retrocast = "retrocast.cli.main:main"
-
-[project.optional-dependencies]
-viz = ["ischemist>=0.2.0", "kaleido>=1.1.0", "plotly>=6.3.0"]
 
 [dependency-groups]
 dev = [
@@ -48,41 +36,12 @@ dev = [
 requires = ["maturin>=1.10.2,<2"]
 build-backend = "maturin"
 
-[tool.coverage.run]
-omit = [
-  "*/analysis/*.py",
-  "*/constants/*",
-  "*/__init__.py",
-  "*/retrocast/types.py",
-  "*/retrocast/utils/logging.py",
-  "*/retrocast/exceptions.py",
-  "*/retrocast/cli/main.py",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-  "pragma: no cover",
-  "def __repr__",
-  "def __str__",
-  "raise NotImplementedError",
-  "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
-  "pass",
-  "logger\\.",
-]
-
 [tool.pytest.ini_options]
-testpaths = ["packages/retrocast-rs/tests"]
-markers = [
-  "unit: runs in <10ms, tests single functions/classes, no IO",
-  "integration: tests workflow glue, uses tmp_path",
-  "contract: verifies adapters output valid retrocast objects",
-  "regression: runs against frozen json.gz files",
-]
+testpaths = ["packages/retrocast-rs/python-tests"]
 
 [tool.ruff]
 line-length = 120
-src = ["packages/retrocast-rs/python"]
+src = ["packages/retrocast-rs/python-tests"]
 lint.select = [
   "E", # pycodestyle
   "F", # Pyflakes
@@ -96,8 +55,7 @@ lint.ignore = ["E501", "SIM108"]
 [tool.maturin]
 bindings = "pyo3"
 manifest-path = "packages/retrocast-rs/crates/retrocast-python/Cargo.toml"
-module-name = "retrocast._native"
-python-source = "packages/retrocast-rs/python"
+module-name = "retrocast"
 include = [
   { path = "LICENSE", format = ["sdist", "wheel"] },
   { path = "THIRD_PARTY_LICENSES.md", format = ["sdist", "wheel"] },
@@ -107,7 +65,7 @@ include = [
 ]
 
 [tool.ty.src]
-exclude = ["packages/retrocast-rs/tests", "packages/retrocast-py", "scripts"]
+exclude = ["packages/retrocast-rs/python-tests", "packages/retrocast-py", "scripts"]
 
 [tool.uv]
 # Require a short cooling-off window before newly uploaded artifacts are eligible.

@@ -713,8 +713,8 @@ Ingest is just the convenience alias for `adapt + collect`
 === "Python"
 
     ```python
-    ingest_routes(raw, adapter, task, *, max_routes=None) -> CollectedRoutes
-    ingest_candidates(raw, adapter, task, *, max_candidates=None) -> CollectedCandidates
+    ingest(raw, adapter_name, task, *, max_candidates=None, workers=1) -> NativePredictions
+    ingest_file(raw_path, adapter_name, task_path, *, max_candidates=None, workers=1) -> NativePredictions
     ```
 
 === "Rust"
@@ -744,8 +744,8 @@ Artifacts use schema-v2 JSON, but an in-process pipeline does not use JSON as an
 === "Python"
 
     ```python
-    predictions = retrocast.ingest_candidates(raw, adapter, task)
-    evaluation = retrocast.score(predictions, task)
+    predictions = retrocast.ingest(raw, "aizynthfinder", task)
+    evaluation = retrocast.score(predictions, task, stocks)
     report = retrocast.analyze(evaluation)
     ```
 
@@ -757,7 +757,7 @@ Artifacts use schema-v2 JSON, but an in-process pipeline does not use JSON as an
     let report = analyze(&evaluation, &ks, &prefix_depths, n_boot, seed, workers)?;
     ```
 
-The Python variables are lazy compatibility views over opaque Rust handles. Passing an untouched value to the next stage hands that handle back to `retrocast-core`. Reading or mutating the mapping/model first materializes the established Python DTO and permanently drops the shortcut for that value. The next stage then validates that DTO through the normal serialized boundary. This rule prevents a mutable Python object and a stale Rust graph from ever claiming to represent the same value.
+The Python variables are opaque Rust handles. `score` consumes `NativePredictions` and moves its graph into `NativeEvaluation`; the old predictions handle then rejects access. There is no Python DTO or compatibility implementation. `.to_dict()`, `.json()`, and `.write()` create explicit snapshots for inspection or persistence before that move.
 
 ## 4. Score
 

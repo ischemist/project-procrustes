@@ -136,15 +136,13 @@ The audit checks release counts, split balance, route/reaction overlap, and meta
 
 Route release behavior lives in:
 
-- `packages/retrocast-rs/python/retrocast/curation/training/route_release.py`
-- `packages/retrocast-rs/python/retrocast/curation/filtering.py`
-- `packages/retrocast-rs/python/retrocast/curation/training/records.py`
+- `packages/retrocast-rs/crates/retrocast-core/src/training.rs`
+- `packages/retrocast-rs/crates/retrocast-core/src/curation.rs`
 
 Single-step release behavior lives in:
 
-- `packages/retrocast-rs/python/retrocast/curation/training/reaction_release.py`
-- `packages/retrocast-rs/python/retrocast/curation/training/records.py`
+- `packages/retrocast-rs/crates/retrocast-core/src/training.rs`
 
 PaRoutes adaptation behavior lives in:
 
-- `packages/retrocast-rs/python/retrocast/adapters/paroutes.py`
+- `packages/retrocast-rs/crates/retrocast-core/src/adapters/paroutes.rs`

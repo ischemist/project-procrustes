@@ -4,105 +4,35 @@ icon: lucide/database-zap
 
 # Training Sets
 
-RetroCast publishes PaRoutes training artifacts as hosted, versioned datasets. The official Python workflow is centered on `retrocast.datasets`. Use `retrocast get-training-data` when you need a download path outside Python.
-
-!!! warning "Requires the hosted training-set API"
-
-    This guide assumes a RetroCast build that includes
-    `retrocast.datasets.download_training_set`. That surface landed after `v0.5.3`
-    in commit `2c6387a`.
-
-    If your install does not expose `retrocast.datasets`, upgrade before
-    running the examples on this page.
+RetroCast publishes PaRoutes training artifacts as hosted, versioned datasets. The standalone `retrocast get-training-data` command resolves releases, downloads artifacts, and verifies checksums.
 
 ## Quick Start
 
-Pick one of two workflows:
+Use the managed cache when the exact local path is unimportant:
 
-=== "managed cache"
-
-    use this when you do not care where the files live beyond “some verified local cache”.
-
-    python:
-
-    ```python
-    from retrocast.datasets import download_training_set
-    from retrocast.io import iter_training_routes
-
-    path = download_training_set(
-        "paroutes",
-        artifact="reaction-holdout-n1-n5",
-        split="training",
-    )
-
-    for route in iter_training_routes(path):
-        ...
-    ```
-
-    cli:
-
-    ```bash
-    retrocast get-training-data reaction-holdout-n1-n5 --split training
-    ```
-
-    resulting local layout:
-
-    ```text
-    ~/.cache/retrocast/training-sets/paroutes/<release>/SHA256SUMS
-    ~/.cache/retrocast/training-sets/paroutes/<release>/<artifact>/manifest.json
-    ~/.cache/retrocast/training-sets/paroutes/<release>/<artifact>/<file>
-    ```
-
-=== "project-owned directory"
-
-    use this when you want to choose the dataset root yourself. pass a dataset-specific directory such as `data/datasets/paroutes`, and retrocast will place releases directly under it.
-
-    python:
-
-    ```python
-    from pathlib import Path
-
-    from retrocast.datasets import download_training_set
-    from retrocast.io import iter_training_routes
-
-    path = download_training_set(
-        "paroutes",
-        artifact="reaction-holdout-n1-n5",
-        split="training",
-        output_dir=Path("data/datasets/paroutes"),
-    )
-
-    for route in iter_training_routes(path):
-        ...
-    ```
-
-    cli:
-
-    ```bash
-    retrocast get-training-data reaction-holdout-n1-n5 --split training --dir data/datasets/paroutes
-    ```
-
-    resulting local layout:
-
-    ```text
-    data/datasets/paroutes/<release>/SHA256SUMS
-    data/datasets/paroutes/<release>/<artifact>/manifest.json
-    data/datasets/paroutes/<release>/<artifact>/<file>
-    ```
-
-One-step reaction training uses the same flow with `artifact="single-step-reaction-holdout-n1-n5"` or `artifact="single-step-route-holdout-n1-n5"`. By default, that downloads the canonical `jsonl` artifact. Pass `format="rsmi"` if you specifically want the plain reaction-smiles text file.
-
-The original PaRoutes n1/n5 test sets are also published as all-only artifacts: `n1-routes`, `n5-routes`, `n1-single-step-reactions`, and `n5-single-step-reactions`. Use `split="all"` for those.
-
-When a real download happens in an interactive terminal, RetroCast shows a progress bar automatically. Pass `show_progress=False` to suppress it or `show_progress=True` to force it.
-
-## Public Imports
-
-The stable public import path for training-set download helpers is `retrocast.datasets`:
-
-```python
-from retrocast.datasets import download_training_set, resolve_latest_training_set_release
+```bash
+retrocast get-training-data reaction-holdout-n1-n5 --split training
 ```
+
+Use `--dir` for a project-owned dataset root:
+
+```bash
+retrocast get-training-data reaction-holdout-n1-n5 \
+  --split training \
+  --dir data/datasets/paroutes
+```
+
+The project-owned layout is:
+
+```text
+data/datasets/paroutes/<release>/SHA256SUMS
+data/datasets/paroutes/<release>/<artifact>/manifest.json
+data/datasets/paroutes/<release>/<artifact>/<file>
+```
+
+One-step reaction training uses `single-step-reaction-holdout-n1-n5` or `single-step-route-holdout-n1-n5`. The default is canonical JSONL; pass `--format rsmi` for the plain reaction-SMILES projection.
+
+The original PaRoutes n1/n5 test sets are also published as all-only artifacts: `n1-routes`, `n5-routes`, `n1-single-step-reactions`, and `n5-single-step-reactions`. Use `--split all` for those.
 
 ## Artifact Matrix
 
@@ -126,124 +56,6 @@ Each artifact directory includes:
 Each release directory includes:
 
 - `SHA256SUMS`
-
-## Python API
-
-`download_training_set()` gives you the verified local artifact path. it also materializes sibling `manifest.json` and release-level `SHA256SUMS`. `format` describes which wire file you want:
-
-- `jsonl` -> structured JSONL artifact
-- `rsmi` -> plain reaction-smiles text artifact
-
-Use `jsonl` unless you explicitly want the single-step reaction-smiles text projection. route artifacts only support `jsonl`.
-
-### Streaming
-
-Use `retrocast.io` when you want to stream a verified local artifact without loading the full file into memory:
-
-```python
-from retrocast.datasets import download_training_set
-from retrocast.io import iter_training_reaction_records
-
-path = download_training_set("paroutes", artifact="single-step-reaction-holdout-n1-n5", split="training")
-
-for record in iter_training_reaction_records(path):
-    ...
-```
-
-Available local streaming helpers:
-
-- `retrocast.io.iter_training_routes(path)`
-- `retrocast.io.iter_training_route_records(path)`
-- `retrocast.io.iter_training_reaction_records(path)`
-- `retrocast.io.iter_training_reaction_smiles(path)`
-
-Available local eager helpers:
-
-- `retrocast.io.load_training_routes(path)`
-- `retrocast.io.load_training_route_records(path)`
-- `retrocast.io.load_training_reaction_records(path)`
-- `retrocast.io.load_training_reaction_smiles(path)`
-
-The intended split is:
-
-- `retrocast.datasets` resolves releases, downloads artifacts, and verifies checksums
-- `retrocast.io` parses eager or streaming views from a local path
-
-That keeps the local artifact path explicit, which is usually useful in real training pipelines.
-
-### Local Metadata
-
-`download_training_set()` returns the verified local `Path`:
-
-```python
-from retrocast.datasets import download_training_set
-
-path = download_training_set(
-    "paroutes",
-    artifact="reaction-holdout-n1-n5",
-    split="training",
-)
-```
-
-The sibling artifact manifest and release checksum file are always there:
-
-```python
-from retrocast.datasets import download_training_set
-
-path = download_training_set(
-    "paroutes",
-    artifact="reaction-holdout-n1-n5",
-    split="training",
-)
-
-manifest_path = path.parent / "manifest.json"
-checksums_path = path.parent.parent / "SHA256SUMS"
-
-print(path)
-print(manifest_path)
-print(checksums_path)
-```
-
-That is usually enough for downstream training pipelines:
-
-- keep `path` as the canonical downloaded artifact
-- inspect `manifest.json` later for release provenance and build metadata
-- compare a local `sha256` against `SHA256SUMS` if you need an explicit audit step
-
-### Release Resolution
-
-For the common case, use `resolve_latest_training_set_release()`:
-
-```python
-from retrocast.datasets import resolve_latest_training_set_release
-
-release = resolve_latest_training_set_release("paroutes")
-```
-
-`resolve_training_set_release()` is still available when you want to resolve a specific label yourself:
-
-```python
-from retrocast.datasets import resolve_training_set_release
-
-release = resolve_training_set_release(dataset="paroutes", release="latest")
-```
-
-### Explicit Output Directories
-
-Use `output_dir=...` when you want a project-owned dataset root instead of the managed cache. this path is treated as the root for one dataset, so releases land directly under it with no extra `retrocast/training-sets/<dataset>` scaffolding:
-
-```python
-from pathlib import Path
-
-from retrocast.datasets import download_training_set
-
-path = download_training_set(
-    "paroutes",
-    artifact="reaction-holdout-n1-n5",
-    split="training",
-    output_dir=Path("data/datasets/paroutes"),
-)
-```
 
 ## Canonical Wire Examples
 

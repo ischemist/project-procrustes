@@ -47,21 +47,11 @@ These benchmarks evaluate practical utility for synthetic chemists. There are no
 
 **Stock to use:** `buyables-stock`
 
-Python download:
+Download the benchmark definition and its declared stock with the standalone CLI:
 
-```python
-from retrocast.datasets import (
-    download_benchmark,
-    download_benchmark_assets,
-    download_stock,
-)
-
-benchmark_path = download_benchmark("mkt-cnv-160")
-stock_path = download_stock("buyables-stock", format="hdf5")
-assets = download_benchmark_assets("mkt-cnv-160")
+```bash
+retrocast get-data mkt-cnv-160
 ```
-
-`download_benchmark_assets(...)` downloads the benchmark definition plus its declared stock. all three helpers use the managed cache by default. use `output_dir=...` when you want project-owned paths.
 
 | Benchmark       | Targets | Description                                       |
 | :-------------- | :------ | :------------------------------------------------ |
