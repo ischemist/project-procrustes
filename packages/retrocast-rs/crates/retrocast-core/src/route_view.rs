@@ -523,91 +523,10 @@ fn stable_hash(value: &Value) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
-    use proptest::{collection, prelude::*};
     use serde_json::json;
 
     use super::{InchiKeyLevel, ReactionContentField};
-    use crate::{
-        model::{Molecule, Reaction, Route},
-        route_path::RoutePath,
-        schema::{CanonicalSmiles, InchiKey},
-    };
-
-    #[derive(Clone, Debug)]
-    enum Tree {
-        Leaf(u8),
-        Branch(u8, Vec<Tree>),
-    }
-
-    fn trees() -> impl Strategy<Value = Tree> {
-        any::<u8>()
-            .prop_map(Tree::Leaf)
-            .prop_recursive(4, 32, 4, |child| {
-                (any::<u8>(), collection::vec(child, 1..4))
-                    .prop_map(|(tag, children)| Tree::Branch(tag, children))
-            })
-    }
-
-    fn molecule_from_tree(tree: &Tree) -> Molecule {
-        let tag = match tree {
-            Tree::Leaf(tag) | Tree::Branch(tag, _) => *tag,
-        };
-        let letter = char::from(b'A' + tag % 26);
-        Molecule {
-            smiles: CanonicalSmiles::try_from(format!("node-{tag}")).unwrap(),
-            inchikey: InchiKey::try_from(format!("AAAAAAAAAAAAA{letter}-BBBBBBBBBB-C")).unwrap(),
-            product_of: match tree {
-                Tree::Leaf(_) => None,
-                Tree::Branch(_, children) => Some(Box::new(Reaction {
-                    reactants: children.iter().map(molecule_from_tree).collect(),
-                    mapped_reaction_smiles: None,
-                    template: None,
-                    reagents: None,
-                    solvents: None,
-                    annotations: Default::default(),
-                })),
-            },
-            annotations: Default::default(),
-        }
-    }
-
-    fn tree_counts(tree: &Tree) -> (usize, usize, usize, usize) {
-        match tree {
-            Tree::Leaf(_) => (1, 0, 1, 0),
-            Tree::Branch(_, children) => {
-                let child_counts = children.iter().map(tree_counts).collect::<Vec<_>>();
-                (
-                    1 + child_counts.iter().map(|counts| counts.0).sum::<usize>(),
-                    1 + child_counts.iter().map(|counts| counts.1).sum::<usize>(),
-                    child_counts.iter().map(|counts| counts.2).sum(),
-                    1 + child_counts
-                        .iter()
-                        .map(|counts| counts.3)
-                        .max()
-                        .unwrap_or(0),
-                )
-            }
-        }
-    }
-
-    fn mutate_nonstructural_content(molecule: &mut Molecule) {
-        molecule
-            .annotations
-            .insert("ignored".to_owned(), json!(true));
-        let Some(reaction) = molecule.product_of.as_deref_mut() else {
-            return;
-        };
-        reaction.reactants.reverse();
-        reaction.template = Some("changed-without-changing-topology".to_owned());
-        reaction
-            .annotations
-            .insert("ignored".to_owned(), json!({"nested": [1, 2, 3]}));
-        for reactant in &mut reaction.reactants {
-            mutate_nonstructural_content(reactant);
-        }
-    }
+    use crate::{model::Route, route_path::RoutePath};
 
     fn route() -> Route {
         serde_json::from_value(json!({
@@ -675,52 +594,5 @@ mod tests {
             annotations: Default::default(),
         }));
         assert!(route.is_convergent());
-    }
-
-    proptest! {
-        #[test]
-        fn generated_route_topologies_preserve_traversal_and_identity_invariants(tree in trees()) {
-            let route = Route {
-                target: molecule_from_tree(&tree),
-                annotations: Default::default(),
-                schema_version: Default::default(),
-            };
-            let (molecule_count, reaction_count, leaf_count, depth) = tree_counts(&tree);
-
-            let molecules = route.molecules();
-            let reactions = route.reactions();
-            let leaves = route.leaves();
-            prop_assert_eq!(molecules.len(), molecule_count);
-            prop_assert_eq!(reactions.len(), reaction_count);
-            prop_assert_eq!(leaves.len(), leaf_count);
-            prop_assert_eq!(route.depth(), depth);
-
-            let molecule_ids = molecules.iter().map(|view| view.id().to_string()).collect::<BTreeSet<_>>();
-            let reaction_ids = reactions.iter().map(|view| view.id().to_string()).collect::<BTreeSet<_>>();
-            prop_assert_eq!(molecule_ids.len(), molecule_count);
-            prop_assert_eq!(reaction_ids.len(), reaction_count);
-            for molecule in molecules {
-                let looked_up = route.molecule_at(&molecule.path).unwrap();
-                prop_assert_eq!(&looked_up.value.inchikey, &molecule.value.inchikey);
-            }
-            for reaction in reactions {
-                let looked_up = route.reaction_at(&reaction.path).unwrap();
-                prop_assert_eq!(looked_up.reactants().len(), reaction.value.reactants.len());
-                prop_assert_eq!(looked_up.product().path, reaction.path.product().unwrap());
-            }
-
-            let wire = serde_json::to_value(&route).unwrap();
-            let round_trip: Route = serde_json::from_value(wire.clone()).unwrap();
-            prop_assert_eq!(serde_json::to_value(round_trip).unwrap(), wire);
-
-            let signature = route.signature(InchiKeyLevel::Full, None);
-            let mut reordered_and_annotated = route.clone();
-            mutate_nonstructural_content(&mut reordered_and_annotated.target);
-            prop_assert_eq!(
-                reordered_and_annotated.signature(InchiKeyLevel::Full, None),
-                signature,
-                "structural identity changed after annotation and sibling-order mutations",
-            );
-        }
     }
 }

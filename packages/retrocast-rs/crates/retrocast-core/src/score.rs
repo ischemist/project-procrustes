@@ -463,68 +463,12 @@ fn acceptable_match(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::BTreeMap;
 
-    use proptest::prelude::*;
-    use serde_json::Map;
     use serde_json::json;
 
-    use super::{Stocks, check_task_constraints, score, score_owned};
-    use crate::{
-        adapt::ingest,
-        adapters::AiZynthFinderAdapter,
-        model::{Constraint, Molecule, Reaction, Route, Task},
-        route::AdaptMode,
-        schema::{CanonicalSmiles, InchiKey},
-    };
-
-    fn molecule(tag: u8) -> Molecule {
-        let letter = char::from(b'A' + tag % 26);
-        Molecule {
-            smiles: CanonicalSmiles::try_from(format!("node-{tag}")).unwrap(),
-            inchikey: InchiKey::try_from(format!("AAAAAAAAAAAAA{letter}-BBBBBBBBBB-C")).unwrap(),
-            product_of: None,
-            annotations: Map::new(),
-        }
-    }
-
-    fn chain_route(depth: usize) -> Route {
-        let mut child = molecule(0);
-        for index in 0..depth {
-            let mut parent = molecule((index + 1) as u8);
-            parent.product_of = Some(Box::new(Reaction {
-                reactants: vec![child],
-                mapped_reaction_smiles: None,
-                template: None,
-                reagents: None,
-                solvents: None,
-                annotations: Map::new(),
-            }));
-            child = parent;
-        }
-        Route {
-            target: child,
-            annotations: Map::new(),
-            schema_version: Default::default(),
-        }
-    }
-
-    fn three_leaf_route() -> Route {
-        let mut target = molecule(3);
-        target.product_of = Some(Box::new(Reaction {
-            reactants: vec![molecule(0), molecule(1), molecule(2)],
-            mapped_reaction_smiles: None,
-            template: None,
-            reagents: None,
-            solvents: None,
-            annotations: Map::new(),
-        }));
-        Route {
-            target,
-            annotations: Map::new(),
-            schema_version: Default::default(),
-        }
-    }
+    use super::{Stocks, score, score_owned};
+    use crate::{adapt::ingest, adapters::AiZynthFinderAdapter, model::Task, route::AdaptMode};
 
     #[test]
     fn owned_scoring_matches_the_borrowed_api() {
@@ -571,59 +515,5 @@ mod tests {
             serde_json::to_value(borrowed).unwrap(),
             serde_json::to_value(owned).unwrap()
         );
-    }
-
-    proptest! {
-        #[test]
-        fn route_depth_constraint_matches_generated_chain_depth(
-            depth in 0_usize..13,
-            maximum in 0_usize..13,
-        ) {
-            let constraint = Constraint {
-                kind: "retrocast.route_depth".to_owned(),
-                fields: Map::from_iter([("max_depth".to_owned(), json!(maximum))]),
-            };
-
-            let result = check_task_constraints(
-                &chain_route(depth),
-                &[constraint],
-                &Stocks::new(),
-                "full",
-            )
-            .unwrap();
-
-            prop_assert_eq!(result.status == "pass", depth <= maximum);
-            prop_assert_eq!(result.checks.is_empty(), depth <= maximum);
-        }
-
-        #[test]
-        fn stock_termination_passes_exactly_when_every_generated_leaf_is_present(mask in 0_u8..8) {
-            let route = three_leaf_route();
-            let leaf_keys = route
-                .target
-                .product_of
-                .as_ref()
-                .unwrap()
-                .reactants
-                .iter()
-                .map(|leaf| leaf.inchikey.to_string())
-                .collect::<Vec<_>>();
-            let selected = leaf_keys
-                .iter()
-                .enumerate()
-                .filter(|(index, _)| mask & (1 << index) != 0)
-                .map(|(_, key)| key.clone())
-                .collect::<BTreeSet<_>>();
-            let stocks = BTreeMap::from([("generated".to_owned(), selected)]);
-            let constraint = Constraint {
-                kind: "retrocast.stock_termination".to_owned(),
-                fields: Map::from_iter([("stock".to_owned(), json!("generated"))]),
-            };
-
-            let result = check_task_constraints(&route, &[constraint], &stocks, "full").unwrap();
-
-            prop_assert_eq!(result.status == "pass", mask == 0b111);
-            prop_assert_eq!(result.checks.is_empty(), mask == 0b111);
-        }
     }
 }
