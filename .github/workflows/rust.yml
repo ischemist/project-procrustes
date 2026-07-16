@@ -1,0 +1,170 @@
+name: RetroCast (Rust) Tests
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  RUST_MIN_LINE_COVERAGE: "65"
+
+jobs:
+  test:
+    name: RetroCast (Rust) Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      coverage_report: ${{ steps.coverage.outputs.report }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+
+      - uses: mamba-org/setup-micromamba@d7c9bd84e824b79d2af72a2d4196c7f4300d3476 # v3
+        with:
+          environment-name: native-build
+          create-args: >-
+            librdkit-dev=2026.03.4
+            libboost-headers=1.90
+          cache-environment: true
+
+      - name: Configure RDKit C++ build
+        shell: bash -el {0}
+        run: |
+          echo "RDKIT_ROOT=$CONDA_PREFIX" >> "$GITHUB_ENV"
+          echo "BOOST_ROOT=$CONDA_PREFIX" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
+        with:
+          components: clippy, llvm-tools-preview, rustfmt
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
+        with:
+          tool: cargo-llvm-cov@0.8.7
+
+      - name: Cache Cargo build
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            packages/retrocast-rs/target
+          key: ${{ runner.os }}-rust-${{ hashFiles('packages/retrocast-rs/Cargo.lock', 'packages/retrocast-rs/**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-
+
+      - name: Check formatting
+        run: cargo fmt --manifest-path packages/retrocast-rs/Cargo.toml --all -- --check
+
+      - name: Lint workspace
+        run: cargo clippy --manifest-path packages/retrocast-rs/Cargo.toml --workspace --all-targets --locked -- -D warnings
+
+      - name: Run workspace tests with coverage
+        id: coverage
+        shell: bash
+        run: |
+          set +e
+          cargo llvm-cov \
+            --manifest-path packages/retrocast-rs/Cargo.toml \
+            --workspace \
+            --all-targets \
+            --locked \
+            --quiet \
+            --fail-under-lines "$RUST_MIN_LINE_COVERAGE" \
+            > "$RUNNER_TEMP/rust-coverage.log" 2>&1
+          exit_code=$?
+          set -e
+
+          cat "$RUNNER_TEMP/rust-coverage.log"
+          awk '/^Filename/{capture=1} capture' "$RUNNER_TEMP/rust-coverage.log" \
+            > "$RUNNER_TEMP/rust-coverage-report.txt"
+
+          {
+            echo "report<<EOF"
+            cat "$RUNNER_TEMP/rust-coverage-report.txt"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          exit "$exit_code"
+
+      - name: Run Rust properties at CI depth
+        env:
+          PROPTEST_CASES: "512"
+        run: cargo test --manifest-path packages/retrocast-rs/Cargo.toml -p retrocast-core --locked
+
+  coverage-comment:
+    name: Update Rust coverage report
+    needs: test
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      # Required only to update the coverage report on trusted same-repository PRs.
+      pull-requests: write
+
+    steps:
+      - name: Add coverage report as a PR comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          COVERAGE_REPORT: ${{ needs.test.outputs.coverage_report }}
+          MIN_LINE_COVERAGE: ${{ env.RUST_MIN_LINE_COVERAGE }}
+        with:
+          script: |
+            const marker = "<!-- retrocast-rust-coverage-report -->";
+            const output = `${marker}
+            ### Rust Coverage Report 🦀
+
+            Minimum line coverage: ${process.env.MIN_LINE_COVERAGE}%
+
+            \`\`\`text
+            ${process.env.COVERAGE_REPORT}
+            \`\`\`
+            `;
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.body && comment.body.includes(marker)
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body: output,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body: output,
+              });
+            }

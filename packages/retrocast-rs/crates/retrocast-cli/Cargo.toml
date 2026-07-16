@@ -20,3 +20,8 @@ retrocast-core = { path = "../retrocast-core" }
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
+
+[dev-dependencies]
+sha2.workspace = true
+tempfile.workspace = true
+url.workspace = true
