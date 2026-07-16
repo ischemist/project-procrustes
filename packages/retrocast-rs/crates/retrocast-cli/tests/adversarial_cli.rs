@@ -3,6 +3,7 @@ use std::{
     process::{Command, Output},
 };
 
+use retrocast_core::adapters::BUILT_IN_ADAPTERS;
 use tempfile::tempdir;
 
 #[test]
@@ -126,7 +127,7 @@ fn pipeline_rejects_manifest_path_traversal_before_reading_external_inputs() {
     .unwrap();
     let output = directory.path().join("output");
 
-    assert_clean_failure(&[
+    let stderr = clean_failure_stderr(&[
         "pipeline",
         "--raw",
         raw.to_str().unwrap(),
@@ -137,6 +138,10 @@ fn pipeline_rejects_manifest_path_traversal_before_reading_external_inputs() {
         "--output-dir",
         output.to_str().unwrap(),
     ]);
+    assert!(
+        stderr.contains("unsafe raw_results_filename directive"),
+        "pipeline failed for the wrong reason:\n{stderr}"
+    );
     assert!(!output.exists());
 }
 
@@ -174,7 +179,7 @@ fn adapter_listing_is_complete_unique_and_deterministic() {
         .lines()
         .filter(|line| !line.contains("deprecated alias"))
         .collect::<Vec<_>>();
-    assert_eq!(canonical.len(), 13);
+    assert_eq!(canonical, BUILT_IN_ADAPTERS);
     let mut unique = canonical.clone();
     unique.sort_unstable();
     unique.dedup();
@@ -182,6 +187,10 @@ fn adapter_listing_is_complete_unique_and_deterministic() {
 }
 
 fn assert_clean_failure(arguments: &[&str]) {
+    drop(clean_failure_stderr(arguments));
+}
+
+fn clean_failure_stderr(arguments: &[&str]) -> String {
     let output = run(arguments);
     assert!(
         !output.status.success(),
@@ -196,6 +205,7 @@ fn assert_clean_failure(arguments: &[&str]) {
         !stderr.contains("panicked at") && !stderr.contains("stack backtrace:"),
         "retrocast {arguments:?} panicked:\n{stderr}"
     );
+    stderr.into_owned()
 }
 
 fn run(arguments: &[&str]) -> Output {
