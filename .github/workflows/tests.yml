@@ -67,9 +67,6 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra viz
 
-      - name: Test Rust workspace
-        run: cargo test --manifest-path packages/retrocast-rs/Cargo.toml --workspace --all-targets --locked
-
       - name: Run tests
         run: uv run pytest -v
 

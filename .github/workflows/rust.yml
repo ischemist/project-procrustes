@@ -1,0 +1,68 @@
+name: Rust
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  test:
+    name: Test native engine
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: native-build
+          create-args: >-
+            librdkit-dev=2026.03.4
+            libboost-headers=1.90
+          cache-environment: true
+
+      - name: Configure RDKit C++ build
+        shell: bash -el {0}
+        run: |
+          echo "RDKIT_ROOT=$CONDA_PREFIX" >> "$GITHUB_ENV"
+          echo "BOOST_ROOT=$CONDA_PREFIX" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo build
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            packages/retrocast-rs/target
+          key: ${{ runner.os }}-rust-${{ hashFiles('packages/retrocast-rs/Cargo.lock', 'packages/retrocast-rs/**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-
+
+      - name: Check formatting
+        run: cargo fmt --manifest-path packages/retrocast-rs/Cargo.toml --all -- --check
+
+      - name: Lint workspace
+        run: cargo clippy --manifest-path packages/retrocast-rs/Cargo.toml --workspace --all-targets --locked -- -D warnings
+
+      - name: Run workspace tests
+        run: cargo test --manifest-path packages/retrocast-rs/Cargo.toml --workspace --all-targets --locked
+
+      - name: Run adversarial properties at CI depth
+        env:
+          PROPTEST_CASES: "512"
+        run: cargo test --manifest-path packages/retrocast-rs/Cargo.toml -p retrocast-core --test adversarial --locked
