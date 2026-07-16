@@ -44,7 +44,7 @@ jobs:
         run: uv sync --no-install-project
 
       - name: Run ruff (linter)
-        run: uv run ruff check packages/retrocast-rs/python-tests scripts/smoke-native-wheel.py
+        run: uv run --no-sync ruff check packages/retrocast-rs/python-tests scripts/smoke-native-wheel.py
 
       - name: Run ruff (formatter)
-        run: uv run ruff format --check packages/retrocast-rs/python-tests scripts/smoke-native-wheel.py
+        run: uv run --no-sync ruff format --check packages/retrocast-rs/python-tests scripts/smoke-native-wheel.py
