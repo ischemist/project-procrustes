@@ -32,6 +32,9 @@ jobs:
             --measure git \
             > pr-loc-report.md
 
+      - name: publish loc report summary
+        run: cat pr-loc-report.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: post loc report
         uses: actions/github-script@v9
         with:
@@ -42,13 +45,20 @@ jobs:
             const body = fs.readFileSync("pr-loc-report.md", "utf8");
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
+            const preserveSummaryOnServerError = (error) => {
+              if (!error.status || error.status < 500) throw error;
+              core.warning(`GitHub comment API returned ${error.status}; the report remains available in the job summary.`);
+              return null;
+            };
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
               repo,
               issue_number,
               per_page: 100,
-            });
+            }).catch(preserveSummaryOnServerError);
+            if (!comments) return;
+
             const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
             if (existing) {
               await github.rest.issues.updateComment({
@@ -56,12 +66,12 @@ jobs:
                 repo,
                 comment_id: existing.id,
                 body,
-              });
+              }).catch(preserveSummaryOnServerError);
             } else {
               await github.rest.issues.createComment({
                 owner,
                 repo,
                 issue_number,
                 body,
-              });
+              }).catch(preserveSummaryOnServerError);
             }
