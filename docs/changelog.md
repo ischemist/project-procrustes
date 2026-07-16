@@ -14,13 +14,9 @@ For most use cases, this should not be a problem since the full pipeline of inge
 
 ## v0.8.1 (unreleased)
 
-v0.8.1 repairs corpus ownership across the Python-to-Rust boundary. Project commands and `retrocast pipeline` now pass artifact paths into Rust, which reads compressed inputs, writes native outputs, and consumes predictions into evaluations without constructing parallel Python or JSON graphs. Opaque values loaded through the Python API remain native through save, score, and analysis until their fields are explicitly inspected.
+v0.8.1 keeps corpus-sized artifacts inside Rust across ingest, score, and analyze. It also narrows ASKCOS pathway graphs before route casting and exposes `--workers` consistently across project commands.
 
-ASKCOS pathway extraction now moves its provider graph once and retains only the nodes referenced by each pathway. This removes a full `uuid2smiles` and `node_dict` clone per candidate. Project-mode ingest, score, and analyze also expose `--workers` consistently.
-
-On the 160-target, 25,762-candidate ASKCOS `mkt-cnv-160` fixture, the 12-worker Python command completed in 19.36 seconds with 555 MiB peak RSS. The pre-Rust v0.7.1 pipeline required 558.2 seconds and 2.32 GiB; v0.8.0 required 241.8 seconds and 8.56 GiB on the same machine. The standalone command completed in 19.26 seconds with 524 MiB; the one-worker Python command used 508 MiB. Candidate artifacts are identical across versions, worker counts, and the Python and standalone front ends. See the [v0.7.1 through v0.8.1 performance record](dev/benchmarks/v0.8.1-native-boundary.md) for both adapters, aggregate throughput, RSS, and methodology.
-
-A repeated Python-boundary check used one warm-up and three measured 12-worker runs per front end. On ASKCOS, the Python package had 1.2% more wall time and 22.3 MiB more median peak RSS than the standalone executable: 20.755 seconds and 565.6 MiB versus 20.508 seconds and 543.2 MiB. On the smaller AiZynthFinder fixture, Python added 0.141 seconds and 36.3 MiB. Candidate, evaluation, and analysis artifacts were exactly equal. The Python process therefore pays a small interpreter and binding cost without recreating a corpus-sized graph.
+On the 25,762-candidate ASKCOS fixture, the 12-worker Python pipeline completed in 19.36 seconds with 555 MiB peak RSS, compared with 558.2 seconds and 2.32 GiB for v0.7.1 and 241.8 seconds and 8.56 GiB for v0.8.0. Standalone Rust completed in 19.26 seconds with 524 MiB. Repeated runs put the Python boundary within 1.2% wall time and 22 MiB RSS of standalone, with identical candidate, evaluation, and analysis artifacts.
 
 ## v0.8.0
 
@@ -34,10 +30,6 @@ v0.8.0 replaces the Python execution engine with one Rust core shared by the Pyt
 - Replaced Python RDKit with a narrow RDKit C++ bridge for canonical SMILES, InChIKeys, and molecular descriptors.
 - Added bounded native parallelism through `workers`, with the Python binding releasing the GIL while the core executes.
 - Added reproducible cross-platform wheel and standalone-bundle builds for Linux x86-64, Windows x86-64, macOS arm64, and macOS x86-64.
-
-### Performance
-
-On the 160-target, 1,830-candidate AiZynthFinder `mkt-cnv-160` fixture, the standalone executable processes 1,096.7 candidates/s with 12 workers in 1.669 seconds. The Python front end over the same core processes 743.0 candidates/s in 2.463 seconds. Candidate and evaluation artifacts are identical across worker counts and front ends; see the [v0.8.0 performance record](dev/benchmarks/v0.8.0-aizynthfinder.md) for wall time, throughput, RSS, and semantic validation.
 
 ### Distribution and migration
 
