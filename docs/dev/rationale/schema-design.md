@@ -13,6 +13,56 @@ RetroCast is designed to handle two broad use cases:
 - casting arbitrary planner output into canonical `Route`s
 - evaluating those outputs for one target or many targets
 
+## Implementation ownership
+
+The schema has one production implementation: `retrocast-core`. The standalone command and the Python extension are front ends over the same Rust values. They own argument conversion and presentation; they do not implement adapters, chemistry, scoring, or analysis.
+
+```text
+packages/retrocast-rs/
+├── crates/retrocast-core/     schemas, RDKit bridge, adapters, workflows, I/O
+├── crates/retrocast-cli/      standalone command
+└── crates/retrocast-python/   direct PyO3 module named retrocast
+```
+
+The frozen `packages/retrocast-py` tree preserves the v0.7.1 implementation for differential testing. It is not imported by the native package and is not a fallback engine.
+
+The two public entry points express the same operation at their host-language boundary:
+
+=== "Python 0.8.x"
+
+    ```python
+    predictions = retrocast.ingest(raw, "aizynthfinder", task)
+    evaluation = retrocast.score(predictions, task, stocks)
+    report = retrocast.analyze(evaluation)
+    ```
+
+=== "Rust 0.8.x"
+
+    ```rust
+    let predictions = ingest(raw, adapter, &task, mode, limit, workers)?;
+    let evaluation = score_owned(
+        predictions,
+        task,
+        &stocks,
+        match_level,
+        acceptable_route_match,
+        execution_stats,
+        workers,
+    )?;
+    let report = analyze(&evaluation, &ks, &prefix_depths, n_boot, seed, workers)?;
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    adapter = get_adapter("aizynthfinder")
+    predictions = ingest_candidates(raw, adapter, task)
+    evaluation = score(predictions, task, constraint_checkers=checkers)
+    report = analyze(evaluation)
+    ```
+
+This establishes three invariants: schemas have one validator, in-process stage chaining does not serialize intermediate artifacts, and worker count cannot change serialized results.
+
 ## Route
 
 In RetroCast, a `Route` is an AND/OR tree of `Molecule` and `Reaction` nodes.
@@ -34,7 +84,53 @@ graph TD
 
 Basic schema
 
-=== "Python"
+=== "Python 0.8.x"
+
+    ```python
+    report = retrocast.analyze(
+        evaluation,
+        ks=[1, 5, 10, 50],
+        prefix_depths=[1, 2, 3],
+        n_boot=10_000,
+        seed=42,
+        workers=12,
+    )
+    ```
+
+=== "Rust 0.8.x"
+
+    ```rust
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Molecule {
+        pub smiles: CanonicalSmiles,
+        pub inchikey: InchiKey,
+        pub product_of: Option<Box<Reaction>>,
+        #[serde(default)]
+        pub annotations: serde_json::Map<String, Value>,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Reaction {
+        pub reactants: Vec<Molecule>,
+        pub mapped_reaction_smiles: Option<ReactionSmiles>,
+        pub template: Option<String>,
+        pub reagents: Option<Vec<CanonicalSmiles>>,
+        pub solvents: Option<Vec<CanonicalSmiles>>,
+        #[serde(default)]
+        pub annotations: serde_json::Map<String, Value>,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Route {
+        pub target: Molecule,
+        #[serde(default)]
+        pub annotations: serde_json::Map<String, Value>,
+        #[serde(default = "schema_version")]
+        pub schema_version: SchemaVersion,
+    }
+    ```
+
+=== "Python 0.7.1"
 
     ```python
     class Molecule(BaseModel):
@@ -59,40 +155,7 @@ Basic schema
         schema_version: str = "2"
     ```
 
-=== "Rust"
-
-    ```rust
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct Molecule {
-        pub smiles: CanonicalSmiles,
-        pub inchikey: InchiKey,
-        pub product_of: Option<Box<Reaction>>,
-        #[serde(default)]
-        pub annotations: Annotations,
-    }
-
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct Reaction {
-        pub reactants: Vec<Molecule>,
-        pub mapped_reaction_smiles: Option<ReactionSmiles>,
-        pub template: Option<String>,
-        pub reagents: Option<Vec<CanonicalSmiles>>,
-        pub solvents: Option<Vec<CanonicalSmiles>>,
-        #[serde(default)]
-        pub annotations: Annotations,
-    }
-
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct Route {
-        pub target: Molecule,
-        #[serde(default)]
-        pub annotations: Annotations,
-        #[serde(default = "schema_v2")]
-        pub schema_version: SchemaVersion,
-    }
-    ```
-
-The Rust constructors are the validation boundary. `CanonicalSmiles`, `InchiKey`, and `SchemaVersion` are validated newtypes rather than aliases for `String`. Serde deserialization calls the same validation path used by adapters, so loading an artifact cannot create a state that the public constructor would reject.
+`CanonicalSmiles`, `InchiKey`, and `SchemaVersion` are validated Rust newtypes rather than aliases for `String`. Serde deserialization calls their validation path, so loading an artifact cannot bypass the constraints used by adapters.
 
 Identical molecules in different positions (e.g. same building block used in two branches) are different nodes; whence a Route is a tree, not just a DAG. Primarily because enforcing a 1 molecule = 1 node would introduce operational (serialization, signatures) complexity without any clear/obvious benefit beyond just marginally smaller disk usage.
 
@@ -108,7 +171,37 @@ RetroCast uses deterministic paths to refer to molecules and reactions inside a 
 
 These IDs are derived in memory and are not serialized. Internally, they are typed addresses, not strings that each caller reparses.
 
-=== "Python"
+=== "Python 0.8.x"
+
+    ```python
+    predictions.write("candidates.json.gz")
+    manifest = json.loads(
+        retrocast.create_manifest_json(json.dumps(manifest_request))
+    )
+    ```
+
+=== "Rust 0.8.x"
+
+    ```rust
+    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
+    pub enum RoutePath {
+        Molecule(Box<[usize]>),
+        Reaction(Box<[usize]>),
+    }
+
+    impl RoutePath {
+        pub fn parse(value: &str) -> Result<Self, RoutePathError>;
+        pub fn target() -> Self;
+        pub fn root_reaction() -> Self;
+        // RoutePath implements Display and serializes to the same rc:* string.
+        pub fn depth(&self) -> usize;
+        pub fn produced_by(&self) -> Result<Self, RoutePathError>;
+        pub fn product(&self) -> Result<Self, RoutePathError>;
+        pub fn reactant(&self, index: usize) -> Result<Self, RoutePathError>;
+    }
+    ```
+
+=== "Python 0.7.1"
 
     ```python
     @dataclass(frozen=True)
@@ -132,27 +225,6 @@ These IDs are derived in memory and are not serialized. Internally, they are typ
         def reactant(self, index: int) -> RoutePath: ...
     ```
 
-=== "Rust"
-
-    ```rust
-    #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-    pub enum RoutePath {
-        Molecule(Box<[usize]>),
-        Reaction(Box<[usize]>),
-    }
-
-    impl RoutePath {
-        pub fn parse(value: &str) -> Result<Self, RoutePathError>;
-        pub fn target() -> Self;
-        pub fn root_reaction() -> Self;
-        pub fn id(&self) -> String;
-        pub fn depth(&self) -> usize;
-        pub fn produced_by(&self) -> Result<Self, RoutePathError>;
-        pub fn product(&self) -> Result<Self, RoutePathError>;
-        pub fn reactant(&self, index: usize) -> Result<Self, RoutePathError>;
-    }
-    ```
-
 semantics:
 
 - `RoutePath.target()` is `rc:m:/`
@@ -163,14 +235,13 @@ semantics:
 
 For serialized IDs, Python exposes validated strings and Rust exposes newtypes:
 
-=== "Python"
+=== "Python 0.8.x"
 
-    ```python
-    ReactionId = Annotated[str, AfterValidator(validate_reaction_id)]
-    MoleculeId = Annotated[str, AfterValidator(validate_molecule_id)]
-    ```
+    The binding exposes this Rust-owned value as JSON-compatible Python data.
+    Validation and derived behavior stay in `retrocast-core`; 0.8.x defines no
+    parallel Python model for it.
 
-=== "Rust"
+=== "Rust 0.8.x"
 
     ```rust
     #[derive(Clone, Debug, Deserialize, Eq, Hash, Serialize)]
@@ -180,6 +251,13 @@ For serialized IDs, Python exposes validated strings and Rust exposes newtypes:
     #[derive(Clone, Debug, Deserialize, Eq, Hash, Serialize)]
     #[serde(try_from = "String", into = "String")]
     pub struct MoleculeId(RoutePath);
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    ReactionId = Annotated[str, AfterValidator(validate_reaction_id)]
+    MoleculeId = Annotated[str, AfterValidator(validate_molecule_id)]
     ```
 
 An invalid kind is rejected when the ID enters the core. Downstream scoring code cannot accidentally put a molecule address into `ReactionValidity`.
@@ -219,21 +297,13 @@ At the most basic structural level, a reaction identity is defined by the struct
 - treat `Reaction` as a Route-specific occurrence object (with an explicit pointer to its product), but that requires writing custom serialization logic and ensuring loaded Reaction objects are always "hydrated" with proper parent references. Violates the spirit of [SRP](https://en.wikipedia.org/wiki/Single-responsibility_principle) and I'm a bit WebDev-brained not to think of the Data-View split analogy, so instead
 - we create a `ReactionView` model that provides a required route-contextual representation of a `Reaction`.
 
-=== "Python"
+=== "Python 0.8.x"
 
-    ```python
-    class ReactionView:
-        route: Route
-        path: RoutePath
-        value: Reaction
+    The binding exposes this Rust-owned value as JSON-compatible Python data.
+    Validation and derived behavior stay in `retrocast-core`; 0.8.x defines no
+    parallel Python model for it.
 
-        def product(self) -> MoleculeView: ...
-        def reactants(self) -> list[MoleculeView]: ...
-        def key(self, match_level=InChIKeyLevel.FULL) -> tuple: ...
-        def signature(self, match_level=InChIKeyLevel.FULL) -> str: ...
-    ```
-
-=== "Rust"
+=== "Rust 0.8.x"
 
     ```rust
     pub struct ReactionView<'route> {
@@ -250,23 +320,29 @@ At the most basic structural level, a reaction identity is defined by the struct
     }
     ```
 
-for consistency in api design and ease of subtree comparison, we also define a similar view model for `Molecule`.
-
-=== "Python"
+=== "Python 0.7.1"
 
     ```python
-    class MoleculeView:
+    class ReactionView:
         route: Route
         path: RoutePath
-        value: Molecule
+        value: Reaction
 
-        def key(self, match_level=InChIKeyLevel.FULL) -> str: ...
-        def produced_by(self) -> ReactionView | None: ...
-        def subtree_key(self, match_level=InChIKeyLevel.FULL, *, depth=None) -> tuple: ...
-        def subtree_signature(self, match_level=InChIKeyLevel.FULL, *, depth=None) -> str: ...
+        def product(self) -> MoleculeView: ...
+        def reactants(self) -> list[MoleculeView]: ...
+        def key(self, match_level=InChIKeyLevel.FULL) -> tuple: ...
+        def signature(self, match_level=InChIKeyLevel.FULL) -> str: ...
     ```
 
-=== "Rust"
+for consistency in api design and ease of subtree comparison, we also define a similar view model for `Molecule`.
+
+=== "Python 0.8.x"
+
+    The binding exposes this Rust-owned value as JSON-compatible Python data.
+    Validation and derived behavior stay in `retrocast-core`; 0.8.x defines no
+    parallel Python model for it.
+
+=== "Rust 0.8.x"
 
     ```rust
     pub struct MoleculeView<'route> {
@@ -283,6 +359,20 @@ for consistency in api design and ease of subtree comparison, we also define a s
     }
     ```
 
+=== "Python 0.7.1"
+
+    ```python
+    class MoleculeView:
+        route: Route
+        path: RoutePath
+        value: Molecule
+
+        def key(self, match_level=InChIKeyLevel.FULL) -> str: ...
+        def produced_by(self) -> ReactionView | None: ...
+        def subtree_key(self, match_level=InChIKeyLevel.FULL, *, depth=None) -> tuple: ...
+        def subtree_signature(self, match_level=InChIKeyLevel.FULL, *, depth=None) -> str: ...
+    ```
+
 Rust views borrow the route. They cannot outlive it and they do not introduce parent pointers into the serialized tree.
 
 ### Route Identity
@@ -291,20 +381,26 @@ With the primitives above, full route equality is established by the subtree sig
 
 We often might be interested in asking how far along the plan (starting from the target) do any two Routes agree? Such prefix matching is simply a subtree signature of fixed depth `k` rooted at the target.
 
-=== "Python"
+=== "Python 0.8.x"
 
-    ```python
-    route.key(match_level=InChIKeyLevel.FULL, depth=None) -> tuple
-    route.signature(match_level=InChIKeyLevel.FULL, depth=None) -> str
-    ```
+    The binding exposes this Rust-owned value as JSON-compatible Python data.
+    Validation and derived behavior stay in `retrocast-core`; 0.8.x defines no
+    parallel Python model for it.
 
-=== "Rust"
+=== "Rust 0.8.x"
 
     ```rust
     impl Route {
         pub fn key(&self, level: InchiKeyLevel, depth: Option<usize>) -> SubtreeKey;
         pub fn signature(&self, level: InchiKeyLevel, depth: Option<usize>) -> Signature;
     }
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    route.key(match_level=InChIKeyLevel.FULL, depth=None) -> tuple
+    route.signature(match_level=InChIKeyLevel.FULL, depth=None) -> str
     ```
 
 ### Content Signatures
@@ -328,20 +424,13 @@ Route embedding asks whether one route occurs inside another route.
 
 `retrocast.curation.embedding` uses route views, paths, molecule keys, reaction signatures, and subtree signatures to produce audit traces:
 
-=== "Python"
+=== "Python 0.8.x"
 
-    ```python
-    class EmbeddingMatch:
-        query_path: RoutePath
-        container_path: RoutePath
-        matched_reactions: int
-        leaf_extensions: tuple[LeafExtension, ...]
+    The binding exposes this Rust-owned value as JSON-compatible Python data.
+    Validation and derived behavior stay in `retrocast-core`; 0.8.x defines no
+    parallel Python model for it.
 
-    find_route_embeddings(query, container, *, allow_leaf_extension=True) -> tuple[EmbeddingMatch, ...]
-    route_embeds_at(query_view, container_view, *, allow_leaf_extension=True) -> EmbeddingMatch | None
-    ```
-
-=== "Rust"
+=== "Rust 0.8.x"
 
     ```rust
     pub struct EmbeddingMatch {
@@ -362,6 +451,19 @@ Route embedding asks whether one route occurs inside another route.
         container: MoleculeView<'_>,
         options: &EmbeddingOptions,
     ) -> Option<EmbeddingMatch>;
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    class EmbeddingMatch:
+        query_path: RoutePath
+        container_path: RoutePath
+        matched_reactions: int
+        leaf_extensions: tuple[LeafExtension, ...]
+
+    find_route_embeddings(query, container, *, allow_leaf_extension=True) -> tuple[EmbeddingMatch, ...]
+    route_embeds_at(query_view, container_view, *, allow_leaf_extension=True) -> EmbeddingMatch | None
     ```
 
 The detailed matching rules live in [Route Embedding](../reference/route-embedding.md). The important schema-design point is small: exact subtree equality is a signature check; embedding is a route-to-route matching check.
@@ -405,23 +507,39 @@ No workflow serializes an intermediate value to call the next workflow. Artifact
 
 The core API reflects that ownership:
 
-=== "Python"
+=== "Python 0.8.x"
 
     ```python
-    candidates = retrocast.ingest(raw, task, adapter="aizynthfinder")
-    evaluation = retrocast.score(candidates, task, registry=registry)
+    candidates = retrocast.ingest(raw, "aizynthfinder", task)
+    evaluation = retrocast.score(candidates, task, stocks)
     report = retrocast.analyze(evaluation)
     ```
 
-=== "Rust"
+=== "Rust 0.8.x"
 
     ```rust
-    let candidates = ingest(raw, &task, &adapter, &ingest_options)?;
-    let evaluation = score(&candidates, &task, &registry, &score_options)?;
-    let report = analyze(&evaluation, &analysis_options)?;
+    let candidates = ingest(raw, adapter, &task, mode, limit, workers)?;
+    let evaluation = score_owned(
+        candidates,
+        task,
+        &stocks,
+        match_level,
+        acceptable_route_match,
+        execution_stats,
+        workers,
+    )?;
+    let report = analyze(&evaluation, &ks, &prefix_depths, n_boot, seed, workers)?;
     ```
 
-The values on both tabs have the same owner: `retrocast-core`.
+=== "Python 0.7.1"
+
+    ```python
+    candidates = ingest_candidates(raw, adapter, task)
+    evaluation = score(candidates, task, constraint_checkers=checkers)
+    report = analyze(evaluation)
+    ```
+
+The Python 0.8.x and Rust 0.8.x values have the same owner: `retrocast-core`. Python 0.7.1 constructs an independent Pydantic graph at each stage.
 
 ## Workflows
 
@@ -435,7 +553,35 @@ Direct `adapt`ing is useful for single-target pipelines. For benchmarking, one c
 
 By default, adapt tries to turn raw planner output into canonical `Route` objects and if fails, returns None. While it's a reasonable default for regular planning, it inflates the Tier-0 validity of the planner's predictions for strict benchmarking. As such, `adapt` can be configured to return `Candidate` objects which either hold a `Route` or a `FailureRecord` that specifies `target_{id,smiles,inchikey}` for proper accounting of failed predictions.
 
-=== "Python"
+=== "Python 0.8.x"
+
+    The binding exposes this Rust-owned value as JSON-compatible Python data.
+    Validation and derived behavior stay in `retrocast-core`; 0.8.x defines no
+    parallel Python model for it.
+
+=== "Rust 0.8.x"
+
+    ```rust
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct FailureRecord {
+        pub code: String,
+        pub message: Option<String>,
+        pub target_id: Option<String>,
+        pub target_smiles: Option<CanonicalSmiles>,
+        pub target_inchikey: Option<InchiKey>,
+        #[serde(default)]
+        pub context: serde_json::Map<String, Value>,
+    }
+
+    #[derive(Clone, Debug, Serialize)]
+    pub struct Candidate {
+        pub rank: usize,
+        pub route: Option<Route>,
+        pub failure: Option<FailureRecord>,
+    }
+    ```
+
+=== "Python 0.7.1"
 
     ```python
     class FailureRecord(BaseModel):
@@ -453,74 +599,87 @@ By default, adapt tries to turn raw planner output into canonical `Route` object
         failure: FailureRecord | None = None
     ```
 
-=== "Rust"
-
-    ```rust
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct FailureRecord {
-        pub code: ErrorCode,
-        pub message: Option<String>,
-        pub target_id: Option<TargetId>,
-        pub target_smiles: Option<CanonicalSmiles>,
-        pub target_inchikey: Option<InchiKey>,
-        #[serde(default)]
-        pub context: Annotations,
-    }
-
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct Candidate {
-        pub rank: NonZeroUsize,
-        #[serde(flatten)]
-        pub outcome: CandidateOutcome,
-    }
-
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    #[serde(untagged)]
-    pub enum CandidateOutcome {
-        Route { route: Route },
-        Failure { failure: FailureRecord },
-    }
-    ```
-
-The JSON shape stays compatible, but Rust represents the exclusive-or directly: a `Candidate` cannot contain both a route and a failure, or neither. Rank zero cannot be constructed.
+Custom deserialization validates that rank is at least one and exactly one of `route` or `failure` is present. Adapters and artifact readers therefore establish the same invariant.
 
 ### Adapt modes
 
 By default, `adapt` returns a `FailureRecord` if even a single SMILES is invalid. Model developers might sometimes be interested in the validity of predictions up to the corrupted SMILES, and `AdaptMode` allows them to relax adapters to return `Route`/`Candidate` objects that contain the longest-possible valid prefix `Route` with the corrupted SMILES node and all its children pruned out.
 
-=== "Python"
+=== "Python 0.8.x"
 
-    ```python
-    AdaptMode = Literal["strict", "prune"]
-    ```
+    The binding exposes this Rust-owned value as JSON-compatible Python data.
+    Validation and derived behavior stay in `retrocast-core`; 0.8.x defines no
+    parallel Python model for it.
 
-=== "Rust"
+=== "Rust 0.8.x"
 
     ```rust
-    #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
-    #[serde(rename_all = "snake_case")]
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
     pub enum AdaptMode {
-        #[default]
         Strict,
         Prune,
     }
     ```
 
+=== "Python 0.7.1"
+
+    ```python
+    AdaptMode = Literal["strict", "prune"]
+    ```
+
 ### Adapt API
 
-=== "Python"
+=== "Python 0.8.x"
+
+    ```python
+    retrocast.adapt(
+        raw_payload,
+        adapter_name,
+        *,
+        mode="strict",
+        target=None,
+        source_key=None,
+        max_candidates=None,
+        workers=1,
+    ) -> list[dict]
+    ```
+
+=== "Rust 0.8.x"
+
+    ```rust
+    pub trait Adapter: Send + Sync {
+        fn name(&self) -> &'static str;
+
+        fn entries(
+            &self,
+            payload: serde_json::Value,
+            source_key: Option<&str>,
+        ) -> Result<Vec<RawRouteEntry>>;
+
+        fn cast(
+            &self,
+            raw_route: serde_json::Value,
+            mode: AdaptMode,
+            target: Option<&Target>,
+        ) -> Result<Route>;
+    }
+
+    pub fn adapt_candidates_with_workers(
+        payload: serde_json::Value,
+        adapter: &dyn Adapter,
+        mode: AdaptMode,
+        target: Option<&Target>,
+        source_key: Option<&str>,
+        max_candidates: Option<usize>,
+        workers: usize,
+    ) -> Result<Vec<Candidate>>;
+    ```
+
+=== "Python 0.7.1"
 
     ```python
     adapt_route(raw_route_payload, adapter, *, mode="strict") -> Route | None
-
-    adapt_routes(
-        raw_payload,
-        adapter,
-        *,
-        mode="strict",
-        max_routes=None,
-    ) -> list[Route]
-
+    adapt_routes(raw_payload, adapter, *, mode="strict", max_routes=None) -> list[Route]
     adapt_candidates(
         raw_payload,
         adapter,
@@ -530,62 +689,39 @@ By default, `adapt` returns a `FailureRecord` if even a single SMILES is invalid
     ) -> list[Candidate]
     ```
 
-=== "Rust"
-
-    ```rust
-    pub trait Adapter: Send + Sync {
-        type RawRoute;
-
-        fn entries(&self, payload: RawPayload) -> Result<Vec<RawRouteEntry<Self::RawRoute>>>;
-        fn adapt_route(&self, raw: Self::RawRoute, mode: AdaptMode) -> Result<Route>;
-    }
-
-    pub fn adapt_routes<A: Adapter>(
-        payload: RawPayload,
-        adapter: &A,
-        options: &AdaptRouteOptions,
-    ) -> Result<Vec<Route>>;
-
-    pub fn adapt_candidates<A: Adapter>(
-        payload: RawPayload,
-        adapter: &A,
-        options: &AdaptCandidateOptions,
-    ) -> Result<Vec<Candidate>>;
-    ```
-
-`max_routes` is a route-first convenience limit: failures are skipped and only successful `Route`s count toward the limit. `max_candidates` is the benchmark-safe limit: it processes the first N raw candidate slots and preserves failures, so Tier-0 validity and MRR remain honest.
-
-Benchmark CLI ingestion uses the candidate-preserving path. Route-only adaptation remains available as a library convenience for ad hoc inspection.
+`max_candidates` processes the first N raw candidate slots and preserves failures, so Tier-0 validity and MRR remain honest. Both front ends use this candidate-preserving path.
 
 ## 2. Collect
 
 Collection maps adapted outputs onto known targets.
 
-=== "Python"
+=== "Python 0.8.x"
 
     ```python
-    CollectedCandidates = dict[str, list[Candidate]]
-    CollectedRoutes = dict[str, list[Route]]
-
-    collect_candidates(candidates, task) -> CollectedCandidates
-    collect_routes(routes, task) -> CollectedRoutes
+    predictions = retrocast.ingest(raw_payload, adapter_name, task)
     ```
 
-=== "Rust"
+=== "Rust 0.8.x"
 
     ```rust
-    pub type CollectedCandidates = BTreeMap<TargetId, Vec<Candidate>>;
-    pub type CollectedRoutes = BTreeMap<TargetId, Vec<Route>>;
+    pub type Predictions = BTreeMap<String, Vec<Candidate>>;
 
     pub fn collect_candidates(
-        candidates: impl IntoIterator<Item = Candidate>,
+        candidates: Vec<Candidate>,
         task: &Task,
-    ) -> Result<CollectedCandidates>;
+    ) -> Predictions;
 
     pub fn collect_routes(
-        routes: impl IntoIterator<Item = Route>,
+        routes: Vec<Route>,
         task: &Task,
-    ) -> Result<CollectedRoutes>;
+    ) -> BTreeMap<String, Vec<Route>>;
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    collect_candidates(candidates, task) -> dict[str, list[Candidate]]
+    collect_routes(routes, task) -> dict[str, list[Route]]
     ```
 
 collection rules:
@@ -595,7 +731,74 @@ collection rules:
 
 where `Task` is defined through `Target`s and `TaskConstraint`s:
 
-=== "Python"
+=== "Python 0.8.x"
+
+    ```python
+    task = {
+        "name": "mkt-cnv-160",
+        "description": "Market benchmark",
+        "targets": {
+            "target-1": {
+                "id": "target-1",
+                "smiles": "CCO",
+                "inchikey": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
+                "acceptable_routes": [],
+                "annotations": {},
+            }
+        },
+        "default_constraints": [
+            {"kind": "retrocast.stock_termination", "stock": "buyables"}
+        ],
+        "constraints": {},
+        "schema_version": "2",
+    }
+    ```
+
+=== "Rust 0.8.x"
+
+    ```rust
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Target {
+        pub id: String,
+        pub smiles: CanonicalSmiles,
+        pub inchikey: InchiKey,
+        #[serde(default)]
+        pub acceptable_routes: Vec<Route>,
+        #[serde(default)]
+        pub annotations: serde_json::Map<String, Value>,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Constraint {
+        pub kind: String,
+        #[serde(flatten)]
+        pub fields: serde_json::Map<String, Value>,
+    }
+
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct Task {
+        pub name: String,
+        #[serde(default)]
+        pub description: String,
+        pub targets: BTreeMap<String, Target>,
+        #[serde(default)]
+        pub default_constraints: Vec<Constraint>,
+        #[serde(default)]
+        pub constraints: BTreeMap<String, Vec<Constraint>>,
+        #[serde(default)]
+        pub metric_label: Option<String>,
+        #[serde(default)]
+        pub annotations: serde_json::Map<String, Value>,
+        #[serde(default = "schema_version")]
+        pub schema_version: SchemaVersion,
+    }
+
+    impl Task {
+        pub fn effective_constraints(&self, target_id: &str) -> Vec<Constraint>;
+    }
+    ```
+
+=== "Python 0.7.1"
 
     ```python
     class Target(BaseModel):
@@ -642,57 +845,7 @@ where `Task` is defined through `Target`s and `TaskConstraint`s:
         description: str
     ```
 
-=== "Rust"
-
-    ```rust
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct Target {
-        pub id: TargetId,
-        pub smiles: CanonicalSmiles,
-        pub inchikey: InchiKey,
-        #[serde(default)]
-        pub acceptable_routes: Vec<Route>,
-        #[serde(default)]
-        pub annotations: Annotations,
-    }
-
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    #[serde(tag = "kind")]
-    pub enum TaskConstraint {
-        #[serde(rename = "retrocast.stock_termination")]
-        StockTermination { stock: StockId },
-        #[serde(rename = "retrocast.required_leaves")]
-        RequiredLeaves { smiles: Vec<CanonicalSmiles> },
-        #[serde(rename = "retrocast.route_depth")]
-        RouteDepth { max_depth: DepthConstraint },
-        #[serde(untagged)]
-        Extension(ExtensionConstraint),
-    }
-
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct Task {
-        pub name: String,
-        pub targets: BTreeMap<TargetId, Target>,
-        #[serde(default)]
-        pub default_constraints: Vec<TaskConstraint>,
-        #[serde(default)]
-        pub constraints: BTreeMap<TargetId, Vec<TaskConstraint>>,
-        pub metric_label: Option<String>,
-        #[serde(default)]
-        pub annotations: Annotations,
-        #[serde(default = "schema_v2")]
-        pub schema_version: SchemaVersion,
-    }
-
-    impl Task {
-        pub fn effective_constraints(
-            &self,
-            target_id: &TargetId,
-        ) -> Result<Vec<&TaskConstraint>>;
-    }
-    ```
-
-The Rust enum validates built-in fields while `ExtensionConstraint` preserves a namespaced kind and JSON object for third-party constraints. `Task::new` and deserialization reject duplicate kinds within one scope and target-map keys that disagree with `Target.id`.
+Rust stores constraints as namespaced kinds plus their JSON fields. `Task::effective_constraints` overlays target-specific constraints on defaults by `kind`.
 
 `route_depth` integers are inclusive maximum depths. Named depth constraints are ranges:
 
@@ -710,29 +863,31 @@ Within one target, constraints are keyed by `kind`. A target-specific constraint
 
 Ingest is just the convenience alias for `adapt + collect`
 
-=== "Python"
+=== "Python 0.8.x"
 
     ```python
     ingest(raw, adapter_name, task, *, max_candidates=None, workers=1) -> NativePredictions
     ingest_file(raw_path, adapter_name, task_path, *, max_candidates=None, workers=1) -> NativePredictions
     ```
 
-=== "Rust"
+=== "Rust 0.8.x"
 
     ```rust
-    pub fn ingest_routes<A: Adapter>(
-        raw: RawPayload,
-        adapter: &A,
+    pub fn ingest(
+        raw: serde_json::Value,
+        adapter: &dyn Adapter,
         task: &Task,
-        options: &IngestRouteOptions,
-    ) -> Result<CollectedRoutes>;
+        mode: AdaptMode,
+        max_candidates: Option<usize>,
+        workers: usize,
+    ) -> Result<Predictions>;
+    ```
 
-    pub fn ingest_candidates<A: Adapter>(
-        raw: RawPayload,
-        adapter: &A,
-        task: &Task,
-        options: &IngestCandidateOptions,
-    ) -> Result<CollectedCandidates>;
+=== "Python 0.7.1"
+
+    ```python
+    ingest_routes(raw, adapter, task, *, max_routes=None) -> CollectedRoutes
+    ingest_candidates(raw, adapter, task, *, max_candidates=None) -> CollectedCandidates
     ```
 
 `max_candidates` is applied per target during benchmark ingestion. It is intentionally first-N by raw planner rank; random candidate sampling is not part of benchmark ingestion because planner rank is part of the measured behavior.
@@ -741,7 +896,7 @@ Ingest is just the convenience alias for `adapt + collect`
 
 Artifacts use schema-v2 JSON, but an in-process pipeline does not use JSON as an internal transport. Both front ends keep the Rust values returned by each stage:
 
-=== "Python"
+=== "Python 0.8.x"
 
     ```python
     predictions = retrocast.ingest(raw, "aizynthfinder", task)
@@ -749,129 +904,84 @@ Artifacts use schema-v2 JSON, but an in-process pipeline does not use JSON as an
     report = retrocast.analyze(evaluation)
     ```
 
-=== "Rust"
+=== "Rust 0.8.x"
 
     ```rust
     let predictions = ingest(raw, adapter, &task, mode, limit, workers)?;
-    let evaluation = score(&predictions, &task, &stocks, level, matching, None, workers)?;
+    let evaluation = score_owned(predictions, task, &stocks, level, matching, None, workers)?;
     let report = analyze(&evaluation, &ks, &prefix_depths, n_boot, seed, workers)?;
     ```
 
-The Python variables are opaque Rust handles. `score` consumes `NativePredictions` and moves its graph into `NativeEvaluation`; the old predictions handle then rejects access. There is no Python DTO or compatibility implementation. `.to_dict()`, `.json()`, and `.write()` create explicit snapshots for inspection or persistence before that move.
+=== "Python 0.7.1"
+
+    ```python
+    predictions = ingest_candidates(raw, adapter, task)
+    evaluation = score(predictions, task, constraint_checkers=checkers)
+    report = analyze(evaluation)
+    ```
+
+The Python variables are opaque Rust handles. `score` consumes `NativePredictions` and moves its graph into `NativeEvaluation`; the old predictions handle then rejects access. `.to_dict()`, `.json()`, and `.write()` create explicit snapshots for inspection or persistence. There is no Python DTO or compatibility implementation on this path.
 
 ## 4. Score
 
-The ultimate method for scoring any synthesis plan is by passing it through the [Solv-N filter](/dev/rationale/solv-n-evaluation), which is defined as:
+Scoring records route validity and task-constraint satisfaction separately:
 
 ```text
-Solv-i[task] = Tier-i validity + satisfaction of task constraints.
+Solv-i[task] = Tier-i validity + satisfaction of task constraints
 ```
 
-Tier-N validity is stored as `TierResult`. `RouteValidity` stores the validity of a `Route` as a whole and of all individual `Reactions` that compose it.
+Tier-0 validity comes from adaptation. A candidate containing a route passes Tier 0; a candidate containing a `FailureRecord` fails it. Task satisfaction is evaluated from the effective constraints stored on the task.
 
-=== "Python"
+### Stored result
+
+=== "Python 0.8.x"
 
     ```python
-    class CheckStatus(StrEnum):
-        PASS = "pass"
-        FAIL = "fail"
-        NOT_EVALUATED = "not_evaluated"
+    snapshot = evaluation.to_dict()
+    scored = snapshot["targets"]["target-1"]["candidates"][0]
 
-
-    class Tier(IntEnum):
-        ZERO = 0
-        ONE = 1
-        TWO = 2
-        THREE = 3
-
-
-    class CheckResult(BaseModel):
-        code: str
-        status: CheckStatus = CheckStatus.FAIL
-        message: str | None = None
-        details: dict[str, Any] = Field(default_factory=dict)
-
-
-    class TierResult(BaseModel):
-        status: CheckStatus
-        checks: list[CheckResult] = Field(default_factory=list)
-
-
-    class ReactionValidity(BaseModel):
-        reaction_id: ReactionId
-        tiers: dict[Tier, TierResult] = Field(default_factory=dict)
-
-
-    class RouteValidity(BaseModel):
-        tiers: dict[Tier, TierResult] = Field(default_factory=dict)
-        reactions: list[ReactionValidity] = Field(default_factory=list)
+    scored["validity"]["tiers"]["0"]["status"]
+    scored["constraints"]["status"]
+    scored["matches_acceptable"]
     ```
 
-=== "Rust"
+=== "Rust 0.8.x"
 
     ```rust
-    #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-    #[serde(rename_all = "snake_case")]
-    pub enum CheckStatus {
-        Pass,
-        Fail,
-        NotEvaluated,
-    }
-
-    #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-    #[repr(u8)]
-    pub enum Tier {
-        Zero = 0,
-        One = 1,
-        Two = 2,
-        Three = 3,
-    }
-
     pub struct CheckResult {
-        pub code: CheckCode,
-        pub status: CheckStatus,
+        pub code: String,
+        pub status: String,
         pub message: Option<String>,
-        pub details: Annotations,
+        pub details: serde_json::Map<String, Value>,
     }
 
     pub struct TierResult {
-        pub status: CheckStatus,
+        pub status: String,
         pub checks: Vec<CheckResult>,
-    }
-
-    pub struct ReactionValidity {
-        pub reaction_id: ReactionId,
-        pub tiers: BTreeMap<Tier, TierResult>,
     }
 
     pub struct RouteValidity {
-        pub tiers: BTreeMap<Tier, TierResult>,
-        pub reactions: Vec<ReactionValidity>,
+        pub tiers: BTreeMap<u8, TierResult>,
+        pub reactions: Vec<Value>,
     }
-    ```
 
-Task constraint satisfaction is stored separately:
-
-=== "Python"
-
-    ```python
-    class ConstraintResult(BaseModel):
-        status: CheckStatus
-        checks: list[CheckResult] = Field(default_factory=list)
-    ```
-
-=== "Rust"
-
-    ```rust
     pub struct ConstraintResult {
-        pub status: CheckStatus,
+        pub status: String,
         pub checks: Vec<CheckResult>,
     }
+
+    pub struct ScoredCandidate {
+        pub rank: usize,
+        pub route: Option<Route>,
+        pub failure: Option<FailureRecord>,
+        pub validity: RouteValidity,
+        pub constraints: ConstraintResult,
+        pub matches_acceptable: bool,
+        pub matched_acceptable_index: Option<usize>,
+    }
     ```
 
-A `Candidate` that undergoes scoring becomes `ScoredCandidate`.
-
-=== "Python"
+=== "Python 0.7.1"
 
     ```python
     class ScoredCandidate(BaseModel):
@@ -888,29 +998,38 @@ A `Candidate` that undergoes scoring becomes `ScoredCandidate`.
         def satisfies_solv(self, tier: Tier | int) -> bool: ...
     ```
 
-=== "Rust"
+`ScoredCandidate` retains the same exclusive route-or-failure invariant as `Candidate`. Its convenience methods define the boolean relationship among validity, task satisfaction, and Solv-N.
+
+Target results snapshot the constraints that were actually enforced:
+
+=== "Python 0.8.x"
+
+    The binding keeps `NativeEvaluation` opaque until `.to_dict()`, `.json()`,
+    or `.write()` is requested.
+
+=== "Rust 0.8.x"
 
     ```rust
-    pub struct ScoredCandidate {
-        pub rank: NonZeroUsize,
-        #[serde(flatten)]
-        pub outcome: CandidateOutcome,
-        pub validity: RouteValidity,
-        pub constraints: ConstraintResult,
-        pub matches_acceptable: bool,
-        pub matched_acceptable_index: Option<usize>,
+    pub struct TargetResult {
+        pub target: Target,
+        pub effective_constraints: Vec<Constraint>,
+        pub candidates: Vec<ScoredCandidate>,
+        pub wall_time: Option<f64>,
+        pub cpu_time: Option<f64>,
     }
 
-    impl ScoredCandidate {
-        pub fn satisfies_validity(&self, tier: Tier) -> bool;
-        pub fn satisfies_task(&self) -> bool;
-        pub fn satisfies_solv(&self, tier: Tier) -> bool;
+    pub struct Evaluation {
+        pub task: Task,
+        pub tiers: Vec<u8>,
+        pub metric_label: String,
+        pub acceptable_match_level: String,
+        pub acceptable_route_match: String,
+        pub targets: BTreeMap<String, TargetResult>,
+        pub schema_version: SchemaVersion,
     }
     ```
 
-`ScoredCandidate`s are collected into `TargetResult`, which in turn is collected into `Evaluation`.
-
-=== "Python"
+=== "Python 0.7.1"
 
     ```python
     class TargetResult(BaseModel):
@@ -920,221 +1039,186 @@ A `Candidate` that undergoes scoring becomes `ScoredCandidate`.
         wall_time: float | None = None
         cpu_time: float | None = None
 
-
     class Evaluation(BaseModel):
         task: Task
         tiers: list[Tier] = Field(default_factory=list)
         metric_label: str
-        acceptable_match_level: InChIKeyLevel = InChIKeyLevel.FULL
-        acceptable_route_match: AcceptableRouteMatch = AcceptableRouteMatch.EXACT
         targets: dict[str, TargetResult] = Field(default_factory=dict)
         schema_version: str = "2"
     ```
 
-=== "Rust"
-
-    ```rust
-    pub struct TargetResult {
-        pub target: Target,
-        pub effective_constraints: Vec<TaskConstraint>,
-        pub candidates: Vec<ScoredCandidate>,
-        pub wall_time: Option<f64>,
-        pub cpu_time: Option<f64>,
-    }
-
-    pub struct Evaluation {
-        pub task: Task,
-        pub tiers: Vec<Tier>,
-        pub metric_label: String,
-        pub acceptable_match_level: InchiKeyLevel,
-        pub acceptable_route_match: AcceptableRouteMatch,
-        pub targets: BTreeMap<TargetId, TargetResult>,
-        pub schema_version: SchemaVersion,
-    }
-    ```
-
-`TargetResult.effective_constraints` is a snapshot, not a cache. Analysis reads what scoring actually enforced even if a task definition is later edited.
-
-!!! note "An intentional violation of single-responsibility principle"
-
-    In principle, Tier-0 validity should be assessed at the `score` workflow stage. The cleanest design would then be if `adapt` always returned an equivalent of `Candidate`s (or a `Route` was extended to hold the information of `Candidate`), but that would result in subpar UX for every use case outside of benchmarking. As a result, we intentionally allow for a slight leakage of responsibility between `adapt` and `score` (i.e., `adapt` without ``--preserve-failed-candidates` returns Tier-0 valid `Route`s.)
+`effective_constraints` is a snapshot, not a cache. Analysis reads what scoring enforced even if the source task definition is edited later.
 
 ### Score API
 
-Because we're far from having a universal Tier-2 validity checker, it is natural to expect multiple solutions emerging from different research groups. To enable modularity of scoring, we define a `TierChecker` protocol.
-
-=== "Python"
+=== "Python 0.8.x"
 
     ```python
-    class TierChecker(Protocol):
-        tier: Tier
-        name: str
-
-        def check_route(self, route: Route) -> RouteValidity: ...
+    evaluation = retrocast.score(
+        predictions,
+        task,
+        stocks,
+        match_level="full",
+        acceptable_route_match="prefix",
+        execution_stats=None,
+        workers=12,
+    )
     ```
 
-=== "Rust"
+=== "Rust 0.8.x"
 
     ```rust
-    pub trait TierChecker: Send + Sync {
-        fn tier(&self) -> Tier;
-        fn name(&self) -> &str;
-        fn check_route(&self, route: &Route) -> Result<RouteValidity>;
-    }
-    ```
-
-Similarly, we define a protocol for task constraint satisfaction:
-
-=== "Python"
-
-    ```python
-    class TaskConstraintChecker(Protocol):
-        kind: str
-
-        def check_route(
-            self,
-            route: Route,
-            constraint: TaskConstraint,
-        ) -> list[CheckResult]: ...
-    ```
-
-=== "Rust"
-
-    ```rust
-    pub trait ConstraintChecker: Send + Sync {
-        fn kind(&self) -> &str;
-        fn check_route(
-            &self,
-            route: &Route,
-            constraint: &TaskConstraint,
-        ) -> Result<Vec<CheckResult>>;
-    }
-    ```
-
-This results in the following API:
-
-=== "Python"
-
-    ```python
-    def score_candidate(candidate, *, target, constraints, registry, options=None) -> ScoredCandidate: ...
-
-    def score_target(candidates, *, target, constraints, registry, options=None) -> TargetResult: ...
-
-    def score(predictions, task, *, registry, options=None) -> Evaluation: ...
-    ```
-
-=== "Rust"
-
-    ```rust
-    pub fn score_candidate(
-        candidate: Candidate,
-        target: &Target,
-        constraints: &[TaskConstraint],
-        registry: &CheckerRegistry,
-        options: &ScoreOptions,
-    ) -> Result<ScoredCandidate>;
-
-    pub fn score_target(
-        candidates: Vec<Candidate>,
-        target: &Target,
-        constraints: &[TaskConstraint],
-        registry: &CheckerRegistry,
-        options: &ScoreOptions,
-    ) -> Result<TargetResult>;
-
-    pub fn score(
-        predictions: CollectedCandidates,
-        task: &Task,
-        registry: &CheckerRegistry,
-        options: &ScoreOptions,
+    pub fn score_owned(
+        predictions: Predictions,
+        task: Task,
+        stocks: &Stocks,
+        match_level: &str,
+        acceptable_route_match: &str,
+        execution_stats: Option<&ExecutionStats>,
+        workers: usize,
     ) -> Result<Evaluation>;
     ```
 
-The registry is validated before target work begins. A missing checker is one configuration error for the evaluation, not a separate failed route check for every candidate.
+=== "Python 0.7.1"
 
-### How task constraint checkers work?
-
-There are two components. `Task.effective_constraints(target_id)` holds information on what constraint should be satisfied. That constraint is passed to `.check_route` within the score workflow. For example:
-
-```py
-constraints = benchmark.effective_constraints("target-1")
-# [
-#   StockTerminationConstraint(stock="buyables-stock"),
-#   RequiredLeavesConstraint(smiles=["CCO"]),
-# ]
-
-for constraint in constraints:
-    checker = registry[constraint.kind]
-    checks.extend(checker.check_route(route, constraint))
-```
-
-For example, for a regular retrosynthesis benchmark (task constraint is stock termination):
-
-For a stock-only task:
-
-```py
-benchmark = Task(
-    name="mkt-cnv-160",
-    targets=targets,
-    default_constraints=[
-        StockTerminationConstraint(stock="buyables-stock"),
-    ],
-)
-
-score(
-    predictions,
-    task=benchmark,
-    constraint_checkers=[
-        StockTerminationChecker(
-            stocks={"buyables-stock": buyables}, # buyables is Set[InChIKeyStr]
-            match_level=InChIKeyLevel.FULL,
-        ),
-    ],
-)
-```
-
-For a bidirectional search problem (stock-plus-required-leaf task):
-
-```py
-benchmark = Task(
-    name="mkt-cnv-160-leaf",
-    targets=targets,
-    default_constraints=[
-        StockTerminationConstraint(stock="buyables-stock"),
-    ],
-    constraints={
-        "target-1": [
-            RequiredLeavesConstraint(smiles=["CCO"]),
+    ```python
+    evaluation = score(
+        predictions,
+        task,
+        tier_checkers=[MyTierOneChecker()],
+        constraint_checkers=[
+            StockTerminationChecker(stocks={"buyables": buyables}),
+            RequiredLeavesChecker(),
+            RouteDepthChecker(),
         ],
-    },
-)
-```
+    )
+    ```
 
-and scoring needs checkers for both kinds:
+Python 0.7.1 accepted runtime checker protocols. The 0.8.x production path executes built-in constraint kinds in `retrocast-core`; the Python binding does not invoke callbacks once per route. Adding a production constraint therefore means adding one core implementation and exposing the same serialized result through both 0.8.x interfaces.
 
-```py
-score(
-    predictions,
-    task=benchmark,
-    constraint_checkers=[
-        StockTerminationChecker(
-            stocks={"buyables-stock": buyables},
-            match_level=InChIKeyLevel.FULL,
-        ),
-        RequiredLeavesChecker(match_level=InChIKeyLevel.FULL),
-    ],
-)
-```
+### Task constraints
 
-This architecture allows for definition of custom `TaskConstraint` for a given `Task` and so long as you define a complementary `TaskConstraintChecker`, you can use the general `score` workflow.
+A task combines defaults with per-target overrides by constraint `kind`. Current native scoring implements stock termination, required leaves, and route depth.
 
-Notably, the `score` workflow enforces that requirement. If you try to pass a `Task` with constraint of kind `ariadne.reaction_count`, but did not specify a corresponding kind checker, you'd get a runtime error. RetroCast treats unverifiable constraints as unsolved by default.
+=== "Python 0.8.x"
+
+    ```python
+    task = {
+        "name": "mkt-cnv-160-leaf",
+        "targets": targets,
+        "default_constraints": [
+            {"kind": "retrocast.stock_termination", "stock": "buyables"}
+        ],
+        "constraints": {
+            "target-1": [
+                {"kind": "retrocast.required_leaves", "smiles": ["CCO"]}
+            ]
+        },
+    }
+    stocks = {"buyables": list(buyable_inchikeys)}
+
+    evaluation = retrocast.score(predictions, task, stocks)
+    ```
+
+=== "Rust 0.8.x"
+
+    ```rust
+    let task: Task = serde_json::from_value(task_json)?;
+    let stocks = BTreeMap::from([(
+        "buyables".to_owned(),
+        buyable_inchikeys.into_iter().collect(),
+    )]);
+
+    let evaluation = score_owned(
+        predictions,
+        task,
+        &stocks,
+        "full",
+        "prefix",
+        None,
+        workers,
+    )?;
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    task = Task(
+        name="mkt-cnv-160-leaf",
+        targets=targets,
+        default_constraints=[
+            StockTerminationConstraint(stock="buyables"),
+        ],
+        constraints={
+            "target-1": [
+                RequiredLeavesConstraint(smiles=["CCO"]),
+            ],
+        },
+    )
+
+    evaluation = score(
+        predictions,
+        task,
+        constraint_checkers=[
+            StockTerminationChecker(stocks={"buyables": buyables}),
+            RequiredLeavesChecker(),
+        ],
+    )
+    ```
+
+An unknown native constraint kind aborts scoring with `EngineError::UnsupportedConstraint`. It is not silently treated as a failed route.
+
+### Acceptable-route matching
+
+Scoring records whether each candidate matches a benchmark acceptable route. `acceptable_match_level` controls molecular identity: `full`, `no_stereo`, or `connectivity`. `acceptable_route_match` records whether the headline comparison used a target-rooted prefix or exact full-route identity.
+
+Reaction-level diagnostic entries use typed route paths such as `rc:r:/` and `rc:r:/1/0`, so a consumer can locate the corresponding reaction without mutating the route tree.
 
 ## 5. Analyze
 
 `analyze` derives benchmark-style metrics from `Evaluation`.
 
-=== "Python"
+=== "Python 0.8.x"
+
+    The binding exposes this Rust-owned value as JSON-compatible Python data.
+    Validation and derived behavior stay in `retrocast-core`; 0.8.x defines no
+    parallel Python model for it.
+
+=== "Rust 0.8.x"
+
+    ```rust
+    pub struct ReliabilityFlag {
+        pub code: String,
+        pub message: String,
+    }
+
+    pub struct MetricSummary {
+        pub value: f64,
+        pub count: usize,
+        pub ci_low: Option<f64>,
+        pub ci_high: Option<f64>,
+        pub reliability: Option<ReliabilityFlag>,
+    }
+
+    pub struct AnalysisReport {
+        pub schema_version: SchemaVersion,
+        pub metrics: BTreeMap<String, MetricSummary>,
+        pub by_stratum: BTreeMap<String, BTreeMap<String, MetricSummary>>,
+        pub bootstrap_resamples: usize,
+        pub runtime: RuntimeSummary,
+    }
+
+    pub fn analyze(
+        evaluation: &Evaluation,
+        ks: &[usize],
+        prefix_depths: &[usize],
+        n_boot: usize,
+        seed: u64,
+        workers: usize,
+    ) -> Result<AnalysisReport>;
+    ```
+
+=== "Python 0.7.1"
 
     ```python
     class ReliabilityFlag(BaseModel):
@@ -1161,51 +1245,28 @@ Notably, the `score` workflow enforces that requirement. If you try to pass a `T
     analyze(evaluation, *, ks=(1, 5, 10, 50), prefix_depths=(1, 2, 3)) -> AnalysisReport
     ```
 
-=== "Rust"
-
-    ```rust
-    pub struct ReliabilityFlag {
-        pub code: ReliabilityCode,
-        pub message: String,
-    }
-
-    pub struct MetricSummary {
-        pub value: f64,
-        pub count: usize,
-        pub ci_low: Option<f64>,
-        pub ci_high: Option<f64>,
-        pub reliability: Option<ReliabilityFlag>,
-    }
-
-    pub struct AnalysisReport {
-        pub metrics: BTreeMap<MetricName, MetricSummary>,
-        pub by_stratum: BTreeMap<Stratum, BTreeMap<MetricName, MetricSummary>>,
-        pub bootstrap_resamples: usize,
-        pub runtime: Option<RuntimeSummary>,
-        pub schema_version: SchemaVersion,
-    }
-
-    pub fn analyze(
-        evaluation: &Evaluation,
-        options: &AnalysisOptions,
-    ) -> Result<AnalysisReport>;
-    ```
-
 Analysis reads only the evaluation artifact. It does not reopen planner output, stocks, or task files. `MetricSummary.count` is the metric denominator, and a confidence interval without its count is therefore not a valid summary.
 
 Stage-manifest statistics are derived by the same core rather than recomputed by a front end:
 
-=== "Python"
+=== "Python 0.8.x"
+
+    ```python
+    statistics = json.loads(
+        retrocast.evaluation_statistics_native(evaluation)
+    )
+    ```
+
+=== "Rust 0.8.x"
+
+    ```rust
+    let statistics = retrocast_core::stats::evaluation_statistics(&evaluation);
+    ```
+
+=== "Python 0.7.1"
 
     ```python
     statistics = evaluation_statistics(evaluation)
-    # evaluation can still retain its opaque Rust handle
-    ```
-
-=== "Rust"
-
-    ```rust
-    let statistics = evaluation_statistics(&evaluation);
     ```
 
 This includes candidate and failure counts, per-target candidate distributions, recorded wall/CPU summaries, and target-level Solv-N counts. These values are provenance data, so Python and the standalone executable must not have separate rounding or denominator rules.
@@ -1216,7 +1277,37 @@ Top-K reconstruction metrics are emitted only for targets with acceptable_routes
 
 Schema values do not know where they came from. Provenance is recorded beside an artifact rather than injected into every route and metric.
 
-=== "Python"
+=== "Python 0.8.x"
+
+    The binding exposes this Rust-owned value as JSON-compatible Python data.
+    Validation and derived behavior stay in `retrocast-core`; 0.8.x defines no
+    parallel Python model for it.
+
+=== "Rust 0.8.x"
+
+    ```rust
+    pub struct FileInfo {
+        pub label: Option<String>,
+        pub path: String,
+        pub file_hash: String,
+        pub content_hash: Option<String>,
+    }
+
+    pub struct Manifest {
+        pub schema_version: String,
+        pub retrocast_version: String,
+        pub created_at: DateTime<Utc>,
+        pub action: String,
+        pub parameters: Map<String, Value>,
+        pub directives: Map<String, Value>,
+        pub source_files: Vec<FileInfo>,
+        pub output_files: ManifestOutputs,
+        pub statistics: Map<String, Value>,
+        pub summary: Map<String, Value>,
+    }
+    ```
+
+=== "Python 0.7.1"
 
     ```python
     class FileInfo(BaseModel):
@@ -1233,26 +1324,6 @@ Schema values do not know where they came from. Provenance is recorded beside an
         parameters: dict[str, Any] = Field(default_factory=dict)
         statistics: dict[str, Any] = Field(default_factory=dict)
         schema_version: str = "2"
-    ```
-
-=== "Rust"
-
-    ```rust
-    pub struct FileInfo {
-        pub label: String,
-        pub path: Utf8PathBuf,
-        pub sha256: Sha256Digest,
-        pub content_sha256: Option<Sha256Digest>,
-    }
-
-    pub struct Manifest {
-        pub action: ActionName,
-        pub source: Vec<FileInfo>,
-        pub output: Vec<FileInfo>,
-        pub parameters: Annotations,
-        pub statistics: Annotations,
-        pub schema_version: SchemaVersion,
-    }
     ```
 
 The physical hash covers the stored bytes. The optional content hash covers the decompressed canonical JSON representation, so equivalent `.json` and `.json.gz` artifacts can be related without pretending their files are identical.

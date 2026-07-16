@@ -29,8 +29,12 @@ nav = [
       "guides/cli.md",
       "guides/workflows.md",
     ] },
-    { "Python Library" = [
+    { "Library" = [
       "guides/library/index.md",
+      "guides/library/adaptation.md",
+      "guides/library/evaluation.md",
+      "guides/library/statistics.md",
+      "guides/library/visualization.md",
       "guides/library/reference.md",
     ] },
     { "Benchmarks and Data" = [
@@ -42,7 +46,6 @@ nav = [
     { "Rationale" = [
       "dev/rationale/solv-n-evaluation.md",
       "dev/rationale/schema-design.md",
-      "dev/rationale/rust-engine.md",
       "dev/rationale/training-set-releases.md",
     ] },
     { "Reference" = [
@@ -56,8 +59,8 @@ nav = [
   ] },
 ]
 
-# Language variants in rationale pages use linked content tabs. Python stays
-# first because it is the public API; Rust shows the implementation contract.
+# Implementation examples use linked tabs in this order: the 0.8.x Python
+# binding, the 0.8.x Rust core, and the frozen pure-Python 0.7.1 oracle.
 [project.markdown_extensions.pymdownx.superfences]
 
 [project.markdown_extensions.pymdownx.tabbed]
