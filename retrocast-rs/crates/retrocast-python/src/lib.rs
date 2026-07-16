@@ -6,14 +6,16 @@ use retrocast_core::{
     adapt, adapters, analyze,
     chem::{self, InchiKeyLevel as ChemInchiKeyLevel},
     embedding::{EmbeddingOptions, find_route_embeddings, route_embeds_at},
+    io,
     model::{Evaluation, ExecutionStats, Predictions, Task},
+    pipeline::{PipelineOptions, run_pipeline},
     route::AdaptMode,
     route_path::RoutePath,
     route_view::InchiKeyLevel,
     score,
 };
 use serde_json::Value;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -31,6 +33,12 @@ impl NativePredictions {
     fn json(&self) -> PyResult<String> {
         to_json(self.value.as_ref())
     }
+
+    fn write(&self, py: Python<'_>, path: PathBuf) -> PyResult<()> {
+        let value = Arc::clone(&self.value);
+        py.detach(move || io::write_json(&path, value.as_ref()))
+            .map_err(python_error)
+    }
 }
 
 /// Opaque ownership of a scored evaluation for direct native analysis.
@@ -43,6 +51,16 @@ struct NativeEvaluation {
 impl NativeEvaluation {
     fn json(&self) -> PyResult<String> {
         to_json(self.value.as_ref())
+    }
+
+    fn write(&self, py: Python<'_>, path: PathBuf) -> PyResult<()> {
+        let value = Arc::clone(&self.value);
+        py.detach(move || io::write_json(&path, value.as_ref()))
+            .map_err(python_error)
+    }
+
+    fn metric_label(&self) -> String {
+        self.value.metric_label.clone()
     }
 }
 
@@ -74,6 +92,19 @@ impl<T: serde::Serialize> AdapterBoundaryResult<T> {
 
 fn python_error(error: impl std::fmt::Display) -> PyErr {
     PyRuntimeError::new_err(error.to_string())
+}
+
+fn artifact_read_error(error: retrocast_core::error::EngineError) -> PyErr {
+    match error {
+        retrocast_core::error::EngineError::Json(error) if error.is_data() => {
+            PyValueError::new_err(error.to_string())
+        }
+        retrocast_core::error::EngineError::UnsafePathComponent { .. } => {
+            PyValueError::new_err(error.to_string())
+        }
+        retrocast_core::error::EngineError::Io(error) => PyOSError::new_err(error.to_string()),
+        error => python_error(error),
+    }
 }
 
 fn chemistry_error(error: retrocast_core::error::EngineError) -> PyErr {
@@ -683,6 +714,58 @@ fn ingest_native(
 }
 
 #[pyfunction]
+fn load_predictions_native(py: Python<'_>, path: PathBuf) -> PyResult<NativePredictions> {
+    let value = py
+        .detach(move || io::read_json::<Predictions>(&path))
+        .map_err(artifact_read_error)?;
+    Ok(NativePredictions {
+        value: Arc::new(value),
+    })
+}
+
+#[pyfunction]
+fn load_evaluation_native(py: Python<'_>, path: PathBuf) -> PyResult<NativeEvaluation> {
+    let value = py
+        .detach(move || io::read_json::<Evaluation>(&path))
+        .map_err(artifact_read_error)?;
+    Ok(NativeEvaluation {
+        value: Arc::new(value),
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (raw_path, adapter, task_path, mode="strict", max_candidates=None, workers=1))]
+fn ingest_file_native(
+    py: Python<'_>,
+    raw_path: PathBuf,
+    adapter: &str,
+    task_path: PathBuf,
+    mode: &str,
+    max_candidates: Option<usize>,
+    workers: usize,
+) -> PyResult<NativePredictions> {
+    let mode = AdaptMode::parse(mode).map_err(python_error)?;
+    let resolved = adapters::built_in(adapter)
+        .ok_or_else(|| PyRuntimeError::new_err(format!("unknown RetroCast adapter {adapter:?}")))?;
+    let value = py
+        .detach(move || {
+            let task: Task = io::read_json(&task_path)?;
+            adapt::ingest_file(
+                &raw_path,
+                resolved.as_ref(),
+                &task,
+                mode,
+                max_candidates,
+                workers,
+            )
+        })
+        .map_err(python_error)?;
+    Ok(NativePredictions {
+        value: Arc::new(value),
+    })
+}
+
+#[pyfunction]
 #[pyo3(signature = (predictions_json, task_json, stocks_json, match_level="full", acceptable_route_match="prefix", execution_stats_json=None, workers=1))]
 #[allow(clippy::too_many_arguments)]
 fn score_json(
@@ -753,6 +836,68 @@ fn score_native(
 }
 
 #[pyfunction]
+#[pyo3(signature = (predictions_path, task_path, stocks_dir, execution_stats_path=None, match_level="full", acceptable_route_match="prefix", workers=1))]
+#[allow(clippy::too_many_arguments)]
+fn score_project_native(
+    py: Python<'_>,
+    predictions_path: PathBuf,
+    task_path: PathBuf,
+    stocks_dir: PathBuf,
+    execution_stats_path: Option<PathBuf>,
+    match_level: &str,
+    acceptable_route_match: &str,
+    workers: usize,
+) -> PyResult<(NativeEvaluation, String, Vec<PathBuf>)> {
+    let match_level = match_level.to_owned();
+    let acceptable_route_match = acceptable_route_match.to_owned();
+    let (value, label, stock_paths) = py
+        .detach(move || {
+            let predictions: Predictions = io::read_json(&predictions_path)?;
+            let task: Task = io::read_json(&task_path)?;
+            let stock_names: BTreeSet<String> = task
+                .targets
+                .keys()
+                .flat_map(|target_id| task.effective_constraints(target_id))
+                .filter(|constraint| constraint.kind == "retrocast.stock_termination")
+                .filter_map(|constraint| {
+                    constraint.fields.get("stock")?.as_str().map(str::to_owned)
+                })
+                .collect();
+            let mut stocks = BTreeMap::new();
+            let mut stock_paths = Vec::new();
+            for name in stock_names {
+                io::validate_path_component(&name, "stock name")?;
+                let path = stocks_dir.join(format!("{name}.csv.gz"));
+                stocks.extend(io::read_stock(&path, &name)?);
+                stock_paths.push(path);
+            }
+            let stats: Option<ExecutionStats> = execution_stats_path
+                .as_deref()
+                .map(io::read_json)
+                .transpose()?;
+            let label = task.derived_metric_label();
+            let evaluation = score::score_owned(
+                predictions,
+                task,
+                &stocks,
+                &match_level,
+                &acceptable_route_match,
+                stats.as_ref(),
+                workers,
+            )?;
+            Ok::<_, retrocast_core::error::EngineError>((evaluation, label, stock_paths))
+        })
+        .map_err(artifact_read_error)?;
+    Ok((
+        NativeEvaluation {
+            value: Arc::new(value),
+        },
+        label,
+        stock_paths,
+    ))
+}
+
+#[pyfunction]
 #[pyo3(signature = (evaluation_json, ks, prefix_depths, n_boot=10000, seed=42, workers=1))]
 fn analyze_json(
     py: Python<'_>,
@@ -795,6 +940,92 @@ fn analyze_native(
         })
         .map_err(python_error)?;
     to_json(&result)
+}
+
+#[pyfunction]
+#[pyo3(signature = (evaluation_path, ks, prefix_depths, execution_stats_path=None, n_boot=10000, seed=42, workers=1))]
+#[allow(clippy::too_many_arguments)]
+fn analyze_file_json(
+    py: Python<'_>,
+    evaluation_path: PathBuf,
+    ks: Vec<usize>,
+    prefix_depths: Vec<usize>,
+    execution_stats_path: Option<PathBuf>,
+    n_boot: usize,
+    seed: u64,
+    workers: usize,
+) -> PyResult<String> {
+    let result = py
+        .detach(move || {
+            let mut evaluation: Evaluation = io::read_json(&evaluation_path)?;
+            if let Some(path) = execution_stats_path {
+                let stats: ExecutionStats = io::read_json(&path)?;
+                for (target_id, target) in &mut evaluation.targets {
+                    if target.wall_time.is_none() {
+                        target.wall_time = stats.wall_time.get(target_id).copied();
+                    }
+                    if target.cpu_time.is_none() {
+                        target.cpu_time = stats.cpu_time.get(target_id).copied();
+                    }
+                }
+            }
+            analyze::analyze(&evaluation, &ks, &prefix_depths, n_boot, seed, workers)
+        })
+        .map_err(python_error)?;
+    to_json(&result)
+}
+
+#[pyfunction]
+#[pyo3(signature = (raw_path, benchmark_path, stock_path, output_dir, stock_name=None, execution_stats_path=None, adapter="aizynthfinder", workers=1, mode="strict", max_candidates=None, match_level="full", acceptable_route_match="prefix", ks=vec![1, 3, 5, 10, 20, 50, 100], prefix_depths=vec![1, 2, 3], n_boot=10000, seed=42))]
+#[allow(clippy::too_many_arguments)]
+fn run_pipeline_json(
+    py: Python<'_>,
+    raw_path: PathBuf,
+    benchmark_path: PathBuf,
+    stock_path: PathBuf,
+    output_dir: PathBuf,
+    stock_name: Option<String>,
+    execution_stats_path: Option<PathBuf>,
+    adapter: &str,
+    workers: usize,
+    mode: &str,
+    max_candidates: Option<usize>,
+    match_level: &str,
+    acceptable_route_match: &str,
+    ks: Vec<usize>,
+    prefix_depths: Vec<usize>,
+    n_boot: usize,
+    seed: u64,
+) -> PyResult<String> {
+    let mode = AdaptMode::parse(mode).map_err(python_error)?;
+    let adapter = adapter.to_owned();
+    let match_level = match_level.to_owned();
+    let acceptable_route_match = acceptable_route_match.to_owned();
+    let stats = py
+        .detach(move || {
+            run_pipeline(
+                &raw_path,
+                &benchmark_path,
+                &stock_path,
+                stock_name.as_deref(),
+                execution_stats_path.as_deref(),
+                &output_dir,
+                &PipelineOptions {
+                    adapter: &adapter,
+                    mode,
+                    max_candidates,
+                    workers,
+                    match_level: &match_level,
+                    acceptable_route_match: &acceptable_route_match,
+                    ks: &ks,
+                    prefix_depths: &prefix_depths,
+                    n_boot,
+                    seed,
+                },
+            )
+        })
+        .map_err(python_error)?;
+    to_json(&stats)
 }
 
 #[pyfunction]
@@ -898,13 +1129,6 @@ fn write_lines_gz(path: &str, lines: Vec<String>) -> PyResult<usize> {
 #[pyfunction]
 fn write_csv_gz(path: &str, rows: Vec<Vec<String>>) -> PyResult<usize> {
     retrocast_core::io::write_csv_gz(Path::new(path), &rows).map_err(python_error)
-}
-
-fn artifact_read_error(error: retrocast_core::error::EngineError) -> PyErr {
-    match error {
-        retrocast_core::error::EngineError::Io(error) => PyOSError::new_err(error.to_string()),
-        error => python_error(error),
-    }
 }
 
 #[pyfunction]
@@ -1475,10 +1699,16 @@ fn native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(route_structure_json, module)?)?;
     module.add_function(wrap_pyfunction!(ingest_json, module)?)?;
     module.add_function(wrap_pyfunction!(ingest_native, module)?)?;
+    module.add_function(wrap_pyfunction!(ingest_file_native, module)?)?;
+    module.add_function(wrap_pyfunction!(load_predictions_native, module)?)?;
+    module.add_function(wrap_pyfunction!(load_evaluation_native, module)?)?;
     module.add_function(wrap_pyfunction!(score_json, module)?)?;
     module.add_function(wrap_pyfunction!(score_native, module)?)?;
+    module.add_function(wrap_pyfunction!(score_project_native, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_json, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_native, module)?)?;
+    module.add_function(wrap_pyfunction!(analyze_file_json, module)?)?;
+    module.add_function(wrap_pyfunction!(run_pipeline_json, module)?)?;
     module.add_function(wrap_pyfunction!(verify_manifest_json, module)?)?;
     module.add_function(wrap_pyfunction!(create_manifest_json, module)?)?;
     module.add_function(wrap_pyfunction!(hash_file, module)?)?;

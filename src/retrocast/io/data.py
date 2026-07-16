@@ -236,16 +236,27 @@ def save_collected_routes(routes: CollectedRoutes, path: Path) -> None:
 
 
 def load_collected_candidates(path: Path) -> CollectedCandidates:
+    from retrocast import native
+
+    if native.available():
+        return _load_native_artifact(path, native.load_predictions_file, artifact="collected_candidates")
     return _load_model(path, _COLLECTED_CANDIDATES_ADAPTER, artifact="collected_candidates")
 
 
 def save_collected_candidates(candidates: CollectedCandidates, path: Path) -> None:
     if isinstance(candidates, NativeCollectedCandidates):
-        candidates.materialize()
+        handle = candidates.native_handle()
+        if handle is not None:
+            handle.write(path)
+            return
     _save_model(candidates, path, _COLLECTED_CANDIDATES_ADAPTER, artifact="collected_candidates")
 
 
 def load_evaluation(path: Path) -> Evaluation:
+    from retrocast import native
+
+    if native.available():
+        return _load_native_artifact(path, native.load_evaluation_file, artifact="evaluation")
     return _load_model(path, _EVALUATION_ADAPTER, artifact="evaluation")
 
 
@@ -253,7 +264,10 @@ def save_evaluation(evaluation: Evaluation, path: Path) -> None:
     from retrocast.native import NativeEvaluation
 
     if isinstance(evaluation, NativeEvaluation):
-        evaluation.materialize()
+        handle = evaluation.native_handle()
+        if handle is not None:
+            handle.write(path)
+            return
     _save_model(evaluation, path, _EVALUATION_ADAPTER, artifact="evaluation")
 
 
@@ -343,6 +357,30 @@ def _load_model(path: Path, adapter: TypeAdapter[T], *, artifact: str) -> T:
         raise ArtifactFormatError(
             f"Invalid {artifact} JSON format in {path}: {exc}",
             code="io.invalid_artifact_shape",
+            context={"path": str(path), "artifact": artifact},
+        ) from exc
+
+
+def _load_native_artifact(path: Path, loader: Any, *, artifact: str) -> Any:
+    path = Path(path)
+    if not path.exists():
+        raise ArtifactNotFoundError(
+            f"{artifact} file not found: {path}",
+            code="io.not_found",
+            context={"path": str(path), "artifact": artifact},
+        )
+    try:
+        return loader(path)
+    except ValueError as exc:
+        raise ArtifactFormatError(
+            f"Invalid {artifact} JSON format in {path}: {exc}",
+            code="io.invalid_artifact_shape",
+            context={"path": str(path), "artifact": artifact},
+        ) from exc
+    except (OSError, RuntimeError) as exc:
+        raise ArtifactDecodeError(
+            f"Failed to load {artifact} from {path}: {exc}",
+            code="io.decode_failed",
             context={"path": str(path), "artifact": artifact},
         ) from exc
 

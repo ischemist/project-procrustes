@@ -6,8 +6,15 @@ import retrocast
 from retrocast import native
 from retrocast.adapters.aizynth import AiZynthFinderAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
+from retrocast.io import (
+    load_collected_candidates,
+    load_evaluation,
+    save_benchmark,
+    save_collected_candidates,
+    save_evaluation,
+)
 from retrocast.metrics.constraints import RequiredLeavesChecker, RouteDepthChecker, StockTerminationChecker
-from retrocast.models.evaluation import AcceptableRouteMatch
+from retrocast.models.evaluation import AcceptableRouteMatch, Evaluation
 from retrocast.models.route import InChIKeyLevel
 from retrocast.models.task import Benchmark, StockTerminationConstraint, Target
 from retrocast.typing import InChIKeyStr, SmilesStr
@@ -81,6 +88,16 @@ def test_python_pipeline_facade_uses_native_engine() -> None:
         evaluation, ks=(1, 5, 10, 50), prefix_depths=(1, 2, 3), workers=2, n_boot=100, seed=42
     )
     assert report == native_report
+
+
+def test_native_evaluation_equality_normalizes_empty_pydantic_extras() -> None:
+    native_evaluation = native.NativeEvaluation.model_construct()
+    plain_evaluation = Evaluation.model_construct()
+    object.__setattr__(native_evaluation, "__pydantic_extra__", {})
+    object.__setattr__(plain_evaluation, "__pydantic_extra__", None)
+
+    assert native_evaluation == plain_evaluation
+    assert plain_evaluation == native_evaluation
 
 
 def test_python_pipeline_keeps_rust_values_between_untouched_stages(monkeypatch) -> None:
@@ -170,3 +187,56 @@ def test_workflow_statistics_preserve_opaque_rust_values(monkeypatch) -> None:
         "n_solv_0": 1,
     }
     assert evaluation.native_handle() is not None
+
+
+def test_file_artifacts_round_trip_without_materializing_native_graphs(tmp_path, monkeypatch) -> None:
+    adapter = AiZynthFinderAdapter()
+    task = _benchmark()
+    predictions_path = tmp_path / "candidates.json.gz"
+    evaluation_path = tmp_path / "evaluation.json.gz"
+
+    predictions = retrocast.ingest_candidates({"ethanol": [_raw_route()]}, adapter, task)
+    save_collected_candidates(predictions, predictions_path)
+    loaded_predictions = load_collected_candidates(predictions_path)
+    assert loaded_predictions.native_handle() is not None
+
+    def reject_materialization(*args, **kwargs):
+        raise AssertionError("file-native artifact was serialized through Python")
+
+    monkeypatch.setattr(type(loaded_predictions), "_ensure_materialized", reject_materialization)
+    stock = {InChIKeyStr(get_inchi_key("C")), InChIKeyStr(get_inchi_key("CC"))}
+    evaluation = retrocast.score(
+        loaded_predictions,
+        task,
+        constraint_checkers=[
+            StockTerminationChecker(stocks={"test-stock": stock}),
+            RequiredLeavesChecker(),
+            RouteDepthChecker(),
+        ],
+        acceptable_match_level=InChIKeyLevel.FULL,
+        acceptable_route_match=AcceptableRouteMatch.PREFIX,
+    )
+    save_evaluation(evaluation, evaluation_path)
+    loaded_evaluation = load_evaluation(evaluation_path)
+    assert loaded_evaluation.native_handle() is not None
+    monkeypatch.setattr(type(loaded_evaluation), "_ensure_materialized", reject_materialization)
+    assert retrocast.analyze(loaded_evaluation, n_boot=10).metrics
+
+
+def test_project_scoring_rejects_unsafe_stock_name_before_path_join(tmp_path) -> None:
+    task = _benchmark().model_copy(update={"default_constraints": [StockTerminationConstraint(stock="../outside")]})
+    predictions = retrocast.ingest_candidates({"ethanol": [_raw_route()]}, AiZynthFinderAdapter(), task)
+    predictions_path = tmp_path / "candidates.json.gz"
+    task_path = tmp_path / "benchmark.json.gz"
+    save_collected_candidates(predictions, predictions_path)
+    save_benchmark(task, task_path)
+
+    with pytest.raises(ValueError, match="unsafe stock name path component"):
+        native.score_project_files(
+            predictions_path,
+            task_path,
+            tmp_path / "stocks",
+            execution_stats_path=None,
+            acceptable_match_level=InChIKeyLevel.FULL,
+            acceptable_route_match=AcceptableRouteMatch.PREFIX,
+        )

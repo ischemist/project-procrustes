@@ -25,20 +25,21 @@ def main() -> None:
     parser.add_argument("--raw", required=True, type=Path)
     parser.add_argument("--benchmark", required=True, type=Path)
     parser.add_argument("--stock", required=True, type=Path)
+    parser.add_argument("--adapter", default="aizynthfinder")
     parser.add_argument("--execution-stats", type=Path)
     parser.add_argument("--rust-binary", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--repetitions", type=int, default=3)
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--n-boot", type=int, default=10000)
+    parser.add_argument("--workers", nargs="+", type=int, default=[1, 12])
     args = parser.parse_args()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     cases = [
-        ("python-api-1", _python_command(args, workers=1)),
-        ("python-api-12", _python_command(args, workers=12)),
-        ("rust-cli-1", _rust_command(args, workers=1)),
-        ("rust-cli-12", _rust_command(args, workers=12)),
+        (f"{surface}-{workers}", command(args, workers=workers))
+        for workers in args.workers
+        for surface, command in (("python-api", _python_command), ("rust-cli", _rust_command))
     ]
     results = []
     for name, command in cases:
@@ -49,15 +50,17 @@ def main() -> None:
         ]
         results.append(_summarize(name, command, samples))
 
+    dataset_stats = results[0]["samples"][0]["internal"]
     payload = {
         "schema_version": 1,
         "machine": _machine_info(),
         "dataset": {
+            "adapter": args.adapter,
             "raw": str(args.raw.resolve()),
             "benchmark": str(args.benchmark.resolve()),
             "stock": str(args.stock.resolve()),
-            "targets": 160,
-            "candidates": 1830,
+            "targets": dataset_stats["targets"],
+            "candidates": dataset_stats["candidates"],
         },
         "settings": {
             "repetitions": args.repetitions,
@@ -66,7 +69,7 @@ def main() -> None:
             "rss": "peak aggregate resident set of the process tree, sampled every 10 ms",
         },
         "results": results,
-        "semantic_validation": _semantic_validation(args.output_dir),
+        "semantic_validation": _semantic_validation(args.output_dir, [name for name, _ in cases]),
     }
     (args.output_dir / "benchmark-results.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     (args.output_dir / "README.md").write_text(_markdown(payload), encoding="utf-8")
@@ -86,6 +89,8 @@ def _python_command(args: argparse.Namespace, *, workers: int) -> list[str]:
         str(args.stock),
         "--output-dir",
         "{output_dir}",
+        "--adapter",
+        args.adapter,
         "--workers",
         str(workers),
         "--n-boot",
@@ -108,6 +113,8 @@ def _rust_command(args: argparse.Namespace, *, workers: int) -> list[str]:
         str(args.stock),
         "--output-dir",
         "{output_dir}",
+        "--adapter",
+        args.adapter,
         "--workers",
         str(workers),
         "--n-boot",
@@ -150,6 +157,8 @@ def _run(command_template: list[str], output_dir: Path) -> dict[str, Any]:
 def _summarize(name: str, command: list[str], samples: list[dict[str, Any]]) -> dict[str, Any]:
     wall = [sample["wall_seconds"] for sample in samples]
     rss = [sample["peak_tree_rss_bytes"] for sample in samples]
+    targets = samples[0]["internal"]["targets"]
+    candidates = samples[0]["internal"]["candidates"]
     phase_names = ["ingest_seconds", "score_seconds", "analyze_seconds", "total_seconds"]
     return {
         "name": name,
@@ -158,8 +167,8 @@ def _summarize(name: str, command: list[str], samples: list[dict[str, Any]]) -> 
         "median_wall_seconds": statistics.median(wall),
         "median_peak_tree_rss_bytes": int(statistics.median(rss)),
         "max_peak_tree_rss_bytes": max(rss),
-        "median_targets_per_second": 160 / statistics.median(wall),
-        "median_candidates_per_second": 1830 / statistics.median(wall),
+        "median_targets_per_second": targets / statistics.median(wall),
+        "median_candidates_per_second": candidates / statistics.median(wall),
         "median_phases": {
             phase: statistics.median(sample["internal"][phase] for sample in samples) for phase in phase_names
         },
@@ -198,13 +207,14 @@ def _command_version(command: list[str]) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-def _semantic_validation(output_dir: Path) -> dict[str, Any]:
+def _semantic_validation(output_dir: Path, case_names: list[str]) -> dict[str, Any]:
     from retrocast.models.analysis import AnalysisReport
     from retrocast.models.evaluation import Evaluation
 
-    reference = output_dir / "runs" / "python-api-1" / "sample-0"
+    reference_name = case_names[0]
+    reference = output_dir / "runs" / reference_name / "sample-0"
     comparisons: dict[str, Any] = {}
-    for case in ("python-api-12", "rust-cli-1", "rust-cli-12"):
+    for case in case_names[1:]:
         candidate = output_dir / "runs" / case / "sample-0"
         reference_candidates = _read_gzip_json(reference / "candidates.json.gz")
         candidate_candidates = _read_gzip_json(candidate / "candidates.json.gz")
@@ -216,7 +226,7 @@ def _semantic_validation(output_dir: Path) -> dict[str, Any]:
             reference_analysis.model_dump(mode="json", exclude_none=True),
             candidate_analysis.model_dump(mode="json", exclude_none=True),
         )
-        comparisons[case] = {
+        comparisons[f"{reference_name}_vs_{case}"] = {
             "candidates_equal": reference_candidates == candidate_candidates,
             "evaluation_equal": reference_evaluation == candidate_evaluation,
             "analysis_non_numeric_equal": non_numeric_equal,
@@ -282,9 +292,9 @@ def _markdown(payload: dict[str, Any]) -> str:
         for result in validation.values()
     )
     maximum_delta = max(result["analysis_max_abs_numeric_delta"] for result in validation.values())
-    return f"""# AiZynthFinder mkt-cnv-160 benchmark
+    return f"""# {payload["dataset"]["adapter"]} pipeline benchmark
 
-This benchmark runs the complete ingest, score, and analyze pipeline over 160 targets and 1,830 candidate slots. Values are medians of {payload["settings"]["repetitions"]} measured runs after {payload["settings"]["warmups"]} warm-up run per case. Wall time includes process startup and artifact IO. RSS is the peak aggregate resident set of the parent process and all live children, sampled every 10 ms.
+This benchmark runs the complete ingest, score, and analyze pipeline over {payload["dataset"]["targets"]:,} targets and {payload["dataset"]["candidates"]:,} candidate slots. Values are medians of {payload["settings"]["repetitions"]} measured runs after {payload["settings"]["warmups"]} warm-up run per case. Wall time includes process startup and artifact IO. RSS is the peak aggregate resident set of the parent process and all live children, sampled every 10 ms.
 
 | execution path | wall (s) | targets/s | candidates/s | peak tree RSS (MiB) | ingest (s) | score (s) | analyze (s) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

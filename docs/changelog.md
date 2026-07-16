@@ -12,6 +12,12 @@ Practically speaking, you should treat `2-raw` (or wherever you store the raw pl
 
 For most use cases, this should not be a problem since the full pipeline of ingest, score, and analyze is decently fast. If you are using (or planning to use) RetroCast in production pipelines that will handle large volumes of data, please feel free [to get in touch](ischemist.com/contact).
 
+## v0.8.1 (unreleased)
+
+v0.8.1 keeps corpus-sized artifacts inside Rust across ingest, score, and analyze. It also narrows ASKCOS pathway graphs before route casting and exposes `--workers` consistently across project commands.
+
+On the 25,762-candidate ASKCOS fixture, the 12-worker Python pipeline completed in 19.36 seconds with 555 MiB peak RSS, compared with 558.2 seconds and 2.32 GiB for v0.7.1 and 241.8 seconds and 8.56 GiB for v0.8.0. Standalone Rust completed in 19.26 seconds with 524 MiB. Repeated runs put the Python boundary within 1.2% wall time and 22 MiB RSS of standalone, with identical candidate, evaluation, and analysis artifacts.
+
 ## v0.8.0
 
 v0.8.0 replaces the Python execution engine with one Rust core shared by the Python package and a standalone `retrocast` executable.
@@ -24,10 +30,6 @@ v0.8.0 replaces the Python execution engine with one Rust core shared by the Pyt
 - Replaced Python RDKit with a narrow RDKit C++ bridge for canonical SMILES, InChIKeys, and molecular descriptors.
 - Added bounded native parallelism through `workers`, with the Python binding releasing the GIL while the core executes.
 - Added reproducible cross-platform wheel and standalone-bundle builds for Linux x86-64, Windows x86-64, macOS arm64, and macOS x86-64.
-
-### Performance
-
-On the 160-target, 1,830-candidate AiZynthFinder `mkt-cnv-160` fixture, the standalone executable processes 1,096.7 candidates/s with 12 workers in 1.669 seconds. The Python front end over the same core processes 743.0 candidates/s in 2.463 seconds. Candidate and evaluation artifacts are identical across worker counts and front ends; see the [recorded benchmark](https://github.com/ischemist/project-procrustes/tree/master/benchmarks/aizynth-mkt-cnv-160) for wall time, throughput, RSS, and semantic validation.
 
 ### Distribution and migration
 

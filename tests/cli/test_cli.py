@@ -11,8 +11,14 @@ import pytest
 
 from retrocast.adapters import PaRoutesAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.cli.main import _resolve_training_data_artifact_and_release, main
-from retrocast.exceptions import ConfigurationError
+from retrocast.cli.main import _native_cli_call, _resolve_training_data_artifact_and_release, main
+from retrocast.exceptions import (
+    ArtifactNotFoundError,
+    ConfigurationError,
+    InputError,
+    RetroCastIOError,
+    WorkflowError,
+)
 from retrocast.io import (
     load_analysis_report,
     load_candidates,
@@ -152,6 +158,50 @@ def test_pipeline_cli_writes_all_schema_v2_artifacts(tmp_path, monkeypatch, caps
     assert stats["candidates"] == 1
     assert stats["engine"] == "rust"
     assert '"targets": 1' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("native_error", "domain_error", "code"),
+    [
+        (FileNotFoundError("missing"), ArtifactNotFoundError, "io.native_not_found"),
+        (OSError("unreadable"), RetroCastIOError, "io.native_failure"),
+        (ValueError("invalid"), InputError, "input.native_invalid"),
+        (RuntimeError("failed"), WorkflowError, "workflow.native_failure"),
+    ],
+)
+def test_native_cli_call_translates_extension_errors(native_error, domain_error, code) -> None:
+    def fail() -> None:
+        raise native_error
+
+    with pytest.raises(domain_error) as exc_info:
+        _native_cli_call("score", fail)
+
+    assert exc_info.value.code == code
+    assert exc_info.value.context == {"action": "score", "error": str(native_error)}
+
+
+def test_pipeline_cli_reports_native_failure_without_traceback(monkeypatch, caplog) -> None:
+    def fail(*args, **kwargs):
+        raise OSError("cannot read benchmark")
+
+    monkeypatch.setattr("retrocast.cli.main.native_run_pipeline", fail)
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_cli(
+            monkeypatch,
+            "pipeline",
+            "--raw",
+            "raw.json.gz",
+            "--benchmark",
+            "benchmark.json.gz",
+            "--stock",
+            "stock.csv.gz",
+            "--output-dir",
+            "output",
+        )
+
+    assert exc_info.value.code == 1
+    assert "Native pipeline failed: cannot read benchmark" in caplog.text
 
 
 def test_get_data_cli_dry_run_lists_matching_files(tmp_path, monkeypatch, capsys) -> None:

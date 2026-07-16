@@ -15,11 +15,24 @@ use crate::{
     score::Stocks,
 };
 
+pub fn validate_path_component(value: &str, label: &str) -> Result<()> {
+    if value.is_empty()
+        || value == "."
+        || value == ".."
+        || value.contains('/')
+        || value.contains('\\')
+        || value.contains('\0')
+    {
+        return Err(EngineError::UnsafePathComponent {
+            label: label.to_owned(),
+            value: value.to_owned(),
+        });
+    }
+    Ok(())
+}
+
 pub fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T> {
-    let mut reader = open_reader(path)?;
-    let mut payload = String::new();
-    reader.read_to_string(&mut payload)?;
-    Ok(serde_json::from_str(&payload)?)
+    Ok(serde_json::from_reader(open_reader(path)?)?)
 }
 
 pub fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
@@ -224,7 +237,7 @@ fn read_stock_smiles(path: &Path) -> Result<BTreeSet<String>> {
     Ok(keys)
 }
 
-fn open_reader(path: &Path) -> Result<Box<dyn Read>> {
+pub(crate) fn open_reader(path: &Path) -> Result<Box<dyn Read>> {
     let file = File::open(path)?;
     if path.extension().is_some_and(|extension| extension == "gz") {
         Ok(Box::new(GzDecoder::new(BufReader::new(file))))
@@ -235,4 +248,28 @@ fn open_reader(path: &Path) -> Result<Box<dyn Read>> {
 
 fn csv_error(error: csv::Error) -> EngineError {
     EngineError::AdapterSchema(format!("stock CSV error: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_path_component;
+
+    #[test]
+    fn path_components_reject_traversal_and_platform_separators() {
+        for value in [
+            "",
+            ".",
+            "..",
+            "../outside",
+            "folder/name",
+            "folder\\name",
+            "a\0b",
+        ] {
+            assert!(
+                validate_path_component(value, "stock").is_err(),
+                "accepted unsafe path component: {value:?}"
+            );
+        }
+        assert!(validate_path_component("buyables-stock", "stock").is_ok());
+    }
 }

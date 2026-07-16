@@ -9,7 +9,7 @@ members = [
 # This is the release workspace used by Rust users, Maturin, and CI so every
 # front end builds the same core from one lockfile.
 [workspace.package]
-version = "0.8.0"
+version = "0.8.1"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"

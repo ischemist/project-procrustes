@@ -7,11 +7,11 @@ use std::{
 use anyhow::{Context, bail};
 use retrocast_core::{
     adapt, adapters, analyze,
-    io::{read_json, read_stock, write_json},
+    io::{read_json, read_stock, validate_path_component, write_json},
     model::{AnalysisReport, Evaluation, ExecutionStats, Predictions, Task},
     provenance::{ContentType, ManifestOutput, create_manifest},
     route::AdaptMode,
-    score::{self, Stocks},
+    score::{Stocks, score_owned},
 };
 use serde_json::{Map, Value, json};
 
@@ -148,12 +148,11 @@ pub fn ingest_project(
             safe_name(&raw_filename, "raw results filename")?;
             let raw_path = raw_dir.join(raw_filename);
             let task_path = paths.benchmarks.join(format!("{dataset}.json.gz"));
-            let raw: Value = read_json(&raw_path)?;
             let task: Task = read_json(&task_path)?;
             let adapter = adapters::built_in(&adapter_name)
                 .with_context(|| format!("unknown RetroCast adapter {adapter_name:?}"))?;
-            let predictions = adapt::ingest(
-                raw,
+            let predictions = adapt::ingest_file(
+                &raw_path,
                 adapter.as_ref(),
                 &task,
                 options.mode,
@@ -171,7 +170,7 @@ pub fn ingest_project(
                 &[raw_path, task_path],
                 &output,
                 &predictions,
-                ContentType::Predictions,
+                ContentType::Unknown,
                 &paths.data_dir,
                 json!({
                     "model": model,
@@ -224,16 +223,16 @@ pub fn score_project(
             } else {
                 None
             };
-            let evaluation = score::score(
-                &predictions,
-                &task,
+            let label = task.derived_metric_label();
+            let evaluation = score_owned(
+                predictions,
+                task,
                 &stocks,
                 options.match_level,
                 options.acceptable_route_match,
                 execution_stats.as_ref(),
                 options.workers,
             )?;
-            let label = task.derived_metric_label();
             let output = paths
                 .scored
                 .join(dataset)
@@ -331,11 +330,7 @@ pub fn analyze_project(
                     "analyze:v2",
                     &sources,
                     &[
-                        (
-                            &analysis_path,
-                            serde_json::to_value(&report)?,
-                            ContentType::Unknown,
-                        ),
+                        (&analysis_path, Value::Null, ContentType::Unknown),
                         (&markdown_path, Value::Null, ContentType::Unknown),
                     ],
                     &paths.data_dir,
@@ -529,10 +524,15 @@ fn write_stage_manifest<T: serde::Serialize>(
     parameters: Value,
     statistics: Value,
 ) -> anyhow::Result<()> {
+    let value = if content_type == ContentType::Unknown {
+        Value::Null
+    } else {
+        serde_json::to_value(value)?
+    };
     write_stage_manifest_many(
         action,
         sources,
-        &[(output, serde_json::to_value(value)?, content_type)],
+        &[(output, value, content_type)],
         root,
         parameters,
         statistics,
@@ -631,15 +631,7 @@ fn file_name(path: &Path) -> anyhow::Result<String> {
 }
 
 fn safe_name(value: &str, label: &str) -> anyhow::Result<String> {
-    if value.is_empty()
-        || value == "."
-        || value == ".."
-        || value.contains('/')
-        || value.contains('\\')
-        || value.contains('\0')
-    {
-        bail!("unsafe {label}: {value:?}");
-    }
+    validate_path_component(value, label)?;
     Ok(value.to_owned())
 }
 

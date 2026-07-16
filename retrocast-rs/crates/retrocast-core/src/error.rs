@@ -45,6 +45,8 @@ pub enum EngineError {
     UnknownAdapter { name: String, available: String },
     #[error("unregistered stock: {0}")]
     UnregisteredStock(String),
+    #[error("unsafe {label} path component: {value:?}")]
+    UnsafePathComponent { label: String, value: String },
     #[error("invalid worker count: {0}")]
     InvalidWorkers(usize),
     #[error("provenance error: {0}")]

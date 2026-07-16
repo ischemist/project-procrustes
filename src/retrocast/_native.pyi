@@ -1,3 +1,5 @@
+from pathlib import Path
+
 def canonicalize_smiles(smiles: str, remove_mapping: bool = ..., ignore_stereo: bool = ...) -> str: ...
 def get_inchi_key(smiles: str, level: str = ...) -> str: ...
 def reduce_inchi_key(inchikey: str, level: str) -> str: ...
@@ -111,6 +113,17 @@ def ingest_native(
     max_candidates: int | None = ...,
     workers: int = ...,
 ) -> NativePredictions: ...
+def ingest_file_native(
+    raw_path: Path,
+    adapter: str,
+    task_path: Path,
+    *,
+    mode: str = ...,
+    max_candidates: int | None = ...,
+    workers: int = ...,
+) -> NativePredictions: ...
+def load_predictions_native(path: Path) -> NativePredictions: ...
+def load_evaluation_native(path: Path) -> NativeEvaluation: ...
 def score_json(
     predictions_json: str,
     task_json: str,
@@ -131,6 +144,16 @@ def score_native(
     execution_stats_json: str | None = ...,
     workers: int = ...,
 ) -> NativeEvaluation: ...
+def score_project_native(
+    predictions_path: Path,
+    task_path: Path,
+    stocks_dir: Path,
+    *,
+    execution_stats_path: Path | None = ...,
+    match_level: str = ...,
+    acceptable_route_match: str = ...,
+    workers: int = ...,
+) -> tuple[NativeEvaluation, str, list[Path]]: ...
 def analyze_json(
     evaluation_json: str,
     ks: list[int],
@@ -148,6 +171,35 @@ def analyze_native(
     n_boot: int = ...,
     seed: int = ...,
     workers: int = ...,
+) -> str: ...
+def analyze_file_json(
+    evaluation_path: Path,
+    ks: list[int],
+    prefix_depths: list[int],
+    *,
+    execution_stats_path: Path | None = ...,
+    n_boot: int = ...,
+    seed: int = ...,
+    workers: int = ...,
+) -> str: ...
+def run_pipeline_json(
+    raw_path: Path,
+    benchmark_path: Path,
+    stock_path: Path,
+    output_dir: Path,
+    *,
+    stock_name: str | None = ...,
+    execution_stats_path: Path | None = ...,
+    adapter: str = ...,
+    workers: int = ...,
+    mode: str = ...,
+    max_candidates: int | None = ...,
+    match_level: str = ...,
+    acceptable_route_match: str = ...,
+    ks: list[int] = ...,
+    prefix_depths: list[int] = ...,
+    n_boot: int = ...,
+    seed: int = ...,
 ) -> str: ...
 def verify_manifest_json(
     manifest_path: str,
@@ -251,6 +303,9 @@ def engine_info() -> tuple[str, str, str]: ...
 
 class NativePredictions:
     def json(self) -> str: ...
+    def write(self, path: Path) -> None: ...
 
 class NativeEvaluation:
     def json(self) -> str: ...
+    def write(self, path: Path) -> None: ...
+    def metric_label(self) -> str: ...

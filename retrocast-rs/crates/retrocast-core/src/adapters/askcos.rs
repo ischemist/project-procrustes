@@ -54,44 +54,51 @@ impl Adapter for AskcosAdapter {
                 "full-graph route extraction is not implemented",
             ));
         }
+        let Value::Object(mut payload) = payload else {
+            return Err(common::schema(self.name(), "results object is required"));
+        };
         let results = payload
-            .get("results")
-            .and_then(Value::as_object)
+            .remove("results")
             .ok_or_else(|| common::schema(self.name(), "results object is required"))?;
+        let Value::Object(mut results) = results else {
+            return Err(common::schema(self.name(), "results object is required"));
+        };
+        let annotations = run_annotations(results.get("stats"));
         let uds = results
-            .get("uds")
-            .and_then(Value::as_object)
+            .remove("uds")
             .ok_or_else(|| common::schema(self.name(), "results.uds object is required"))?;
+        let Value::Object(mut uds) = uds else {
+            return Err(common::schema(
+                self.name(),
+                "results.uds object is required",
+            ));
+        };
         let uuid2smiles: BTreeMap<String, String> = serde_json::from_value(
-            uds.get("uuid2smiles")
-                .cloned()
+            uds.remove("uuid2smiles")
                 .ok_or_else(|| common::schema(self.name(), "uds.uuid2smiles is required"))?,
         )
         .map_err(|error| common::schema(self.name(), format!("invalid uuid2smiles: {error}")))?;
         let node_dict: BTreeMap<String, Value> = serde_json::from_value(
-            uds.get("node_dict")
-                .cloned()
+            uds.remove("node_dict")
                 .ok_or_else(|| common::schema(self.name(), "uds.node_dict is required"))?,
         )
         .map_err(|error| common::schema(self.name(), format!("invalid node_dict: {error}")))?;
         let pathways: Vec<Vec<Edge>> = serde_json::from_value(
-            uds.get("pathways")
-                .cloned()
+            uds.remove("pathways")
                 .ok_or_else(|| common::schema(self.name(), "uds.pathways is required"))?,
         )
         .map_err(|error| common::schema(self.name(), format!("invalid pathways: {error}")))?;
         validate_nodes(&node_dict, self.name())?;
-        let annotations = run_annotations(results.get("stats"));
         Ok(pathways
             .into_iter()
             .enumerate()
             .map(|(index, edges)| RawRouteEntry {
-                payload: serde_json::to_value(ExtractedPathway {
-                    pathway_edges: edges,
-                    uuid2smiles: uuid2smiles.clone(),
-                    node_dict: node_dict.clone(),
-                    annotations: annotations.clone(),
-                })
+                payload: serde_json::to_value(compact_pathway(
+                    edges,
+                    &uuid2smiles,
+                    &node_dict,
+                    &annotations,
+                ))
                 .expect("ASKCOS pathway is serializable"),
                 source_key: source_key.map(str::to_owned),
                 source_row_index: None,
@@ -138,6 +145,41 @@ impl Adapter for AskcosAdapter {
             annotations: pathway.annotations,
             schema_version: Default::default(),
         })
+    }
+}
+
+fn compact_pathway(
+    pathway_edges: Vec<Edge>,
+    uuid2smiles: &BTreeMap<String, String>,
+    node_dict: &BTreeMap<String, Value>,
+    annotations: &Map<String, Value>,
+) -> ExtractedPathway {
+    let pathway_uuids: HashSet<&str> = pathway_edges
+        .iter()
+        .flat_map(|edge| [edge.source.as_str(), edge.target.as_str()])
+        .chain([ROOT_UUID])
+        .collect();
+    let compact_uuid2smiles: BTreeMap<_, _> = pathway_uuids
+        .into_iter()
+        .filter_map(|uuid| {
+            uuid2smiles
+                .get(uuid)
+                .map(|smiles| (uuid.to_owned(), smiles.clone()))
+        })
+        .collect();
+    let compact_node_dict = compact_uuid2smiles
+        .values()
+        .filter_map(|smiles| {
+            node_dict
+                .get(smiles)
+                .map(|node| (smiles.clone(), node.clone()))
+        })
+        .collect();
+    ExtractedPathway {
+        pathway_edges,
+        uuid2smiles: compact_uuid2smiles,
+        node_dict: compact_node_dict,
+        annotations: annotations.clone(),
     }
 }
 
@@ -351,7 +393,7 @@ fn run_annotations(stats: Option<&Value>) -> Map<String, Value> {
 mod tests {
     use serde_json::{Value, json};
 
-    use super::AskcosAdapter;
+    use super::{AskcosAdapter, ExtractedPathway};
     use crate::{adapters::Adapter, route::AdaptMode};
 
     fn output() -> Value {
@@ -361,6 +403,7 @@ mod tests {
                 "node_dict": {
                     "CCOC(C)=O": {"smiles": "CCOC(C)=O", "id": "chem-root", "type": "chemical", "terminal": false},
                     "CCO": {"smiles": "CCO", "id": "chem-leaf", "type": "chemical", "terminal": true},
+                    "CO": {"smiles": "CO", "id": "chem-unused", "type": "chemical", "terminal": true},
                     "CCO>>CCOC(C)=O": {
                         "smiles": "CCO>>CCOC(C)=O", "id": "rxn-1", "type": "reaction",
                         "reaction_properties": {"mapped_smiles": "CCO>>CCOC(C)=O"},
@@ -370,7 +413,8 @@ mod tests {
                 "uuid2smiles": {
                     "00000000-0000-0000-0000-000000000000": "CCOC(C)=O",
                     "uuid-rxn": "CCO>>CCOC(C)=O",
-                    "uuid-leaf": "CCO"
+                    "uuid-leaf": "CCO",
+                    "uuid-unused": "CO"
                 },
                 "pathways": [[
                     {"source": "00000000-0000-0000-0000-000000000000", "target": "uuid-rxn"},
@@ -387,8 +431,15 @@ mod tests {
             .unwrap()
             .pop()
             .unwrap();
+        let pathway: ExtractedPathway = serde_json::from_value(entry.payload).unwrap();
+        assert_eq!(pathway.node_dict.len(), 3);
+        assert!(!pathway.node_dict.contains_key("CO"));
         let route = AskcosAdapter::default()
-            .cast(entry.payload, AdaptMode::Strict, None)
+            .cast(
+                serde_json::to_value(pathway).unwrap(),
+                AdaptMode::Strict,
+                None,
+            )
             .unwrap();
         assert_eq!(route.annotations["total_paths"], 1);
         let reaction = route.target.product_of.unwrap();

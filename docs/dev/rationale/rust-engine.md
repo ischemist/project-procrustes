@@ -97,6 +97,22 @@ This boundary establishes three invariants:
 - stage chaining does not serialize intermediate values
 - the CLI and Python library produce the same artifact for the same inputs and options
 
+### Artifact boundaries
+
+An artifact path crosses the Python binding as a path, not as its contents. Rust opens the compressed file and deserializes it directly into the type consumed by that stage. Writing an opaque prediction or evaluation calls the Rust writer against the same native value. The Python process does not construct a dictionary, JSON string, or Pydantic graph for these operations.
+
+Project-mode commands follow this ownership sequence:
+
+    compressed raw file
+      -> Rust provider payload
+      -> Rust Predictions
+      -> Rust Evaluation
+      -> small AnalysisReport returned for presentation
+
+Each arrow consumes the previous corpus-sized value when the previous value is no longer needed. Scoring moves candidates into the evaluation. The pipeline writes predictions before that move and writes the evaluation before analysis releases it. Manifest generation hashes the written artifacts and receives only small statistics; it does not convert a typed artifact into a second generic JSON tree.
+
+The in-memory Python API accepts dictionaries and Pydantic models for compatibility. Those calls must serialize caller-owned Python values because Python already owns the input. Project-mode stage commands and `pipeline` are the normal large-corpus path and never take that detour. The invariant is one corpus-sized representation per active stage, plus bounded input, output, and worker-local buffers.
+
 ## Extensibility boundary
 
 Adapters, tier checkers, constraint checkers, and analysis strata are Rust traits. Built-in implementations are registered by stable string identifiers. A configuration artifact refers to an implementation by identifier rather than containing executable Python.
@@ -127,6 +143,8 @@ The release implementation is RDKit C++. Public Python chemistry helpers transla
 ## Parallel execution
 
 Parallelism belongs to the core because the core knows the safe unit of work. Ingest and score partition by target. Analysis partitions independent metric or bootstrap groups. A bounded worker pool is created from `workers`; output is collected into ordered maps before serialization.
+
+Adapter entries must contain only the data needed to cast that candidate. A provider may supply a shared search graph, but copying that complete graph into every route entry makes worker count multiply corpus memory. The adapter first narrows shared provider state to a route-local entry, then parallel workers cast those entries.
 
 Determinism does not mean preserving completion order. It means that worker count cannot change target order, candidate rank, signatures, point estimates, or seeded confidence intervals.
 
