@@ -29,17 +29,13 @@ The field of retrosynthesis is fragmented.
 
 ## Installation
 
-The Python package includes the native engine and its RDKit C++ libraries; it does not install Python RDKit. It is the right installation when you want both `import retrocast` and the compatibility CLI:
+The Python package includes the native engine and its RDKit C++ libraries; it does not install Python RDKit. Install it when you want `import retrocast`:
 
 ```bash
-# Install the Python package as a command-line tool
-uv tool install retrocast
-
-# Or add the importable library to a project
 uv add retrocast
 ```
 
-The standalone Rust executable is published separately on the [GitHub Releases page](https://github.com/ischemist/project-procrustes/releases). Download the archive for `linux-x86_64`, `macos-arm64`, `macos-x86_64`, or `windows-x86_64`; each archive contains `retrocast` and the RDKit libraries it was built and smoke-tested with. It does not require Python, Conda, Rust, or a separately installed RDKit.
+The standalone Rust executable provides the `retrocast` CLI and is published separately on the [GitHub Releases page](https://github.com/ischemist/project-procrustes/releases). Download the archive for `linux-x86_64`, `macos-arm64`, `macos-x86_64`, or `windows-x86_64`; each archive contains `retrocast` and the RDKit libraries it was built and smoke-tested with. It does not require Python, Conda, Rust, or a separately installed RDKit.
 
 Markdown docs are formatted with `oxfmt` and kept unwrapped (`proseWrap: "never"`). Use `pnpm docs:fmt` to normalize docs formatting or `pnpm docs:fmt:check` to verify it in review/CI.
 
@@ -187,11 +183,10 @@ _Target Audience: Computational Chemists_ Designed to assess practical utility. 
 
 RetroCast is also a library. You can use it to integrate standardization directly into your training or inference loops.
 
-`adapt`, `ingest_candidates`, `score`, and `analyze` use the same Rust core as the standalone `retrocast` executable for every built-in adapter. There is no Python/Rust engine selector: Python is an interface to the same implementation.
+`adapt`, `ingest`, `score`, and `analyze` use the same Rust core as the standalone `retrocast` executable for every built-in adapter. There is no Python/Rust engine selector and no Python implementation inside the wheel.
 
 ```python
-from retrocast import adapt
-from retrocast.adapters import DirectMultiStepAdapter
+import retrocast
 
 # Your model's raw output (any supported format)
 raw_output = {
@@ -199,16 +194,14 @@ raw_output = {
     "children": [...]
 }
 
-# Cast to the canonical Route object
-adapter = DirectMultiStepAdapter()
-candidate = adapt([raw_output], adapter)[0]
-route = candidate.route
+# Cast to canonical schema dictionaries.
+candidates = retrocast.adapt([raw_output], "directmultistep")
+route = candidates[0].get("route")
 
 if route is None:
     raise ValueError("Could not adapt route")
 
-print(f"Depth: {route.depth()}")
-print(f"Leaves: {[m.smiles for m in route.leaves()]}")
+print(route["target"]["smiles"])
 ```
 
 ---

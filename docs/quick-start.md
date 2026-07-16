@@ -14,25 +14,17 @@ This guide gets you from raw planner output to a RetroCast analysis report.
 
 ## 1. Install
 
-=== "uv (recommended)"
+=== "Standalone CLI"
 
-    We recommend installing RetroCast as a standalone tool using `uv`:
+    Download the archive for your platform from [GitHub Releases](https://github.com/ischemist/project-procrustes/releases). It contains the `retrocast` executable and its native libraries.
 
-    ```bash
-    uv tool install retrocast
-    ```
-
-    If you don't have `uv`, you can install it in one minute:
-
-    ```bash
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
-
-=== "pip"
+=== "Python 0.8.x"
 
     ```bash
     pip install retrocast
     ```
+
+    The wheel provides `import retrocast`; it does not install the standalone command.
 
 Verify installation:
 
@@ -203,49 +195,83 @@ This is useful for small experiments, notebooks, or custom pipelines where you d
 RetroCast has three common entry points depending on what you are trying to do:
 
 | Goal | Use this | Result |
-| --- | --- | --- | --- |
-| Cast one raw route-like record inside Python | `adapt_route(...)` | `Route | None` |
-| Inspect only valid routes from a raw artifact | `adapt_routes(...)` | `list[Route]` |
-| Preserve benchmark prediction slots, including failures | `adapt_candidates(...)` or `ingest_candidates(...)` | `Candidate`s with `Route` or `FailureRecord` |
+| --- | --- | --- |
+| Adapt a planner payload inside Python | `retrocast.adapt(...)` | ranked schema-v2 dictionaries |
+| Run in-memory ingest, score, and analysis | `retrocast.ingest(...)` -> `retrocast.score(...)` -> `retrocast.analyze(...)` | native handles, then a report dictionary |
+| Run the file pipeline from Python | `retrocast.pipeline(...)` | artifacts plus timing and throughput statistics |
+| Embed the engine in Rust | `retrocast_core::{adapt, score, analyze}` | typed schema-2 values |
 | Run the managed file-based benchmark workflow | `retrocast ingest` -> `retrocast score` -> `retrocast analyze` | `candidates.json.gz`, `evaluation.json.gz`, `analysis.json.gz`, `report.md` |
 
-If you are evaluating a model, use the candidate-preserving path. If you are just inspecting chemistry, route-only adaptation is usually simpler.
+Use `adapt` for inspection. Use `ingest` for evaluation because it preserves every ranked prediction slot, including typed failures.
 
-## Python API
+## Library API
 
-The same workflows are available from Python:
+=== "Python 0.8.x"
 
-```python
-from retrocast import get_adapter
-from retrocast.io import load_benchmark
-from retrocast.workflow import ingest_candidates
+    ```python
+    import json
 
-task = load_benchmark(benchmark_path)
-adapter = get_adapter("paroutes")
-predictions = ingest_candidates(raw_payload, adapter, task)
-```
+    import retrocast
 
-Use `adapt_route(...)` or `adapt_routes(...)` for route-first inspection. Use `adapt_candidates(...)` or `ingest_candidates(...)` when failed prediction slots must remain visible for evaluation.
+    task = json.loads(benchmark_path.read_text())
+    predictions = retrocast.ingest(raw_payload, "paroutes", task, workers=12)
+    ```
+
+=== "Rust 0.8.x"
+
+    ```rust
+    let adapter = retrocast_core::adapters::built_in("paroutes")
+        .expect("built-in adapter");
+    let predictions = retrocast_core::adapt::ingest(
+        raw_payload,
+        adapter.as_ref(),
+        &task,
+        retrocast_core::route::AdaptMode::Strict,
+        None,
+        12,
+    )?;
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    from retrocast import get_adapter
+    from retrocast.io import load_benchmark
+    from retrocast.workflow import ingest_candidates
+
+    task = load_benchmark(benchmark_path)
+    adapter = get_adapter("paroutes")
+    predictions = ingest_candidates(raw_payload, adapter, task)
+    ```
+
+Python receives an opaque Rust-owned value. Write or inspect it before passing it to `score`, which consumes the prediction graph. Rust owns the typed `Predictions` value directly.
 
 ## Next Steps
 
-**Learn the Concepts**  
+**Learn the Concepts**
+
 Read [Concepts](concepts.md) to understand the schema-2 model and workflow.
 
-**Understand Schema Design**  
+**Understand Schema Design**
+
 Read [Schema Design](/dev/rationale/schema-design) for the deeper data-model rationale.
 
-**Use the Python API**  
-Use the `retrocast.workflow` functions when integrating RetroCast into your own scripts.
+**Use the Library API**
 
-**Write Custom Adapters**  
+Use the top-level Python functions or `retrocast-core` from Rust applications.
+
+**Write Custom Adapters**
+
 Need to support a new output format? See [Writing a Custom Adapter](dev/reference/adapters.md).
 
-**Full CLI Reference**  
+**Full CLI Reference**
+
 See all available commands in the [CLI Reference](guides/cli.md).
 
-**Explore Benchmarks**  
+**Explore Benchmarks**
+
 Learn about evaluation sets in the [Benchmarks Guide](guides/benchmarks.md).
 
-**From isChemist: Structure precedes quantity.**  
+**From isChemist: Structure precedes quantity.**
+
 Essays and software that make better scientific questions possible. Subscribe at [ischemist.com/newsletter](https://ischemist.com/newsletter), or check [service status](https://status.ischemist.com) if hosted RetroCast resources or SynthArena look off.

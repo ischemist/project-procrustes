@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal, TypeAlias
 
-from retrocast.hashing import hash_file
-from retrocast.models.provenance import Manifest
+from retrocast._version import __version__
+from retrocast.hashing import hash_file, hash_json
+from retrocast.models.provenance import FileInfo, Manifest
 
 logger = logging.getLogger(__name__)
 
@@ -46,44 +48,44 @@ def create_manifest(
     release_name: str | None = None,
     keyed_output_files: bool = False,
 ) -> Manifest:
-    from retrocast import native
+    source_infos = [_required_file_info(path, root_dir) for path in sources]
 
-    for path in sources:
-        if not path.exists():
-            raise FileNotFoundError(f"manifest source file not found: {path}")
-        _relative_path(path, root_dir)
-
-    normalized_outputs = []
+    output_infos = []
     for output in outputs:
         label, path, obj, content_type, content_hash = _normalize_manifest_output(output)
         content_type = ContentType(content_type)
-        _relative_path(path, root_dir)
-        normalized_outputs.append(
-            {
-                "label": label,
-                "path": str(path),
-                "value": _jsonable(obj),
-                "content_type": content_type.value,
-                "content_hash": content_hash,
-            }
+        file_hash = calculate_file_hash(path) if path.exists() else "file-not-written"
+        output_infos.append(
+            FileInfo(
+                label=label,
+                path=_relative_path(path, root_dir),
+                file_hash=file_hash,
+                content_hash=content_hash if content_hash is not None else _content_hash(obj, content_type),
+            )
         )
+
+    manifest_outputs: list[FileInfo] | dict[str, FileInfo]
     if keyed_output_files:
-        for output in normalized_outputs:
-            if output["label"] is None:
+        manifest_outputs = {}
+        for file_info in output_infos:
+            if file_info.label is None:
                 raise ValueError("keyed_output_files=True requires every output to include a label")
-    return native.create_manifest(
-        {
-            "action": action,
-            "sources": [str(path) for path in sources],
-            "outputs": normalized_outputs,
-            "root_dir": str(root_dir),
-            "parameters": parameters or {},
-            "statistics": statistics or {},
-            "directives": directives or {},
-            "summary": summary or {},
-            "release_name": release_name,
-            "keyed_output_files": keyed_output_files,
-        }
+            manifest_outputs[file_info.label] = file_info
+    else:
+        manifest_outputs = output_infos
+
+    return Manifest(
+        schema_version="2",
+        retrocast_version=__version__,
+        created_at=datetime.now(UTC),
+        action=action,
+        parameters=parameters or {},
+        directives=directives or {},
+        release_name=release_name,
+        source_files=source_infos,
+        output_files=manifest_outputs,
+        statistics=statistics or {},
+        summary=summary or {},
     )
 
 
@@ -123,6 +125,22 @@ def _relative_path(path: Path, root_dir: Path) -> str:
     except ValueError:
         logger.warning("path %s is not inside root %s; storing absolute path", resolved_path, resolved_root)
         return str(resolved_path)
+
+
+def _required_file_info(path: Path, root_dir: Path) -> FileInfo:
+    if not path.exists():
+        raise FileNotFoundError(f"manifest source file not found: {path}")
+    return FileInfo(path=_relative_path(path, root_dir), file_hash=calculate_file_hash(path))
+
+
+def _content_hash(obj: Any, content_type: ContentType) -> str | None:
+    if content_type == ContentType.UNKNOWN:
+        return None
+    if content_type == ContentType.STOCK and isinstance(obj, dict):
+        payload = sorted(obj.keys())
+    else:
+        payload = _jsonable(obj)
+    return hash_json(payload)
 
 
 def _jsonable(obj: Any) -> Any:

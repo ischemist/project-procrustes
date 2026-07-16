@@ -10,7 +10,7 @@ documentation.workspace = true
 description = "Python bindings for retrocast-core"
 
 [lib]
-name = "retrocast_native"
+name = "retrocast"
 crate-type = ["cdylib"]
 
 [dependencies]

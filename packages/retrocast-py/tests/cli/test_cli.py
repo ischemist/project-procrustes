@@ -11,14 +11,8 @@ import pytest
 
 from retrocast.adapters import PaRoutesAdapter
 from retrocast.chem import canonicalize_smiles, get_inchi_key
-from retrocast.cli.main import _native_cli_call, _resolve_training_data_artifact_and_release, main
-from retrocast.exceptions import (
-    ArtifactNotFoundError,
-    ConfigurationError,
-    InputError,
-    RetroCastIOError,
-    WorkflowError,
-)
+from retrocast.cli.main import _resolve_training_data_artifact_and_release, main
+from retrocast.exceptions import ConfigurationError
 from retrocast.io import (
     load_analysis_report,
     load_candidates,
@@ -124,84 +118,6 @@ def test_v2_list_adapters_cli_reports_canonical_names_and_aliases(monkeypatch, c
     output = capsys.readouterr().out
     assert "paroutes" in output
     assert "retro-star -> retrostar" in output
-
-
-def test_pipeline_cli_writes_all_schema_v2_artifacts(tmp_path, monkeypatch, capsys) -> None:
-    benchmark_path = tmp_path / "benchmark.json.gz"
-    raw_path = tmp_path / "results.json.gz"
-    stock_path = tmp_path / "test-stock.csv.gz"
-    output_dir = tmp_path / "output"
-    save_benchmark(benchmark(), benchmark_path)
-    save_json_gz({"ethanol": [raw_route()]}, raw_path)
-    write_stock(stock_path)
-
-    run_cli(
-        monkeypatch,
-        "pipeline",
-        "--raw",
-        str(raw_path),
-        "--benchmark",
-        str(benchmark_path),
-        "--stock",
-        str(stock_path),
-        "--output-dir",
-        str(output_dir),
-        "--n-boot",
-        "10",
-    )
-
-    assert len(load_collected_candidates(output_dir / "candidates.json.gz")["ethanol"]) == 1
-    assert "ethanol" in load_evaluation(output_dir / "evaluation.json.gz").targets
-    assert load_analysis_report(output_dir / "analysis.json.gz").bootstrap_resamples == 10
-    stats = json.loads((output_dir / "pipeline-stats.json").read_text(encoding="utf-8"))
-    assert stats["targets"] == 1
-    assert stats["candidates"] == 1
-    assert stats["engine"] == "rust"
-    assert '"targets": 1' in capsys.readouterr().out
-
-
-@pytest.mark.parametrize(
-    ("native_error", "domain_error", "code"),
-    [
-        (FileNotFoundError("missing"), ArtifactNotFoundError, "io.native_not_found"),
-        (OSError("unreadable"), RetroCastIOError, "io.native_failure"),
-        (ValueError("invalid"), InputError, "input.native_invalid"),
-        (RuntimeError("failed"), WorkflowError, "workflow.native_failure"),
-    ],
-)
-def test_native_cli_call_translates_extension_errors(native_error, domain_error, code) -> None:
-    def fail() -> None:
-        raise native_error
-
-    with pytest.raises(domain_error) as exc_info:
-        _native_cli_call("score", fail)
-
-    assert exc_info.value.code == code
-    assert exc_info.value.context == {"action": "score", "error": str(native_error)}
-
-
-def test_pipeline_cli_reports_native_failure_without_traceback(monkeypatch, caplog) -> None:
-    def fail(*args, **kwargs):
-        raise OSError("cannot read benchmark")
-
-    monkeypatch.setattr("retrocast.cli.main.native_run_pipeline", fail)
-
-    with pytest.raises(SystemExit) as exc_info:
-        run_cli(
-            monkeypatch,
-            "pipeline",
-            "--raw",
-            "raw.json.gz",
-            "--benchmark",
-            "benchmark.json.gz",
-            "--stock",
-            "stock.csv.gz",
-            "--output-dir",
-            "output",
-        )
-
-    assert exc_info.value.code == 1
-    assert "Native pipeline failed: cannot read benchmark" in caplog.text
 
 
 def test_get_data_cli_dry_run_lists_matching_files(tmp_path, monkeypatch, capsys) -> None:

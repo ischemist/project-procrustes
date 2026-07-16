@@ -1,6 +1,7 @@
 use pyo3::{
     exceptions::{PyOSError, PyRuntimeError, PyValueError},
     prelude::*,
+    types::PyAny,
 };
 use retrocast_core::{
     adapt, adapters, analyze,
@@ -17,32 +18,63 @@ use retrocast_core::{
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// Opaque ownership of ingested candidates while a Python pipeline remains native.
 ///
 /// Python can materialize the value for inspection, but scoring can consume this
 /// handle directly without serializing and reparsing the candidate graph.
-#[pyclass(frozen, module = "retrocast._native")]
+#[pyclass(frozen, module = "retrocast")]
 struct NativePredictions {
-    value: Arc<Predictions>,
+    value: Mutex<Option<Arc<Predictions>>>,
+}
+
+impl NativePredictions {
+    fn snapshot(&self) -> PyResult<Arc<Predictions>> {
+        self.value
+            .lock()
+            .map_err(python_error)?
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| PyRuntimeError::new_err("predictions were consumed by score()"))
+    }
+
+    fn take(&self) -> PyResult<Predictions> {
+        let mut guard = self.value.lock().map_err(python_error)?;
+        let value = guard
+            .take()
+            .ok_or_else(|| PyRuntimeError::new_err("predictions were consumed by score()"))?;
+        match Arc::try_unwrap(value) {
+            Ok(predictions) => Ok(predictions),
+            Err(value) => {
+                *guard = Some(value);
+                Err(PyRuntimeError::new_err(
+                    "predictions are currently in use by another Python call",
+                ))
+            }
+        }
+    }
 }
 
 #[pymethods]
 impl NativePredictions {
     fn json(&self) -> PyResult<String> {
-        to_json(self.value.as_ref())
+        to_json(self.snapshot()?.as_ref())
     }
 
     fn write(&self, py: Python<'_>, path: PathBuf) -> PyResult<()> {
-        let value = Arc::clone(&self.value);
+        let value = self.snapshot()?;
         py.detach(move || io::write_json(&path, value.as_ref()))
-            .map_err(python_error)
+            .map_err(artifact_read_error)
+    }
+
+    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_loads(py, &to_json(self.snapshot()?.as_ref())?)
     }
 }
 
 /// Opaque ownership of a scored evaluation for direct native analysis.
-#[pyclass(frozen, module = "retrocast._native")]
+#[pyclass(frozen, module = "retrocast")]
 struct NativeEvaluation {
     value: Arc<Evaluation>,
 }
@@ -56,11 +88,15 @@ impl NativeEvaluation {
     fn write(&self, py: Python<'_>, path: PathBuf) -> PyResult<()> {
         let value = Arc::clone(&self.value);
         py.detach(move || io::write_json(&path, value.as_ref()))
-            .map_err(python_error)
+            .map_err(artifact_read_error)
     }
 
     fn metric_label(&self) -> String {
         self.value.metric_label.clone()
+    }
+
+    fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        json_loads(py, &to_json(self.value.as_ref())?)
     }
 }
 
@@ -124,6 +160,201 @@ fn from_json<T: serde::de::DeserializeOwned>(value: &str) -> PyResult<T> {
 
 fn to_json<T: serde::Serialize>(value: &T) -> PyResult<String> {
     serde_json::to_string(value).map_err(python_error)
+}
+
+fn json_dumps(value: &Bound<'_, PyAny>) -> PyResult<String> {
+    value
+        .py()
+        .import("json")?
+        .call_method1("dumps", (value,))?
+        .extract()
+}
+
+fn json_loads(py: Python<'_>, value: &str) -> PyResult<Py<PyAny>> {
+    Ok(py.import("json")?.call_method1("loads", (value,))?.unbind())
+}
+
+#[pyfunction(name = "adapt")]
+#[pyo3(signature = (raw, adapter, *, mode="strict", target=None, source_key=None, max_candidates=None, workers=1))]
+#[allow(clippy::too_many_arguments)]
+fn adapt_py(
+    py: Python<'_>,
+    raw: &Bound<'_, PyAny>,
+    adapter: &str,
+    mode: &str,
+    target: Option<&Bound<'_, PyAny>>,
+    source_key: Option<&str>,
+    max_candidates: Option<usize>,
+    workers: usize,
+) -> PyResult<Py<PyAny>> {
+    let raw_json = json_dumps(raw)?;
+    let target_json = target.map(json_dumps).transpose()?;
+    let result = adapt_candidates_json(
+        py,
+        &raw_json,
+        adapter,
+        mode,
+        target_json.as_deref(),
+        source_key,
+        max_candidates,
+        workers,
+    )?;
+    json_loads(py, &result)
+}
+
+#[pyfunction(name = "ingest")]
+#[pyo3(signature = (raw, adapter, task, *, mode="strict", max_candidates=None, workers=1))]
+fn ingest_py(
+    py: Python<'_>,
+    raw: &Bound<'_, PyAny>,
+    adapter: &str,
+    task: &Bound<'_, PyAny>,
+    mode: &str,
+    max_candidates: Option<usize>,
+    workers: usize,
+) -> PyResult<NativePredictions> {
+    ingest_native(
+        py,
+        &json_dumps(raw)?,
+        adapter,
+        &json_dumps(task)?,
+        mode,
+        max_candidates,
+        workers,
+    )
+}
+
+#[pyfunction(name = "ingest_file")]
+#[pyo3(signature = (raw_path, adapter, task_path, *, mode="strict", max_candidates=None, workers=1))]
+fn ingest_file_py(
+    py: Python<'_>,
+    raw_path: PathBuf,
+    adapter: &str,
+    task_path: PathBuf,
+    mode: &str,
+    max_candidates: Option<usize>,
+    workers: usize,
+) -> PyResult<NativePredictions> {
+    ingest_file_native(
+        py,
+        raw_path,
+        adapter,
+        task_path,
+        mode,
+        max_candidates,
+        workers,
+    )
+}
+
+#[pyfunction(name = "score")]
+#[pyo3(signature = (predictions, task, stocks, *, match_level="full", acceptable_route_match="prefix", execution_stats=None, workers=1))]
+#[allow(clippy::too_many_arguments)]
+fn score_py(
+    py: Python<'_>,
+    predictions: PyRef<'_, NativePredictions>,
+    task: &Bound<'_, PyAny>,
+    stocks: &Bound<'_, PyAny>,
+    match_level: &str,
+    acceptable_route_match: &str,
+    execution_stats: Option<&Bound<'_, PyAny>>,
+    workers: usize,
+) -> PyResult<NativeEvaluation> {
+    let execution_stats_json = execution_stats.map(json_dumps).transpose()?;
+    score_native(
+        py,
+        predictions,
+        &json_dumps(task)?,
+        &json_dumps(stocks)?,
+        match_level,
+        acceptable_route_match,
+        execution_stats_json.as_deref(),
+        workers,
+    )
+}
+
+#[pyfunction(name = "analyze")]
+#[pyo3(signature = (evaluation, *, ks=vec![1, 3, 5, 10, 20, 50, 100], prefix_depths=vec![1, 2, 3], n_boot=10000, seed=42, workers=1))]
+fn analyze_py(
+    py: Python<'_>,
+    evaluation: PyRef<'_, NativeEvaluation>,
+    ks: Vec<usize>,
+    prefix_depths: Vec<usize>,
+    n_boot: usize,
+    seed: u64,
+    workers: usize,
+) -> PyResult<Py<PyAny>> {
+    let result = analyze_native(py, evaluation, ks, prefix_depths, n_boot, seed, workers)?;
+    json_loads(py, &result)
+}
+
+#[pyfunction(name = "analyze_file")]
+#[pyo3(signature = (evaluation_path, *, ks=vec![1, 3, 5, 10, 20, 50, 100], prefix_depths=vec![1, 2, 3], execution_stats_path=None, n_boot=10000, seed=42, workers=1))]
+#[allow(clippy::too_many_arguments)]
+fn analyze_file_py(
+    py: Python<'_>,
+    evaluation_path: PathBuf,
+    ks: Vec<usize>,
+    prefix_depths: Vec<usize>,
+    execution_stats_path: Option<PathBuf>,
+    n_boot: usize,
+    seed: u64,
+    workers: usize,
+) -> PyResult<Py<PyAny>> {
+    let result = analyze_file_json(
+        py,
+        evaluation_path,
+        ks,
+        prefix_depths,
+        execution_stats_path,
+        n_boot,
+        seed,
+        workers,
+    )?;
+    json_loads(py, &result)
+}
+
+#[pyfunction(name = "pipeline")]
+#[pyo3(signature = (raw_path, benchmark_path, stock_path, output_dir, *, stock_name=None, execution_stats_path=None, adapter="aizynthfinder", workers=1, mode="strict", max_candidates=None, match_level="full", acceptable_route_match="prefix", ks=vec![1, 3, 5, 10, 20, 50, 100], prefix_depths=vec![1, 2, 3], n_boot=10000, seed=42))]
+#[allow(clippy::too_many_arguments)]
+fn pipeline_py(
+    py: Python<'_>,
+    raw_path: PathBuf,
+    benchmark_path: PathBuf,
+    stock_path: PathBuf,
+    output_dir: PathBuf,
+    stock_name: Option<String>,
+    execution_stats_path: Option<PathBuf>,
+    adapter: &str,
+    workers: usize,
+    mode: &str,
+    max_candidates: Option<usize>,
+    match_level: &str,
+    acceptable_route_match: &str,
+    ks: Vec<usize>,
+    prefix_depths: Vec<usize>,
+    n_boot: usize,
+    seed: u64,
+) -> PyResult<Py<PyAny>> {
+    let result = run_pipeline_json(
+        py,
+        raw_path,
+        benchmark_path,
+        stock_path,
+        output_dir,
+        stock_name,
+        execution_stats_path,
+        adapter,
+        workers,
+        mode,
+        max_candidates,
+        match_level,
+        acceptable_route_match,
+        ks,
+        prefix_depths,
+        n_boot,
+        seed,
+    )?;
+    json_loads(py, &result)
 }
 
 #[pyfunction]
@@ -284,8 +515,9 @@ fn collected_candidate_statistics_json(predictions_json: &str) -> PyResult<Strin
 fn collected_candidate_statistics_native(
     predictions: PyRef<'_, NativePredictions>,
 ) -> PyResult<String> {
+    let predictions = predictions.snapshot()?;
     to_json(&retrocast_core::stats::collected_candidate_statistics(
-        predictions.value.as_ref(),
+        predictions.as_ref(),
     ))
 }
 
@@ -709,7 +941,7 @@ fn ingest_native(
         .detach(|| adapt::ingest(raw, resolved.as_ref(), &task, mode, max_candidates, workers))
         .map_err(python_error)?;
     Ok(NativePredictions {
-        value: Arc::new(value),
+        value: Mutex::new(Some(Arc::new(value))),
     })
 }
 
@@ -719,7 +951,7 @@ fn load_predictions_native(py: Python<'_>, path: PathBuf) -> PyResult<NativePred
         .detach(move || io::read_json::<Predictions>(&path))
         .map_err(artifact_read_error)?;
     Ok(NativePredictions {
-        value: Arc::new(value),
+        value: Mutex::new(Some(Arc::new(value))),
     })
 }
 
@@ -759,9 +991,9 @@ fn ingest_file_native(
                 workers,
             )
         })
-        .map_err(python_error)?;
+        .map_err(artifact_read_error)?;
     Ok(NativePredictions {
-        value: Arc::new(value),
+        value: Mutex::new(Some(Arc::new(value))),
     })
 }
 
@@ -811,17 +1043,20 @@ fn score_native(
     execution_stats_json: Option<&str>,
     workers: usize,
 ) -> PyResult<NativeEvaluation> {
-    let predictions = Arc::clone(&predictions.value);
     let task: Task = from_json(task_json)?;
     let stocks = from_json(stocks_json)?;
     let stats: Option<ExecutionStats> = execution_stats_json.map(from_json).transpose()?;
+    if workers == 0 {
+        return Err(PyRuntimeError::new_err("invalid worker count: 0"));
+    }
+    let predictions = predictions.take()?;
     let match_level = match_level.to_owned();
     let acceptable_route_match = acceptable_route_match.to_owned();
     let value = py
         .detach(move || {
-            score::score(
-                predictions.as_ref(),
-                &task,
+            score::score_owned(
+                predictions,
+                task,
                 &stocks,
                 &match_level,
                 &acceptable_route_match,
@@ -971,7 +1206,7 @@ fn analyze_file_json(
             }
             analyze::analyze(&evaluation, &ks, &prefix_depths, n_boot, seed, workers)
         })
-        .map_err(python_error)?;
+        .map_err(artifact_read_error)?;
     to_json(&result)
 }
 
@@ -1024,7 +1259,7 @@ fn run_pipeline_json(
                 },
             )
         })
-        .map_err(python_error)?;
+        .map_err(artifact_read_error)?;
     to_json(&stats)
 }
 
@@ -1653,10 +1888,18 @@ fn molecular_descriptors(py: Python<'_>, smiles: &str) -> PyResult<(u32, f64, u3
 }
 
 #[pymodule]
-#[pyo3(name = "_native")]
-fn native(module: &Bound<'_, PyModule>) -> PyResult<()> {
+fn retrocast(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    module.add("__engine__", "rust")?;
     module.add_class::<NativePredictions>()?;
     module.add_class::<NativeEvaluation>()?;
+    module.add_function(wrap_pyfunction!(adapt_py, module)?)?;
+    module.add_function(wrap_pyfunction!(ingest_py, module)?)?;
+    module.add_function(wrap_pyfunction!(ingest_file_py, module)?)?;
+    module.add_function(wrap_pyfunction!(score_py, module)?)?;
+    module.add_function(wrap_pyfunction!(analyze_py, module)?)?;
+    module.add_function(wrap_pyfunction!(analyze_file_py, module)?)?;
+    module.add_function(wrap_pyfunction!(pipeline_py, module)?)?;
     module.add_function(wrap_pyfunction!(canonicalize_smiles, module)?)?;
     module.add_function(wrap_pyfunction!(get_inchi_key, module)?)?;
     module.add_function(wrap_pyfunction!(reduce_inchi_key, module)?)?;

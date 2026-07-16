@@ -27,25 +27,11 @@ The field of retrosynthesis evaluation is fragmented:
 
 ## Installation
 
-=== "uv (recommended)"
+=== "Standalone CLI"
 
-    We recommend using [uv](https://github.com/astral-sh/uv) for fast, reliable dependency management:
+    Download the archive for your platform from [GitHub Releases](https://github.com/ischemist/project-procrustes/releases). It includes the executable and required RDKit libraries.
 
-    ```bash
-    # Install as a standalone tool
-    uv tool install retrocast
-
-    # Or add to your project
-    uv add retrocast
-    ```
-
-    If you don't have `uv`, install it in one minute:
-
-    ```bash
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    ```
-
-=== "pip"
+=== "Python 0.8.x"
 
     ```bash
     pip install retrocast
@@ -58,7 +44,7 @@ New to RetroCast? Start here:
 - **[Quick Start](quick-start.md)** - Get from raw model output to a statistical report in 5 minutes
 - **[Concepts](concepts.md)** - Understand the architecture and philosophy
 - **[CLI Reference](guides/cli.md)** - Full command documentation
-- **[Python Library](guides/library/)** - Integrate RetroCast into your research pipelines
+- **[Library API](guides/library/)** - Use the same core from Python or Rust
 - **[Changelog](changelog.md)** - Release notes and migration guides
 - **[Training Sets](guides/training-sets.md)** - Load PaRoutes route and reaction training artifacts
 - **[Training-Set Release Rationale](dev/rationale/training-set-releases.md)** - How PaRoutes route and single-step releases are created

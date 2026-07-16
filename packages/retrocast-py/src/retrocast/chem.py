@@ -1,127 +1,379 @@
+import logging
 from enum import StrEnum
-from typing import Any
 
-from retrocast.exceptions import ChemRuntimeError, InvalidInchiKeyError, InvalidSmilesError
+from rdkit import Chem, rdBase
+from rdkit.Chem import rdinchi, rdMolDescriptors
+
+from retrocast.exceptions import ChemRuntimeError, InvalidInchiKeyError, InvalidSmilesError, RetroCastException
 from retrocast.typing import InChIKeyStr, SmilesStr
 
-try:
-    from retrocast import _native
-except ImportError:  # pragma: no cover - source checkout before `maturin develop`
-    _native: Any | None = None
+logger = logging.getLogger(__name__)
 
+rdBase.DisableLog("rdApp.*")
 
+# standard "no stereo" hash block for the second segment of an InChiKey, includes the standard flags (SA)
 NO_STEREO_PLACEHOLDER = "UHFFFAOYSA"
 
 
 class InChIKeyLevel(StrEnum):
-    """The chemical layers retained in an InChIKey."""
+    """
+    Levels of InChI key specificity for chemical comparison.
 
+    InChI keys have three blocks (25 hash chars, 2 hyphens, 27 chars total):
+    - First 14 chars: Molecular connectivity (skeleton, hydrogens, charge)
+    - Next 8 chars: Stereochemistry and isotopes
+    - Last 3 chars: Standard/non-standard flag (S/N), version (A for v1), protonation (N)
+
+    Example: BQJCRHHNABKAKU-KBQPJGBKSA-N
+             └── 14 ────┘   └── 8 ─┘└─3┘
+    """
+
+    # Full 27-char InChI key with all stereochemistry (default)
     FULL = "full"
+
+    # Full 27-char InChI key generated WITHOUT stereochemistry info.
+    # Uses -SNon option during InChI generation, producing a proper standard InChI.
+    # The stereo block will be "UHFFFAOY" (all F's = no stereo info).
     NO_STEREO = "no_stereo"
+
+    # First 14 characters only (connectivity layer).
+    # Useful for pure structural identity regardless of stereo, isotopes, or protonation.
+    # Warning: loses protonation information - use with care.
     CONNECTIVITY = "connectivity"
 
 
-def canonicalize_smiles(smiles: str, remove_mapping: bool = False, ignore_stereo: bool = False) -> SmilesStr:
-    """Return RDKit's canonical SMILES, optionally removing mapping or stereo."""
-    _validate_smiles(smiles, "canonicalize_smiles")
+def _get_mol(smiles: str, func_name: str) -> Chem.Mol:
+    """
+    internal helper. parses smiles, handles None checks, sanitizes inputs.
+    single point of failure for parsing logic.
+    """
+    if not isinstance(smiles, str) or not smiles:
+        msg = f"SMILES input must be a non-empty string in {func_name}"
+        raise InvalidSmilesError(
+            msg,
+            code="chem.invalid_smiles",
+            context={"operation": func_name, "value": smiles},
+        )
+
+    # rdkit handles exceptions poorly, usually just returns None or segfaults (rarely now)
     try:
-        return SmilesStr(_engine().canonicalize_smiles(smiles, remove_mapping, ignore_stereo))
-    except ValueError as exc:
-        raise _invalid_smiles(smiles, "canonicalize_smiles") from exc
-    except RuntimeError as exc:
+        mol = Chem.MolFromSmiles(smiles)
+    except Exception as e:
+        # rare edge case where rdkit raises instead of returning None
         raise ChemRuntimeError(
-            f"Unexpected RDKit error canonicalizing '{smiles}': {exc}",
+            f"RDKit raised error parsing '{smiles}': {e}",
+            code="chem.rdkit_parse_failed",
+            context={"operation": func_name, "smiles": smiles},
+        ) from e
+
+    if mol is None:
+        raise InvalidSmilesError(
+            f"Invalid SMILES string: {smiles}",
+            code="chem.invalid_smiles",
+            context={"operation": func_name, "smiles": smiles},
+        )
+
+    return mol
+
+
+def canonicalize_smiles(smiles: str, remove_mapping: bool = False, ignore_stereo: bool = False) -> SmilesStr:
+    """
+    Converts a SMILES string to its canonical form using RDKit.
+
+    Args:
+        smiles: The input SMILES string.
+        remove_mapping: If True, removes atom mapping numbers from the SMILES. Defaults to False.
+        ignore_stereo: If True, strips stereochemistry information (dangerous - loses information).
+            Defaults to False (stereochemistry is preserved).
+
+    Returns:
+        The canonical SMILES string.
+
+    Raises:
+        InvalidSmilesError: If the input SMILES is malformed or cannot be parsed by RDKit.
+        RetroCastException: For any other unexpected errors during processing.
+    """
+    try:
+        mol = _get_mol(smiles, "canonicalize_smiles")
+        if remove_mapping:
+            for atom in mol.GetAtoms():
+                atom.SetAtomMapNum(0)
+
+        # round trip ensures sanitization
+        canon = Chem.MolToSmiles(mol, canonical=True, isomericSmiles=not ignore_stereo)
+        return SmilesStr(canon)
+    except (InvalidSmilesError, RetroCastException):
+        raise
+    except Exception as e:
+        raise ChemRuntimeError(
+            f"Unexpected RDKit error canonicalizing '{smiles}': {e}",
             code="chem.rdkit_canonicalize_failed",
             context={"operation": "canonicalize_smiles", "smiles": smiles},
-        ) from exc
+        ) from e
 
 
 def get_inchi_key(smiles: str, level: InChIKeyLevel = InChIKeyLevel.FULL) -> InChIKeyStr:
-    """Return an RDKit InChIKey at the requested identity level."""
-    _validate_smiles(smiles, "get_inchi_key")
-    resolved_level = _validate_level(level)
+    """
+    Generates an InChIKey from a SMILES string with configurable specificity.
+
+    Args:
+        smiles: The input SMILES string.
+        level: The level of specificity for the InChI key:
+            - FULL: Standard 27-char InChI key with all stereo info (default)
+            - NO_STEREO: Standard 27-char InChI key generated without stereochemistry.
+              Uses the -SNon option during InChI generation, which produces a valid
+              standard InChI. The stereo block will show "UHFFFAOY" indicating no
+              stereo information was encoded.
+            - CONNECTIVITY: First 14 characters only (molecular connectivity).
+              Loses protonation info - use with care.
+
+    Returns:
+        The InChIKey string at the requested level of specificity.
+
+    Raises:
+        InvalidSmilesError: If the input SMILES is malformed or cannot be parsed by RDKit.
+        RetroCastException: For any other unexpected errors during processing.
+
+    Examples:
+        >>> get_inchi_key("C[C@H](O)CC")  # Full key with stereo
+        'BTANRVKWQNVYAZ-BYPYZUCNSA-N'
+        >>> get_inchi_key("C[C@H](O)CC", level=InChIKeyLevel.NO_STEREO)  # No stereo
+        'BTANRVKWQNVYAZ-UHFFFAOYSA-N'
+        >>> get_inchi_key("C[C@H](O)CC", level=InChIKeyLevel.CONNECTIVITY)
+        'BTANRVKWQNVYAZ'
+    """
     try:
-        return InChIKeyStr(_engine().get_inchi_key(smiles, resolved_level.value))
-    except ValueError as exc:
-        raise _invalid_smiles(smiles, "get_inchi_key") from exc
-    except RuntimeError as exc:
+        mol = _get_mol(smiles, "get_inchi_key")
+
+        if level == InChIKeyLevel.NO_STEREO:
+            # Use -SNon to generate InChI without stereochemistry
+            # MolToInchi returns (inchi, ret_code, message, log, aux_info)
+            inchi, ret_code, _, _, _ = rdinchi.MolToInchi(mol, options="-SNon")
+            if ret_code != 0:
+                raise ChemRuntimeError(
+                    f"rdkit failed to generate inchi (code {ret_code})",
+                    code="chem.inchi_generation_failed",
+                    context={"smiles": smiles, "ret_code": ret_code, "level": level.value},
+                )
+            key = rdinchi.InchiToInchiKey(inchi)
+        else:
+            key = Chem.MolToInchiKey(mol)
+
+        if not key:
+            raise ChemRuntimeError(
+                f"Empty InChIKey generated for '{smiles}'",
+                code="chem.inchikey_empty",
+                context={"smiles": smiles, "level": level.value},
+            )
+
+        if level == InChIKeyLevel.CONNECTIVITY:
+            return InChIKeyStr(key.split("-")[0])
+
+        return InChIKeyStr(key)
+
+    except (InvalidSmilesError, RetroCastException):
+        raise
+    except Exception as e:
         raise ChemRuntimeError(
-            f"unexpected error generating inchikey: {exc}",
+            f"unexpected error generating inchikey: {e}",
             code="chem.inchikey_generation_failed",
-            context={"smiles": smiles, "level": resolved_level.value},
-        ) from exc
+            context={"smiles": smiles, "level": level.value},
+        ) from e
 
 
 def reduce_inchikey(inchikey: str, level: InChIKeyLevel) -> InChIKeyStr:
-    """Destructively reduce an existing InChIKey to a coarser identity level."""
-    resolved_level = _validate_level(level)
-    try:
-        return InChIKeyStr(_engine().reduce_inchi_key(inchikey, resolved_level.value))
-    except ValueError as exc:
-        code = "chem.inchikey_upscale" if "cannot upscale" in str(exc) else "chem.invalid_inchikey"
+    """
+    Reduces an existing InChI key to a lower specificity level (destructive).
+
+    Raises error if attempting to restore lost information.
+
+    Use this when you have a full InChI key and need to reduce it for comparison.
+    For generating keys directly at a specific level, use `get_inchi_key(smiles, level=...)`.
+
+    Args:
+        inchikey: A standard 27-character InChI key.
+        level: Target level of specificity:
+            - FULL: Returns the key unchanged
+            - NO_STEREO: Replaces the stereo block with the standard no-stereo
+              placeholder "UHFFFAOYSA", returning a valid 27-char InChI key.
+              This matches the output of `get_inchi_key(smiles, level=InChIKeyLevel.NO_STEREO)`.
+            - CONNECTIVITY: Returns first 14 chars only (molecular skeleton)
+
+    Returns:
+        The normalized InChI key at the specified level.
+
+    Example:
+        >>> reduce_inchikey("BQJCRHHNABKAKU-KBQPJGBKSA-N", InChIKeyLevel.NO_STEREO)
+        'BQJCRHHNABKAKU-UHFFFAOYSA-N'
+        >>> reduce_inchikey("BQJCRHHNABKAKU-KBQPJGBKSA-N", InChIKeyLevel.CONNECTIVITY)
+        'BQJCRHHNABKAKU'
+    """
+    # Standard no-stereo placeholder used by InChI when stereo is not encoded
+    parts = inchikey.split("-")
+
+    # basic validation: 14 chars (1 part) or 27 chars (3 parts)
+    if len(parts) not in (1, 3):
         raise InvalidInchiKeyError(
-            str(exc),
-            code=code,
-            context={"inchikey": inchikey, "target_level": resolved_level.value},
-        ) from exc
+            f"malformed InChIKey structure: {inchikey}",
+            code="chem.invalid_inchikey",
+            context={"inchikey": inchikey, "target_level": level.value},
+        )
+
+    # validate connectivity block is exactly 14 chars
+    if len(parts[0]) != 14:
+        raise InvalidInchiKeyError(
+            f"invalid connectivity block length (expected 14, got {len(parts[0])}): {inchikey}",
+            code="chem.invalid_inchikey",
+            context={"inchikey": inchikey, "target_level": level.value, "connectivity_length": len(parts[0])},
+        )
+
+    current_is_partial = len(parts) == 1
+    target_is_full = level in (InChIKeyLevel.FULL, InChIKeyLevel.NO_STEREO)
+
+    # prevent upscaling (14 -> 25)
+    if current_is_partial and target_is_full:
+        raise InvalidInchiKeyError(
+            f"cannot upscale connectivity key '{inchikey}' to level '{level}'. information has been lost.",
+            code="chem.inchikey_upscale",
+            context={"inchikey": inchikey, "target_level": level.value},
+        )
+
+    if level == InChIKeyLevel.FULL:
+        # note: it is chemically impossible to detect if a 27-char key is "no_stereo" or just "a molecule with no stereo centers" just by looking at the string. so NO_STEREO -> FULL is allowed to pass through as an identity operation, which is pragmatically fine.
+        return InChIKeyStr(inchikey)
+
+    if level == InChIKeyLevel.CONNECTIVITY:
+        return InChIKeyStr(parts[0])
+
+    if level == InChIKeyLevel.NO_STEREO:
+        # we already checked we have 3 parts above
+        return InChIKeyStr(f"{parts[0]}-{NO_STEREO_PLACEHOLDER}-{parts[2]}")
+
+    raise ValueError(f"unknown inchikey level: {level}")
 
 
 def get_heavy_atom_count(smiles: str) -> int:
-    """Return the number of non-hydrogen atoms in a molecule."""
-    return int(_descriptors(smiles, "get_heavy_atom_count", "HAC calculation")[0])
+    """
+    Returns the number of heavy (non-hydrogen) atoms in a molecule.
+
+    Args:
+        smiles: The input SMILES string.
+
+    Returns:
+        The count of heavy atoms.
+
+    Raises:
+        InvalidSmilesError: If the input SMILES is malformed or cannot be parsed by RDKit.
+        RetroCastException: For any other unexpected errors during processing.
+    """
+    if not isinstance(smiles, str) or not smiles:
+        raise InvalidSmilesError(
+            "SMILES input must be a non-empty string.",
+            code="chem.invalid_smiles",
+            context={"operation": "get_heavy_atom_count", "value": smiles},
+        )
+
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            raise InvalidSmilesError(
+                f"Invalid SMILES string: {smiles}",
+                code="chem.invalid_smiles",
+                context={"operation": "get_heavy_atom_count", "smiles": smiles},
+            )
+
+        return mol.GetNumAtoms()
+
+    except InvalidSmilesError:
+        raise
+    except Exception as e:
+        raise ChemRuntimeError(
+            f"An unexpected error occurred during HAC calculation: {e}",
+            code="chem.descriptor_failed",
+            context={"operation": "get_heavy_atom_count", "smiles": smiles},
+        ) from e
 
 
 def get_molecular_weight(smiles: str) -> float:
-    """Return the exact molecular weight in daltons."""
-    return float(_descriptors(smiles, "get_molecular_weight", "MW calculation")[1])
+    """
+    Returns the exact molecular weight of a molecule.
+
+    Args:
+        smiles: The input SMILES string.
+
+    Returns:
+        The exact molecular weight in Daltons.
+
+    Raises:
+        InvalidSmilesError: If the input SMILES is malformed or cannot be parsed by RDKit.
+        RetroCastException: For any other unexpected errors during processing.
+    """
+    if not isinstance(smiles, str) or not smiles:
+        raise InvalidSmilesError(
+            "SMILES input must be a non-empty string.",
+            code="chem.invalid_smiles",
+            context={"operation": "get_molecular_weight", "value": smiles},
+        )
+
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            raise InvalidSmilesError(
+                f"Invalid SMILES string: {smiles}",
+                code="chem.invalid_smiles",
+                context={"operation": "get_molecular_weight", "smiles": smiles},
+            )
+
+        return rdMolDescriptors.CalcExactMolWt(mol)
+
+    except InvalidSmilesError:
+        raise
+    except Exception as e:
+        raise ChemRuntimeError(
+            f"An unexpected error occurred during MW calculation: {e}",
+            code="chem.descriptor_failed",
+            context={"operation": "get_molecular_weight", "smiles": smiles},
+        ) from e
 
 
 def get_chiral_center_count(smiles: str) -> int:
-    """Return the number of assigned chiral centers in a molecule."""
-    return int(_descriptors(smiles, "get_chiral_center_count", "chiral center count")[2])
+    """
+    Returns the number of chiral centers in a molecule.
 
+    Args:
+        smiles: The input SMILES string.
 
-def _descriptors(smiles: str, operation: str, label: str) -> tuple[int, float, int]:
-    _validate_smiles(smiles, operation)
-    try:
-        return _engine().molecular_descriptors(smiles)
-    except ValueError as exc:
-        raise _invalid_smiles(smiles, operation) from exc
-    except RuntimeError as exc:
-        raise ChemRuntimeError(
-            f"An unexpected error occurred during {label}: {exc}",
-            code="chem.descriptor_failed",
-            context={"operation": operation, "smiles": smiles},
-        ) from exc
+    Returns:
+        The count of chiral centers.
 
-
-def _engine() -> Any:
-    if _native is None:
-        raise ChemRuntimeError(
-            "RetroCast's native chemistry engine is unavailable; install a platform wheel or run `maturin develop`.",
-            code="chem.native_unavailable",
-        )
-    return _native
-
-
-def _validate_smiles(smiles: object, operation: str) -> None:
+    Raises:
+        InvalidSmilesError: If the input SMILES is malformed or cannot be parsed by RDKit.
+        RetroCastException: For any other unexpected errors during processing.
+    """
     if not isinstance(smiles, str) or not smiles:
         raise InvalidSmilesError(
-            f"SMILES input must be a non-empty string in {operation}",
+            "SMILES input must be a non-empty string.",
             code="chem.invalid_smiles",
-            context={"operation": operation, "value": smiles},
+            context={"operation": "get_chiral_center_count", "value": smiles},
         )
 
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            raise InvalidSmilesError(
+                f"Invalid SMILES string: {smiles}",
+                code="chem.invalid_smiles",
+                context={"operation": "get_chiral_center_count", "smiles": smiles},
+            )
 
-def _invalid_smiles(smiles: str, operation: str) -> InvalidSmilesError:
-    return InvalidSmilesError(
-        f"Invalid SMILES string: {smiles}",
-        code="chem.invalid_smiles",
-        context={"operation": operation, "smiles": smiles},
-    )
+        chiral_centers = Chem.FindMolChiralCenters(mol)
+        return len(chiral_centers)
 
-
-def _validate_level(level: InChIKeyLevel) -> InChIKeyLevel:
-    if not isinstance(level, InChIKeyLevel):
-        raise ValueError(f"unknown inchikey level: {level}")
-    return level
+    except InvalidSmilesError:
+        raise
+    except Exception as e:
+        raise ChemRuntimeError(
+            f"An unexpected error occurred during chiral center count: {e}",
+            code="chem.descriptor_failed",
+            context={"operation": "get_chiral_center_count", "smiles": smiles},
+        ) from e

@@ -16,29 +16,7 @@ Project mode uses the standard data directory and writes manifests for reproduci
 
 ## Installation
 
-=== "uv (recommended)"
-
-    ```bash
-    uv tool install retrocast
-    ```
-
-    If you want to use the Plotly-based visualization helpers:
-
-    ```bash
-    uv tool install "retrocast[viz]"
-    ```
-
-=== "pip"
-
-    ```bash
-    pip install retrocast
-    ```
-
-    If you want to use the Plotly-based visualization helpers:
-
-    ```bash
-    pip install "retrocast[viz]"
-    ```
+Download the standalone archive for your platform from [GitHub Releases](https://github.com/ischemist/project-procrustes/releases). Each archive contains the `retrocast` executable and its required native libraries. The PyPI wheel is the Python binding and does not install this command.
 
 Verify installation:
 

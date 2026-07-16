@@ -4,7 +4,7 @@ import json
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from functools import cache
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, Field, model_validator
 
@@ -31,6 +31,11 @@ def _stable_hash(value: Any) -> str:
     return hash_json(value)
 
 
+def _validate_depth(depth: int | None) -> None:
+    if depth is not None and depth < 0:
+        raise ValueError("depth must be non-negative")
+
+
 # section: route paths
 
 
@@ -40,12 +45,45 @@ class RoutePath:
     indices: tuple[int, ...] = ()
 
     def __post_init__(self) -> None:
-        _parse_route_path(self.id())
+        if self.kind not in ("m", "r"):
+            raise ValueError("route path kind must be 'm' or 'r'")
+        if any(index < 0 for index in self.indices):
+            raise ValueError("route path indices must be non-negative")
 
     @classmethod
     def parse(cls, value: str) -> RoutePath:
-        kind, indices = _parse_route_path(value)
-        return cls(kind=kind, indices=tuple(indices))
+        prefix = "rc:"
+        if not value.startswith(prefix):
+            raise ValueError("route path must start with 'rc:'")
+
+        try:
+            kind, rest = value[len(prefix) :].split(":", 1)
+        except ValueError as exc:
+            raise ValueError("route path must have form 'rc:<kind>:/...'") from exc
+
+        if kind == "m":
+            route_kind: RouteNodeKind = "m"
+        elif kind == "r":
+            route_kind = "r"
+        else:
+            raise ValueError("route path kind must be 'm' or 'r'")
+        if not rest.startswith("/"):
+            raise ValueError("route path indices must start with '/'")
+
+        tail = rest[1:]
+        if tail == "":
+            return cls(kind=route_kind, indices=())
+
+        parts = tail.split("/")
+        try:
+            indices = tuple(int(part) for part in parts)
+        except ValueError as exc:
+            raise ValueError("route path indices must be integers") from exc
+        if any(index < 0 for index in indices):
+            raise ValueError("route path indices must be non-negative")
+        if any(str(index) != part for index, part in zip(indices, parts, strict=True)):
+            raise ValueError("route path indices must be canonical non-negative integers")
+        return cls(kind=route_kind, indices=indices)
 
     @classmethod
     @cache
@@ -71,26 +109,21 @@ class RoutePath:
         return self.kind == "r"
 
     def produced_by(self) -> RoutePath:
-        return RoutePath.parse(_transform_route_path(self.id(), "produced_by"))
+        if not self.is_molecule():
+            raise ValueError("only molecule paths have a producing reaction")
+        return RoutePath(kind="r", indices=self.indices)
 
     def product(self) -> RoutePath:
-        return RoutePath.parse(_transform_route_path(self.id(), "product"))
+        if not self.is_reaction():
+            raise ValueError("only reaction paths have a product molecule")
+        return RoutePath(kind="m", indices=self.indices)
 
     def reactant(self, index: int) -> RoutePath:
-        return RoutePath.parse(_transform_route_path(self.id(), "reactant", index=index))
-
-
-def _parse_route_path(value: str) -> tuple[RouteNodeKind, list[int]]:
-    from retrocast import _native
-
-    kind, indices = _native.route_path_parse(value)
-    return cast(RouteNodeKind, kind), indices
-
-
-def _transform_route_path(value: str, operation: str, *, index: int | None = None) -> str:
-    from retrocast import _native
-
-    return _native.route_path_transform(value, operation, index=index)
+        if not self.is_reaction():
+            raise ValueError("only reaction paths have reactants")
+        if index < 0:
+            raise ValueError("reactant index must be non-negative")
+        return RoutePath(kind="m", indices=(*self.indices, index))
 
 
 def validate_reaction_id(value: str) -> str:
@@ -145,11 +178,37 @@ class Molecule(BaseModel):
 
 
 def _normalize_reactants(reactants: list[Molecule]) -> list[Molecule]:
-    from retrocast import _native
+    """
+    RoutePaths depend on the order of reactants, so to ensure that for a chemically unique Route a path is prescriptive, we need to normalize the positions of sibling nodes.
 
-    payload = json.dumps([_molecule_wire(reactant) for reactant in reactants], separators=(",", ":"))
-    order: list[int] = json.loads(_native.reactant_order_json(payload))
-    return [reactants[index] for index in order]
+    Sorting uses subtree keys. The tiebreaker compares all route fields we can confidently serialize.
+    """
+    groups: dict[tuple[Any, ...], list[Molecule]] = {}
+    for reactant in reactants:
+        groups.setdefault(_molecule_subtree_key(reactant), []).append(reactant)
+
+    ordered: list[Molecule] = []
+    for key in sorted(groups):
+        group = groups[key]
+        ordered.extend(group if len(group) == 1 else sorted(group, key=_reactant_order_tiebreaker))
+    return ordered
+
+
+def _reactant_order_tiebreaker(molecule: Molecule) -> str:
+    def payload(value: Molecule) -> tuple[Any, ...]:
+        reaction = value.product_of
+        reaction_payload = None
+        if reaction is not None:
+            reaction_payload = (
+                reaction.mapped_reaction_smiles,
+                reaction.template,
+                _ordered_optional_smiles(reaction.reagents),
+                _ordered_optional_smiles(reaction.solvents),
+                tuple(payload(reactant) for reactant in reaction.reactants),
+            )
+        return (value.smiles, value.inchikey, reaction_payload)
+
+    return json.dumps(payload(molecule), sort_keys=True, separators=(",", ":"))
 
 
 def _molecule_subtree_key(
@@ -158,12 +217,21 @@ def _molecule_subtree_key(
     *,
     depth: int | None = None,
 ) -> tuple[Any, ...]:
-    return _native_identity(
-        _route_wire(molecule),
-        "molecule",
-        match_level,
-        path="rc:m:/",
-        depth=depth,
+    """Compute subtree identity from raw molecules before a route-bound view exists."""
+    _validate_depth(depth)
+    reaction = molecule.product_of
+    if reaction is None or depth == 0:
+        return ("mol", molecule.key(match_level))
+
+    next_depth = None if depth is None else depth - 1
+    child_signatures = sorted(
+        _stable_hash(_molecule_subtree_key(reactant, match_level, depth=next_depth)) for reactant in reaction.reactants
+    )
+    return (
+        "mol",
+        molecule.key(match_level),
+        _reaction_key(molecule, reaction, match_level),
+        tuple(child_signatures),
     )
 
 
@@ -172,11 +240,10 @@ def _reaction_key(
     reaction: Reaction,
     match_level: InChIKeyLevel = InChIKeyLevel.FULL,
 ) -> tuple[str, str, tuple[str, ...]]:
-    return _native_identity(
-        _route_wire(product, reaction=reaction),
-        "reaction",
-        match_level,
-        path="rc:r:/",
+    return (
+        "rxn",
+        product.key(match_level),
+        tuple(sorted(reactant.key(match_level) for reactant in reaction.reactants)),
     )
 
 
@@ -196,13 +263,33 @@ def _reaction_content_key(
     *,
     fields: tuple[ReactionContentField, ...],
 ) -> tuple[Any, ...]:
-    return _native_identity(
-        _route_wire(product, reaction=reaction),
-        "reaction",
-        match_level,
-        path="rc:r:/",
-        fields=fields,
+    if not fields:
+        return _reaction_key(product, reaction, match_level)
+    return (
+        "rxn-content",
+        _reaction_key(product, reaction, match_level),
+        tuple((field, _reaction_content_field_value(reaction, field)) for field in fields),
     )
+
+
+def _reaction_content_field_value(reaction: Reaction, field: ReactionContentField) -> Any:
+    match field:
+        case "mapped_reaction_smiles":
+            return reaction.mapped_reaction_smiles
+        case "template":
+            return reaction.template
+        case "reagents":
+            return _ordered_optional_smiles(reaction.reagents)
+        case "solvents":
+            return _ordered_optional_smiles(reaction.solvents)
+        case _ as unreachable:
+            raise AssertionError(f"unhandled reaction content field: {unreachable!r}")
+
+
+def _ordered_optional_smiles(values: list[SmilesStr] | None) -> tuple[str, ...] | None:
+    if not values:
+        return None
+    return tuple(sorted(str(value) for value in values))
 
 
 def _molecule_content_subtree_key(
@@ -212,79 +299,23 @@ def _molecule_content_subtree_key(
     fields: tuple[ReactionContentField, ...],
     depth: int | None = None,
 ) -> tuple[Any, ...]:
-    return _native_identity(
-        _route_wire(molecule),
-        "molecule",
-        match_level,
-        path="rc:m:/",
-        depth=depth,
-        fields=fields,
+    if not fields:
+        return _molecule_subtree_key(molecule, match_level, depth=depth)
+    _validate_depth(depth)
+    reaction = molecule.product_of
+    if reaction is None or depth == 0:
+        return ("mol-content", molecule.key(match_level))
+
+    next_depth = None if depth is None else depth - 1
+    child_signatures = sorted(
+        _stable_hash(_molecule_content_subtree_key(reactant, match_level, fields=fields, depth=next_depth))
+        for reactant in reaction.reactants
     )
-
-
-def _native_identity(
-    route: dict[str, Any],
-    node_kind: str,
-    match_level: InChIKeyLevel,
-    *,
-    path: str | None = None,
-    depth: int | None = None,
-    fields: Iterable[ReactionContentField] = (),
-) -> tuple[Any, ...]:
-    from retrocast import _native
-
-    result = json.loads(
-        _native.route_identity_json(
-            json.dumps(route, separators=(",", ":")),
-            node_kind,
-            level=match_level.value,
-            path=path,
-            depth=depth,
-            fields_json=json.dumps(list(fields), separators=(",", ":")),
-        )
-    )
-    return _tuples(result["key"])
-
-
-def _tuples(value: Any) -> Any:
-    if isinstance(value, list):
-        return tuple(_tuples(item) for item in value)
-    return value
-
-
-def _route_wire(product: Molecule, *, reaction: Reaction | None = None) -> dict[str, Any]:
-    target = _molecule_wire(product)
-    if reaction is not None:
-        target["product_of"] = _reaction_wire(reaction)
-    return {"target": target, "schema_version": "2"}
-
-
-def _molecule_wire(molecule: Molecule) -> dict[str, Any]:
-    return {
-        "smiles": str(molecule.smiles),
-        "inchikey": str(molecule.inchikey),
-        "product_of": _reaction_wire(molecule.product_of) if molecule.product_of is not None else None,
-    }
-
-
-def _reaction_wire(reaction: Reaction) -> dict[str, Any]:
-    return {
-        "reactants": [_molecule_wire(reactant) for reactant in reaction.reactants],
-        "mapped_reaction_smiles": reaction.mapped_reaction_smiles,
-        "template": reaction.template,
-        "reagents": reaction.reagents,
-        "solvents": reaction.solvents,
-    }
-
-
-def _native_structure(route: Route, *, molecule_path: str | None = None) -> dict[str, Any]:
-    from retrocast import _native
-
-    return json.loads(
-        _native.route_structure_json(
-            json.dumps(_route_wire(route.target), separators=(",", ":")),
-            molecule_path=molecule_path,
-        )
+    return (
+        "mol-content",
+        molecule.key(match_level),
+        _reaction_content_key(molecule, reaction, match_level, fields=fields),
+        tuple(child_signatures),
     )
 
 
@@ -331,6 +362,7 @@ class Route(BaseModel):
         *,
         depth: int | None = None,
     ) -> tuple[Any, ...]:
+        _validate_depth(depth)
         return self.molecule_at(RoutePath.target()).subtree_key(match_level, depth=depth)
 
     def signature(
@@ -345,12 +377,10 @@ class Route(BaseModel):
         return list(self.iter_leaves())
 
     def iter_leaves(self) -> Iterator[MoleculeView]:
-        for path in _native_structure(self)["leaf_paths"]:
-            yield self.molecule_at(path)
+        yield from self.molecule_at(RoutePath.target()).iter_leaves()
 
     def iter_molecules(self) -> Iterator[MoleculeView]:
-        for path in _native_structure(self)["molecule_paths"]:
-            yield self.molecule_at(path)
+        yield from self.molecule_at(RoutePath.target()).iter_molecules()
 
     def find_molecules(
         self,
@@ -372,8 +402,19 @@ class Route(BaseModel):
         return list(self.iter_reactions())
 
     def iter_reactions(self) -> Iterator[ReactionView]:
-        for path in _native_structure(self)["reaction_paths"]:
-            yield self.reaction_at(path)
+        stack = [RoutePath.root_reaction()]
+        while stack:
+            path = stack.pop()
+            try:
+                reaction = self.reaction_at(path)
+            except KeyError:
+                continue
+            yield reaction
+            stack.extend(
+                reactant.path.produced_by()
+                for reactant in reaction.reactants()
+                if reactant.value.product_of is not None
+            )
 
     def reaction_signatures(self, match_level: InChIKeyLevel = InChIKeyLevel.FULL) -> set[str]:
         return {reaction.signature(match_level) for reaction in self.iter_reactions()}
@@ -407,10 +448,21 @@ class Route(BaseModel):
         return {reaction.content_signature(match_level, fields=content_fields) for reaction in self.iter_reactions()}
 
     def depth(self) -> int:
-        return int(_native_structure(self)["depth"])
+        return self.molecule_at(RoutePath.target()).depth()
 
     def is_convergent(self) -> bool:
-        return bool(_native_structure(self)["is_convergent"])
+        """Return whether any reaction joins multiple synthesized branches."""
+        stack = [self.target]
+        while stack:
+            molecule = stack.pop()
+            reaction = molecule.product_of
+            if reaction is None:
+                continue
+            synthesized_reactants = [reactant for reactant in reaction.reactants if reactant.product_of is not None]
+            if len(synthesized_reactants) > 1:
+                return True
+            stack.extend(reaction.reactants)
+        return False
 
 
 # section: route-bound views
@@ -477,15 +529,37 @@ class MoleculeView(BaseModel):
         return list(self.iter_leaves())
 
     def iter_leaves(self) -> Iterator[MoleculeView]:
-        for path in _native_structure(self.route, molecule_path=self.path.id())["leaf_paths"]:
-            yield self.route.molecule_at(path)
+        reaction = self.produced_by()
+        if reaction is None:
+            yield self
+            return
+
+        for reactant in reaction.reactants():
+            yield from reactant.iter_leaves()
 
     def iter_molecules(self) -> Iterator[MoleculeView]:
-        for path in _native_structure(self.route, molecule_path=self.path.id())["molecule_paths"]:
-            yield self.route.molecule_at(path)
+        yield self
+        reaction = self.produced_by()
+        if reaction is None:
+            return
+        for reactant in reaction.reactants():
+            yield from reactant.iter_molecules()
 
     def depth(self) -> int:
-        return int(_native_structure(self.route, molecule_path=self.path.id())["depth"])
+        max_depth = 0
+        stack: list[tuple[MoleculeView, int]] = [(self, 0)]
+        while stack:
+            molecule, depth = stack.pop()
+            reaction = molecule.produced_by()
+            if reaction is None:
+                max_depth = max(max_depth, depth)
+                continue
+            if not reaction.value.reactants:
+                max_depth = max(max_depth, depth + 1)
+                continue
+            for reactant in reaction.reactants():
+                stack.append((reactant, depth + 1))
+        return max_depth
 
     def subtree_key(
         self,

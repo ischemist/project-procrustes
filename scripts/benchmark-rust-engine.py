@@ -76,29 +76,25 @@ def main() -> None:
 
 
 def _python_command(args: argparse.Namespace, *, workers: int) -> list[str]:
-    command = [
+    invocation = (
+        "import sys; import retrocast; "
+        "retrocast.pipeline(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], "
+        "execution_stats_path=None if sys.argv[5] == '-' else sys.argv[5], "
+        "adapter=sys.argv[6], workers=int(sys.argv[7]), n_boot=int(sys.argv[8]))"
+    )
+    return [
         sys.executable,
-        "-m",
-        "retrocast.cli.main",
-        "pipeline",
-        "--raw",
+        "-c",
+        invocation,
         str(args.raw),
-        "--benchmark",
         str(args.benchmark),
-        "--stock",
         str(args.stock),
-        "--output-dir",
         "{output_dir}",
-        "--adapter",
+        str(args.execution_stats) if args.execution_stats else "-",
         args.adapter,
-        "--workers",
         str(workers),
-        "--n-boot",
         str(args.n_boot),
     ]
-    if args.execution_stats:
-        command.extend(["--execution-stats", str(args.execution_stats)])
-    return command
 
 
 def _rust_command(args: argparse.Namespace, *, workers: int) -> list[str]:
@@ -186,9 +182,9 @@ def _machine_info() -> dict[str, Any]:
         )
     native_info = None
     try:
-        from retrocast import _native
+        import retrocast
 
-        native_info = _native.engine_info()
+        native_info = retrocast.engine_info()
     except ImportError:
         pass
     return {
@@ -208,9 +204,6 @@ def _command_version(command: list[str]) -> str | None:
 
 
 def _semantic_validation(output_dir: Path, case_names: list[str]) -> dict[str, Any]:
-    from retrocast.models.analysis import AnalysisReport
-    from retrocast.models.evaluation import Evaluation
-
     reference_name = case_names[0]
     reference = output_dir / "runs" / reference_name / "sample-0"
     comparisons: dict[str, Any] = {}
@@ -218,13 +211,13 @@ def _semantic_validation(output_dir: Path, case_names: list[str]) -> dict[str, A
         candidate = output_dir / "runs" / case / "sample-0"
         reference_candidates = _read_gzip_json(reference / "candidates.json.gz")
         candidate_candidates = _read_gzip_json(candidate / "candidates.json.gz")
-        reference_evaluation = Evaluation.model_validate(_read_gzip_json(reference / "evaluation.json.gz"))
-        candidate_evaluation = Evaluation.model_validate(_read_gzip_json(candidate / "evaluation.json.gz"))
-        reference_analysis = AnalysisReport.model_validate(_read_gzip_json(reference / "analysis.json.gz"))
-        candidate_analysis = AnalysisReport.model_validate(_read_gzip_json(candidate / "analysis.json.gz"))
+        reference_evaluation = _read_gzip_json(reference / "evaluation.json.gz")
+        candidate_evaluation = _read_gzip_json(candidate / "evaluation.json.gz")
+        reference_analysis = _read_gzip_json(reference / "analysis.json.gz")
+        candidate_analysis = _read_gzip_json(candidate / "analysis.json.gz")
         delta, non_numeric_equal = _maximum_numeric_delta(
-            reference_analysis.model_dump(mode="json", exclude_none=True),
-            candidate_analysis.model_dump(mode="json", exclude_none=True),
+            reference_analysis,
+            candidate_analysis,
         )
         comparisons[f"{reference_name}_vs_{case}"] = {
             "candidates_equal": reference_candidates == candidate_candidates,

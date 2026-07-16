@@ -4,195 +4,294 @@ icon: lucide/code-xml
 
 # Writing a Custom Adapter
 
-Every retrosynthesis planner has its own output format: nested molecule/reaction trees, route strings, custom xml payloads. The job of a single adapter is to handle one type of raw format and cast it into the canonical `Route` model (see [schema design](/dev/rationale/schema-design) for a mental model of `Route`).
-
-The adapter-level data flow is:
+Every retrosynthesis planner has its own output format: nested molecule/reaction trees, route strings, or graph payloads. An adapter traverses one raw format and casts each prediction into the canonical `Route` model described in [Schema Design](/dev/rationale/schema-design).
 
 ```text
-raw artifact -> RawRouteEntry -> Route
+raw artifact -> RawRouteEntry -> Route -> Candidate
 ```
+
+Built-in adapters execute in `retrocast-core` for both front ends. Python selects them by name; new production adapters implement the Rust trait and are registered in the core.
+
+## Use A Built-In Adapter
+
+=== "Python 0.8.x"
+
+    ```python
+    candidates = retrocast.adapt(raw_payload, "paroutes", workers=12)
+    ```
+
+=== "Rust 0.8.x"
+
+    ```rust
+    use retrocast_core::adapters::{adapt_candidates_with_workers, built_in};
+
+    let adapter = built_in("paroutes").expect("built-in adapter");
+    let candidates = adapt_candidates_with_workers(
+        raw_payload,
+        adapter.as_ref(),
+        AdaptMode::Strict,
+        None,
+        None,
+        None,
+        12,
+    )?;
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    from retrocast import adapt_candidates, get_adapter
+
+    adapter = get_adapter("paroutes")
+    candidates = adapt_candidates(raw_payload, adapter)
+    ```
+
+The adapter identifier is part of the public artifact contract. Keep it lowercase and stable.
 
 ## Contract
 
-An adapter implements two methods:
+An adapter implements two operations:
 
-```python
-from collections.abc import Iterator
-from typing import Any, Protocol
+```rust
+use serde_json::Value;
 
-from retrocast.adapters.base import AdaptMode, RawRouteEntry
-from retrocast.models.route import Route
-from retrocast.models.task import Target
+use retrocast_core::{
+    adapters::RawRouteEntry,
+    error::Result,
+    model::{Route, Target},
+    route::AdaptMode,
+};
 
+pub trait Adapter: Send + Sync {
+    fn name(&self) -> &'static str;
 
-class Adapter(Protocol):
-    def iter_raw_routes(
-        self,
-        raw_payload: Any,
-        *,
-        source_key: str | None = None,
-    ) -> Iterator[RawRouteEntry]: ...
+    fn entries(
+        &self,
+        payload: Value,
+        source_key: Option<&str>,
+    ) -> Result<Vec<RawRouteEntry>>;
 
-    def cast(
-        self,
-        raw_route: Any,
-        *,
-        mode: AdaptMode = "strict",
-        target: Target | None = None,
-    ) -> Route: ...
+    fn cast(
+        &self,
+        raw_route: Value,
+        mode: AdaptMode,
+        target: Option<&Target>,
+    ) -> Result<Route>;
+}
 ```
 
-`iter_raw_routes(...)` is for artifact traversal. If a planner stores all target predictions in one file, this is where the file is split. If a planner stores one completion per JSONL row, this is where rows become entries. It should preserve source order and any target hints present in each raw route record.
+`entries(...)` traverses an artifact. It splits a multi-target file or a list of completions into ranked route entries while preserving source order and target hints.
 
-`cast(...)` is for route construction. It receives one raw route record and returns one `Route`, or raises a typed adapter/chemistry error if the input cannot be represented as a valid route.
+`cast(...)` constructs one route. It returns a canonical `Route` or a typed `EngineError` when the input cannot be represented safely.
 
 ## Raw Entries
 
-`RawRouteEntry` is the envelope carried between traversal and casting. It contains one raw route record plus the small amount of provenance needed by workflows.
+`RawRouteEntry` carries one raw route record and the provenance needed to preserve evaluation accounting:
 
-```python
-@dataclass(frozen=True, slots=True)
-class RawRouteEntry:
-    payload: Any
-    source_key: str | None = None
-    source_row_index: int | None = None
-    source_record_id: str | None = None
-    target_hint_id: str | None = None
-    target_hint_smiles: str | None = None
-    source_order: int | None = None
+```rust
+pub struct RawRouteEntry {
+    pub payload: Value,
+    pub source_key: Option<String>,
+    pub source_row_index: Option<usize>,
+    pub source_record_id: Option<String>,
+    pub target_hint_id: Option<String>,
+    pub target_hint_smiles: Option<String>,
+    pub source_order: Option<usize>,
+}
 ```
 
-`payload` is the raw route record that will later be passed to `cast(...)`. The name is broad because adapters receive many planner-specific shapes; in prose, this document calls it a raw route record.
+`payload` is passed to `cast(...)`.
 
-`source_order` is the planner's rank slot when the raw format exposes one. `adapt_candidates(...)` preserves it as `Candidate.rank`; if it is absent, rank falls back to iteration order.
+`source_order` is the planner's rank slot when the format provides one. The adaptation workflow preserves it as `Candidate.rank`; otherwise rank falls back to entry order.
 
-`target_hint_id` and `target_hint_smiles` are used when the raw route record itself identifies the target. They matter most for failed prediction slots: if no `Route` can be built, collection can still attach the failure to the right target.
+`target_hint_id` and `target_hint_smiles` let a failed prediction remain attached to the correct benchmark target even when no route can be built.
 
 ## Route Construction
 
-`cast(...)` should return the same shape regardless of the planner that produced the route:
+Every adapter returns the same chemistry shape:
 
-```python
-Route(
-    target=Molecule(
-        smiles=canonical_target_smiles,
-        inchikey=target_inchikey,
-        product_of=Reaction(reactants=[...]),
-    )
-)
+```rust
+Route {
+    target: Molecule {
+        smiles: canonical_target_smiles,
+        inchikey: target_inchikey,
+        product_of: Some(Box::new(Reaction {
+            reactants,
+            ..
+        })),
+        ..
+    },
+    ..
+}
 ```
 
-The basic rules are:
+The implementation must:
 
-- validate raw input with pydantic models or explicit checks before transforming it.
-- canonicalize every raw SMILES with `retrocast.chem.canonicalize_smiles`.
-- compute molecule identity with `get_inchi_key` after canonicalization.
-- build the route as `Route -> Molecule -> Reaction -> Molecule`.
-- preserve useful planner data in `annotations` on the relevant `Route`, `Molecule`, or `Reaction`.
-- when `target` is provided, verify that the route root matches `target.smiles` after canonicalization.
+- validate the raw shape before transforming it
+- canonicalize every raw SMILES through `retrocast_core::chem`
+- calculate molecule identity through the RDKit C++ bridge
+- build an alternating `Molecule -> Reaction -> Molecule` tree
+- preserve useful planner data in `annotations` on the relevant object
+- verify the route root against `target` when one is supplied
 
-Adapters return `Route`, not `Candidate`. A failed `cast(...)` should raise `AdapterSchemaError`, `AdapterLogicError`, or a `ChemError`; the caller decides whether that becomes `None`, a skipped route, or a `FailureRecord`.
+Adapters return `Route`, not `Candidate`. The workflow converts a cast error into a ranked `FailureRecord` with stable code and context.
 
 ## Adapt Modes
 
-By default, adaptation is strict. If any SMILES is invalid, if the route contains a cycle, or if the route cannot be represented as a tree, the raw route record fails adaptation.
+`AdaptMode::Strict` rejects invalid chemistry, cycles, and route structures that cannot be represented as a tree.
 
-```python
-AdaptMode = Literal["strict", "prune"]
-```
+`AdaptMode::Prune` asks how much of the target-rooted prediction remains valid before a corrupted branch. An adapter may remove a branch only when the cut is unambiguous. It must still fail if pruning removes the target or leaves a reaction with no reactants.
 
-`prune` exists for a narrower question: "how much of this prediction was valid before the corrupted branch?" In prune mode, an adapter may drop an invalid branch and return the longest valid prefix route. This is only acceptable when the raw representation makes the cut unambiguous. If pruning removes the target or leaves a reaction with no reactants, the adapter should fail.
+=== "Python 0.8.x"
+
+    ```python
+    candidates = retrocast.adapt(raw_payload, "myadapter", mode="prune")
+    ```
+
+=== "Rust 0.8.x"
+
+    ```rust
+    let mode = AdaptMode::Prune;
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    candidates = adapt_candidates(raw_payload, adapter, mode="prune")
+    ```
 
 ## Workflow Use
 
-The workflow layer exposes three adaptation paths:
+The candidate-preserving workflow is the benchmark path:
 
-```python
-adapt_route(raw_route_payload, adapter, *, mode="strict", target=None) -> Route | None
-adapt_routes(raw_payload, adapter, *, mode="strict", max_routes=None) -> list[Route]
-adapt_candidates(raw_payload, adapter, *, mode="strict", max_candidates=None) -> list[Candidate]
-```
+=== "Python 0.8.x"
 
-`adapt_route(...)` is the one-off convenience function. It tries to cast one raw route record and returns `None` for expected adapter or chemistry failures.
+    ```python
+    candidates = retrocast.adapt(
+        raw_payload,
+        "myadapter",
+        max_candidates=100,
+    )
+    predictions = retrocast.ingest(
+        raw_payload,
+        "myadapter",
+        task,
+        max_candidates=100,
+    )
+    ```
 
-`adapt_routes(...)` returns only valid routes. `max_routes` counts successful routes, so malformed raw route records do not consume the limit.
+=== "Rust 0.8.x"
 
-`adapt_candidates(...)` is the benchmarking path. `max_candidates` means "the first N raw prediction slots", not "the first N successful routes". Failed slots become `FailureRecord`s so Tier-0 validity and MRR are not inflated by silently dropping bad predictions.
+    ```rust
+    let candidates = adapt_candidates_with_workers(
+        raw_payload,
+        &adapter,
+        AdaptMode::Strict,
+        None,
+        None,
+        Some(100),
+        workers,
+    )?;
+
+    let predictions = ingest(
+        raw_payload,
+        &adapter,
+        &task,
+        AdaptMode::Strict,
+        Some(100),
+        workers,
+    )?;
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    from retrocast import adapt_candidates, ingest_candidates
+
+    candidates = adapt_candidates(
+        raw_payload,
+        adapter,
+        max_candidates=100,
+    )
+    predictions = ingest_candidates(
+        raw_payload,
+        adapter,
+        task,
+        max_candidates=100,
+    )
+    ```
+
+`max_candidates` means the first N raw prediction slots, not the first N successful routes. Failed slots remain in rank order so adaptation errors cannot inflate Tier-0 or MRR metrics.
 
 ## Common Raw Shapes
 
-Most adapters end up looking like one of the following patterns. The helpers in `retrocast.adapters.common` cover the repetitive parts: canonicalization, recursive traversal, cycle detection, and prune-mode behavior.
+Most adapters reduce to one of three patterns.
 
 ### Bipartite Trees
 
-Some planners already output an alternating molecule/reaction tree:
+Some planners already produce an alternating graph:
 
 ```text
 molecule -> reaction -> molecule -> reaction -> ...
 ```
 
-Use `build_bipartite_molecule(...)` when raw nodes expose molecule/reaction roles and child links. This is the closest raw shape to the schema-2 model.
+Validate node roles and child links before recursively building the route. A molecule child under a molecule, or a missing referenced node, is a schema failure.
 
 ### Precursor Maps
 
-Some planners output route strings or reaction tables that can be reduced to a product-to-reactants map:
+Route strings and reaction tables can often be reduced to a product-to-reactants map:
 
-```python
+```json
 {
-    "target": ["intermediate", "stock_a"],
-    "intermediate": ["stock_b", "stock_c"],
+  "target": ["intermediate", "stock_a"],
+  "intermediate": ["stock_b", "stock_c"]
 }
 ```
 
-Use `build_molecule_from_precursor_map(...)` for this shape. The adapter parses the raw format into the map, chooses the root product, and lets the helper walk the route.
+Choose the root product, reject cycles, and walk the map into the alternating route tree.
 
 ### Plain Molecule Trees
 
-Some raw routes are nested molecule trees where a parent molecule is made from its children, but there is no explicit reaction node.
-
-Use `build_plain_tree_molecule(...)` for this shape. The adapter provides callbacks for SMILES, children, molecule annotations, and reaction fields.
+Some raw routes contain nested molecule nodes without explicit reaction nodes. Each parent-child expansion becomes one `Reaction`; adapter-specific callbacks or helpers extract SMILES and annotations.
 
 ## Target Validation
 
-If `target` is provided, the adapted root must match it. A route for the wrong target is not a bad route for the requested target; it is the wrong object.
+When `target` is supplied, the canonical route root must match it. A route for another molecule is not a failed synthesis of the requested target; it is the wrong object.
 
-```python
-from retrocast.adapters.errors import adapter_target_mismatch
-
-if target is not None and route.target.smiles != target.smiles:
-    raise adapter_target_mismatch(
-        "myadapter",
-        target.id,
-        expected_smiles=target.smiles,
-        actual_smiles=route.target.smiles,
-    )
+```rust
+if route.target.smiles != target.smiles {
+    return Err(EngineError::TargetMismatch {
+        adapter: "myadapter",
+        target_id: target.id.clone(),
+        expected: target.smiles.to_string(),
+        actual: route.target.smiles.to_string(),
+    });
+}
 ```
 
-Some raw formats cannot even be interpreted without a target. For example, a route string may describe disconnections but not name the root in a reliable way. In that case, missing `target` is an adapter error.
+Some formats cannot be interpreted without a target. Missing target context should then produce a typed adapter error.
 
 ## Adapter Errors
 
-Adapter errors are part of evaluation accounting. Messages are for humans, but `code` and `context` are what workflows aggregate.
+Messages are for humans. `code` and `context` are the stable fields aggregated by workflows.
 
-Keep `context["adapter"]` lowercase and aligned with the registry slug. Use display capitalization, such as `DreamRetro` or `AiZynthFinder`, only in the human message.
+Keep `context["adapter"]` lowercase and aligned with the registry slug. Use display capitalization only in the message.
 
-Common codes:
-
-| code | meaning |
+| Code | Meaning |
 | --- | --- |
-| `adapter.schema_invalid` | raw payload does not match the adapter's expected input shape |
-| `adapter.target_mismatch` | the adapted route root is not the requested target |
-| `adapter.cycle_detected` | the raw graph revisits the same molecule in one route path |
-| `adapter.node_type_invalid` | a graph slot contains a molecule where a reaction is required, or the reverse |
-| `adapter.node_missing` | a raw edge references a node absent from the lookup table |
-| `adapter.route_string_empty` | a string route field is empty after parsing |
-| `adapter.route_string_invalid` | a string route field has malformed step boundaries or missing reactants/products |
-| `adapter.route_transform_failed` | fallback for a route-local transform failure that lacks a narrower code |
-| `adapter.unsupported_feature` | a valid request asks for an adapter feature that is not implemented |
+| `adapter.schema_invalid` | Raw payload does not match the expected shape. |
+| `adapter.target_mismatch` | Adapted root is not the requested target. |
+| `adapter.cycle_detected` | The graph revisits a molecule in one route path. |
+| `adapter.node_type_invalid` | A molecule appears where a reaction is required, or the reverse. |
+| `adapter.node_missing` | An edge references a missing node. |
+| `adapter.route_string_empty` | A route string is empty after parsing. |
+| `adapter.route_string_invalid` | Step boundaries or reactant/product fields are malformed. |
+| `adapter.route_transform_failed` | A route-local transform failed without a narrower code. |
+| `adapter.unsupported_feature` | A valid request asks for an unimplemented adapter feature. |
 
-Chemistry failures use `chem.*` codes, usually `chem.invalid_smiles` or `chem.runtime_error`. For the shared exception shape and workflow-level accounting, see [Error Handling](errors.md).
+Chemistry failures use `chem.*` codes, usually `chem.invalid_smiles` or `chem.runtime_error`. See [Error Handling](errors.md) for candidate-level accounting.
 
-### Adapter Error Examples
+### Examples
 
 `adapter.cycle_detected`: the raw route loops back to a molecule already in the same path.
 
@@ -202,67 +301,47 @@ Chemistry failures use `chem.*` codes, usually `chem.invalid_smiles` or `chem.ru
   "children": [
     {
       "smiles": "CC=O",
-      "children": [{ "smiles": "CCO", "children": [] }]
+      "children": [{"smiles": "CCO", "children": []}]
     }
   ]
 }
 ```
 
-`adapter.node_type_invalid`: a bipartite molecule has a molecule child where a reaction node is required.
+`adapter.node_type_invalid`: a bipartite molecule has a molecule child where a reaction is required.
 
 ```json
 {
   "type": "mol",
   "smiles": "CCO",
-  "children": [{ "type": "mol", "smiles": "CC=O", "children": [] }]
+  "children": [{"type": "mol", "smiles": "CC=O", "children": []}]
 }
 ```
 
-`adapter.route_string_invalid`: a route string exists, but it does not match the adapter grammar.
+`adapter.route_string_invalid`: a reaction step omits the product side.
 
-```json
-{ "succ": true, "routes": "CCO>CC=O" }
+```text
+CCO.CN>>
 ```
-
-`adapter.schema_invalid`: the raw field has the wrong type before route transformation starts.
-
-```json
-{ "succ": true, "routes": 123 }
-```
-
-If `adapter.route_transform_failed` appears often in manifests, promote the recurring case to a more specific code.
 
 ## Registration
 
-Canonical adapter modules live under `retrocast.adapters` without an `_adapter` suffix, for example `retrocast.adapters.paroutes`.
+Add the adapter module under `retrocast-core/src/adapters`, export its type from `adapters/mod.rs`, add its canonical slug to `BUILT_IN_ADAPTERS`, and resolve it in `built_in(...)`.
 
-Register the adapter in `retrocast.adapters.registry`:
+Python and CLI discovery use that same registry; no separate front-end registration is required.
 
-```python
-ADAPTER_TYPES = {
-    "aizynthfinder": AiZynthFinderAdapter,
-    "myadapter": MyAdapter,
-}
-```
+## Test Checklist
 
-Use a stable lowercase slug.
+Cover:
 
-## Tests
+- one valid representative payload
+- empty and malformed top-level payloads
+- invalid SMILES and RDKit failures
+- cycles and invalid node alternation
+- strict versus prune behavior
+- target mismatch and missing target context
+- source order, explicit ranks, and target hints
+- failed-slot preservation through ingest and score
+- deterministic results with one and multiple workers
+- serialized parity through the Python binding
 
-Each adapter should use `tests.adapters.base.AdapterContractSuite` and add adapter-specific regression tests for its raw format.
-
-The contract suite checks that the adapter:
-
-- extracts raw route entries from a valid raw artifact.
-- rejects malformed raw artifacts with `adapter.schema_invalid`.
-- casts one valid raw route into a schema-2 `Route`.
-- rejects malformed route payloads with `adapter.schema_invalid`.
-- rejects target mismatches with `adapter.target_mismatch`.
-- rejects invalid SMILES in `strict` mode.
-- prunes invalid leaves in `prune` mode when the adapter claims prune support.
-
-Run focused adapter tests with:
-
-```bash
-uv run pytest packages/retrocast-py/tests/adapters/test_myadapter.py
-```
+Keep fixtures small. A single route that exercises the raw format is more diagnostic than a large planner dump.

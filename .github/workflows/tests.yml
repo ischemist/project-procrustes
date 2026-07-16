@@ -1,4 +1,4 @@
-name: RetroCast (Python) Tests
+name: RetroCast (Python Bindings) Tests
 
 on:
   push:
@@ -12,11 +12,10 @@ on:
 
 jobs:
   test:
-    name: RetroCast (Python) Tests
+    name: RetroCast (Python Bindings) Tests
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
 
     steps:
       - name: Checkout
@@ -65,72 +64,8 @@ jobs:
           uv venv --clear
           echo "$PWD/.venv/bin" >> $GITHUB_PATH
 
-      - name: Install dependencies
-        run: uv sync --extra viz
+      - name: Build and install native extension
+        run: uv sync
 
       - name: Run tests
         run: uv run pytest -v
-
-      - name: generate coverage report
-        id: coverage
-        run: |
-          set +e  # disable exit on error temporarily
-          report=$(uv run pytest --cov=retrocast --cov-report=term-missing)
-          exit_code=$?
-          set -e  # re-enable exit on error
-
-          # this is some bash magic to make the multiline report available to next steps
-          echo "report<<EOF" >> $GITHUB_OUTPUT
-          echo "$report" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-          exit $exit_code  # fail the step if tests failed
-
-      - name: find changed files in src
-        id: changed-src-files
-        if: github.event_name == 'pull_request'
-        uses: tj-actions/changed-files@v47 # check for the latest version, they update a lot
-        with:
-          files: packages/retrocast-py/src/**
-
-      - name: print coverage report to logs
-        run: |
-          echo "${{ steps.coverage.outputs.report }}"
-
-      - name: add coverage report as a pr comment
-        if: github.event_name == 'pull_request' && steps.changed-src-files.outputs.any_changed == 'true'
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const marker = "<!-- retrocast-pytest-coverage-report -->";
-            const output = `${marker}
-            ### Pytest Coverage Report 🧪
-            \`\`\`
-            ${{ steps.coverage.outputs.report }}
-            \`\`\`
-            `;
-
-            const { owner, repo } = context.repo;
-            const issue_number = context.issue.number;
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner,
-              repo,
-              issue_number,
-              per_page: 100,
-            });
-            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner,
-                repo,
-                comment_id: existing.id,
-                body: output,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number,
-                body: output,
-              });
-            }

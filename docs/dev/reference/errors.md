@@ -4,94 +4,140 @@ icon: lucide/triangle-alert
 
 # Error Handling
 
-At public package, CLI, I/O, adapter, workflow, and benchmark boundaries, RetroCast raises `RetroCastException` subclasses with stable `code` values. Human-readable messages can change; callers should record or branch on `code` and `context`.
+`retrocast-core` owns one `EngineError` boundary. The CLI renders it and exits non-zero. PyO3 translates it into a built-in Python exception. The published package does not contain a second Python exception hierarchy.
 
-Use these exceptions when the caller can do something specific with the failure: abort a command, skip one raw route record, preserve a failed prediction slot, choose a different public API, or continue a batch. Inside local implementation code, ordinary `ValueError`, `TypeError`, and `RuntimeError` are fine.
+Expected route-local failures are different: they become `FailureRecord` data and keep their planner rank.
 
-!!! info "Codes are the public contract"
+## Interface Boundaries
 
-    Do not branch on exception prose. Branch on `error.code`.
+=== "Python 0.8.x"
 
-## Rules
+    | Exception | Meaning |
+    | --- | --- |
+    | `ValueError` | Invalid SMILES, InChIKey, chemical level, or typed artifact data |
+    | `OSError` | An artifact path could not be read or written |
+    | `RuntimeError` | Adapter, schema, worker-pool, scoring, analysis, or another native failure |
 
-- Raise `RetroCastException` subclasses at public package, CLI, I/O, adapter, workflow, and benchmark boundaries when callers can reasonably recover or branch.
-- Preserve causes with `raise ... from exc` when wrapping filesystem, JSON, gzip, Pydantic, RDKit, or serializer failures.
-- Let ordinary `ValueError`, `TypeError`, and `RuntimeError` represent local programmer errors and private helper invariants.
-- Library code raises; CLI and workflow boundaries decide whether to abort, skip, count, or continue.
-- Never branch on exception prose. Branch on `error.code`.
+    ```python
+    try:
+        predictions = retrocast.ingest(raw, "aizynthfinder", task)
+    except (ValueError, OSError, RuntimeError) as error:
+        logger.exception("RetroCast ingest failed: %s", error)
+        raise
+    ```
 
-## Shape
+=== "Rust 0.8.x"
 
-All boundary-facing exceptions expose:
+    ```rust
+    use retrocast_core::error::{EngineError, Result};
+
+    fn run() -> Result<()> {
+        let predictions = ingest(raw, adapter, &task, mode, limit, workers)?;
+        // ...
+        Ok(())
+    }
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    from retrocast.exceptions import AdapterError, ChemError, RetroCastException
+
+    try:
+        predictions = ingest_candidates(raw_payload, adapter, task)
+    except (AdapterError, ChemError) as error:
+        logger.error("%s: %s", error.code, error)
+        raise
+    ```
+
+Do not branch on Python exception prose. Rust code should match a specific `EngineError` variant only when it can recover meaningfully.
+
+## Failure Records
+
+A malformed route entry can be counted without aborting the rest of the planner artifact:
 
 ```json
 {
-  "code": "adapter.schema_invalid",
-  "message": "raw data for target 'x' failed DirectMultiStep schema validation",
-  "context": { "adapter": "directmultistep", "target_id": "x" },
-  "retryable": false
+  "rank": 2,
+  "failure": {
+    "code": "adapter.schema_invalid",
+    "target_id": "target-1",
+    "context": {"adapter": "aizynthfinder"}
+  }
 }
 ```
 
-Use `error.to_dict()` when persisting or reporting the structured form.
+The distinction is:
 
-## Examples
+- a route-local failure becomes a ranked candidate when processing can continue
+- an invalid artifact envelope, unsafe path, unknown adapter, or impossible workflow request aborts the call
 
-Wrap expected boundary failures with a stable code and context:
+Inspect `FailureRecord.code` when route-level accounting matters:
 
-```python
-from pydantic import ValidationError
+=== "Python 0.8.x"
 
-from retrocast.adapters.errors import adapter_schema_error
+    ```python
+    failures = [
+        candidate["failure"]["code"]
+        for target_candidates in predictions.to_dict().values()
+        for candidate in target_candidates
+        if candidate.get("failure") is not None
+    ]
+    ```
 
-try:
-    validated = MyRawOutput.model_validate(raw_target_data)
-except ValidationError as exc:
-    raise adapter_schema_error("directmultistep", target.id, "invalid route list") from exc
-```
+=== "Rust 0.8.x"
 
-Handle failures by class and code, not by message text:
+    ```rust
+    let failures = predictions
+        .values()
+        .flatten()
+        .filter_map(|candidate| candidate.failure.as_ref())
+        .map(|failure| failure.code.as_str())
+        .collect::<Vec<_>>();
+    ```
 
-```python
-from retrocast.workflow.adapt import adapt_candidates
-from retrocast.exceptions import AdapterError, ChemError
+=== "Python 0.7.1"
 
-try:
-    candidates = adapt_candidates(raw_payload, adapter)
-except (AdapterError, ChemError) as exc:
-    stats.record_failure(exc.code, target_id=target_id)
-    candidates = []
-```
+    ```python
+    failures = [
+        candidate.failure.code
+        for target_candidates in predictions.values()
+        for candidate in target_candidates
+        if candidate.failure is not None
+    ]
+    ```
 
-## Taxonomy
+## Stable Code Families
 
-| Family | Base class | Examples | Meaning |
-| --- | --- | --- | --- |
-| `input.*` | `InputError` | `input.invalid` | External CLI/config input is invalid |
-| `security.*` | `SecurityError` | `security.path_invalid`, `security.path_traversal` | Path, filename, or filesystem boundary input is unsafe |
-| `config.*` | `ConfigurationError` | `config.invalid_value` | Config values cannot be interpreted safely |
-| `chem.*` | `ChemError` | `chem.invalid_smiles`, `chem.runtime_error` | Chemistry parsing, identity, or backend failure |
-| `curation.*` | `CurationError` | `curation.route_embedding_query_invalid` | Curation API input is valid data but invalid for the requested operation |
-| `schema.*` | `SchemaLogicError` | `schema.logic_error` | Data is structurally valid but logically impossible |
-| `benchmark.*` | `BenchmarkError` | `benchmark.validation_failed` | Benchmark construction or uniqueness contract failed |
-| `adapter.*` | `AdapterError` | `adapter.schema_invalid`, `adapter.target_mismatch`, `adapter.cycle_detected`, `adapter.route_string_invalid` | Raw model output failed adapter boundary contracts |
-| `io.*` | `DataIOError` | `io.not_found`, `io.decode_failed`, `io.invalid_artifact_shape`, `io.unsupported_format`, `io.write_failed` | Artifact read, decode, shape, format, or write failure |
-| `serialization.*` | `RetroCastSerializationError` | `serialization.syntheseus_failed` | Conversion to external route formats failed |
-| `workflow.*` | `WorkflowError` | `workflow.error` | Orchestration failed at a workflow boundary |
-| `dataset.*` | `DatasetError` | `dataset.resolution_failed`, `dataset.download_failed`, `dataset.verification_failed` | Hosted dataset resolution, download, or integrity check failed |
-| `validity.*` | `WorkflowError`, `UnsupportedValidityTierError` | `validity.unsupported_tier` | Requested validity tier has no implemented validator |
+Serialized failure codes are the durable route-level contract. Human-readable messages may become clearer without changing the code.
+
+| Family | Examples | Meaning |
+| --- | --- | --- |
+| `input.*` | `input.invalid` | External CLI or configuration input is invalid. |
+| `security.*` | `security.path_invalid`, `security.path_traversal` | A path or filename is unsafe. |
+| `config.*` | `config.invalid_value` | Configuration cannot be interpreted safely. |
+| `chem.*` | `chem.invalid_smiles`, `chem.runtime_error` | Chemistry parsing, identity, or RDKit failed. |
+| `curation.*` | `curation.route_embedding_query_invalid` | Valid data is invalid for the requested curation operation. |
+| `schema.*` | `schema.logic_error` | Structurally valid data is logically impossible. |
+| `benchmark.*` | `benchmark.validation_failed` | Benchmark construction or uniqueness failed. |
+| `adapter.*` | `adapter.schema_invalid`, `adapter.target_mismatch`, `adapter.cycle_detected` | Raw planner output failed an adapter contract. |
+| `io.*` | `io.not_found`, `io.decode_failed`, `io.invalid_artifact_shape` | Artifact reading, decoding, shape, or writing failed. |
+| `serialization.*` | `serialization.syntheseus_failed` | Conversion to an external format failed. |
+| `workflow.*` | `workflow.error` | Orchestration failed at a workflow boundary. |
+| `dataset.*` | `dataset.resolution_failed`, `dataset.download_failed`, `dataset.verification_failed` | Hosted data resolution or integrity checking failed. |
+| `validity.*` | `validity.unsupported_tier` | No validator implements the requested validity tier. |
+
+Not every family is currently emitted by every workflow. Adding a new code is a schema decision; repurposing an existing code is a breaking change.
 
 ## Adapter Policy
 
-Adapter schema errors are fatal for one raw payload or entry and counted by the workflow. Individual route transform errors may be recorded as failed candidates when the adapter can keep processing the rest of the input artifact.
+An invalid artifact envelope is fatal. An invalid route entry becomes a failed candidate when the adapter can continue to later entries.
 
-Route root mismatches should use `adapter.target_mismatch`; malformed raw payloads should use `adapter.schema_invalid`.
+Use `adapter.target_mismatch` for a valid route whose canonical root differs from the requested target. Use `adapter.schema_invalid` when the raw payload does not match the adapter's declared shape. Chemistry failures keep their `chem.*` identity.
 
 ## Workflow Accounting
 
-Batch workflows that continue after expected failures must count them by stable code.
-
-For `ingest`, candidate statistics are written into the manifest `statistics` block, so failure counts land under `statistics.failures_by_code`.
+Candidate statistics aggregate failures by code:
 
 ```json
 {
@@ -104,12 +150,25 @@ For `ingest`, candidate statistics are written into the manifest `statistics` bl
 }
 ```
 
+Manifests persist those counts so an ingest run can be audited without reparsing the raw planner output.
+
+## Rust Rules
+
+- Return `Result<T, EngineError>` across core boundaries.
+- Prefer a specific enum variant to an unstructured string.
+- Preserve source errors where the original cause matters.
+- Convert an adapter error into `FailureRecord` only at the boundary that owns rank and target context.
+- Validate path components before joining managed artifact paths.
+- Never panic on caller-controlled data.
+
 ## CLI Policy
 
-The CLI is the process boundary. It formats known `RetroCastException` instances with code and context, logs unexpected errors with tracebacks, and exits non-zero for fatal command failures.
+The CLI is the process boundary. It prints a diagnostic and exits non-zero for fatal failures. Route-local failures do not make ingest fail when they have been preserved as candidate data.
 
 ## Tests
 
-Test the exception class and `code`; assert exact message text only when copy itself is the public contract. When wrapping matters, assert `__cause__` is present.
+Test the `EngineError` variant or serialized failure code. Assert exact messages only when CLI copy is itself the contract.
 
-See [adapter errors](adapters.md#adapter-error-examples) for concrete examples of route-local adapter failures.
+Adversarial coverage should include malformed JSON, invalid chemistry, unsafe paths, zero workers, partial route corruption, deterministic concurrent execution, and Python exception translation.
+
+See [adapter errors](adapters.md#adapter-errors) for route-local examples.

@@ -23,10 +23,6 @@ def adapt_route(
     target: Target | None = None,
 ) -> Route | None:
     """Adapt one raw route payload into one canonical route, or None on failure."""
-    from retrocast import native
-
-    if native.available() and native._adapter_slug(adapter) is not None:
-        return native.adapt_route(raw_route_payload, adapter, mode=mode, target=target)
     try:
         return adapter.cast(raw_route_payload, mode=mode, target=target)
     except (AdapterError, ChemError, ValidationError):
@@ -42,7 +38,6 @@ def adapt_routes(
     source_key: str | None = None,
     max_routes: int | None = None,
     progress_callback: Callable[[], None] | None = None,
-    workers: int = 1,
 ) -> list[Route]:
     """Adapt raw planner output into valid canonical routes.
 
@@ -53,27 +48,6 @@ def adapt_routes(
     _validate_limit(max_routes, "max_routes")
     if max_routes == 0:
         return []
-    from retrocast import native
-
-    if native._adapter_slug(adapter) is not None:
-        candidates = native.adapt(
-            raw_payload,
-            adapter,
-            mode=mode,
-            target=target,
-            source_key=source_key,
-            workers=workers,
-        )
-        routes = []
-        for candidate in candidates:
-            if progress_callback is not None:
-                progress_callback()
-            if candidate.route is None:
-                continue
-            routes.append(candidate.route)
-            if max_routes is not None and len(routes) >= max_routes:
-                break
-        return routes
 
     routes: list[Route] = []
     for entry in adapter.iter_raw_routes(raw_payload, source_key=source_key):
@@ -98,28 +72,11 @@ def adapt_candidates(
     source_key: str | None = None,
     max_candidates: int | None = None,
     progress_callback: Callable[[], None] | None = None,
-    workers: int = 1,
 ) -> list[Candidate]:
     """Adapt raw planner output while preserving failed candidate rank slots."""
     _validate_limit(max_candidates, "max_candidates")
     if max_candidates == 0:
         return []
-    from retrocast import native
-
-    if native._adapter_slug(adapter) is not None:
-        candidates = native.adapt(
-            raw_payload,
-            adapter,
-            mode=mode,
-            target=target,
-            source_key=source_key,
-            max_candidates=max_candidates,
-            workers=workers,
-        )
-        if progress_callback is not None:
-            for _ in candidates:
-                progress_callback()
-        return candidates
 
     candidates: list[Candidate] = []
     entries = adapter.iter_raw_routes(raw_payload, source_key=source_key)

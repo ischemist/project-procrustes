@@ -1,4 +1,4 @@
-name: Linting & Type Checking
+name: RetroCast (Python Bindings) Lint
 
 on:
   push:
@@ -11,29 +11,13 @@ on:
       - master
 
 jobs:
-  type-check:
+  lint:
+    name: RetroCast (Python Bindings) Lint
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - uses: mamba-org/setup-micromamba@v2
-        with:
-          environment-name: native-build
-          create-args: >-
-            librdkit-dev=2026.03.4
-            libboost-headers=1.90
-          cache-environment: true
-
-      - name: Configure RDKit C++ build
-        shell: bash -el {0}
-        run: |
-          echo "RDKIT_ROOT=$CONDA_PREFIX" >> "$GITHUB_ENV"
-          echo "BOOST_ROOT=$CONDA_PREFIX" >> "$GITHUB_ENV"
-          echo "LD_LIBRARY_PATH=$CONDA_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
-
-      - uses: dtolnay/rust-toolchain@stable
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v6
@@ -57,13 +41,10 @@ jobs:
             ${{ runner.os }}-uv-
 
       - name: Install dependencies
-        run: uv sync --extra viz
+        run: uv sync --no-install-project
 
       - name: Run ruff (linter)
-        run: uv run ruff check
+        run: uv run --no-sync ruff check packages/retrocast-rs/python-tests scripts/smoke-native-wheel.py
 
       - name: Run ruff (formatter)
-        run: uv run ruff format --check
-
-      - name: Run ty
-        run: uv run ty check .
+        run: uv run --no-sync ruff format --check packages/retrocast-rs/python-tests scripts/smoke-native-wheel.py

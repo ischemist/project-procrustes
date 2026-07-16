@@ -1,47 +1,85 @@
-import logging
+from __future__ import annotations
+
 from collections.abc import Iterator
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from retrocast.adapters.base import RawRouteEntry
-from retrocast.adapters.native import NativeAdapter, _call_native, _json
+from pydantic import BaseModel, Field, RootModel, ValidationError
 
-logger = logging.getLogger(__name__)
+from retrocast.adapters.base import AdaptMode, RawRouteEntry
+from retrocast.adapters.common import build_bipartite_molecule
+from retrocast.adapters.errors import adapter_schema_error, adapter_target_mismatch
+from retrocast.chem import canonicalize_smiles
+from retrocast.exceptions import AdapterLogicError
+from retrocast.models.route import Route
+from retrocast.models.task import Target
+
+# SECTION: Raw SynPlanner Schema
 
 
-class _RoutePayload(dict[str, Any]):
-    def __getattr__(self, name: str) -> Any:
-        try:
-            return self[name]
-        except KeyError as error:
-            raise AttributeError(name) from error
+class SynPlannerBaseNode(BaseModel):
+    smiles: str
+    children: list[SynPlannerNode] = Field(default_factory=list)
 
 
-class SynPlannerAdapter(NativeAdapter):
-    adapter_slug = "synplanner"
+class SynPlannerMoleculeInput(SynPlannerBaseNode):
+    type: Literal["mol"]
+    in_stock: bool = False
 
-    def iter_raw_routes(
-        self,
-        raw_payload: Any,
-        *,
-        source_key: str | None = None,
-    ) -> Iterator[RawRouteEntry]:
-        batch = _call_native("synplanner_entries_json", _json(raw_payload), source_key=source_key)
+
+class SynPlannerReactionInput(SynPlannerBaseNode):
+    type: Literal["reaction"]
+
+
+SynPlannerNode = Annotated[SynPlannerMoleculeInput | SynPlannerReactionInput, Field(discriminator="type")]
+
+
+class SynPlannerRouteList(RootModel[list[SynPlannerMoleculeInput]]):
+    pass
+
+
+# SECTION: Adapter
+
+
+class SynPlannerAdapter:
+    def iter_raw_routes(self, raw_payload: Any, *, source_key: str | None = None) -> Iterator[RawRouteEntry]:
         target_id = source_key or "<unknown>"
-        for skipped in batch["skipped"]:
-            logger.warning(
-                "skipping invalid synplanner route: target=%s source_index=%s source_order=%s error=%s",
-                target_id,
-                skipped["source_index"],
-                skipped["source_order"],
-                skipped["error"],
+        try:
+            routes = SynPlannerRouteList.model_validate(raw_payload)
+        except ValidationError as exc:
+            raise adapter_schema_error("synplanner", target_id, "invalid route list") from exc
+        for source_order, route_root in enumerate(routes.root, start=1):
+            yield RawRouteEntry(payload=route_root, source_key=source_key, source_order=source_order)
+
+    def cast(self, raw_route: Any, *, mode: AdaptMode = "strict", target: Target | None = None) -> Route:
+        target_id = target.id if target is not None else "<unknown>"
+        try:
+            route_root = SynPlannerMoleculeInput.model_validate(raw_route)
+        except ValidationError as exc:
+            raise adapter_schema_error("synplanner", target_id, "invalid molecule route root") from exc
+        route_target = build_bipartite_molecule(
+            route_root,
+            adapter="synplanner",
+            mode=mode,
+            reaction_fields=_reaction_fields,
+            remove_mapping=True,
+        )
+        if route_target is None:
+            raise AdapterLogicError(
+                "SynPlanner target molecule was pruned",
+                code="adapter.target_pruned",
+                context={"adapter": "synplanner", "target_id": target_id},
             )
-        if batch["skipped"]:
-            logger.warning(
-                "skipped %s invalid synplanner route(s) for target %s; valid_routes=%s",
-                len(batch["skipped"]),
-                target_id,
-                len(batch["entries"]),
-            )
-        for entry in batch["entries"]:
-            entry["payload"] = _RoutePayload(entry["payload"])
-            yield RawRouteEntry(**entry)
+        if target is not None:
+            expected_smiles = canonicalize_smiles(target.smiles, remove_mapping=True)
+            if route_target.smiles != expected_smiles:
+                raise adapter_target_mismatch(
+                    "synplanner", target.id, expected_smiles=expected_smiles, actual_smiles=route_target.smiles
+                )
+        return Route(target=route_target)
+
+
+# SECTION: Helpers
+
+
+def _reaction_fields(node: SynPlannerReactionInput) -> dict[str, Any]:
+    return {"mapped_reaction_smiles": node.smiles, "annotations": {"source_smiles": node.smiles}}

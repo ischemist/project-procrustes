@@ -4,125 +4,268 @@ icon: lucide/git-branch
 
 # Adaptation
 
-Adaptation is the part of RetroCast that turns planner-specific output into schema-2 objects.
-
-Adapters know raw formats. Workflow helpers decide whether failures are skipped or preserved.
+Adaptation turns planner-specific output into schema-2 `Candidate`s. An adapter understands one raw format; the workflow decides how to preserve ranks, failures, and benchmark targets.
 
 ## Choose A Workflow
 
-| Goal | Function | Input shape | Output shape |
-| --- | --- | --- | --- | --- |
-| Inspect one raw route record | `adapt_route(raw_route, adapter)` | one raw route record | `Route | None` |
-| Inspect only successful routes from a raw artifact | `adapt_routes(raw_payload, adapter)` | raw artifact | `list[Route]` |
-| Preserve ranked prediction slots, including failures | `adapt_candidates(raw_payload, adapter)` | raw artifact | `list[Candidate]` |
-| Map candidates onto a task | `collect_candidates(candidates, task)` | `list[Candidate]` plus `Task` | `dict[target_id, list[Candidate]]` |
-| Run adapt and collect together | `ingest_candidates(raw_payload, adapter, task)` | raw artifact plus `Task` | collected candidates |
+| Goal | Python | Rust | Result |
+| --- | --- | --- | --- |
+| Adapt one planner payload | `retrocast.adapt(...)` | `adapt_candidates_with_workers(...)` | ranked candidates |
+| Adapt and collect in memory | `retrocast.ingest(...)` | `adapt::ingest(...)` | predictions grouped by target |
+| Read, adapt, and collect a file | `retrocast.ingest_file(...)` | `adapt::ingest_file(...)` | predictions grouped by target |
 
-Use route-only adaptation when you only want to inspect chemistry. Use candidate-preserving adaptation when you are evaluating a planner and failed prediction slots must remain visible.
+Use `adapt` to inspect a payload. Use `ingest` for evaluation because it maps every candidate onto a task target and returns the value consumed by scoring.
 
 ## Terms
 
-`raw_payload` is the whole raw artifact passed to `iter_raw_routes(...)`.
+`raw_payload` is the planner artifact passed to an adapter.
 
-`RawRouteEntry` is the envelope yielded by the adapter. It carries one raw route record plus provenance such as source order and target hints.
+`RawRouteEntry` is the envelope produced when the adapter traverses that artifact. It contains one raw route record and provenance such as source order and target hints.
 
-`RawRouteEntry.payload` is the raw route record passed to `cast(...)`.
+`Route` is the canonical chemistry tree produced by a successful cast.
 
-`Route` is the successful chemistry object returned by `cast(...)`.
+`Candidate` stores a one-based planner rank and exactly one of `route` or `failure`. A failure is a result, not a missing list element.
 
-`Candidate` is produced by `adapt_candidates(...)`. It stores rank and either a `Route` or a `FailureRecord`.
+## Adapt A Payload
 
-## Adapt One Route
+=== "Python 0.8.x"
 
-```python
-from retrocast import adapt_route
-from retrocast.adapters import DirectMultiStepAdapter
+    ```python
+    import retrocast
 
-adapter = DirectMultiStepAdapter()
-route = adapt_route(raw_route_record, adapter)
+    candidates = retrocast.adapt(
+        raw_payload,
+        "paroutes",
+        mode="strict",
+        max_candidates=50,
+        workers=12,
+    )
 
-if route is not None:
-    print(route.target.smiles)
-    print(route.depth())
-    print([leaf.value.smiles for leaf in route.leaves()])
-```
+    for candidate in candidates:
+        if route := candidate.get("route"):
+            print(candidate["rank"], route["target"]["smiles"])
+        else:
+            print(candidate["rank"], candidate["failure"]["code"])
+    ```
 
-`adapt_route(...)` returns `None` for expected adapter or chemistry failures. It is convenient for ad hoc inspection, but it is not benchmark-safe because failures disappear.
+=== "Rust 0.8.x"
 
-## Adapt Successful Routes
+    ```rust
+    use retrocast_core::{
+        adapters::{adapt_candidates_with_workers, built_in},
+        route::AdaptMode,
+    };
 
-```python
-from retrocast import adapt_routes, get_adapter
+    let adapter = built_in("paroutes").expect("built-in adapter");
+    let candidates = adapt_candidates_with_workers(
+        raw_payload,
+        adapter.as_ref(),
+        AdaptMode::Strict,
+        None,
+        None,
+        Some(50),
+        12,
+    )?;
 
-adapter = get_adapter("paroutes")
-routes = adapt_routes(raw_payload, adapter, max_routes=50)
-```
+    for candidate in candidates {
+        match (candidate.route, candidate.failure) {
+            (Some(route), None) => println!("{} {}", candidate.rank, route.target.smiles),
+            (None, Some(failure)) => println!("{} {}", candidate.rank, failure.code),
+            _ => unreachable!("Candidate validates exactly one outcome"),
+        }
+    }
+    ```
 
-`max_routes` counts successful routes because a `Route` is, by definition, a valid adapted route. Malformed raw route records are skipped and do not consume the limit. Use `adapt_candidates(..., max_candidates=N)` when you need to bound the first N raw prediction slots or preserve failures for evaluation.
+=== "Python 0.7.1"
 
-## Preserve Candidate Slots
+    ```python
+    from retrocast import adapt_candidates, get_adapter
 
-```python
-from retrocast import adapt_candidates, get_adapter
+    adapter = get_adapter("paroutes")
+    candidates = adapt_candidates(
+        raw_payload,
+        adapter,
+        mode="strict",
+        max_candidates=50,
+    )
 
-adapter = get_adapter("paroutes")
+    for candidate in candidates:
+        if candidate.route is not None:
+            print(candidate.rank, candidate.route.target.smiles)
+        else:
+            print(candidate.rank, candidate.failure.code)
+    ```
 
-candidates = adapt_candidates(raw_payload, adapter, max_candidates=50)
-```
+`max_candidates` means the first N raw prediction slots. Failed slots consume a rank and remain visible. This is required for honest Solv-0 and MRR accounting.
 
-`max_candidates` means the first N raw prediction slots. A failed slot becomes:
+## Supply A Target Hint
 
-```python
-Candidate(rank=rank, failure=FailureRecord(...))
-```
+Some raw formats need the expected target to validate or interpret a route. The target uses the schema-2 `Target` shape.
 
-This is the right path for Solv-0 and MRR accounting.
+=== "Python 0.8.x"
 
-## Collect For A Task
+    ```python
+    candidates = retrocast.adapt(
+        raw_route_record,
+        "synplanner",
+        target=target_dict,
+        source_key="target-001",
+    )
+    ```
 
-```python
-from retrocast import collect_candidates
-from retrocast.io import load_benchmark
+=== "Rust 0.8.x"
 
-task = load_benchmark("benchmark.json.gz")
-predictions = collect_candidates(candidates, task)
-```
+    ```rust
+    let candidates = adapt_candidates_with_workers(
+        raw_route_record,
+        adapter.as_ref(),
+        AdaptMode::Strict,
+        Some(&target),
+        Some("target-001"),
+        None,
+        1,
+    )?;
+    ```
 
-Collection maps candidates to target ids. Successful candidates are placed by route target identity. Failed candidates are placed by `FailureRecord.target_id` or `FailureRecord.target_inchikey`.
+=== "Python 0.7.1"
 
-## Ingest In One Step
+    ```python
+    from retrocast import adapt_candidates, get_adapter
 
-```python
-from retrocast import get_adapter, ingest_candidates
-from retrocast.io import load_benchmark
+    adapter = get_adapter("synplanner")
+    candidates = adapt_candidates(
+        raw_route_record,
+        adapter,
+        target=target,
+        source_key="target-001",
+    )
+    ```
 
-task = load_benchmark("benchmark.json.gz")
-adapter = get_adapter("aizynthfinder")
+If the adapted root does not match the supplied target, the slot becomes an `adapter.target_mismatch` failure.
 
-predictions = ingest_candidates(raw_payload, adapter, task, max_candidates=50)
-```
+## Ingest For A Task
 
-`ingest_candidates(...)` is just `adapt_candidates(...) + collect_candidates(...)`.
+Ingest combines adaptation and collection. Successful candidates are collected by route target identity. Failed candidates use the target hints preserved in their `FailureRecord`.
+
+=== "Python 0.8.x"
+
+    ```python
+    predictions = retrocast.ingest(
+        raw_payload,
+        "aizynthfinder",
+        task,
+        max_candidates=50,
+        workers=12,
+    )
+    ```
+
+=== "Rust 0.8.x"
+
+    ```rust
+    use retrocast_core::adapt::ingest;
+
+    let predictions = ingest(
+        raw_payload,
+        adapter.as_ref(),
+        &task,
+        AdaptMode::Strict,
+        Some(50),
+        12,
+    )?;
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    from retrocast import get_adapter, ingest_candidates
+
+    adapter = get_adapter("aizynthfinder")
+    predictions = ingest_candidates(
+        raw_payload,
+        adapter,
+        task,
+        max_candidates=50,
+    )
+    ```
+
+Python 0.8.x returns `NativePredictions`; Rust and Python 0.7.1 return target-id maps of ranked candidates, using Rust types and Pydantic models respectively.
+
+## Stream A Large Artifact
+
+The file entry point opens JSON or JSON gzip in Rust. For multi-target map payloads, it decodes and adapts target-by-target instead of materializing the complete raw graph in Python.
+
+=== "Python 0.8.x"
+
+    ```python
+    predictions = retrocast.ingest_file(
+        "results.json.gz",
+        "aizynthfinder",
+        "benchmark.json.gz",
+        workers=12,
+    )
+    predictions.write("candidates.json.gz")
+    ```
+
+=== "Rust 0.8.x"
+
+    ```rust
+    let predictions = ingest_file(
+        raw_path,
+        adapter.as_ref(),
+        &task,
+        AdaptMode::Strict,
+        None,
+        12,
+    )?;
+    retrocast_core::io::write_json(output_path, &predictions)?;
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    from retrocast import get_adapter, ingest_candidates
+    from retrocast.io import load_benchmark, load_json_gz, save_collected_candidates
+
+    raw_payload = load_json_gz("results.json.gz")
+    task = load_benchmark("benchmark.json.gz")
+    adapter = get_adapter("aizynthfinder")
+    predictions = ingest_candidates(raw_payload, adapter, task)
+    save_collected_candidates(predictions, "candidates.json.gz")
+    ```
 
 ## Adapt Modes
 
-```python
-routes = adapt_routes(raw_payload, adapter, mode="strict")
-routes = adapt_routes(raw_payload, adapter, mode="prune")
-```
+`strict` rejects a raw route with invalid chemistry, cycles, or an impossible route structure.
 
-`strict` rejects raw route records with invalid chemistry or impossible route structure.
+`prune` allows an adapter to return the longest valid target-rooted prefix when an invalid branch can be removed unambiguously. It still fails if pruning removes the target or leaves a reaction without reactants.
 
-`prune` lets adapters return the longest valid prefix route when an invalid branch can be removed unambiguously. Not every adapter supports useful pruning.
+=== "Python 0.8.x"
+
+    ```python
+    candidates = retrocast.adapt(raw_payload, "paroutes", mode="prune")
+    ```
+
+=== "Rust 0.8.x"
+
+    ```rust
+    let mode = AdaptMode::Prune;
+    ```
+
+=== "Python 0.7.1"
+
+    ```python
+    candidates = adapt_candidates(raw_payload, adapter, mode="prune")
+    ```
 
 ## Available Adapters
 
-Use `get_adapter(...)` or import adapter classes directly.
+Built-in adapter identifiers are lowercase and stable:
 
-```python
-from retrocast import get_adapter
-
-adapter = get_adapter("paroutes")
+```text
+aizynthfinder  askcos          directmultistep  dreamretroer
+molbuilder     multistepttl    paroutes          retrochimera
+retrostar      synllama        synplanner        syntheseus
+ursa
 ```
 
-See [Writing a Custom Adapter](../../dev/reference/adapters.md) for adapter contracts and raw-shape patterns.
+The standalone CLI prints the registry with `retrocast list-adapters`. See [Writing a Custom Adapter](../../dev/reference/adapters.md) for the Rust adapter contract and raw-shape patterns.

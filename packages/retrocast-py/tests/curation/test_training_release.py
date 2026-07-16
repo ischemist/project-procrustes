@@ -579,7 +579,7 @@ def test_adaptation_cache_round_trips_without_recasting(tmp_path: Path, monkeypa
     first = adapt_training_routes(source_path, dataset="all", show_progress=False)
 
     monkeypatch.setattr(
-        "retrocast.native.adapt_training_routes",
+        "retrocast.curation.training.route_release.PaRoutesAdapter.cast",
         lambda *_args, **_kwargs: pytest.fail("cache hit should not recast routes"),
     )
     second = adapt_training_routes(source_path, dataset="all", show_progress=False)

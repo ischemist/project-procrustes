@@ -12,7 +12,6 @@ from retrocast.models import (
     Task,
     TaskConstraint,
 )
-from retrocast.native import adapt
 from retrocast.workflow import (
     adapt_candidates,
     adapt_route,
@@ -38,7 +37,6 @@ __all__ = [
     "TaskConstraint",
     "__version__",
     "adapt_candidates",
-    "adapt",
     "adapt_route",
     "adapt_routes",
     "analyze",
