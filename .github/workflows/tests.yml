@@ -1,4 +1,4 @@
-name: Tests
+name: RetroCast (Python) Tests
 
 on:
   push:
@@ -12,6 +12,7 @@ on:
 
 jobs:
   test:
+    name: RetroCast (Python) Tests
     runs-on: ubuntu-latest
     permissions:
       contents: read

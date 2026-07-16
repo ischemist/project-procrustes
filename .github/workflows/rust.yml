@@ -1,4 +1,4 @@
-name: Rust
+name: RetroCast (Rust) Tests
 
 on:
   push:
@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: rust-${{ github.workflow }}-${{ github.ref }}
@@ -20,10 +21,11 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: "1"
+  RUST_MIN_LINE_COVERAGE: "50"
 
 jobs:
   test:
-    name: Test native engine
+    name: RetroCast (Rust) Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -50,7 +52,12 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
-          components: clippy, rustfmt
+          components: clippy, llvm-tools-preview, rustfmt
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
+        with:
+          tool: cargo-llvm-cov@0.8.7
 
       - name: Cache Cargo build
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
@@ -69,10 +76,81 @@ jobs:
       - name: Lint workspace
         run: cargo clippy --manifest-path packages/retrocast-rs/Cargo.toml --workspace --all-targets --locked -- -D warnings
 
-      - name: Run workspace tests
-        run: cargo test --manifest-path packages/retrocast-rs/Cargo.toml --workspace --all-targets --locked
+      - name: Run workspace tests with coverage
+        id: coverage
+        shell: bash
+        run: |
+          set +e
+          cargo llvm-cov \
+            --manifest-path packages/retrocast-rs/Cargo.toml \
+            --workspace \
+            --all-targets \
+            --locked \
+            --quiet \
+            --fail-under-lines "$RUST_MIN_LINE_COVERAGE" \
+            > "$RUNNER_TEMP/rust-coverage.log" 2>&1
+          exit_code=$?
+          set -e
+
+          cat "$RUNNER_TEMP/rust-coverage.log"
+          awk '/^Filename/{capture=1} capture' "$RUNNER_TEMP/rust-coverage.log" \
+            > "$RUNNER_TEMP/rust-coverage-report.txt"
+
+          {
+            echo "report<<EOF"
+            cat "$RUNNER_TEMP/rust-coverage-report.txt"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          exit "$exit_code"
 
       - name: Run Rust properties at CI depth
         env:
           PROPTEST_CASES: "512"
         run: cargo test --manifest-path packages/retrocast-rs/Cargo.toml -p retrocast-core --locked
+
+      - name: Add coverage report as a PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          COVERAGE_REPORT: ${{ steps.coverage.outputs.report }}
+          MIN_LINE_COVERAGE: ${{ env.RUST_MIN_LINE_COVERAGE }}
+        with:
+          script: |
+            const marker = "<!-- retrocast-rust-coverage-report -->";
+            const output = `${marker}
+            ### Rust Coverage Report 🦀
+
+            Minimum line coverage: ${process.env.MIN_LINE_COVERAGE}%
+
+            \`\`\`text
+            ${process.env.COVERAGE_REPORT}
+            \`\`\`
+            `;
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.body && comment.body.includes(marker)
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body: output,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body: output,
+              });
+            }
