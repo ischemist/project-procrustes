@@ -72,6 +72,7 @@ exclude_lines = [
 ]
 
 [tool.pytest]
+testpaths = ["packages/retrocast-py/tests"]
 markers = [
   "unit: runs in <10ms, tests single functions/classes, no IO",
   "integration: tests workflow glue, uses tmp_path",
@@ -81,6 +82,7 @@ markers = [
 
 [tool.ruff]
 line-length = 120
+src = ["packages/retrocast-py/src"]
 lint.select = [
   "E", # pycodestyle
   "F", # Pyflakes
@@ -93,19 +95,19 @@ lint.ignore = ["E501", "SIM108"]
 
 [tool.maturin]
 bindings = "pyo3"
-manifest-path = "retrocast-rs/crates/retrocast-python/Cargo.toml"
+manifest-path = "packages/retrocast-rs/crates/retrocast-python/Cargo.toml"
 module-name = "retrocast._native"
-python-source = "src"
+python-source = "packages/retrocast-py/src"
 include = [
   { path = "LICENSE", format = ["sdist", "wheel"] },
   { path = "THIRD_PARTY_LICENSES.md", format = ["sdist", "wheel"] },
   { path = "licenses/LLVM-LICENSE.txt", format = ["sdist", "wheel"] },
   { path = "licenses/LGPL-2.1.txt", format = ["sdist", "wheel"] },
-  { path = "retrocast-rs/**", format = "sdist" },
+  { path = "packages/retrocast-rs/**", format = "sdist" },
 ]
 
 [tool.ty.src]
-exclude = ["tests", "scripts"]
+exclude = ["packages/retrocast-py/tests", "scripts"]
 
 [tool.uv]
 # Require a short cooling-off window before newly uploaded artifacts are eligible.

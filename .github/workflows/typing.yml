@@ -52,7 +52,7 @@ jobs:
           path: |
             ~/.cache/uv
             .venv
-          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
+          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml', 'uv.lock', 'packages/retrocast-rs/Cargo.lock', 'packages/retrocast-rs/**/Cargo.toml') }}
           restore-keys: |
             ${{ runner.os }}-uv-
 
@@ -60,10 +60,10 @@ jobs:
         run: uv sync --extra viz
 
       - name: Check Rust formatting
-        run: cargo fmt --manifest-path retrocast-rs/Cargo.toml --all -- --check
+        run: cargo fmt --manifest-path packages/retrocast-rs/Cargo.toml --all -- --check
 
       - name: Lint Rust workspace
-        run: cargo clippy --manifest-path retrocast-rs/Cargo.toml --workspace --all-targets --locked -- -D warnings
+        run: cargo clippy --manifest-path packages/retrocast-rs/Cargo.toml --workspace --all-targets --locked -- -D warnings
 
       - name: Run ruff (linter)
         run: uv run ruff check

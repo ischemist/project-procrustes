@@ -264,5 +264,5 @@ The contract suite checks that the adapter:
 Run focused adapter tests with:
 
 ```bash
-uv run pytest tests/adapters/test_myadapter.py
+uv run pytest packages/retrocast-py/tests/adapters/test_myadapter.py
 ```

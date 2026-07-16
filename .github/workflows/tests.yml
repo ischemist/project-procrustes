@@ -55,7 +55,7 @@ jobs:
             ~/.cache/uv
             ~/.uv
             .venv
-          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
+          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml', 'uv.lock', 'packages/retrocast-rs/Cargo.lock', 'packages/retrocast-rs/**/Cargo.toml') }}
           restore-keys: |
             ${{ runner.os }}-uv-
 
@@ -68,7 +68,7 @@ jobs:
         run: uv sync --extra viz
 
       - name: Test Rust workspace
-        run: cargo test --manifest-path retrocast-rs/Cargo.toml --workspace --all-targets --locked
+        run: cargo test --manifest-path packages/retrocast-rs/Cargo.toml --workspace --all-targets --locked
 
       - name: Run tests
         run: uv run pytest -v
@@ -93,7 +93,7 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: tj-actions/changed-files@v47 # check for the latest version, they update a lot
         with:
-          files: src/** # or whatever your source directory is
+          files: packages/retrocast-py/src/**
 
       - name: print coverage report to logs
         run: |
