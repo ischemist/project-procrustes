@@ -69,7 +69,7 @@ def test_adapt_accepts_plain_python_values() -> None:
     assert candidates[0]["route"]["target"]["smiles"] == "CCO"
 
 
-def test_native_handles_keep_pipeline_state_in_rust(tmp_path: Path) -> None:
+def test_native_handles_keep_composed_state_in_rust(tmp_path: Path) -> None:
     predictions = retrocast.ingest(
         {TARGET_ID: raw()},
         "aizynthfinder",
@@ -136,14 +136,14 @@ def test_failed_score_does_not_consume_predictions_while_write_is_active(tmp_pat
     assert isinstance(evaluation, retrocast.NativeEvaluation)
 
 
-def test_file_pipeline_runs_without_python_materialization(tmp_path: Path) -> None:
+def test_evaluate_files_runs_without_python_materialization(tmp_path: Path) -> None:
     benchmark_path = tmp_path / "benchmark.json"
     stock_path = tmp_path / "test-stock.txt"
     output_dir = tmp_path / "output"
     benchmark_path.write_text(json.dumps(task()), encoding="utf-8")
     stock_path.write_text("C\nO\n", encoding="utf-8")
 
-    stats = retrocast.pipeline(
+    stats = retrocast.evaluate(
         FIXTURE,
         benchmark_path,
         stock_path,
@@ -158,6 +158,7 @@ def test_file_pipeline_runs_without_python_materialization(tmp_path: Path) -> No
     assert (output_dir / "candidates.json.gz").is_file()
     assert (output_dir / "evaluation.json.gz").is_file()
     assert (output_dir / "analysis.json.gz").is_file()
+    assert (output_dir / "evaluation-run.json").is_file()
 
 
 @pytest.mark.parametrize("entrypoint", ["adapt", "ingest"])

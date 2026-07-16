@@ -12,7 +12,7 @@ The field of retrosynthesis is fragmented.
 2.  **Ad-Hoc Metrics:** "Solvability" is often calculated differently across publications, with varying definitions of commercial stock (e.g., using made-to-order libraries vs. actual off-the-shelf compounds).
 3.  **Flawed Benchmarks:** The standard PaRoutes n5 dataset is heavily skewed (74% of routes are length 3-4), masking performance failures on complex targets. Furthermore, the standard stock definition for PaRoutes creates synthetic "ground truths" that are often physically unobtainable.
 
-**RetroCast solves this.** It provides a canonical schema, adapters for 10+ models, and a rigorous statistical pipeline to turn retrosynthesis from a qualitative art into a quantitative science.
+**RetroCast solves this.** It provides a canonical schema, adapters for 10+ models, and rigorous statistical evaluation to turn retrosynthesis from a qualitative art into a quantitative science.
 
 ---
 
@@ -125,7 +125,7 @@ Project mode reads raw model outputs from `data/retrocast/2-raw/<model>/<benchma
 }
 ```
 
-**Run the pipeline:**
+**Evaluate planner output:**
 
 ```bash
 # 1. Ingest: Standardize raw outputs from data/retrocast/2-raw/
@@ -138,10 +138,10 @@ retrocast score --model dms-explorer --dataset ref-lin-600
 retrocast analyze --model dms-explorer --dataset ref-lin-600
 ```
 
-The all-in-one command keeps Rust-owned routes in memory between stages and uses one bounded worker pool:
+The all-in-one command evaluates each target and releases its route graphs after preparing their analysis contributions:
 
 ```bash
-retrocast pipeline \
+retrocast evaluate \
   --raw data/retrocast/2-raw/aizynthfinder-run/mkt-cnv-160 \
   --adapter aizynthfinder \
   --benchmark data/retrocast/1-benchmarks/definitions/mkt-cnv-160.json.gz \
@@ -149,6 +149,8 @@ retrocast pipeline \
   --output-dir native-results \
   --workers 12
 ```
+
+This writes `candidates.json.gz`, `evaluation.json.gz`, `analysis.json.gz`, `evaluation-run.json`, and a verifiable `manifest.json`.
 
 **Output:** A schema-v2 analysis report in `data/retrocast/5-results/`.
 

@@ -8,9 +8,9 @@ use retrocast_core::{
     chem,
     curation::{excise_reactions, generate_pruned_routes},
     dataset::{DatasetError, TrainingSetRequest, download_training_set},
+    evaluate::{EvaluationOptions, evaluate_files},
     io::{read_json, write_csv_gz, write_json, write_jsonl_gz},
     model::{AnalysisReport, Evaluation, Molecule, Reaction, Route, Target, Task},
-    pipeline::{PipelineOptions, run_pipeline},
     provenance::{
         ContentType, Manifest, ManifestOutput, VerificationCategory, VerificationLevel,
         create_manifest, file_hash, verify_manifest,
@@ -155,14 +155,14 @@ fn provenance_verification_distinguishes_chain_breaks_from_disk_tampering() {
 }
 
 #[test]
-fn standalone_pipeline_writes_a_self_describing_scored_release() {
+fn standalone_evaluation_writes_a_self_describing_scored_release() {
     let directory = tempdir().unwrap();
     let root = directory.path();
     let raw_dir = root.join("raw");
     let task_path = root.join("benchmark.json.gz");
     let stock_path = root.join("contract-stock.csv.gz");
     let stats_path = root.join("execution-stats.json.gz");
-    let output = root.join("pipeline-output");
+    let output = root.join("evaluation-output");
 
     fs::create_dir_all(&raw_dir).unwrap();
     write_json(
@@ -191,14 +191,14 @@ fn standalone_pipeline_writes_a_self_describing_scored_release() {
     )
     .unwrap();
 
-    let pipeline_stats = run_pipeline(
+    let run_stats = evaluate_files(
         &raw_dir,
         &task_path,
         &stock_path,
         None,
         Some(&stats_path),
         &output,
-        &PipelineOptions {
+        &EvaluationOptions {
             adapter: "aizynthfinder",
             mode: AdaptMode::Strict,
             max_candidates: None,
@@ -213,10 +213,10 @@ fn standalone_pipeline_writes_a_self_describing_scored_release() {
     )
     .unwrap();
 
-    assert_eq!(pipeline_stats.targets, 1);
-    assert_eq!(pipeline_stats.candidates, 1);
-    assert_eq!(pipeline_stats.workers, 2);
-    assert!(pipeline_stats.total_seconds > 0.0);
+    assert_eq!(run_stats.targets, 1);
+    assert_eq!(run_stats.candidates, 1);
+    assert_eq!(run_stats.workers, 2);
+    assert!(run_stats.total_seconds > 0.0);
 
     let evaluation: Evaluation = read_json(&output.join("evaluation.json.gz")).unwrap();
     let target = &evaluation.targets["propane"];
@@ -233,7 +233,7 @@ fn standalone_pipeline_writes_a_self_describing_scored_release() {
     assert_eq!(analysis.runtime.total_wall_time, Some(2.5));
 
     let manifest: Manifest = read_json(&output.join("manifest.json")).unwrap();
-    assert_eq!(manifest.action, "pipeline:v2");
+    assert_eq!(manifest.action, "evaluate:v2");
     assert_eq!(manifest.parameters["workers"], 2);
     assert_eq!(manifest.statistics["targets"], 1);
     assert_eq!(manifest.output_files().count(), 4);

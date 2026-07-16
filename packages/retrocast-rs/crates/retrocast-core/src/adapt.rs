@@ -26,18 +26,58 @@ pub fn ingest_file(
     max_candidates: Option<usize>,
     workers: usize,
 ) -> Result<Predictions> {
+    process_file_targets(
+        path,
+        adapter,
+        task,
+        mode,
+        max_candidates,
+        workers,
+        |_, _, candidates| Ok(candidates),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+/// Adapt selected target payloads and pass each owned candidate vector to the next stage.
+///
+/// Multi-target ingest keeps the parser-to-worker handoff bounded. The callback
+/// runs on the worker that adapted the target, and the returned values are
+/// collected by target ID; targets absent from the raw file receive an empty
+/// candidate vector.
+pub(crate) fn process_file_targets<R, F>(
+    path: &Path,
+    adapter: &dyn Adapter,
+    task: &Task,
+    mode: AdaptMode,
+    max_candidates: Option<usize>,
+    workers: usize,
+    process: F,
+) -> Result<BTreeMap<String, R>>
+where
+    R: Send,
+    F: Fn(&str, Target, Vec<Candidate>) -> Result<R> + Sync,
+{
     if workers == 0 {
         return Err(EngineError::InvalidWorkers(workers));
     }
     if task.targets.len() <= 1 {
-        return ingest(
+        let mut predictions = ingest(
             io::read_json(path)?,
             adapter,
             task,
             mode,
             max_candidates,
             workers,
-        );
+        )?;
+        return task
+            .targets
+            .iter()
+            .map(|(target_id, target)| {
+                let candidates = predictions.remove(target_id).unwrap_or_default();
+                process(target_id, target.clone(), candidates)
+                    .map(|result| (target_id.clone(), result))
+            })
+            .collect();
     }
 
     let relevant_source_keys = task
@@ -53,6 +93,7 @@ pub fn ingest_file(
     let receiver = Arc::new(Mutex::new(receiver));
     let worker_count = workers.min(task.targets.len());
     let (parse_result, worker_results) = std::thread::scope(|scope| {
+        let process = &process;
         let handles = (0..worker_count)
             .map(|_| {
                 let receiver = Arc::clone(&receiver);
@@ -75,7 +116,10 @@ pub fn ingest_file(
                             max_candidates,
                             1,
                         );
-                        results.push(candidates.map(|candidates| (target_id, candidates)));
+                        results.push(candidates.and_then(|candidates| {
+                            process(&target_id, target, candidates)
+                                .map(|result| (target_id, result))
+                        }));
                     }
                     results
                 })
@@ -100,16 +144,20 @@ pub fn ingest_file(
     });
     parse_result?;
 
-    let mut predictions = task
-        .targets
-        .keys()
-        .map(|target_id| (target_id.clone(), Vec::new()))
-        .collect::<Predictions>();
+    let mut processed = BTreeMap::new();
     for result in worker_results {
-        let (target_id, candidates) = result?;
-        predictions.insert(target_id, candidates);
+        let (target_id, value) = result?;
+        processed.insert(target_id, value);
     }
-    Ok(predictions)
+    for (target_id, target) in &task.targets {
+        if !processed.contains_key(target_id) {
+            processed.insert(
+                target_id.clone(),
+                process(target_id, target.clone(), Vec::new())?,
+            );
+        }
+    }
+    Ok(processed)
 }
 
 type StreamingTargetJob = (String, Target, Value, String);

@@ -503,7 +503,23 @@ Each arrow is a concrete read/write boundary:
 | Analyze | evaluation and metric options | `AnalysisReport` | every metric records its denominator and reliability |
 | Write | any artifact value | bytes plus manifest metadata | content hash covers the serialized artifact |
 
-No workflow serializes an intermediate value to call the next workflow. Artifact I/O is a leaf operation at the edge of the graph. This is what lets a single `retrocast pipeline` invocation keep routes in memory from adaptation through analysis.
+No workflow serializes an intermediate value to call the next workflow. Artifact I/O is a leaf operation at the edge of the graph. A single `retrocast evaluate` invocation keeps each target's routes as Rust values until it has scored them and prepared their analysis contributions.
+
+Standalone evaluation applies the same ownership target by target. A route moves directly from adaptation into scoring; the worker then writes that target's candidate and evaluation output fragments and reduces the scored route to scalar analysis contributions. The sorted fragments are final artifact-writer state and are never read back to invoke scoring or analysis.
+
+The standalone Rust entry point uses the same target-owned evaluation as the CLI:
+
+```rust
+let stats = retrocast_core::evaluate::evaluate_files(
+    raw_path,
+    benchmark_path,
+    stock_path,
+    stock_name,
+    execution_stats_path,
+    output_dir,
+    &options,
+)?;
+```
 
 The core API reflects that ownership:
 
@@ -545,7 +561,7 @@ The Python 0.8.x and Rust 0.8.x values have the same owner: `retrocast-core`. Py
 
 Raw planner payloads can be `adapt`ed into `Route` objects, which constitute fully Tier-0 valid routes, or `Candidate` objects, which preserve failed slots for proper accounting of Solv-0. Canonical `Candidates` can be `collect`ed into predictions for each `Target`/`Task`. A collection of `Task`s is a `Benchmark`.
 
-Direct `adapt`ing is useful for single-target pipelines. For benchmarking, one can use `ingest` which is `adapt`ing and `collect`ing into `Benchmark` predictions.
+Direct `adapt`ing is useful for one target. Benchmark evaluation uses `ingest`, which combines `adapt` and `collect` into predictions keyed by benchmark target.
 
 `Benchmark` predictions are keyed by target id. These predictions can be `score`d with Tier-N validity checks against `TaskConstraint` records, resulting in Solv-N values. Predictions can also be compared against `Target.acceptable_routes` to obtain Top-K reconstruction accuracy.
 
@@ -894,7 +910,7 @@ Ingest is just the convenience alias for `adapt + collect`
 
 ### In-process ownership
 
-Artifacts use schema-v2 JSON, but an in-process pipeline does not use JSON as an internal transport. Both front ends keep the Rust values returned by each stage:
+Artifacts use schema-v2 JSON, but composed in-process evaluation does not use JSON as internal transport. Both front ends keep the Rust values returned by each stage:
 
 === "Python 0.8.x"
 
@@ -920,7 +936,7 @@ Artifacts use schema-v2 JSON, but an in-process pipeline does not use JSON as an
     report = analyze(evaluation)
     ```
 
-The Python variables are opaque Rust handles. `score` consumes `NativePredictions` and moves its graph into `NativeEvaluation`; the old predictions handle then rejects access. `.to_dict()`, `.json()`, and `.write()` create explicit snapshots for inspection or persistence. There is no Python DTO or compatibility implementation on this path.
+The Python variables are opaque Rust handles. `score` consumes `NativePredictions` and moves its graph into `NativeEvaluation`; the old predictions handle then rejects access. `.to_dict()`, `.json()`, and `.write()` create explicit snapshots for inspection or persistence. There is no Python DTO or compatibility implementation on this path. The standalone `retrocast evaluate` command uses the target-owned `evaluate::evaluate_files` entry point described above.
 
 ## 4. Score
 

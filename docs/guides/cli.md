@@ -209,7 +209,7 @@ If the raw filename is not declared in `manifest.json`, ingest reads `results.js
 }
 ```
 
-### The Pipeline
+### Evaluation flow
 
 ```mermaid
 graph LR

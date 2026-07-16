@@ -18,7 +18,7 @@ This page lists the current native workflow surface and the frozen pure-Python o
     | `score(predictions, task, stocks, *, match_level="full", acceptable_route_match="prefix", execution_stats=None, workers=1)` | Consume predictions and score them | `NativeEvaluation` |
     | `analyze(evaluation, *, ks=..., prefix_depths=..., n_boot=10000, seed=42, workers=1)` | Calculate metrics and intervals | `dict` |
     | `analyze_file(evaluation_path, *, ..., execution_stats_path=None)` | Read and analyze an evaluation in Rust | `dict` |
-    | `pipeline(raw_path, benchmark_path, stock_path, output_dir, *, ...)` | Run ingest, score, and analysis in one native process | timing and throughput `dict` |
+    | `evaluate(raw_path, benchmark_path, stock_path, output_dir, *, ...)` | Evaluate raw planner output and write release artifacts | timing and throughput `dict` |
 
 === "Rust 0.8.x"
 
@@ -29,7 +29,7 @@ This page lists the current native workflow surface and the frozen pure-Python o
     | `adapt::ingest_file(...)` | Stream, adapt, and collect an artifact | `Result<Predictions>` |
     | `score::score_owned(...)` | Consume predictions and score them | `Result<Evaluation>` |
     | `analyze::analyze(...)` | Calculate metrics and intervals | `Result<AnalysisReport>` |
-    | `pipeline::run_pipeline(...)` | Run the native file pipeline | `Result<PipelineStats>` |
+    | `evaluate::evaluate_files(...)` | Evaluate raw planner output and write release artifacts | `Result<EvaluationRunStats>` |
 
 === "Python 0.7.1"
 

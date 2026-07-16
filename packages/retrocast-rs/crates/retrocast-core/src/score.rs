@@ -16,6 +16,48 @@ use crate::{
 pub type Stocks = BTreeMap<String, BTreeSet<String>>;
 type RuntimeStocks = BTreeMap<String, HashSet<String>>;
 
+/// Score independent targets against one precomputed runtime stock index.
+pub(crate) struct TargetScorer {
+    stocks: RuntimeStocks,
+    match_level: String,
+    acceptable_route_match: String,
+}
+
+impl TargetScorer {
+    pub(crate) fn new(stocks: &Stocks, match_level: &str, acceptable_route_match: &str) -> Self {
+        Self {
+            stocks: runtime_stocks(stocks, match_level),
+            match_level: match_level.to_owned(),
+            acceptable_route_match: acceptable_route_match.to_owned(),
+        }
+    }
+
+    pub(crate) fn score_owned(
+        &self,
+        target: Target,
+        constraints: Vec<Constraint>,
+        candidates: Vec<Candidate>,
+        wall_time: Option<f64>,
+        cpu_time: Option<f64>,
+    ) -> Result<TargetResult> {
+        let candidates = score_target_owned(
+            candidates,
+            &target,
+            &constraints,
+            &self.stocks,
+            &self.match_level,
+            &self.acceptable_route_match,
+        )?;
+        Ok(TargetResult {
+            target,
+            effective_constraints: constraints,
+            candidates,
+            wall_time,
+            cpu_time,
+        })
+    }
+}
+
 pub fn score(
     predictions: &Predictions,
     task: &Task,
@@ -77,7 +119,7 @@ pub fn score_owned(
     execution_stats: Option<&ExecutionStats>,
     workers: usize,
 ) -> Result<Evaluation> {
-    let runtime_stocks = runtime_stocks(stocks, match_level);
+    let scorer = TargetScorer::new(stocks, match_level, acceptable_route_match);
     let jobs = task
         .targets
         .iter()
@@ -93,26 +135,13 @@ pub fn score_owned(
     let results = with_pool(workers, || {
         jobs.into_par_iter()
             .map(|(target_id, target, constraints, candidates)| {
-                let scored = score_target_owned(
-                    candidates,
-                    &target,
-                    &constraints,
-                    &runtime_stocks,
-                    match_level,
-                    acceptable_route_match,
-                )?;
-                Ok((
-                    target_id.clone(),
-                    TargetResult {
-                        target,
-                        effective_constraints: constraints,
-                        candidates: scored,
-                        wall_time: execution_stats
-                            .and_then(|stats| stats.wall_time.get(&target_id).copied()),
-                        cpu_time: execution_stats
-                            .and_then(|stats| stats.cpu_time.get(&target_id).copied()),
-                    },
-                ))
+                let wall_time =
+                    execution_stats.and_then(|stats| stats.wall_time.get(&target_id).copied());
+                let cpu_time =
+                    execution_stats.and_then(|stats| stats.cpu_time.get(&target_id).copied());
+                let result =
+                    scorer.score_owned(target, constraints, candidates, wall_time, cpu_time)?;
+                Ok((target_id, result))
             })
             .collect::<Result<Vec<_>>>()
     })??;

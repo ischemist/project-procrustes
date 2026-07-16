@@ -10,13 +10,15 @@ RetroCast is still pre-`1.0.0`. Until `1.0.0`, we will make breaking changes to 
 
 Practically speaking, you should treat `2-raw` (or wherever you store the raw planner outputs) as the source of truth and `3-processed`, `4-scored`, `5-results` as regenerable.
 
-For most use cases, this should not be a problem since the full pipeline of ingest, score, and analyze is decently fast. If you are using (or planning to use) RetroCast in production pipelines that will handle large volumes of data, please feel free [to get in touch](ischemist.com/contact).
+For most use cases, this should not be a problem since complete evaluation through ingest, score, and analyze is decently fast. If you are using (or planning to use) RetroCast for large evaluation runs, please feel free [to get in touch](ischemist.com/contact).
 
 ## v0.8.1 (unreleased)
 
 v0.8.1 keeps corpus-sized artifacts inside Rust across ingest, score, and analyze. It also narrows ASKCOS pathway graphs before route casting and exposes `--workers` consistently across project commands.
 
-On the 25,762-candidate ASKCOS fixture, the 12-worker Python pipeline completed in 19.36 seconds with 555 MiB peak RSS, compared with 558.2 seconds and 2.32 GiB for v0.7.1 and 241.8 seconds and 8.56 GiB for v0.8.0. Standalone Rust completed in 19.26 seconds with 524 MiB. Repeated runs put the Python boundary within 1.2% wall time and 22 MiB RSS of standalone, with identical candidate, evaluation, and analysis artifacts.
+The standalone `evaluate` command now processes adaptation, scoring, artifact writing, and metric preparation per target. Candidate and evaluation fragments are assembled in deterministic target order, while analysis retains compact scalar contributions instead of every scored route.
+
+In single eight-worker measurements, standalone evaluation processed the 160-target, 25,762-candidate ASKCOS fixture in 13.65 seconds with 276 MiB peak RSS and the 400-target, 3,589-candidate AiZynthFinder fixture in 1.98 seconds with 61 MiB peak RSS. Candidate, evaluation, and analysis values matched the materialized implementation exactly.
 
 ## v0.8.0
 
@@ -25,7 +27,7 @@ v0.8.0 replaces the Python execution engine with one Rust core shared by the Pyt
 ### Highlights
 
 - Ported schema validation, every built-in planner adapter, route operations, ingest, scoring, analysis, statistics, artifact IO, provenance, datasets, curation, and training-release workflows to `retrocast-core`.
-- Added a standalone executable with direct-file and project-mode `adapt`, `collect`, `ingest`, `score`, `analyze`, `pipeline`, `verify`, and dataset commands.
+- Added a standalone executable with direct-file and project-mode `adapt`, `collect`, `ingest`, `score`, `analyze`, `evaluate`, `verify`, and dataset commands.
 - Added PyO3 bindings behind the existing `import retrocast` interface. Untouched ingest and evaluation values remain Rust-owned between stages without intermediate JSON serialization.
 - Replaced Python RDKit with a narrow RDKit C++ bridge for canonical SMILES, InChIKeys, and molecular descriptors.
 - Added bounded native parallelism through `workers`, with the Python binding releasing the GIL while the core executes.

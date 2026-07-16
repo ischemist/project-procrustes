@@ -11,7 +11,7 @@ use tempfile::tempdir;
 use url::Url;
 
 #[test]
-fn pipeline_command_emits_a_verifiable_release_and_verify_detects_tampering() {
+fn evaluate_command_emits_a_verifiable_release_and_verify_detects_tampering() {
     let directory = tempdir().unwrap();
     let root = directory.path();
     let raw = root.join("raw");
@@ -40,8 +40,8 @@ fn pipeline_command_emits_a_verifiable_release_and_verify_detects_tampering() {
     )
     .unwrap();
 
-    let pipeline = run(&[
-        "pipeline",
+    let evaluation = run(&[
+        "evaluate",
         "--raw",
         raw.to_str().unwrap(),
         "--benchmark",
@@ -56,11 +56,11 @@ fn pipeline_command_emits_a_verifiable_release_and_verify_detects_tampering() {
         "2",
     ]);
     assert!(
-        pipeline.status.success(),
+        evaluation.status.success(),
         "{}",
-        String::from_utf8_lossy(&pipeline.stderr)
+        String::from_utf8_lossy(&evaluation.stderr)
     );
-    let stats: Value = serde_json::from_slice(&pipeline.stdout).unwrap();
+    let stats: Value = serde_json::from_slice(&evaluation.stdout).unwrap();
     assert_eq!(stats["targets"], 1);
     assert_eq!(stats["candidates"], 1);
     let report: AnalysisReport = read_json(&output.join("analysis.json.gz")).unwrap();
