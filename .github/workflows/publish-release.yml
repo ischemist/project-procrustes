@@ -181,7 +181,7 @@ jobs:
             throw 'standalone adapter registry smoke failed'
           }
           & "$bundle\retrocast.exe" adapt `
-            --input packages\retrocast-rs\tests\testing_data\aizynth-smoke.json `
+            --input packages\retrocast-rs\test-data\aizynth-smoke.json `
             --adapter aizynthfinder `
             --output "$bundle\smoke.json" `
             --max-candidates 1

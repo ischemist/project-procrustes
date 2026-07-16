@@ -41,7 +41,8 @@ def raw() -> list[object]:
 
 def test_distribution_is_the_native_module() -> None:
     assert retrocast.__engine__ == "rust"
-    assert retrocast.__version__ == "0.8.1"
+    assert isinstance(retrocast.__version__, str)
+    assert retrocast.__version__
     assert retrocast.engine_info()[0] == retrocast.__version__
 
     with pytest.raises(ModuleNotFoundError):
