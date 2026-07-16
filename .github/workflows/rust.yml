@@ -18,6 +18,7 @@ jobs:
   test:
     name: Test native engine
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -62,7 +63,7 @@ jobs:
       - name: Run workspace tests
         run: cargo test --manifest-path packages/retrocast-rs/Cargo.toml --workspace --all-targets --locked
 
-      - name: Run adversarial properties at CI depth
+      - name: Run Rust properties at CI depth
         env:
           PROPTEST_CASES: "512"
-        run: cargo test --manifest-path packages/retrocast-rs/Cargo.toml -p retrocast-core --test adversarial --locked
+        run: cargo test --manifest-path packages/retrocast-rs/Cargo.toml -p retrocast-core --locked

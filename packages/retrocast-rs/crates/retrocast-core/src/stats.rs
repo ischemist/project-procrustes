@@ -424,7 +424,11 @@ pub fn reliability_flag(n: usize, probability: f64) -> ReliabilityFlag {
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{paired_difference, probabilistic_ranking, summarize_values};
+    use proptest::{collection, prelude::*};
+
+    use super::{
+        bootstrap_distribution, paired_difference, probabilistic_ranking, summarize_values,
+    };
 
     #[test]
     fn ranks_stronger_models_first() {
@@ -444,5 +448,77 @@ mod tests {
             paired_difference(&[0.0, 0.0], &[1.0, 1.0], "left", "right", "toy", 100, 42);
         assert_eq!(comparison.diff_mean, 1.0);
         assert!(comparison.is_significant);
+    }
+
+    proptest! {
+        #[test]
+        fn bootstrap_distribution_is_seed_stable_and_stays_inside_the_sample_range(
+            raw_values in collection::vec(-1_000_i16..1_000, 1..64),
+            n_boot in 1_usize..128,
+            seed in any::<u64>(),
+        ) {
+            let values = raw_values.into_iter().map(|value| f64::from(value) / 10.0).collect::<Vec<_>>();
+            let first = bootstrap_distribution(&values, n_boot, seed);
+            let second = bootstrap_distribution(&values, n_boot, seed);
+            let minimum = values.iter().copied().reduce(f64::min).unwrap();
+            let maximum = values.iter().copied().reduce(f64::max).unwrap();
+
+            prop_assert_eq!(&first, &second);
+            prop_assert_eq!(first.len(), n_boot);
+            prop_assert!(first.iter().all(|value| minimum - 1e-10 <= *value && *value <= maximum + 1e-10));
+        }
+
+        #[test]
+        fn constant_samples_have_exact_zero_width_bootstrap_intervals(
+            raw_value in -1_000_i16..1_000,
+            count in 1_usize..64,
+            n_boot in 1_usize..128,
+            seed in any::<u64>(),
+        ) {
+            let value = f64::from(raw_value) / 10.0;
+            let summary = summarize_values(&vec![value; count], n_boot, seed, 0.05, false);
+
+            prop_assert!((summary.value - value).abs() < 1e-10);
+            prop_assert_eq!(summary.count, count);
+            prop_assert!((summary.ci_low.unwrap() - value).abs() < 1e-10);
+            prop_assert!((summary.ci_high.unwrap() - value).abs() < 1e-10);
+        }
+
+        #[test]
+        fn pairwise_difference_is_antisymmetric(
+            pairs in collection::vec((-1_000_i16..1_000, -1_000_i16..1_000), 1..32),
+            n_boot in 1_usize..128,
+            seed in any::<u64>(),
+        ) {
+            let left = pairs.iter().map(|(value, _)| f64::from(*value) / 10.0).collect::<Vec<_>>();
+            let right = pairs.iter().map(|(_, value)| f64::from(*value) / 10.0).collect::<Vec<_>>();
+            let forward = paired_difference(&left, &right, "left", "right", "generated", n_boot, seed);
+            let reverse = paired_difference(&right, &left, "right", "left", "generated", n_boot, seed);
+
+            prop_assert!((forward.diff_mean + reverse.diff_mean).abs() < 1e-10);
+            prop_assert!((forward.diff_ci_low + reverse.diff_ci_high).abs() < 1e-10);
+            prop_assert!((forward.diff_ci_high + reverse.diff_ci_low).abs() < 1e-10);
+            prop_assert_eq!(forward.is_significant, reverse.is_significant);
+            prop_assert_eq!(forward.count, reverse.count);
+        }
+
+        #[test]
+        fn ranking_probabilities_form_distributions(
+            model_count in 1_usize..8,
+            n_boot in 1_usize..128,
+            seed in any::<u64>(),
+        ) {
+            let values = (0..model_count)
+                .map(|index| (format!("model-{index}"), vec![index as f64, (index + 1) as f64]))
+                .collect::<BTreeMap<_, _>>();
+            let ranking = probabilistic_ranking(&values, n_boot, seed);
+
+            prop_assert_eq!(ranking.len(), model_count);
+            for model in ranking {
+                let probability_sum = model.rank_probs.values().sum::<f64>();
+                prop_assert!((probability_sum - 1.0).abs() < 1e-12);
+                prop_assert!((1.0..=model_count as f64).contains(&model.expected_rank));
+            }
+        }
     }
 }

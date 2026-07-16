@@ -30,6 +30,7 @@ pub fn analyze(
     seed: u64,
     workers: usize,
 ) -> Result<AnalysisReport> {
+    validate_analysis_options(n_boot)?;
     let targets: Vec<_> = evaluation.targets.values().collect();
     let metrics = summarize_targets(
         &targets,
@@ -103,6 +104,7 @@ pub fn summarize_target_results(
     seed: u64,
     workers: usize,
 ) -> Result<BTreeMap<String, MetricSummary>> {
+    validate_analysis_options(n_boot)?;
     let target_refs = targets.iter().collect::<Vec<_>>();
     summarize_targets(
         &target_refs,
@@ -115,6 +117,13 @@ pub fn summarize_target_results(
         seed,
         workers,
     )
+}
+
+fn validate_analysis_options(n_boot: usize) -> Result<()> {
+    if n_boot == 0 {
+        return Err(crate::error::EngineError::InvalidBootstrapResamples(n_boot));
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]

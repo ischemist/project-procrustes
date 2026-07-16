@@ -2,18 +2,14 @@ use std::{collections::BTreeMap, fs};
 
 use proptest::{collection, prelude::*};
 use retrocast_core::{
-    adapt::ingest,
-    adapters::{self, AiZynthFinderAdapter},
+    adapt::{ingest, ingest_file},
+    adapters::{self, AiZynthFinderAdapter, adapt_candidates_with_workers},
     analyze::analyze,
     chem,
     error::EngineError,
-    io::{
-        read_json_value, read_jsonl_values, validate_path_component, write_json_gz, write_jsonl_gz,
-    },
-    model::{Candidate, Evaluation, Predictions, Target, Task},
+    io::{read_json_value, read_jsonl_values, write_json, write_json_gz, write_jsonl_gz},
+    model::{Candidate, Predictions, Target, Task},
     route::AdaptMode,
-    route_path::RoutePath,
-    schema::{CanonicalSmiles, InchiKey, ReactionSmiles, SchemaVersion},
     score::{Stocks, score},
 };
 use serde_json::{Map, Value, json};
@@ -43,93 +39,49 @@ fn bounded_json() -> impl Strategy<Value = Value> {
 
 proptest! {
     #[test]
-    fn route_paths_round_trip_canonically(
-        indices in collection::vec(any::<usize>(), 0..32),
-        molecule in any::<bool>(),
+    fn adapter_candidate_boundaries_are_worker_deterministic_and_respect_limits(
+        adapter_index in 0_usize..adapters::BUILT_IN_ADAPTERS.len(),
+        payload in bounded_json(),
+        limit in 0_usize..16,
     ) {
-        let path = if molecule {
-            RoutePath::Molecule(indices.into_boxed_slice())
-        } else {
-            RoutePath::Reaction(indices.into_boxed_slice())
-        };
-        let encoded = path.to_string();
-        let decoded = RoutePath::parse(&encoded).unwrap();
+        let name = adapters::BUILT_IN_ADAPTERS[adapter_index];
+        let adapter = adapters::built_in(name).expect("registered built-in adapter");
+        let serial = adapt_candidates_with_workers(
+            payload.clone(),
+            adapter.as_ref(),
+            AdaptMode::Strict,
+            None,
+            Some("generated-source"),
+            Some(limit),
+            1,
+        );
+        let parallel = adapt_candidates_with_workers(
+            payload,
+            adapter.as_ref(),
+            AdaptMode::Strict,
+            None,
+            Some("generated-source"),
+            Some(limit),
+            4,
+        );
 
-        prop_assert_eq!(&decoded, &path);
-        prop_assert_eq!(serde_json::from_str::<RoutePath>(&serde_json::to_string(&path).unwrap()).unwrap(), path);
-    }
-
-    #[test]
-    fn path_component_validation_matches_its_security_boundary(value in bounded_string()) {
-        let unsafe_component = value.is_empty()
-            || value == "."
-            || value == ".."
-            || value.contains('/')
-            || value.contains('\\')
-            || value.contains('\0');
-
-        prop_assert_eq!(validate_path_component(&value, "component").is_err(), unsafe_component);
-    }
-
-    #[test]
-    fn scalar_deserializers_never_accept_values_outside_their_wire_invariants(value in bounded_string()) {
-        let wire = serde_json::to_string(&value).unwrap();
-        let key_is_valid = {
-            let bytes = value.as_bytes();
-            bytes.len() == 27
-                && bytes[14] == b'-'
-                && bytes[25] == b'-'
-                && bytes.iter().enumerate().all(|(index, byte)| {
-                    matches!(index, 14 | 25) || byte.is_ascii_uppercase()
-                })
-        };
-
-        prop_assert_eq!(serde_json::from_str::<CanonicalSmiles>(&wire).is_ok(), !value.is_empty());
-        prop_assert_eq!(serde_json::from_str::<ReactionSmiles>(&wire).is_ok(), !value.is_empty());
-        prop_assert_eq!(serde_json::from_str::<InchiKey>(&wire).is_ok(), key_is_valid);
-        prop_assert_eq!(serde_json::from_str::<SchemaVersion>(&wire).is_ok(), value == "2");
-    }
-
-    #[test]
-    fn candidate_deserialization_enforces_exactly_one_ranked_outcome(
-        rank in any::<u16>(),
-        has_route in any::<bool>(),
-        has_failure in any::<bool>(),
-    ) {
-        let mut candidate = Map::from_iter([("rank".to_owned(), Value::from(rank))]);
-        if has_route {
-            candidate.insert("route".to_owned(), valid_route());
-        }
-        if has_failure {
-            candidate.insert("failure".to_owned(), json!({"code": "provider.failure"}));
-        }
-
-        let parsed = serde_json::from_value::<Candidate>(Value::Object(candidate));
-        prop_assert_eq!(parsed.is_ok(), rank > 0 && (has_route ^ has_failure));
-    }
-
-    #[test]
-    fn every_adapter_handles_bounded_arbitrary_json_without_panicking(payload in bounded_json()) {
-        for &name in adapters::BUILT_IN_ADAPTERS {
-            let adapter = adapters::built_in(name).expect("registered built-in adapter");
-            if let Ok(entries) = adapter.entries(payload.clone(), Some("adversarial-source")) {
-                for entry in entries.into_iter().take(32) {
-                    let _ = adapter.cast(entry.payload, AdaptMode::Strict, None);
+        match (serial, parallel) {
+            (Ok(serial), Ok(parallel)) => {
+                prop_assert!(serial.len() <= limit);
+                prop_assert_eq!(serde_json::to_value(&serial).unwrap(), serde_json::to_value(&parallel).unwrap());
+                for candidate in serial {
+                    prop_assert!(candidate.rank > 0);
+                    prop_assert!(candidate.route.is_some() ^ candidate.failure.is_some());
+                    prop_assert!(serde_json::from_value::<Candidate>(serde_json::to_value(candidate).unwrap()).is_ok());
                 }
             }
+            (Err(serial), Err(parallel)) => prop_assert_eq!(serial.to_string(), parallel.to_string()),
+            (serial, parallel) => prop_assert!(false, "worker-dependent adapter result for {name}: serial={serial:?}, parallel={parallel:?}"),
         }
     }
 
     #[test]
-    fn supported_wire_models_reject_arbitrary_json_without_panicking(payload in bounded_json()) {
-        let encoded = serde_json::to_vec(&payload).unwrap();
-        let _ = serde_json::from_slice::<Task>(&encoded);
-        let _ = serde_json::from_slice::<Predictions>(&encoded);
-        let _ = serde_json::from_slice::<Evaluation>(&encoded);
-    }
-
-    #[test]
-    fn artifact_readers_handle_arbitrary_bytes_without_panicking(
+    fn malformed_artifact_bytes_are_a_panic_safety_backstop(
         payload in collection::vec(any::<u8>(), 0..4096),
         compressed in any::<bool>(),
     ) {
@@ -142,26 +94,67 @@ proptest! {
         fs::write(&jsonl_path, payload).unwrap();
         let _ = read_jsonl_values(&jsonl_path, false);
     }
-}
 
-#[test]
-fn route_paths_reject_noncanonical_and_overflowing_indices() {
-    for value in [
-        "",
-        "rc:",
-        "rc:x:/0",
-        "rc:m:",
-        "rc:m:0",
-        "rc:m://0",
-        "rc:m:/00",
-        "rc:m:/+1",
-        "rc:m:/-1",
-        "rc:m:/ 1",
-        "rc:m:/1 ",
-        "rc:m:/184467440737095516160000000000000000000",
-        "rc:m:/0/",
-    ] {
-        assert!(RoutePath::parse(value).is_err(), "accepted {value:?}");
+    #[test]
+    fn generated_artifacts_round_trip_and_compress_deterministically(
+        payload in bounded_json(),
+        rows in collection::vec(bounded_json(), 0..16),
+    ) {
+        let directory = tempdir().unwrap();
+        let first = directory.path().join("first.json.gz");
+        let second = directory.path().join("second.json.gz");
+        write_json_gz(&first, &payload).unwrap();
+        write_json_gz(&second, &payload).unwrap();
+
+        prop_assert_eq!(read_json_value(&first).unwrap(), payload);
+        prop_assert_eq!(fs::read(first).unwrap(), fs::read(second).unwrap());
+
+        let jsonl = directory.path().join("rows.jsonl.gz");
+        prop_assert_eq!(write_jsonl_gz(&jsonl, &rows).unwrap(), rows.len());
+        prop_assert_eq!(read_jsonl_values(&jsonl, false).unwrap(), rows);
+    }
+
+    #[test]
+    fn streamed_ingest_differentially_matches_owned_ingest_for_generated_targets(
+        ethanol in collection::vec(any::<bool>(), 0..6),
+        methanol in collection::vec(any::<bool>(), 0..6),
+        ethane in collection::vec(any::<bool>(), 0..6),
+        ethanol_key_mode in 0_u8..3,
+        methanol_key_mode in 0_u8..3,
+        ethane_key_mode in 0_u8..3,
+        workers in 1_usize..13,
+    ) {
+        let task = adversarial_task();
+        let mut raw = Map::new();
+        insert_generated_target(&mut raw, "ethanol", "CCO", "OCC", &ethanol, ethanol_key_mode);
+        insert_generated_target(&mut raw, "methanol", "CO", "OC", &methanol, methanol_key_mode);
+        insert_generated_target(&mut raw, "ethane", "CC", "CC", &ethane, ethane_key_mode);
+        raw.insert("not-in-task".to_owned(), json!([{"arbitrary": [1, 2, 3]}]));
+        let raw = Value::Object(raw);
+
+        let owned = ingest(
+            raw.clone(),
+            &AiZynthFinderAdapter,
+            &task,
+            AdaptMode::Strict,
+            None,
+            workers,
+        )
+        .unwrap();
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("generated.json.gz");
+        write_json(&path, &raw).unwrap();
+        let streamed = ingest_file(
+            &path,
+            &AiZynthFinderAdapter,
+            &task,
+            AdaptMode::Strict,
+            None,
+            workers,
+        )
+        .unwrap();
+
+        prop_assert_eq!(serde_json::to_value(streamed).unwrap(), serde_json::to_value(owned).unwrap());
     }
 }
 
@@ -260,7 +253,51 @@ fn full_pipeline_semantics_are_identical_across_worker_counts() {
             workers,
         )
         .unwrap();
-        let analysis = analyze(&evaluation, &[10, 1, 10], &[3, 1, 3], 128, 42, workers).unwrap();
+        let analysis = analyze(&evaluation, &[1, 10], &[1, 3], 128, 42, workers).unwrap();
+
+        let redundant_options =
+            analyze(&evaluation, &[10, 1, 10], &[3, 1, 3], 128, 42, workers).unwrap();
+        assert_eq!(
+            serde_json::to_value(&redundant_options).unwrap(),
+            serde_json::to_value(&analysis).unwrap(),
+            "duplicate or reordered metric options changed analysis",
+        );
+
+        let mut reordered_candidates = evaluation.clone();
+        for target in reordered_candidates.targets.values_mut() {
+            target.candidates.reverse();
+        }
+        let reordered_analysis =
+            analyze(&reordered_candidates, &[1, 10], &[1, 3], 128, 42, workers).unwrap();
+        assert_eq!(
+            serde_json::to_value(&reordered_analysis).unwrap(),
+            serde_json::to_value(&analysis).unwrap(),
+            "candidate storage order overrode explicit ranks",
+        );
+
+        let mut padded_with_failure = evaluation.clone();
+        let failure = padded_with_failure.targets["ethanol"]
+            .candidates
+            .iter()
+            .find(|candidate| candidate.failure.is_some())
+            .cloned()
+            .unwrap();
+        let mut later_failure = failure;
+        later_failure.rank = usize::MAX;
+        padded_with_failure
+            .targets
+            .get_mut("ethanol")
+            .unwrap()
+            .candidates
+            .push(later_failure);
+        let padded_analysis =
+            analyze(&padded_with_failure, &[1, 10], &[1, 3], 128, 42, workers).unwrap();
+        assert_eq!(
+            serde_json::to_value(&padded_analysis).unwrap(),
+            serde_json::to_value(&analysis).unwrap(),
+            "a later failed candidate changed success metrics",
+        );
+
         let result =
             json!({"predictions": predictions, "evaluation": evaluation, "analysis": analysis});
 
@@ -312,14 +349,61 @@ fn zero_workers_is_rejected_before_parallel_work_starts() {
     assert!(matches!(error, EngineError::InvalidWorkers(0)));
 }
 
-fn valid_route() -> Value {
-    json!({
-        "target": {
-            "smiles": "CCO",
-            "inchikey": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
-        },
-        "schema_version": "2"
-    })
+#[test]
+fn zero_bootstrap_resamples_is_rejected_instead_of_panicking() {
+    let task = adversarial_task();
+    let evaluation = score(
+        &Predictions::new(),
+        &task,
+        &Stocks::new(),
+        "full",
+        "prefix",
+        None,
+        1,
+    )
+    .unwrap();
+
+    let error = analyze(&evaluation, &[1], &[1], 0, 42, 1).unwrap_err();
+
+    assert!(matches!(error, EngineError::InvalidBootstrapResamples(0)));
+}
+
+fn insert_generated_target(
+    raw: &mut Map<String, Value>,
+    target_id: &str,
+    canonical_smiles: &str,
+    equivalent_smiles: &str,
+    outcomes: &[bool],
+    key_mode: u8,
+) {
+    let payload = Value::Array(
+        outcomes
+            .iter()
+            .map(|valid| {
+                if *valid {
+                    json!({"type": "mol", "smiles": equivalent_smiles})
+                } else {
+                    json!({"type": "mol", "smiles": "not-smiles"})
+                }
+            })
+            .collect(),
+    );
+    match key_mode {
+        0 => {
+            raw.insert(target_id.to_owned(), payload);
+        }
+        1 => {
+            raw.insert(canonical_smiles.to_owned(), payload);
+        }
+        2 => {
+            raw.insert(
+                canonical_smiles.to_owned(),
+                json!([{"type": "mol", "smiles": "wrong-target"}]),
+            );
+            raw.insert(target_id.to_owned(), payload);
+        }
+        _ => unreachable!("generated key mode is bounded"),
+    }
 }
 
 fn adversarial_task() -> Task {

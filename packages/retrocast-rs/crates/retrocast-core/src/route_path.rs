@@ -224,7 +224,9 @@ node_id!(ReactionId, Reaction, NotReaction);
 
 #[cfg(test)]
 mod tests {
-    use super::{MoleculeId, ReactionId, RoutePath, RoutePathError};
+    use proptest::{collection, prelude::*};
+
+    use super::{MoleculeId, ReactionId, RoutePath};
 
     #[test]
     fn parses_and_navigates_canonical_paths() {
@@ -239,12 +241,23 @@ mod tests {
 
     #[test]
     fn rejects_noncanonical_indices() {
-        assert_eq!(
-            RoutePath::parse("rc:m:/01").unwrap_err(),
-            RoutePathError::InvalidIndex
-        );
-        assert!(RoutePath::parse("rc:m:/-1").is_err());
-        assert!(RoutePath::parse("rc:m://1").is_err());
+        for value in [
+            "",
+            "rc:",
+            "rc:x:/0",
+            "rc:m:",
+            "rc:m:0",
+            "rc:m://0",
+            "rc:m:/00",
+            "rc:m:/+1",
+            "rc:m:/-1",
+            "rc:m:/ 1",
+            "rc:m:/1 ",
+            "rc:m:/184467440737095516160000000000000000000",
+            "rc:m:/0/",
+        ] {
+            assert!(RoutePath::parse(value).is_err(), "accepted {value:?}");
+        }
     }
 
     #[test]
@@ -252,5 +265,27 @@ mod tests {
         let molecule: MoleculeId = serde_json::from_str("\"rc:m:/0\"").unwrap();
         assert_eq!(serde_json::to_string(&molecule).unwrap(), "\"rc:m:/0\"");
         assert!(serde_json::from_str::<ReactionId>("\"rc:m:/0\"").is_err());
+    }
+
+    proptest! {
+        #[test]
+        fn route_paths_round_trip_canonically(
+            indices in collection::vec(any::<usize>(), 0..32),
+            molecule in any::<bool>(),
+        ) {
+            let path = if molecule {
+                RoutePath::Molecule(indices.into_boxed_slice())
+            } else {
+                RoutePath::Reaction(indices.into_boxed_slice())
+            };
+            let encoded = path.to_string();
+            let decoded = RoutePath::parse(&encoded).unwrap();
+
+            prop_assert_eq!(&decoded, &path);
+            prop_assert_eq!(
+                serde_json::from_str::<RoutePath>(&serde_json::to_string(&path).unwrap()).unwrap(),
+                path,
+            );
+        }
     }
 }

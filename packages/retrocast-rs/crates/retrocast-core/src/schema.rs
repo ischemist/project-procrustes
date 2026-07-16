@@ -227,7 +227,9 @@ impl<'de> Deserialize<'de> for SchemaVersion {
 
 #[cfg(test)]
 mod tests {
-    use super::{CanonicalSmiles, InchiKey, SchemaVersion};
+    use proptest::{collection, prelude::*};
+
+    use super::{CanonicalSmiles, InchiKey, ReactionSmiles, SchemaVersion};
 
     #[test]
     fn scalar_types_reject_invalid_wire_values() {
@@ -244,5 +246,28 @@ mod tests {
             r#""LFQSCWFLJHTTHZ-UHFFFAOYSA-N""#
         );
         assert_eq!(serde_json::to_string(&SchemaVersion::V2).unwrap(), r#""2""#);
+    }
+
+    proptest! {
+        #[test]
+        fn scalar_deserializers_accept_exactly_their_wire_invariants(
+            value in collection::vec(any::<char>(), 0..64).prop_map(|characters| characters.into_iter().collect::<String>()),
+        ) {
+            let wire = serde_json::to_string(&value).unwrap();
+            let key_is_valid = {
+                let bytes = value.as_bytes();
+                bytes.len() == 27
+                    && bytes[14] == b'-'
+                    && bytes[25] == b'-'
+                    && bytes.iter().enumerate().all(|(index, byte)| {
+                        matches!(index, 14 | 25) || byte.is_ascii_uppercase()
+                    })
+            };
+
+            prop_assert_eq!(serde_json::from_str::<CanonicalSmiles>(&wire).is_ok(), !value.is_empty());
+            prop_assert_eq!(serde_json::from_str::<ReactionSmiles>(&wire).is_ok(), !value.is_empty());
+            prop_assert_eq!(serde_json::from_str::<InchiKey>(&wire).is_ok(), key_is_valid);
+            prop_assert_eq!(serde_json::from_str::<SchemaVersion>(&wire).is_ok(), value == "2");
+        }
     }
 }

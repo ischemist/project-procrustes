@@ -389,7 +389,20 @@ pub struct ExecutionStats {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+    use serde_json::{Map, Value, json};
+
     use super::{Candidate, ScoredCandidate};
+
+    fn valid_route() -> Value {
+        json!({
+            "target": {
+                "smiles": "CCO",
+                "inchikey": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
+            },
+            "schema_version": "2"
+        })
+    }
 
     #[test]
     fn candidate_requires_one_nonzero_ranked_outcome() {
@@ -416,5 +429,25 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    proptest! {
+        #[test]
+        fn candidate_deserialization_enforces_exactly_one_ranked_outcome(
+            rank in any::<u16>(),
+            has_route in any::<bool>(),
+            has_failure in any::<bool>(),
+        ) {
+            let mut candidate = Map::from_iter([("rank".to_owned(), Value::from(rank))]);
+            if has_route {
+                candidate.insert("route".to_owned(), valid_route());
+            }
+            if has_failure {
+                candidate.insert("failure".to_owned(), json!({"code": "provider.failure"}));
+            }
+
+            let parsed = serde_json::from_value::<Candidate>(Value::Object(candidate));
+            prop_assert_eq!(parsed.is_ok(), rank > 0 && (has_route ^ has_failure));
+        }
     }
 }

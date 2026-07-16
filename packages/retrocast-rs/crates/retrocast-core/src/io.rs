@@ -252,6 +252,8 @@ fn csv_error(error: csv::Error) -> EngineError {
 
 #[cfg(test)]
 mod tests {
+    use proptest::{collection, prelude::*};
+
     use super::validate_path_component;
 
     #[test]
@@ -271,5 +273,21 @@ mod tests {
             );
         }
         assert!(validate_path_component("buyables-stock", "stock").is_ok());
+    }
+
+    proptest! {
+        #[test]
+        fn path_component_validation_matches_its_security_boundary(
+            value in collection::vec(any::<char>(), 0..64).prop_map(|characters| characters.into_iter().collect::<String>()),
+        ) {
+            let unsafe_component = value.is_empty()
+                || value == "."
+                || value == ".."
+                || value.contains('/')
+                || value.contains('\\')
+                || value.contains('\0');
+
+            prop_assert_eq!(validate_path_component(&value, "component").is_err(), unsafe_component);
+        }
     }
 }

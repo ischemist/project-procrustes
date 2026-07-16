@@ -88,6 +88,30 @@ fn malformed_artifacts_and_invalid_execution_options_fail_cleanly() {
         output.to_str().unwrap(),
     ]);
     assert!(!output.exists());
+
+    let evaluation = directory.path().join("evaluation.json");
+    fs::write(
+        &evaluation,
+        br#"{
+            "task":{"name":"empty","targets":{}},
+            "tiers":[0],
+            "metric_label":"task",
+            "acceptable_match_level":"full",
+            "acceptable_route_match":"prefix",
+            "targets":{}
+        }"#,
+    )
+    .unwrap();
+    assert_clean_failure(&[
+        "analyze",
+        "--evaluation",
+        evaluation.to_str().unwrap(),
+        "--output",
+        output.to_str().unwrap(),
+        "--n-boot",
+        "0",
+    ]);
+    assert!(!output.exists());
 }
 
 #[test]

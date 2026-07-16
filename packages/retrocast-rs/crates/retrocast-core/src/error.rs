@@ -49,6 +49,8 @@ pub enum EngineError {
     UnsafePathComponent { label: String, value: String },
     #[error("invalid worker count: {0}")]
     InvalidWorkers(usize),
+    #[error("bootstrap resamples must be positive, got {0}")]
+    InvalidBootstrapResamples(usize),
     #[error("provenance error: {0}")]
     Provenance(String),
     #[error("JSONL row {line_number}: {message}")]
