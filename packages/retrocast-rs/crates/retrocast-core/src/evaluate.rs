@@ -528,60 +528,25 @@ pub fn bind_stock_constraint(task: &mut Task, stock_name: &str) {
 
 #[cfg(test)]
 mod tests {
+    use std::path::{Path, PathBuf};
+
     use serde_json::json;
 
-    use super::{EvaluationOptions, evaluate_files, evaluate_materialized_files};
+    use super::{
+        EvaluationOptions, bind_stock_constraint, evaluate_files, evaluate_materialized_files,
+    };
     use crate::{
+        error::EngineError,
         io::{read_json, write_json},
+        model::Task,
         route::AdaptMode,
     };
 
     #[test]
     fn evaluate_files_matches_materialized_artifacts() {
         let temporary = tempfile::tempdir().unwrap();
-        let raw_path = temporary.path().join("raw.json.gz");
-        let benchmark_path = temporary.path().join("benchmark.json");
-        let stock_path = temporary.path().join("stock.txt");
-        write_json(
-            &raw_path,
-            &json!({
-                "methanol": [{"type": "mol", "smiles": "OC"}],
-                "ethanol": [{"type": "mol", "smiles": "OCC"}]
-            }),
-        )
-        .unwrap();
-        write_json(
-            &benchmark_path,
-            &json!({
-                "name": "evaluation-test",
-                "targets": {
-                    "ethanol": {
-                        "id": "ethanol",
-                        "smiles": "CCO",
-                        "inchikey": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
-                    },
-                    "methanol": {
-                        "id": "methanol",
-                        "smiles": "CO",
-                        "inchikey": "OKKJLVBELUTLKV-UHFFFAOYSA-N"
-                    }
-                }
-            }),
-        )
-        .unwrap();
-        std::fs::write(&stock_path, "CCO\nCO\n").unwrap();
-        let options = EvaluationOptions {
-            adapter: "aizynthfinder",
-            mode: AdaptMode::Strict,
-            max_candidates: None,
-            workers: 2,
-            match_level: "full",
-            acceptable_route_match: "prefix",
-            ks: &[1, 3],
-            prefix_depths: &[1, 2],
-            n_boot: 100,
-            seed: 42,
-        };
+        let (raw_path, benchmark_path, stock_path) = write_evaluation_fixture(temporary.path());
+        let options = evaluation_options();
         let materialized = temporary.path().join("materialized");
         let optimized = temporary.path().join("optimized");
 
@@ -631,5 +596,165 @@ mod tests {
                 .to_string_lossy()
                 .starts_with('.')
         }));
+    }
+
+    #[test]
+    fn evaluate_files_rejects_unknown_adapter_without_creating_outputs() {
+        let temporary = tempfile::tempdir().unwrap();
+        let (raw_path, benchmark_path, stock_path) = write_evaluation_fixture(temporary.path());
+        let output = temporary.path().join("output");
+        let options = EvaluationOptions {
+            adapter: "unknown-planner",
+            ..evaluation_options()
+        };
+
+        let error = evaluate_files(
+            &raw_path,
+            &benchmark_path,
+            &stock_path,
+            None,
+            None,
+            &output,
+            &options,
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, EngineError::UnknownAdapter { .. }));
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn evaluate_files_removes_staging_when_analysis_fails() {
+        let temporary = tempfile::tempdir().unwrap();
+        let (raw_path, benchmark_path, stock_path) = write_evaluation_fixture(temporary.path());
+        let output = temporary.path().join("output");
+        let options = EvaluationOptions {
+            n_boot: 0,
+            ..evaluation_options()
+        };
+
+        let error = evaluate_files(
+            &raw_path,
+            &benchmark_path,
+            &stock_path,
+            None,
+            None,
+            &output,
+            &options,
+        )
+        .unwrap_err();
+
+        assert!(matches!(error, EngineError::InvalidBootstrapResamples(0)));
+        assert!(!output.join("manifest.json").exists());
+        assert!(std::fs::read_dir(output).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".retrocast-evaluate-staging-")
+        }));
+    }
+
+    #[test]
+    fn bind_stock_constraint_replaces_overrides_without_erasing_other_constraints() {
+        let mut task: Task = serde_json::from_value(json!({
+            "name": "stock-rebinding-test",
+            "targets": {
+                "ethanol": {
+                    "id": "ethanol",
+                    "smiles": "CCO",
+                    "inchikey": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
+                }
+            },
+            "default_constraints": [
+                {"kind": "retrocast.stock_termination", "stock": "old-default"},
+                {"kind": "retrocast.route_depth", "max_depth": 4}
+            ],
+            "constraints": {
+                "ethanol": [
+                    {"kind": "retrocast.stock_termination", "stock": "old-override"},
+                    {"kind": "retrocast.route_depth", "max_depth": 2}
+                ]
+            }
+        }))
+        .unwrap();
+
+        bind_stock_constraint(&mut task, "buyables");
+
+        let effective = task.effective_constraints("ethanol");
+        assert_eq!(
+            effective
+                .iter()
+                .find(|constraint| constraint.kind == "retrocast.stock_termination")
+                .unwrap()
+                .fields["stock"],
+            "buyables"
+        );
+        assert_eq!(
+            effective
+                .iter()
+                .find(|constraint| constraint.kind == "retrocast.route_depth")
+                .unwrap()
+                .fields["max_depth"],
+            2
+        );
+        assert_eq!(
+            effective
+                .iter()
+                .filter(|constraint| constraint.kind == "retrocast.stock_termination")
+                .count(),
+            1
+        );
+    }
+
+    fn evaluation_options() -> EvaluationOptions<'static> {
+        EvaluationOptions {
+            adapter: "aizynthfinder",
+            mode: AdaptMode::Strict,
+            max_candidates: None,
+            workers: 2,
+            match_level: "full",
+            acceptable_route_match: "prefix",
+            ks: &[1, 3],
+            prefix_depths: &[1, 2],
+            n_boot: 100,
+            seed: 42,
+        }
+    }
+
+    fn write_evaluation_fixture(root: &Path) -> (PathBuf, PathBuf, PathBuf) {
+        let raw_path = root.join("raw");
+        let benchmark_path = root.join("benchmark.json");
+        let stock_path = root.join("stock.txt");
+        std::fs::create_dir(&raw_path).unwrap();
+        write_json(
+            &raw_path.join("results.json.gz"),
+            &json!({
+                "methanol": [{"type": "mol", "smiles": "OC"}],
+                "ethanol": [{"type": "mol", "smiles": "OCC"}]
+            }),
+        )
+        .unwrap();
+        write_json(
+            &benchmark_path,
+            &json!({
+                "name": "evaluation-test",
+                "targets": {
+                    "ethanol": {
+                        "id": "ethanol",
+                        "smiles": "CCO",
+                        "inchikey": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
+                    },
+                    "methanol": {
+                        "id": "methanol",
+                        "smiles": "CO",
+                        "inchikey": "OKKJLVBELUTLKV-UHFFFAOYSA-N"
+                    }
+                }
+            }),
+        )
+        .unwrap();
+        std::fs::write(&stock_path, "CCO\nCO\n").unwrap();
+        (raw_path, benchmark_path, stock_path)
     }
 }
