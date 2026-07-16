@@ -9,9 +9,9 @@ use retrocast_core::{
     dataset::{
         HostedDataRequest, TrainingDataRequest, download_hosted_data, download_training_data,
     },
+    evaluate::{EvaluationOptions, bind_stock_constraint, evaluate_files},
     io::{read_json, read_stock, write_json},
     model::{Candidate, Evaluation, ExecutionStats, Predictions, Task},
-    pipeline::{PipelineOptions, bind_stock_constraint, run_pipeline},
     provenance::{ContentType, verify_manifest},
     route::AdaptMode,
     score::score,
@@ -29,7 +29,7 @@ use project::{
 #[command(
     name = "retrocast",
     version,
-    about = "Ingest, score, and analyze retrosynthesis plans"
+    about = "Evaluate retrosynthesis planner output"
 )]
 struct Cli {
     /// Path to the project configuration file.
@@ -214,8 +214,8 @@ enum Command {
         #[arg(long)]
         output: Option<PathBuf>,
     },
-    /// Run ingest, score, and analysis in one process.
-    Pipeline {
+    /// Evaluate planner output against a benchmark.
+    Evaluate {
         #[arg(long)]
         raw: PathBuf,
         #[arg(long)]
@@ -626,7 +626,7 @@ fn main() -> anyhow::Result<()> {
                 anyhow::bail!("manifest verification failed");
             }
         }
-        Command::Pipeline {
+        Command::Evaluate {
             raw,
             benchmark,
             stock,
@@ -645,14 +645,14 @@ fn main() -> anyhow::Result<()> {
             seed,
         } => {
             let mode = AdaptMode::parse(&mode)?;
-            let stats = run_pipeline(
+            let stats = evaluate_files(
                 &raw,
                 &benchmark,
                 &stock,
                 stock_name.as_deref(),
                 execution_stats.as_deref(),
                 &output_dir,
-                &PipelineOptions {
+                &EvaluationOptions {
                     adapter: &adapter,
                     mode,
                     max_candidates,

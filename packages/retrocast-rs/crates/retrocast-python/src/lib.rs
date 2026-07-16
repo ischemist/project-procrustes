@@ -7,9 +7,9 @@ use retrocast_core::{
     adapt, adapters, analyze,
     chem::{self, InchiKeyLevel as ChemInchiKeyLevel},
     embedding::{EmbeddingOptions, find_route_embeddings, route_embeds_at},
+    evaluate::{EvaluationOptions, evaluate_files},
     io,
     model::{Evaluation, ExecutionStats, Predictions, Task},
-    pipeline::{PipelineOptions, run_pipeline},
     route::AdaptMode,
     route_path::RoutePath,
     route_view::InchiKeyLevel,
@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-/// Opaque ownership of ingested candidates while a Python pipeline remains native.
+/// Opaque ownership of ingested candidates while Python composes native stages.
 ///
 /// Python can materialize the value for inspection, but scoring can consume this
 /// handle directly without serializing and reparsing the candidate graph.
@@ -313,10 +313,10 @@ fn analyze_file_py(
     json_loads(py, &result)
 }
 
-#[pyfunction(name = "pipeline")]
+#[pyfunction(name = "evaluate")]
 #[pyo3(signature = (raw_path, benchmark_path, stock_path, output_dir, *, stock_name=None, execution_stats_path=None, adapter="aizynthfinder", workers=1, mode="strict", max_candidates=None, match_level="full", acceptable_route_match="prefix", ks=vec![1, 3, 5, 10, 20, 50, 100], prefix_depths=vec![1, 2, 3], n_boot=10000, seed=42))]
 #[allow(clippy::too_many_arguments)]
-fn pipeline_py(
+fn evaluate_py(
     py: Python<'_>,
     raw_path: PathBuf,
     benchmark_path: PathBuf,
@@ -335,7 +335,7 @@ fn pipeline_py(
     n_boot: usize,
     seed: u64,
 ) -> PyResult<Py<PyAny>> {
-    let result = run_pipeline_json(
+    let result = evaluate_files_json(
         py,
         raw_path,
         benchmark_path,
@@ -1213,7 +1213,7 @@ fn analyze_file_json(
 #[pyfunction]
 #[pyo3(signature = (raw_path, benchmark_path, stock_path, output_dir, stock_name=None, execution_stats_path=None, adapter="aizynthfinder", workers=1, mode="strict", max_candidates=None, match_level="full", acceptable_route_match="prefix", ks=vec![1, 3, 5, 10, 20, 50, 100], prefix_depths=vec![1, 2, 3], n_boot=10000, seed=42))]
 #[allow(clippy::too_many_arguments)]
-fn run_pipeline_json(
+fn evaluate_files_json(
     py: Python<'_>,
     raw_path: PathBuf,
     benchmark_path: PathBuf,
@@ -1238,14 +1238,14 @@ fn run_pipeline_json(
     let acceptable_route_match = acceptable_route_match.to_owned();
     let stats = py
         .detach(move || {
-            run_pipeline(
+            evaluate_files(
                 &raw_path,
                 &benchmark_path,
                 &stock_path,
                 stock_name.as_deref(),
                 execution_stats_path.as_deref(),
                 &output_dir,
-                &PipelineOptions {
+                &EvaluationOptions {
                     adapter: &adapter,
                     mode,
                     max_candidates,
@@ -1899,7 +1899,7 @@ fn retrocast(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(score_py, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_py, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_file_py, module)?)?;
-    module.add_function(wrap_pyfunction!(pipeline_py, module)?)?;
+    module.add_function(wrap_pyfunction!(evaluate_py, module)?)?;
     module.add_function(wrap_pyfunction!(canonicalize_smiles, module)?)?;
     module.add_function(wrap_pyfunction!(get_inchi_key, module)?)?;
     module.add_function(wrap_pyfunction!(reduce_inchi_key, module)?)?;
@@ -1951,7 +1951,7 @@ fn retrocast(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(analyze_json, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_native, module)?)?;
     module.add_function(wrap_pyfunction!(analyze_file_json, module)?)?;
-    module.add_function(wrap_pyfunction!(run_pipeline_json, module)?)?;
+    module.add_function(wrap_pyfunction!(evaluate_files_json, module)?)?;
     module.add_function(wrap_pyfunction!(verify_manifest_json, module)?)?;
     module.add_function(wrap_pyfunction!(create_manifest_json, module)?)?;
     module.add_function(wrap_pyfunction!(hash_file, module)?)?;

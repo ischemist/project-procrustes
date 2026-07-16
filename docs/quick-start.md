@@ -10,7 +10,7 @@ This guide gets you from raw planner output to a RetroCast analysis report.
 
     - Install RetroCast and inspect the data directory layout
     - Place raw planner output where project-mode commands expect it
-    - Run the `ingest` -> `score` -> `analyze` pipeline
+    - Evaluate planner output from ingestion through analysis
 
 ## 1. Install
 
@@ -198,7 +198,8 @@ RetroCast has three common entry points depending on what you are trying to do:
 | --- | --- | --- |
 | Adapt a planner payload inside Python | `retrocast.adapt(...)` | ranked schema-v2 dictionaries |
 | Run in-memory ingest, score, and analysis | `retrocast.ingest(...)` -> `retrocast.score(...)` -> `retrocast.analyze(...)` | native handles, then a report dictionary |
-| Run the file pipeline from Python | `retrocast.pipeline(...)` | artifacts plus timing and throughput statistics |
+| Evaluate planner output from Python | `retrocast.evaluate(...)` | artifacts plus timing and throughput statistics |
+| Evaluate planner output from the command line | `retrocast evaluate ...` | artifacts plus timing and throughput statistics |
 | Embed the engine in Rust | `retrocast_core::{adapt, score, analyze}` | typed schema-2 values |
 | Run the managed file-based benchmark workflow | `retrocast ingest` -> `retrocast score` -> `retrocast analyze` | `candidates.json.gz`, `evaluation.json.gz`, `analysis.json.gz`, `report.md` |
 

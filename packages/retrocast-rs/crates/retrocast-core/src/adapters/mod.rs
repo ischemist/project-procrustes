@@ -87,6 +87,27 @@ pub trait Adapter: Send + Sync {
     fn entries(&self, payload: Value, source_key: Option<&str>) -> Result<Vec<RawRouteEntry>>;
 
     fn cast(&self, raw_route: Value, mode: AdaptMode, target: Option<&Target>) -> Result<Route>;
+
+    #[allow(clippy::too_many_arguments)]
+    fn candidates(
+        &self,
+        payload: Value,
+        mode: AdaptMode,
+        target: Option<&Target>,
+        source_key: Option<&str>,
+        max_candidates: Option<usize>,
+        workers: usize,
+    ) -> Result<Vec<Candidate>> {
+        adapt_entries_with_workers(
+            payload,
+            self,
+            mode,
+            target,
+            source_key,
+            max_candidates,
+            workers,
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -98,12 +119,13 @@ impl Adapter for AiZynthFinderAdapter {
     }
 
     fn entries(&self, payload: Value, source_key: Option<&str>) -> Result<Vec<RawRouteEntry>> {
-        let routes = payload
-            .as_array()
-            .ok_or_else(|| EngineError::AdapterSchema("route payload must be a list".to_owned()))?;
+        let Value::Array(routes) = payload else {
+            return Err(EngineError::AdapterSchema(
+                "route payload must be a list".to_owned(),
+            ));
+        };
         Ok(routes
-            .iter()
-            .cloned()
+            .into_iter()
             .enumerate()
             .map(|(index, payload)| RawRouteEntry {
                 payload,
@@ -164,39 +186,85 @@ pub fn adapt_candidates_with_workers(
     max_candidates: Option<usize>,
     workers: usize,
 ) -> Result<Vec<Candidate>> {
+    adapter.candidates(payload, mode, target, source_key, max_candidates, workers)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn adapt_entries_with_workers<A: Adapter + ?Sized>(
+    payload: Value,
+    adapter: &A,
+    mode: AdaptMode,
+    target: Option<&Target>,
+    source_key: Option<&str>,
+    max_candidates: Option<usize>,
+    workers: usize,
+) -> Result<Vec<Candidate>> {
     let mut entries = adapter.entries(payload, source_key)?;
     if let Some(limit) = max_candidates {
         entries.truncate(limit);
     }
+
+    if workers == 1 {
+        return Ok(entries
+            .into_iter()
+            .enumerate()
+            .map(|(index, entry)| candidate_from_entry(adapter, index, entry, mode, target))
+            .collect());
+    }
+
     let candidates = with_pool(workers, || {
         entries
             .into_par_iter()
             .enumerate()
-            .map(|(index, mut entry)| {
-                let rank = entry.source_order.unwrap_or(index + 1);
-                let raw_route = std::mem::take(&mut entry.payload);
-                let inferred_target = if target.is_none() {
-                    target_from_entry(&entry)
-                } else {
-                    None
-                };
-                let entry_target = target.or(inferred_target.as_ref());
-                match adapter.cast(raw_route, mode, entry_target) {
-                    Ok(route) => Candidate {
-                        rank,
-                        route: Some(route),
-                        failure: None,
-                    },
-                    Err(error) => Candidate {
-                        rank,
-                        route: None,
-                        failure: Some(failure_record(adapter.name(), error, entry_target, &entry)),
-                    },
-                }
-            })
+            .map(|(index, entry)| candidate_from_entry(adapter, index, entry, mode, target))
             .collect()
     })?;
     Ok(candidates)
+}
+
+fn candidate_from_entry<A: Adapter + ?Sized>(
+    adapter: &A,
+    index: usize,
+    mut entry: RawRouteEntry,
+    mode: AdaptMode,
+    target: Option<&Target>,
+) -> Candidate {
+    let rank = entry.source_order.unwrap_or(index + 1);
+    let raw_route = std::mem::take(&mut entry.payload);
+    let inferred_target = if target.is_none() {
+        target_from_entry(&entry)
+    } else {
+        None
+    };
+    let entry_target = target.or(inferred_target.as_ref());
+    candidate_from_result(
+        adapter.name(),
+        rank,
+        adapter.cast(raw_route, mode, entry_target),
+        entry_target,
+        &entry,
+    )
+}
+
+pub(super) fn candidate_from_result(
+    adapter_name: &str,
+    rank: usize,
+    route: Result<Route>,
+    target: Option<&Target>,
+    entry: &RawRouteEntry,
+) -> Candidate {
+    match route {
+        Ok(route) => Candidate {
+            rank,
+            route: Some(route),
+            failure: None,
+        },
+        Err(error) => Candidate {
+            rank,
+            route: None,
+            failure: Some(failure_record(adapter_name, error, target, entry)),
+        },
+    }
 }
 
 fn target_from_entry(entry: &RawRouteEntry) -> Option<Target> {

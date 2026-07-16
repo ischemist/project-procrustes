@@ -8,7 +8,7 @@ The PyPI distribution exposes one import surface: the Maturin-built `retrocast` 
 
 ## Policy
 
-- Friendly workflow names (`adapt`, `ingest`, `score`, `analyze`, `pipeline`) accept JSON-compatible Python values or native handles.
+- Friendly workflow names (`adapt`, `ingest`, `score`, `analyze`, `evaluate`) accept JSON-compatible Python values or native handles.
 - Corpus-sized stages return opaque Rust-owned handles. Materialization must be explicit through `.to_dict()`, `.json()`, or `.write()`.
 - File entry points pass paths into Rust; Python must not read or decompress corpus artifacts first.
 - Chemistry helpers call the same RDKit C++ bridge as the CLI.

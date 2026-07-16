@@ -23,7 +23,7 @@ graph LR
     C --> D[Evaluation<br/><i>Solv-N, MRR, Top-K</i>]
 ```
 
-The adapter handles the raw format. The evaluation pipeline handles canonical objects.
+The adapter handles the raw format. Evaluation operates on canonical objects.
 
 ## Route
 

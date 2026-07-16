@@ -220,7 +220,7 @@ fn deeply_nested_json_fails_cleanly_at_the_deserializer_limit() {
 }
 
 #[test]
-fn full_pipeline_semantics_are_identical_across_worker_counts() {
+fn full_evaluation_semantics_are_identical_across_worker_counts() {
     let task = adversarial_task();
     let raw = json!({
         "ethanol": [

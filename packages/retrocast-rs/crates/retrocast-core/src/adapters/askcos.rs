@@ -1,15 +1,17 @@
 use std::collections::{BTreeMap, HashSet};
 
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
-use super::{Adapter, RawRouteEntry, common};
+use super::{Adapter, RawRouteEntry, candidate_from_result, common};
 use crate::{
     chem,
     error::Result,
-    model::{Molecule, Reaction, Route, Target},
+    model::{Candidate, Molecule, Reaction, Route, Target},
     route::{AdaptMode, normalize_reactants},
     schema::{CanonicalSmiles, ReactionSmiles},
+    with_pool,
 };
 
 const ROOT_UUID: &str = "00000000-0000-0000-0000-000000000000";
@@ -23,6 +25,13 @@ struct Edge {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct ExtractedPathway {
     pathway_edges: Vec<Edge>,
+    uuid2smiles: BTreeMap<String, String>,
+    node_dict: BTreeMap<String, Value>,
+    annotations: Map<String, Value>,
+}
+
+struct AskcosOutput {
+    pathways: Vec<Vec<Edge>>,
     uuid2smiles: BTreeMap<String, String>,
     node_dict: BTreeMap<String, Value>,
     annotations: Map<String, Value>,
@@ -47,57 +56,17 @@ impl Adapter for AskcosAdapter {
     }
 
     fn entries(&self, payload: Value, source_key: Option<&str>) -> Result<Vec<RawRouteEntry>> {
-        if self.use_full_graph {
-            return Err(common::logic(
-                self.name(),
-                "adapter.unsupported_feature",
-                "full-graph route extraction is not implemented",
-            ));
-        }
-        let Value::Object(mut payload) = payload else {
-            return Err(common::schema(self.name(), "results object is required"));
-        };
-        let results = payload
-            .remove("results")
-            .ok_or_else(|| common::schema(self.name(), "results object is required"))?;
-        let Value::Object(mut results) = results else {
-            return Err(common::schema(self.name(), "results object is required"));
-        };
-        let annotations = run_annotations(results.get("stats"));
-        let uds = results
-            .remove("uds")
-            .ok_or_else(|| common::schema(self.name(), "results.uds object is required"))?;
-        let Value::Object(mut uds) = uds else {
-            return Err(common::schema(
-                self.name(),
-                "results.uds object is required",
-            ));
-        };
-        let uuid2smiles: BTreeMap<String, String> = serde_json::from_value(
-            uds.remove("uuid2smiles")
-                .ok_or_else(|| common::schema(self.name(), "uds.uuid2smiles is required"))?,
-        )
-        .map_err(|error| common::schema(self.name(), format!("invalid uuid2smiles: {error}")))?;
-        let node_dict: BTreeMap<String, Value> = serde_json::from_value(
-            uds.remove("node_dict")
-                .ok_or_else(|| common::schema(self.name(), "uds.node_dict is required"))?,
-        )
-        .map_err(|error| common::schema(self.name(), format!("invalid node_dict: {error}")))?;
-        let pathways: Vec<Vec<Edge>> = serde_json::from_value(
-            uds.remove("pathways")
-                .ok_or_else(|| common::schema(self.name(), "uds.pathways is required"))?,
-        )
-        .map_err(|error| common::schema(self.name(), format!("invalid pathways: {error}")))?;
-        validate_nodes(&node_dict, self.name())?;
-        Ok(pathways
+        let output = parse_output(payload, self)?;
+        Ok(output
+            .pathways
             .into_iter()
             .enumerate()
             .map(|(index, edges)| RawRouteEntry {
                 payload: serde_json::to_value(compact_pathway(
                     edges,
-                    &uuid2smiles,
-                    &node_dict,
-                    &annotations,
+                    &output.uuid2smiles,
+                    &output.node_dict,
+                    &output.annotations,
                 ))
                 .expect("ASKCOS pathway is serializable"),
                 source_key: source_key.map(str::to_owned),
@@ -110,42 +79,151 @@ impl Adapter for AskcosAdapter {
             .collect())
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn candidates(
+        &self,
+        payload: Value,
+        mode: AdaptMode,
+        target: Option<&Target>,
+        _source_key: Option<&str>,
+        max_candidates: Option<usize>,
+        workers: usize,
+    ) -> Result<Vec<Candidate>> {
+        let AskcosOutput {
+            mut pathways,
+            uuid2smiles,
+            node_dict,
+            annotations,
+        } = parse_output(payload, self)?;
+        if let Some(limit) = max_candidates {
+            pathways.truncate(limit);
+        }
+
+        let adapt = |(index, edges): (usize, Vec<Edge>)| {
+            let rank = index + 1;
+            let entry = RawRouteEntry::new(Value::Null);
+            candidate_from_result(
+                self.name(),
+                rank,
+                build_route(&edges, &uuid2smiles, &node_dict, &annotations, mode, target),
+                target,
+                &entry,
+            )
+        };
+
+        if workers == 1 {
+            return Ok(pathways.into_iter().enumerate().map(adapt).collect());
+        }
+        with_pool(workers, || {
+            pathways.into_par_iter().enumerate().map(adapt).collect()
+        })
+    }
+
     fn cast(&self, raw_route: Value, mode: AdaptMode, target: Option<&Target>) -> Result<Route> {
         let pathway: ExtractedPathway = serde_json::from_value(raw_route)
             .map_err(|error| common::schema(self.name(), format!("invalid pathway: {error}")))?;
-        let mut adjacency: BTreeMap<String, Vec<String>> = BTreeMap::new();
-        for edge in &pathway.pathway_edges {
-            adjacency
-                .entry(edge.source.clone())
-                .or_default()
-                .push(edge.target.clone());
-        }
-        if !pathway.uuid2smiles.contains_key(ROOT_UUID) {
-            return Err(node_missing("root chemical", ROOT_UUID, "uuid2smiles"));
-        }
-        let target_molecule = build_molecule(
-            ROOT_UUID,
-            &adjacency,
+        build_route(
+            &pathway.pathway_edges,
             &pathway.uuid2smiles,
             &pathway.node_dict,
+            &pathway.annotations,
             mode,
-            &HashSet::new(),
-        )?
-        .ok_or_else(|| common::target_pruned(self.name()))?;
-        if let Some(target) = target {
-            common::require_target_match(
-                &target_molecule.smiles,
-                &target.smiles,
-                &target.id,
-                self.name(),
-            )?;
-        }
-        Ok(Route {
-            target: target_molecule,
-            annotations: pathway.annotations,
-            schema_version: Default::default(),
-        })
+            target,
+        )
     }
+}
+
+fn parse_output(payload: Value, adapter: &AskcosAdapter) -> Result<AskcosOutput> {
+    if adapter.use_full_graph {
+        return Err(common::logic(
+            adapter.name(),
+            "adapter.unsupported_feature",
+            "full-graph route extraction is not implemented",
+        ));
+    }
+    let Value::Object(mut payload) = payload else {
+        return Err(common::schema(adapter.name(), "results object is required"));
+    };
+    let results = payload
+        .remove("results")
+        .ok_or_else(|| common::schema(adapter.name(), "results object is required"))?;
+    let Value::Object(mut results) = results else {
+        return Err(common::schema(adapter.name(), "results object is required"));
+    };
+    let annotations = run_annotations(results.get("stats"));
+    let uds = results
+        .remove("uds")
+        .ok_or_else(|| common::schema(adapter.name(), "results.uds object is required"))?;
+    let Value::Object(mut uds) = uds else {
+        return Err(common::schema(
+            adapter.name(),
+            "results.uds object is required",
+        ));
+    };
+    let uuid2smiles = serde_json::from_value(
+        uds.remove("uuid2smiles")
+            .ok_or_else(|| common::schema(adapter.name(), "uds.uuid2smiles is required"))?,
+    )
+    .map_err(|error| common::schema(adapter.name(), format!("invalid uuid2smiles: {error}")))?;
+    let node_dict = serde_json::from_value(
+        uds.remove("node_dict")
+            .ok_or_else(|| common::schema(adapter.name(), "uds.node_dict is required"))?,
+    )
+    .map_err(|error| common::schema(adapter.name(), format!("invalid node_dict: {error}")))?;
+    let pathways = serde_json::from_value(
+        uds.remove("pathways")
+            .ok_or_else(|| common::schema(adapter.name(), "uds.pathways is required"))?,
+    )
+    .map_err(|error| common::schema(adapter.name(), format!("invalid pathways: {error}")))?;
+    validate_nodes(&node_dict, adapter.name())?;
+    Ok(AskcosOutput {
+        pathways,
+        uuid2smiles,
+        node_dict,
+        annotations,
+    })
+}
+
+fn build_route(
+    pathway_edges: &[Edge],
+    uuid2smiles: &BTreeMap<String, String>,
+    node_dict: &BTreeMap<String, Value>,
+    annotations: &Map<String, Value>,
+    mode: AdaptMode,
+    target: Option<&Target>,
+) -> Result<Route> {
+    let mut adjacency: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for edge in pathway_edges {
+        adjacency
+            .entry(edge.source.as_str())
+            .or_default()
+            .push(edge.target.as_str());
+    }
+    if !uuid2smiles.contains_key(ROOT_UUID) {
+        return Err(node_missing("root chemical", ROOT_UUID, "uuid2smiles"));
+    }
+    let target_molecule = build_molecule(
+        ROOT_UUID,
+        &adjacency,
+        uuid2smiles,
+        node_dict,
+        mode,
+        &mut HashSet::new(),
+    )?
+    .ok_or_else(|| common::target_pruned("askcos"))?;
+    if let Some(target) = target {
+        common::require_target_match(
+            &target_molecule.smiles,
+            &target.smiles,
+            &target.id,
+            "askcos",
+        )?;
+    }
+    Ok(Route {
+        target: target_molecule,
+        annotations: annotations.clone(),
+        schema_version: Default::default(),
+    })
 }
 
 fn compact_pathway(
@@ -217,11 +295,11 @@ fn validate_nodes(nodes: &BTreeMap<String, Value>, adapter: &'static str) -> Res
 
 fn build_molecule(
     chemical_uuid: &str,
-    adjacency: &BTreeMap<String, Vec<String>>,
+    adjacency: &BTreeMap<&str, Vec<&str>>,
     uuid2smiles: &BTreeMap<String, String>,
     node_dict: &BTreeMap<String, Value>,
     mode: AdaptMode,
-    visited: &HashSet<CanonicalSmiles>,
+    visited: &mut HashSet<CanonicalSmiles>,
 ) -> Result<Option<Molecule>> {
     let raw_smiles = uuid2smiles
         .get(chemical_uuid)
@@ -267,16 +345,17 @@ fn build_molecule(
             format!("molecule {smiles:?} has multiple child reactions"),
         ));
     }
-    let mut next_visited = visited.clone();
-    next_visited.insert(smiles.clone());
+    visited.insert(smiles.clone());
     let reaction = build_reaction(
-        &child_reactions[0],
+        child_reactions[0],
         adjacency,
         uuid2smiles,
         node_dict,
         mode,
-        &next_visited,
-    )?;
+        visited,
+    );
+    visited.remove(&smiles);
+    let reaction = reaction?;
     let Some(reaction) = reaction else {
         return if mode == AdaptMode::Prune {
             Ok(None)
@@ -298,11 +377,11 @@ fn build_molecule(
 
 fn build_reaction(
     reaction_uuid: &str,
-    adjacency: &BTreeMap<String, Vec<String>>,
+    adjacency: &BTreeMap<&str, Vec<&str>>,
     uuid2smiles: &BTreeMap<String, String>,
     node_dict: &BTreeMap<String, Value>,
     mode: AdaptMode,
-    visited: &HashSet<CanonicalSmiles>,
+    visited: &mut HashSet<CanonicalSmiles>,
 ) -> Result<Option<Reaction>> {
     let raw_smiles = uuid2smiles
         .get(reaction_uuid)
@@ -394,7 +473,10 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{AskcosAdapter, ExtractedPathway};
-    use crate::{adapters::Adapter, route::AdaptMode};
+    use crate::{
+        adapters::{Adapter, adapt_candidates_with_workers},
+        route::AdaptMode,
+    };
 
     fn output() -> Value {
         json!({"results": {
@@ -450,5 +532,32 @@ mod tests {
     #[test]
     fn full_graph_mode_is_explicitly_unsupported() {
         assert!(AskcosAdapter::full_graph().entries(output(), None).is_err());
+    }
+
+    #[test]
+    fn direct_candidate_path_matches_entry_cast_across_worker_counts() {
+        let adapter = AskcosAdapter::default();
+        let entry = adapter.entries(output(), None).unwrap().pop().unwrap();
+        let expected = adapter
+            .cast(entry.payload, AdaptMode::Strict, None)
+            .unwrap();
+
+        for workers in [1, 2] {
+            let candidates = adapt_candidates_with_workers(
+                output(),
+                &adapter,
+                AdaptMode::Strict,
+                None,
+                None,
+                None,
+                workers,
+            )
+            .unwrap();
+            assert_eq!(candidates.len(), 1);
+            assert_eq!(
+                serde_json::to_value(candidates[0].route.as_ref().unwrap()).unwrap(),
+                serde_json::to_value(&expected).unwrap(),
+            );
+        }
     }
 }

@@ -16,7 +16,7 @@ The field of retrosynthesis evaluation is fragmented:
 2. **Ad-Hoc Metrics:** "Solvability" is calculated differently across publications, with varying stock definitions (e.g., made-to-order libraries vs. actual off-the-shelf compounds).
 3. **Flawed Benchmarks:** Standard datasets are heavily skewed (74% of PaRoutes routes are length 3-4), masking performance failures on complex targets.
 
-**RetroCast solves this.** It provides a canonical schema, adapters for 10+ models, and a rigorous statistical pipeline to turn retrosynthesis from a qualitative art into a quantitative science.
+**RetroCast solves this.** It provides a canonical schema, adapters for 10+ models, and rigorous statistical evaluation to turn retrosynthesis from a qualitative art into a quantitative science.
 
 ## Key Features
 

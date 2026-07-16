@@ -11,8 +11,9 @@ use crate::{
     stats, with_pool,
 };
 
+#[derive(Clone, Copy)]
 enum SummaryKind {
-    Bootstrap { reliability: bool },
+    Bootstrap,
     Mean,
 }
 
@@ -20,6 +21,19 @@ struct MetricValues {
     name: String,
     values: Vec<f64>,
     kind: SummaryKind,
+}
+
+struct PreparedMetric {
+    value: Option<f64>,
+    kind: SummaryKind,
+}
+
+/// Retain the scalar contributions analysis needs after a target's routes are released.
+pub(crate) struct PreparedTargetAnalysis {
+    metrics: BTreeMap<String, PreparedMetric>,
+    stratum: Option<String>,
+    wall_time: Option<f64>,
+    cpu_time: Option<f64>,
 }
 
 pub fn analyze(
@@ -30,57 +44,43 @@ pub fn analyze(
     seed: u64,
     workers: usize,
 ) -> Result<AnalysisReport> {
-    validate_analysis_options(n_boot)?;
-    let targets: Vec<_> = evaluation.targets.values().collect();
-    let metrics = summarize_targets(
-        &targets,
-        &evaluation.tiers,
-        ks,
-        prefix_depths,
-        &evaluation.metric_label,
-        &evaluation.acceptable_match_level,
-        n_boot,
-        seed,
-        workers,
-    )?;
-    let mut strata: BTreeMap<String, Vec<&TargetResult>> = BTreeMap::new();
-    for target in &targets {
-        if let Some(route) = target.target.acceptable_routes.first() {
-            strata
-                .entry(format!("depth {}", route_depth(route)))
-                .or_default()
-                .push(target);
-        } else if let Some(depth) = target
-            .effective_constraints
-            .iter()
-            .find(|constraint| constraint.kind == "retrocast.route_depth")
-            .and_then(|constraint| constraint.fields.get("max_depth"))
-        {
-            let label = depth
-                .as_str()
-                .map(str::to_owned)
-                .unwrap_or_else(|| depth.to_string());
-            strata
-                .entry(format!("depth {label}"))
-                .or_default()
-                .push(target);
-        }
-    }
-    let mut by_stratum = BTreeMap::new();
-    for (label, stratum_targets) in strata {
-        by_stratum.insert(
-            label,
-            summarize_targets(
-                &stratum_targets,
+    let prepared = evaluation
+        .targets
+        .values()
+        .map(|target| {
+            prepare_target_analysis(
+                target,
                 &evaluation.tiers,
                 ks,
                 prefix_depths,
                 &evaluation.metric_label,
                 &evaluation.acceptable_match_level,
-                n_boot,
-                seed,
-                workers,
-            )?,
+            )
+        })
+        .collect::<Vec<_>>();
+    analyze_prepared_targets(&prepared, n_boot, seed, workers)
+}
+
+pub(crate) fn analyze_prepared_targets(
+    targets: &[PreparedTargetAnalysis],
+    n_boot: usize,
+    seed: u64,
+    workers: usize,
+) -> Result<AnalysisReport> {
+    validate_analysis_options(n_boot)?;
+    let target_refs = targets.iter().collect::<Vec<_>>();
+    let metrics = summarize_prepared_targets(&target_refs, n_boot, seed, workers)?;
+    let mut strata: BTreeMap<&str, Vec<&PreparedTargetAnalysis>> = BTreeMap::new();
+    for target in targets {
+        if let Some(stratum) = target.stratum.as_deref() {
+            strata.entry(stratum).or_default().push(target);
+        }
+    }
+    let mut by_stratum = BTreeMap::new();
+    for (label, stratum_targets) in strata {
+        by_stratum.insert(
+            label.to_owned(),
+            summarize_prepared_targets(&stratum_targets, n_boot, seed, workers)?,
         );
     }
     Ok(AnalysisReport {
@@ -88,8 +88,183 @@ pub fn analyze(
         metrics,
         by_stratum,
         bootstrap_resamples: n_boot,
-        runtime: runtime_summary(&targets),
+        runtime: prepared_runtime_summary(targets),
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+/// Derive one target's metric contributions and stratum while its scored routes are available.
+pub(crate) fn prepare_target_analysis(
+    target: &TargetResult,
+    tiers: &[u8],
+    ks: &[usize],
+    prefix_depths: &[usize],
+    metric_label: &str,
+    match_level: &str,
+) -> PreparedTargetAnalysis {
+    let mut metrics = BTreeMap::new();
+    for &tier in tiers {
+        insert_bootstrap_metric(
+            &mut metrics,
+            format!("tier_{tier}_validity_rate"),
+            rate(target, |candidate| candidate.satisfies_validity(tier)),
+        );
+        insert_bootstrap_metric(
+            &mut metrics,
+            format!("tier_{tier}_validity_mrr"),
+            mrr(target, |candidate| candidate.satisfies_validity(tier)),
+        );
+        insert_bootstrap_metric(
+            &mut metrics,
+            format!("solv_{tier}[{metric_label}]_rate"),
+            rate(target, |candidate| candidate.satisfies_solv(tier)),
+        );
+        insert_bootstrap_metric(
+            &mut metrics,
+            format!("solv_{tier}[{metric_label}]_mrr"),
+            mrr(target, |candidate| candidate.satisfies_solv(tier)),
+        );
+    }
+    if !target.target.acceptable_routes.is_empty() {
+        for k in sorted_unique(ks) {
+            let reconstruction = top_k_reconstruction(target, k);
+            let root_hit = has_root_hit(target, k, match_level);
+            insert_bootstrap_metric(
+                &mut metrics,
+                format!("acceptable_reconstruction_top_{k}[{metric_label}]"),
+                reconstruction,
+            );
+            insert_bootstrap_metric(
+                &mut metrics,
+                format!("acceptable_root_reconstruction_top_{k}[{metric_label}]"),
+                f64::from(root_hit),
+            );
+            // Preserve the zero-count metric when no target in the slice has
+            // an acceptable root.
+            metrics.insert(
+                format!("acceptable_reconstruction_given_root_top_{k}[{metric_label}]"),
+                PreparedMetric {
+                    value: root_hit.then_some(reconstruction),
+                    kind: SummaryKind::Bootstrap,
+                },
+            );
+            metrics.insert(
+                format!("distinct_root_reactions_top_{k}[{metric_label}]"),
+                PreparedMetric {
+                    value: Some(distinct_root_reactions(target, k, match_level) as f64),
+                    kind: SummaryKind::Mean,
+                },
+            );
+            for depth in sorted_unique(prefix_depths) {
+                insert_bootstrap_metric(
+                    &mut metrics,
+                    format!(
+                        "acceptable_prefix_reconstruction_depth_{depth}_top_{k}[{metric_label}]"
+                    ),
+                    f64::from(has_prefix_hit(target, k, depth, match_level)),
+                );
+            }
+        }
+    }
+    PreparedTargetAnalysis {
+        metrics,
+        stratum: target_stratum(target),
+        wall_time: target.wall_time,
+        cpu_time: target.cpu_time,
+    }
+}
+
+fn insert_bootstrap_metric(
+    metrics: &mut BTreeMap<String, PreparedMetric>,
+    name: String,
+    value: f64,
+) {
+    metrics.insert(
+        name,
+        PreparedMetric {
+            value: Some(value),
+            kind: SummaryKind::Bootstrap,
+        },
+    );
+}
+
+fn target_stratum(target: &TargetResult) -> Option<String> {
+    if let Some(route) = target.target.acceptable_routes.first() {
+        return Some(format!("depth {}", route_depth(route)));
+    }
+    target
+        .effective_constraints
+        .iter()
+        .find(|constraint| constraint.kind == "retrocast.route_depth")
+        .and_then(|constraint| constraint.fields.get("max_depth"))
+        .map(|depth| {
+            let label = depth
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| depth.to_string());
+            format!("depth {label}")
+        })
+}
+
+fn summarize_prepared_targets(
+    targets: &[&PreparedTargetAnalysis],
+    n_boot: usize,
+    seed: u64,
+    workers: usize,
+) -> Result<BTreeMap<String, MetricSummary>> {
+    let mut metrics: BTreeMap<String, MetricValues> = BTreeMap::new();
+    for target in targets {
+        for (name, metric) in &target.metrics {
+            let values = &mut metrics
+                .entry(name.clone())
+                .or_insert_with(|| MetricValues {
+                    name: name.clone(),
+                    values: Vec::new(),
+                    kind: metric.kind,
+                })
+                .values;
+            if let Some(value) = metric.value {
+                values.push(value);
+            }
+        }
+    }
+    let summaries = with_pool(workers, || {
+        metrics
+            .into_values()
+            .collect::<Vec<_>>()
+            .into_par_iter()
+            .map(|metric| {
+                let summary = match metric.kind {
+                    SummaryKind::Bootstrap => {
+                        stats::summarize_values(&metric.values, n_boot, seed, 0.05, true)
+                    }
+                    SummaryKind::Mean => mean_summary(&metric.values),
+                };
+                (metric.name, summary)
+            })
+            .collect::<Vec<_>>()
+    })?;
+    Ok(summaries.into_iter().collect())
+}
+
+fn prepared_runtime_summary(targets: &[PreparedTargetAnalysis]) -> RuntimeSummary {
+    let wall = targets
+        .iter()
+        .filter_map(|target| target.wall_time)
+        .collect::<Vec<_>>();
+    let cpu = targets
+        .iter()
+        .filter_map(|target| target.cpu_time)
+        .collect::<Vec<_>>();
+    let total_wall_time = (!wall.is_empty()).then(|| wall.iter().sum());
+    let total_cpu_time = (!cpu.is_empty()).then(|| cpu.iter().sum());
+    RuntimeSummary {
+        total_wall_time,
+        mean_wall_time: total_wall_time.map(|value: f64| value / wall.len() as f64),
+        total_cpu_time,
+        mean_cpu_time: total_cpu_time.map(|value: f64| value / cpu.len() as f64),
+        timed_target_count: wall.len().max(cpu.len()),
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -105,18 +280,13 @@ pub fn summarize_target_results(
     workers: usize,
 ) -> Result<BTreeMap<String, MetricSummary>> {
     validate_analysis_options(n_boot)?;
-    let target_refs = targets.iter().collect::<Vec<_>>();
-    summarize_targets(
-        &target_refs,
-        tiers,
-        ks,
-        prefix_depths,
-        metric_label,
-        match_level,
-        n_boot,
-        seed,
-        workers,
-    )
+    let prepared = targets
+        .iter()
+        .map(|target| {
+            prepare_target_analysis(target, tiers, ks, prefix_depths, metric_label, match_level)
+        })
+        .collect::<Vec<_>>();
+    summarize_prepared_targets(&prepared.iter().collect::<Vec<_>>(), n_boot, seed, workers)
 }
 
 fn validate_analysis_options(n_boot: usize) -> Result<()> {
@@ -124,124 +294,6 @@ fn validate_analysis_options(n_boot: usize) -> Result<()> {
         return Err(crate::error::EngineError::InvalidBootstrapResamples(n_boot));
     }
     Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-fn summarize_targets(
-    targets: &[&TargetResult],
-    tiers: &[u8],
-    ks: &[usize],
-    prefix_depths: &[usize],
-    metric_label: &str,
-    match_level: &str,
-    n_boot: usize,
-    seed: u64,
-    workers: usize,
-) -> Result<BTreeMap<String, MetricSummary>> {
-    let mut metrics = Vec::new();
-    for &tier in tiers {
-        metrics.push(metric(
-            format!("tier_{tier}_validity_rate"),
-            targets
-                .iter()
-                .map(|target| rate(target, |candidate| candidate.satisfies_validity(tier)))
-                .collect(),
-        ));
-        metrics.push(metric(
-            format!("tier_{tier}_validity_mrr"),
-            targets
-                .iter()
-                .map(|target| mrr(target, |candidate| candidate.satisfies_validity(tier)))
-                .collect(),
-        ));
-        metrics.push(metric(
-            format!("solv_{tier}[{metric_label}]_rate"),
-            targets
-                .iter()
-                .map(|target| rate(target, |candidate| candidate.satisfies_solv(tier)))
-                .collect(),
-        ));
-        metrics.push(metric(
-            format!("solv_{tier}[{metric_label}]_mrr"),
-            targets
-                .iter()
-                .map(|target| mrr(target, |candidate| candidate.satisfies_solv(tier)))
-                .collect(),
-        ));
-    }
-    let reconstruction_targets: Vec<_> = targets
-        .iter()
-        .copied()
-        .filter(|target| !target.target.acceptable_routes.is_empty())
-        .collect();
-    if !reconstruction_targets.is_empty() {
-        for k in sorted_unique(ks) {
-            metrics.push(metric(
-                format!("acceptable_reconstruction_top_{k}[{metric_label}]"),
-                reconstruction_targets
-                    .iter()
-                    .map(|target| top_k_reconstruction(target, k))
-                    .collect(),
-            ));
-            metrics.push(metric(
-                format!("acceptable_root_reconstruction_top_{k}[{metric_label}]"),
-                reconstruction_targets
-                    .iter()
-                    .map(|target| f64::from(has_root_hit(target, k, match_level)))
-                    .collect(),
-            ));
-            metrics.push(metric(
-                format!("acceptable_reconstruction_given_root_top_{k}[{metric_label}]"),
-                reconstruction_targets
-                    .iter()
-                    .filter(|target| has_root_hit(target, k, match_level))
-                    .map(|target| top_k_reconstruction(target, k))
-                    .collect(),
-            ));
-            metrics.push(MetricValues {
-                name: format!("distinct_root_reactions_top_{k}[{metric_label}]"),
-                values: reconstruction_targets
-                    .iter()
-                    .map(|target| distinct_root_reactions(target, k, match_level) as f64)
-                    .collect(),
-                kind: SummaryKind::Mean,
-            });
-            for depth in sorted_unique(prefix_depths) {
-                metrics.push(metric(
-                    format!(
-                        "acceptable_prefix_reconstruction_depth_{depth}_top_{k}[{metric_label}]"
-                    ),
-                    reconstruction_targets
-                        .iter()
-                        .map(|target| f64::from(has_prefix_hit(target, k, depth, match_level)))
-                        .collect(),
-                ));
-            }
-        }
-    }
-    let summaries = with_pool(workers, || {
-        metrics
-            .into_par_iter()
-            .map(|metric| {
-                let summary = match metric.kind {
-                    SummaryKind::Bootstrap { reliability } => {
-                        stats::summarize_values(&metric.values, n_boot, seed, 0.05, reliability)
-                    }
-                    SummaryKind::Mean => mean_summary(&metric.values),
-                };
-                (metric.name, summary)
-            })
-            .collect::<Vec<_>>()
-    })?;
-    Ok(summaries.into_iter().collect())
-}
-
-fn metric(name: String, values: Vec<f64>) -> MetricValues {
-    MetricValues {
-        name,
-        values,
-        kind: SummaryKind::Bootstrap { reliability: true },
-    }
 }
 
 fn sorted_unique(values: &[usize]) -> Vec<usize> {
@@ -332,25 +384,5 @@ fn mean_summary(values: &[f64]) -> MetricSummary {
         ci_low: None,
         ci_high: None,
         reliability: None,
-    }
-}
-
-fn runtime_summary(targets: &[&TargetResult]) -> RuntimeSummary {
-    let wall: Vec<_> = targets
-        .iter()
-        .filter_map(|target| target.wall_time)
-        .collect();
-    let cpu: Vec<_> = targets
-        .iter()
-        .filter_map(|target| target.cpu_time)
-        .collect();
-    let total_wall_time = (!wall.is_empty()).then(|| wall.iter().sum());
-    let total_cpu_time = (!cpu.is_empty()).then(|| cpu.iter().sum());
-    RuntimeSummary {
-        total_wall_time,
-        mean_wall_time: total_wall_time.map(|value: f64| value / wall.len() as f64),
-        total_cpu_time,
-        mean_cpu_time: total_cpu_time.map(|value: f64| value / cpu.len() as f64),
-        timed_target_count: wall.len().max(cpu.len()),
     }
 }

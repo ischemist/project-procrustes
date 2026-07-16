@@ -73,6 +73,38 @@ fn analysis_keeps_failed_targets_in_headline_denominators_and_filters_reconstruc
 }
 
 #[test]
+fn analysis_keeps_empty_given_root_metrics() {
+    let acceptable = two_step_route();
+    let solved_target = target("solved", "CCC", vec![acceptable]);
+    let evaluation = retrocast_core::model::Evaluation {
+        task: task(BTreeMap::from([(
+            "solved".to_owned(),
+            solved_target.clone(),
+        )])),
+        tiers: vec![0],
+        metric_label: "contract".to_owned(),
+        acceptable_match_level: "full".to_owned(),
+        acceptable_route_match: "prefix".to_owned(),
+        targets: BTreeMap::from([(
+            "solved".to_owned(),
+            TargetResult {
+                target: solved_target,
+                effective_constraints: Vec::new(),
+                candidates: vec![scored(1, alternate_root_route(), true, true, false)],
+                wall_time: None,
+                cpu_time: None,
+            },
+        )]),
+        schema_version: Default::default(),
+    };
+
+    let report = analyze(&evaluation, &[1], &[1], 64, 11, 1).unwrap();
+    let metric = &report.metrics["acceptable_reconstruction_given_root_top_1[contract]"];
+    assert_eq!(metric.value, 0.0);
+    assert_eq!(metric.count, 0);
+}
+
+#[test]
 fn scoring_combines_constraints_uses_target_overrides_and_prefers_deepest_prefix_match() {
     let shallow = one_step_route();
     let deep = two_step_route();
@@ -223,6 +255,20 @@ fn two_step_route() -> Route {
                     molecule("C", None),
                 ],
                 "CC.C>>CCC",
+            )),
+        ),
+        annotations: Map::new(),
+        schema_version: Default::default(),
+    }
+}
+
+fn alternate_root_route() -> Route {
+    Route {
+        target: molecule(
+            "CCC",
+            Some(reaction(
+                vec![molecule("C", None), molecule("O", None)],
+                "C.O>>CCC",
             )),
         ),
         annotations: Map::new(),

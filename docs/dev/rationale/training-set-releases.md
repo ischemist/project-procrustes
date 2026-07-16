@@ -4,7 +4,7 @@ icon: lucide/package-open
 
 # Training Set Releases
 
-This page explains how retrocast creates the public PaRoutes training releases. This doc aims to give a compact mental model of the pipeline:
+This page explains how retrocast creates the public PaRoutes training releases. This doc gives a compact mental model of the release process:
 
 - what artifacts we produce
 - what problem each artifact solves
@@ -64,7 +64,7 @@ The route release has two modes.
 
 `reaction-holdout-n1-n5` first removes exact holdout routes, then removes holdout reactions from surviving routes. If a route still has valid fragments after excision, those fragments remain candidates.
 
-During adaptation, RetroCast sanity-checks PaRoutes `reaction_hash` values against `ReactionSignature`. PaRoutes `reaction_hash` is reaction SMILES represented with InChIKeys, so it should describe the same identity as RetroCast's reactant/product InChIKey signature. If the check passes, `reaction_hash` is not carried through the release pipeline.
+During adaptation, RetroCast sanity-checks PaRoutes `reaction_hash` values against `ReactionSignature`. PaRoutes `reaction_hash` is reaction SMILES represented with InChIKeys, so it should describe the same identity as RetroCast's reactant/product InChIKey signature. If the check passes, `reaction_hash` is not carried into the release.
 
 PaRoutes condition slots stay in reaction annotations. We do not populate structured `solvents` or `reagents` fields because the slot is not reliably one or the other; it can also contain material that should have been modeled as a reactant. RetroCast tries to canonicalize the slot into `condition_slot_smiles`, but keeps the raw `condition_slot` when parsing fails or when the raw text may still help an end user.
 

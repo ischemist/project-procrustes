@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Benchmark the AiZynthFinder pipeline and aggregate parent/child RSS."""
+"""Benchmark end-to-end RetroCast evaluation and aggregate parent/child RSS."""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ def main() -> None:
 def _python_command(args: argparse.Namespace, *, workers: int) -> list[str]:
     invocation = (
         "import sys; import retrocast; "
-        "retrocast.pipeline(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], "
+        "retrocast.evaluate(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], "
         "execution_stats_path=None if sys.argv[5] == '-' else sys.argv[5], "
         "adapter=sys.argv[6], workers=int(sys.argv[7]), n_boot=int(sys.argv[8]))"
     )
@@ -100,7 +100,7 @@ def _python_command(args: argparse.Namespace, *, workers: int) -> list[str]:
 def _rust_command(args: argparse.Namespace, *, workers: int) -> list[str]:
     command = [
         str(args.rust_binary),
-        "pipeline",
+        "evaluate",
         "--raw",
         str(args.raw),
         "--benchmark",
@@ -142,7 +142,7 @@ def _run(command_template: list[str], output_dir: Path) -> dict[str, Any]:
     wall_seconds = time.perf_counter() - started
     if process.returncode != 0:
         raise RuntimeError(f"command failed ({process.returncode}): {' '.join(command)}\n{stdout}\n{stderr}")
-    internal = json.loads((output_dir / "pipeline-stats.json").read_text(encoding="utf-8"))
+    internal = json.loads((output_dir / "evaluation-run.json").read_text(encoding="utf-8"))
     return {
         "wall_seconds": wall_seconds,
         "peak_tree_rss_bytes": peak_rss,
@@ -285,9 +285,9 @@ def _markdown(payload: dict[str, Any]) -> str:
         for result in validation.values()
     )
     maximum_delta = max(result["analysis_max_abs_numeric_delta"] for result in validation.values())
-    return f"""# {payload["dataset"]["adapter"]} pipeline benchmark
+    return f"""# {payload["dataset"]["adapter"]} evaluation benchmark
 
-This benchmark runs the complete ingest, score, and analyze pipeline over {payload["dataset"]["targets"]:,} targets and {payload["dataset"]["candidates"]:,} candidate slots. Values are medians of {payload["settings"]["repetitions"]} measured runs after {payload["settings"]["warmups"]} warm-up run per case. Wall time includes process startup and artifact IO. RSS is the peak aggregate resident set of the parent process and all live children, sampled every 10 ms.
+This benchmark evaluates {payload["dataset"]["targets"]:,} targets and {payload["dataset"]["candidates"]:,} candidate slots from raw planner output through bootstrap analysis. Values are medians of {payload["settings"]["repetitions"]} measured runs after {payload["settings"]["warmups"]} warm-up run per case. Wall time includes process startup and artifact IO. RSS is the peak aggregate resident set of the parent process and all live children, sampled every 10 ms.
 
 | execution path | wall (s) | targets/s | candidates/s | peak tree RSS (MiB) | ingest (s) | score (s) | analyze (s) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

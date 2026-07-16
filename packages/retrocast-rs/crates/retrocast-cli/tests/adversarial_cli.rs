@@ -116,7 +116,7 @@ fn malformed_artifacts_and_invalid_execution_options_fail_cleanly() {
 }
 
 #[test]
-fn pipeline_rejects_manifest_path_traversal_before_reading_external_inputs() {
+fn evaluate_rejects_manifest_path_traversal_before_reading_external_inputs() {
     let directory = tempdir().unwrap();
     let raw = directory.path().join("raw");
     fs::create_dir(&raw).unwrap();
@@ -128,7 +128,7 @@ fn pipeline_rejects_manifest_path_traversal_before_reading_external_inputs() {
     let output = directory.path().join("output");
 
     let stderr = clean_failure_stderr(&[
-        "pipeline",
+        "evaluate",
         "--raw",
         raw.to_str().unwrap(),
         "--benchmark",
@@ -140,7 +140,7 @@ fn pipeline_rejects_manifest_path_traversal_before_reading_external_inputs() {
     ]);
     assert!(
         stderr.contains("unsafe raw_results_filename directive"),
-        "pipeline failed for the wrong reason:\n{stderr}"
+        "evaluation failed for the wrong reason:\n{stderr}"
     );
     assert!(!output.exists());
 }
