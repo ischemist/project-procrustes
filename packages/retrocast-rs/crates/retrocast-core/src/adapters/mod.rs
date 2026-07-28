@@ -427,7 +427,7 @@ pub fn normalize_slug(name: &str) -> String {
 mod tests {
     use serde_json::json;
 
-    use super::{AiZynthFinderAdapter, adapt_candidates};
+    use super::{Adapter, AiZynthFinderAdapter, adapt_candidates};
     use crate::route::AdaptMode;
 
     #[test]
@@ -448,6 +448,49 @@ mod tests {
         assert_eq!(
             candidates[1].failure.as_ref().unwrap().code,
             "chem.invalid_smiles"
+        );
+    }
+
+    #[test]
+    fn aizynth_separates_template_from_forward_mapped_reaction() {
+        let route = AiZynthFinderAdapter
+            .cast(
+                json!({
+                    "type": "mol",
+                    "smiles": "CCO",
+                    "children": [{
+                        "type": "reaction",
+                        "smiles": "[CH2:1][OH:2]>>[CH:1]=[O:2]",
+                        "metadata": {
+                            "template": "[C:1]-[OH:2]>>[CH:1]=[O:2]",
+                            "mapped_reaction_smiles":
+                                "[CH3:1][CH2:2][OH:3]>>[CH3:1][CH:2]=[O:3].[H:4][H:5]"
+                        },
+                        "children": [
+                            {"type": "mol", "smiles": "CC=O", "in_stock": true},
+                            {"type": "mol", "smiles": "[H][H]", "in_stock": true}
+                        ]
+                    }]
+                }),
+                AdaptMode::Strict,
+                None,
+            )
+            .unwrap();
+        let reaction = route.target.product_of.unwrap();
+        assert_eq!(
+            reaction.template.as_deref(),
+            Some("[C:1]-[OH:2]>>[CH:1]=[O:2]")
+        );
+        assert_eq!(
+            reaction
+                .mapped_reaction_smiles
+                .as_ref()
+                .map(|value| value.as_str()),
+            Some("[CH3:1][CH:2]=[O:3].[H:4][H:5]>>[CH3:1][CH2:2][OH:3]")
+        );
+        assert_eq!(
+            reaction.annotations["mapped_reaction_smiles"],
+            "[CH3:1][CH2:2][OH:3]>>[CH3:1][CH:2]=[O:3].[H:4][H:5]"
         );
     }
 }

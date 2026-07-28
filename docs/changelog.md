@@ -22,6 +22,8 @@ Task loading now has an explicit trust boundary: normal reads validate structure
 
 Planner manifests now require existing artifacts and can hash raw outputs from disk without serializing their full values across the Python/Rust boundary. Verification is strict by default, and the planner-specific creator and verifier enforce the adapter and safe raw-results directive contract consumed by project ingest. Producer schema errors surface as `ValueError`; filesystem failures surface as `OSError`.
 
+Reaction provenance now distinguishes source-reported templates from concrete atom-mapped reactions. Template-based adapters populate `template` only from an explicit planner template, while `mapped_reaction_smiles` stores the full mapped reaction in forward `reactants>>product` direction; reaction names and rendered actions remain annotations.
+
 ## v0.8.1
 
 v0.8.1 keeps corpus-sized artifacts inside Rust across ingest, score, and analyze. It also narrows ASKCOS pathway graphs before route casting and exposes `--workers` consistently across project commands.

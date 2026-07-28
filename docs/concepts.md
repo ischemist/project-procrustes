@@ -35,6 +35,8 @@ Route -> Molecule -> Reaction -> Molecule -> Reaction -> ...
 
 The root is `Route.target`. A non-leaf `Molecule` has `product_of: Reaction`; a leaf molecule has `product_of = None`. A `Reaction` stores the reactant molecules used to make its product.
 
+`mapped_reaction_smiles` is the full concrete atom-mapped reaction in `reactants>>product` direction, matching the surrounding `Reaction.reactants` and product `Molecule`. `template` is populated only when the planner reports the reaction template itself, usually as reaction SMARTS. Adapters do not infer a template from a reaction name or from a planner's rendered reaction action.
+
 ```python
 class Molecule(BaseModel):
     smiles: SmilesStr

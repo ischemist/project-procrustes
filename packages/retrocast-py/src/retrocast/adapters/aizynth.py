@@ -95,8 +95,17 @@ class AiZynthFinderAdapter:
 def _reaction_fields(node: AizynthReactionInput) -> dict[str, Any]:
     fields: dict[str, Any] = {}
     if "mapped_reaction_smiles" in node.metadata:
-        fields["mapped_reaction_smiles"] = node.metadata["mapped_reaction_smiles"]
+        fields["mapped_reaction_smiles"] = _forward_reaction_smiles(node.metadata["mapped_reaction_smiles"])
     if "template" in node.metadata:
         fields["template"] = node.metadata["template"]
     fields["annotations"] = dict(node.metadata)
     return fields
+
+
+def _forward_reaction_smiles(reaction_smiles: Any) -> Any:
+    if not isinstance(reaction_smiles, str):
+        return reaction_smiles
+    target, separator, precursors = reaction_smiles.partition(">>")
+    if not separator:
+        return reaction_smiles
+    return f"{precursors}>>{target}"

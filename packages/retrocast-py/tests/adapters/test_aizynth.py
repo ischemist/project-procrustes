@@ -32,8 +32,11 @@ def raw_aizynth_route() -> dict:
         "children": [
             {
                 "type": "reaction",
-                "smiles": "CCO",
-                "metadata": {"template": "tmpl-1", "mapped_reaction_smiles": "CC=O.[H][H]>>CCO"},
+                "smiles": "[CH2:1][OH:2]>>[CH:1]=[O:2]",
+                "metadata": {
+                    "template": "[C:1]-[OH:2]>>[CH:1]=[O:2]",
+                    "mapped_reaction_smiles": "[CH3:1][CH2:2][OH:3]>>[CH3:1][CH:2]=[O:3].[H:4][H:5]",
+                },
                 "children": [
                     {"type": "mol", "smiles": "CC=O", "in_stock": True},
                     {"type": "mol", "smiles": "[H][H]", "in_stock": True},
@@ -99,9 +102,10 @@ def test_aizynth_preserves_scores_and_reaction_metadata(raw_aizynth_route) -> No
     reaction = route.reaction_at("rc:r:/").value
 
     assert route.annotations == {"scores": {"state score": 0.75}, "state_score": 0.75}
-    assert reaction.template == "tmpl-1"
-    assert reaction.mapped_reaction_smiles == "CC=O.[H][H]>>CCO"
-    assert reaction.annotations["template"] == "tmpl-1"
+    assert reaction.template == "[C:1]-[OH:2]>>[CH:1]=[O:2]"
+    assert reaction.mapped_reaction_smiles == ("[CH3:1][CH:2]=[O:3].[H:4][H:5]>>[CH3:1][CH2:2][OH:3]")
+    assert reaction.annotations["template"] == "[C:1]-[OH:2]>>[CH:1]=[O:2]"
+    assert reaction.annotations["mapped_reaction_smiles"] == ("[CH3:1][CH2:2][OH:3]>>[CH3:1][CH:2]=[O:3].[H:4][H:5]")
 
 
 @pytest.mark.contract

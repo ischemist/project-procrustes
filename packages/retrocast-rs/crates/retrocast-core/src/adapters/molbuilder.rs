@@ -147,14 +147,14 @@ fn build_node(
         };
     }
     normalize_reactants(&mut reactants);
-    let (template, annotations) = reaction_fields(node);
+    let annotations = reaction_annotations(node);
     Ok(Some(Molecule {
         smiles,
         inchikey,
         product_of: Some(Box::new(Reaction {
             reactants,
             mapped_reaction_smiles: None,
-            template,
+            template: None,
             reagents: None,
             solvents: None,
             annotations,
@@ -163,9 +163,9 @@ fn build_node(
     }))
 }
 
-fn reaction_fields(node: &Node) -> (Option<String>, Map<String, Value>) {
+fn reaction_annotations(node: &Node) -> Map<String, Value> {
     let Some(disconnection) = &node.best_disconnection else {
-        return (None, Map::new());
+        return Map::new();
     };
     let reaction_name = disconnection.reaction_name.trim();
     let mut annotations = Map::from_iter([("score".to_owned(), json!(disconnection.score))]);
@@ -184,10 +184,7 @@ fn reaction_fields(node: &Node) -> (Option<String>, Map<String, Value>) {
             serde_json::to_value(&disconnection.precursors).expect("precursors are serializable"),
         );
     }
-    (
-        (!reaction_name.is_empty()).then(|| reaction_name.to_owned()),
-        annotations,
-    )
+    annotations
 }
 
 #[cfg(test)]
@@ -218,7 +215,8 @@ mod tests {
             .unwrap();
         assert_eq!(route.target.annotations["functional_groups"][0], "alcohol");
         let reaction = route.target.product_of.unwrap();
-        assert_eq!(reaction.template.as_deref(), Some("Reduction"));
+        assert_eq!(reaction.template, None);
+        assert_eq!(reaction.annotations["reaction_name"], "Reduction");
         assert_eq!(reaction.annotations["precursors"][0]["cost_per_kg"], 15.0);
     }
 }

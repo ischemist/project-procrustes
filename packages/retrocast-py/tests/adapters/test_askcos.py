@@ -50,8 +50,19 @@ def askcos_output(pathways: list[list[dict[str, str]]] | None = None) -> dict[st
                         "smiles": "CC(=O)O.CCO>>CCOC(C)=O",
                         "id": "rxn-1",
                         "type": "reaction",
-                        "reaction_properties": {"mapped_smiles": "CC(=O)O.CCO>>CCOC(C)=O"},
-                        "model_metadata": [{"source": {"template": {"reaction_smarts": "esterification"}}}],
+                        "reaction_properties": {
+                            "mapped_smiles": (
+                                "[CH3:1][C:2](=[O:3])[OH:4].[CH3:5][CH2:6][OH:7]"
+                                ">>[CH3:1][C:2](=[O:3])[O:7][CH2:6][CH3:5]"
+                            )
+                        },
+                        "model_metadata": [
+                            {
+                                "source": {
+                                    "template": {"reaction_smarts": "[C:1](=[O:2])[OH:3].[OH:4]>>[C:1](=[O:2])[O:4]"}
+                                }
+                            }
+                        ],
                     },
                 },
                 "uuid2smiles": {
@@ -182,8 +193,10 @@ def test_askcos_reaction_fields_and_annotations(askcos_route_payload) -> None:
     route = AskcosAdapter().cast(askcos_route_payload, target=target_for("CCOC(C)=O"))
     reaction = route.reaction_at("rc:r:/").value
 
-    assert reaction.mapped_reaction_smiles == "CC(=O)O.CCO>>CCOC(C)=O"
-    assert reaction.template == "esterification"
+    assert reaction.mapped_reaction_smiles == (
+        "[CH3:1][C:2](=[O:3])[OH:4].[CH3:5][CH2:6][OH:7]>>[CH3:1][C:2](=[O:3])[O:7][CH2:6][CH3:5]"
+    )
+    assert reaction.template == "[C:1](=[O:2])[OH:3].[OH:4]>>[C:1](=[O:2])[O:4]"
     assert reaction.annotations == {"source_id": "rxn-1"}
 
 
