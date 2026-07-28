@@ -50,9 +50,23 @@ def main() -> None:
         "default_constraints": [{"kind": "retrocast.stock_termination", "stock": "test-stock"}],
     }
     with tempfile.TemporaryDirectory() as directory:
-        task_path = Path(directory) / "task.json.gz"
-        retrocast.write_json_gz(task, task_path)
+        root = Path(directory)
+        task_path = root / "task.json.gz"
+        raw_path = root / "routes.json.gz"
+        manifest_path = root / "manifest.json"
+        retrocast.write_task(task, task_path)
         assert retrocast.load_task(task_path)["targets"][target_id]["id"] == target_id
+        assert retrocast.resolve_stock_bindings(task) == {target_id: "test-stock"}
+        retrocast.write_json_gz({"ethanol": []}, raw_path)
+        manifest = retrocast.create_planner_manifest(
+            "wheel-smoke",
+            "aizynthfinder",
+            raw_path,
+            [task_path],
+            root,
+        )
+        retrocast.write_json(manifest, manifest_path)
+        assert retrocast.verify_planner_manifest(manifest_path, root)["is_valid"]
 
     raw = json.loads(args.fixture.read_text(encoding="utf-8"))
     predictions = retrocast.ingest(

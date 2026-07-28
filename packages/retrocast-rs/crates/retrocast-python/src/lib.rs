@@ -139,13 +139,29 @@ fn python_error(error: impl std::fmt::Display) -> PyErr {
 
 fn artifact_read_error(error: retrocast_core::error::EngineError) -> PyErr {
     match error {
-        retrocast_core::error::EngineError::Json(error) if error.is_data() => {
-            PyValueError::new_err(error.to_string())
-        }
+        retrocast_core::error::EngineError::Json(error) => PyValueError::new_err(error.to_string()),
         retrocast_core::error::EngineError::UnsafePathComponent { .. } => {
             PyValueError::new_err(error.to_string())
         }
         retrocast_core::error::EngineError::Io(error) => PyOSError::new_err(error.to_string()),
+        error => python_error(error),
+    }
+}
+
+fn producer_input_error(error: retrocast_core::error::EngineError) -> PyErr {
+    match error {
+        retrocast_core::error::EngineError::Io(error) => PyOSError::new_err(error.to_string()),
+        retrocast_core::error::EngineError::InvalidSmiles { .. }
+        | retrocast_core::error::EngineError::InvalidInchiKey { .. }
+        | retrocast_core::error::EngineError::InchiKeyUpscale { .. }
+        | retrocast_core::error::EngineError::InvalidTask(_)
+        | retrocast_core::error::EngineError::InvalidExecutionStats(_)
+        | retrocast_core::error::EngineError::InvalidStock(_)
+        | retrocast_core::error::EngineError::UnsafePathComponent { .. }
+        | retrocast_core::error::EngineError::UnknownAdapter { .. }
+        | retrocast_core::error::EngineError::Provenance(_)
+        | retrocast_core::error::EngineError::Schema(_)
+        | retrocast_core::error::EngineError::Json(_) => PyValueError::new_err(error.to_string()),
         error => python_error(error),
     }
 }
@@ -1296,21 +1312,54 @@ fn evaluate_files_json(
     to_json(&stats)
 }
 
-/// Validate a JSON-compatible task and return its normalized schema-2 value.
+/// Validate a task at a trust boundary, including target chemistry by default.
 #[pyfunction(name = "validate_task")]
-fn validate_task_py(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+#[pyo3(signature = (value, *, chemistry=true))]
+fn validate_task_py(
+    py: Python<'_>,
+    value: &Bound<'_, PyAny>,
+    chemistry: bool,
+) -> PyResult<Py<PyAny>> {
     let task: Task = serde_json::from_value(python_value(value)?)
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    if chemistry {
+        task.validate_chemistry().map_err(producer_input_error)?;
+    }
     json_loads(py, &to_json(&task)?)
 }
 
-/// Load and validate a task without recreating the Rust schema in Python.
+/// Load a structurally validated task, with opt-in chemistry checks for untrusted files.
 #[pyfunction(name = "load_task")]
-fn load_task_py(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
+#[pyo3(signature = (path, *, chemistry=false))]
+fn load_task_py(py: Python<'_>, path: PathBuf, chemistry: bool) -> PyResult<Py<PyAny>> {
     let task: Task = py
         .detach(|| io::read_json(&path))
         .map_err(artifact_read_error)?;
+    if chemistry {
+        py.detach(|| task.validate_chemistry())
+            .map_err(producer_input_error)?;
+    }
     json_loads(py, &to_json(&task)?)
+}
+
+/// Validate target chemistry before writing a trusted task artifact.
+#[pyfunction(name = "write_task")]
+fn write_task_py(py: Python<'_>, value: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<()> {
+    let task: Task = serde_json::from_value(python_value(value)?)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    py.detach(|| {
+        task.validate_chemistry()?;
+        io::write_json(&path, &task)
+    })
+    .map_err(producer_input_error)
+}
+
+/// Return the effective stock name inherited by every target.
+#[pyfunction(name = "resolve_stock_bindings")]
+fn resolve_stock_bindings_py(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    let task: Task = serde_json::from_value(python_value(value)?)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    json_loads(py, &to_json(&task.stock_bindings())?)
 }
 
 /// Read a JSON or JSON-gzip artifact into ordinary Python values.
@@ -1353,7 +1402,7 @@ fn load_stock_py(py: Python<'_>, path: PathBuf, representation: &str) -> PyResul
     };
     py.detach(|| io::read_stock_values(&path, representation))
         .map(|values| values.into_iter().collect())
-        .map_err(artifact_read_error)
+        .map_err(producer_input_error)
 }
 
 /// Validate per-target planner timings before they enter an evaluation.
@@ -1395,12 +1444,25 @@ fn manifest_output_from_python(
             )));
         }
     };
+    let content_hash: Option<String> = value.call_method1("get", ("content_hash",))?.extract()?;
+    let has_value: bool = value.call_method1("__contains__", ("value",))?.extract()?;
+    let output_value = if has_value {
+        python_value(&value.get_item("value")?)?
+    } else if content_type == retrocast_core::provenance::ContentType::Unknown
+        || content_hash.is_some()
+    {
+        Value::Null
+    } else {
+        return Err(PyValueError::new_err(
+            "manifest output value is required unless content_type is 'unknown' or content_hash is supplied",
+        ));
+    };
     Ok(retrocast_core::provenance::ManifestOutput {
         label: value.call_method1("get", ("label",))?.extract()?,
         path: value.get_item("path")?.extract()?,
-        value: python_value(&value.get_item("value")?)?,
+        value: output_value,
         content_type,
-        content_hash: value.call_method1("get", ("content_hash",))?.extract()?,
+        content_hash,
     })
 }
 
@@ -1449,13 +1511,76 @@ fn create_manifest_py(
         release_name,
         keyed_output_files,
     )
-    .map_err(artifact_read_error)?;
+    .map_err(producer_input_error)?;
+    json_loads(py, &to_json(&manifest)?)
+}
+
+/// Create a strict raw-output manifest accepted by project-mode ingest.
+#[pyfunction(name = "create_planner_manifest")]
+#[pyo3(signature = (
+    action,
+    adapter,
+    raw_results_path,
+    sources,
+    root_dir,
+    *,
+    parameters=None,
+    statistics=None,
+    summary=None,
+    release_name=None
+))]
+#[allow(clippy::too_many_arguments)]
+fn create_planner_manifest_py(
+    py: Python<'_>,
+    action: String,
+    adapter: String,
+    raw_results_path: PathBuf,
+    sources: Vec<PathBuf>,
+    root_dir: PathBuf,
+    parameters: Option<&Bound<'_, PyAny>>,
+    statistics: Option<&Bound<'_, PyAny>>,
+    summary: Option<&Bound<'_, PyAny>>,
+    release_name: Option<String>,
+) -> PyResult<Py<PyAny>> {
+    let raw_results_filename = raw_results_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| PyValueError::new_err("raw_results_path requires a UTF-8 filename"))?;
+    let planner =
+        retrocast_core::provenance::validate_planner_directives(&adapter, raw_results_filename)
+            .map_err(producer_input_error)?;
+    let directives = serde_json::Map::from_iter([
+        ("adapter".to_owned(), Value::String(planner.adapter)),
+        (
+            "raw_results_filename".to_owned(),
+            Value::String(planner.raw_results_filename),
+        ),
+    ]);
+    let manifest = retrocast_core::provenance::create_manifest(
+        action,
+        &sources,
+        &[retrocast_core::provenance::ManifestOutput {
+            label: None,
+            path: raw_results_path,
+            value: Value::Null,
+            content_type: retrocast_core::provenance::ContentType::Unknown,
+            content_hash: None,
+        }],
+        &root_dir,
+        python_map("parameters", parameters)?,
+        python_map("statistics", statistics)?,
+        directives,
+        python_map("summary", summary)?,
+        release_name,
+        false,
+    )
+    .map_err(producer_input_error)?;
     json_loads(py, &to_json(&manifest)?)
 }
 
 /// Verify one manifest and return the same structured report as the Rust CLI.
 #[pyfunction(name = "verify_manifest")]
-#[pyo3(signature = (manifest_path, root_dir, *, deep=false, output_only=false, lenient=true))]
+#[pyo3(signature = (manifest_path, root_dir, *, deep=false, output_only=false, lenient=false))]
 fn verify_manifest_py(
     py: Python<'_>,
     manifest_path: PathBuf,
@@ -1471,6 +1596,27 @@ fn verify_manifest_py(
             deep,
             output_only,
             lenient,
+        )
+    });
+    json_loads(py, &to_json(&report)?)
+}
+
+/// Verify hashes plus the adapter and raw-output contract used by project ingest.
+#[pyfunction(name = "verify_planner_manifest")]
+#[pyo3(signature = (manifest_path, root_dir, *, deep=false, output_only=false))]
+fn verify_planner_manifest_py(
+    py: Python<'_>,
+    manifest_path: PathBuf,
+    root_dir: PathBuf,
+    deep: bool,
+    output_only: bool,
+) -> PyResult<Py<PyAny>> {
+    let report = py.detach(|| {
+        retrocast_core::provenance::verify_planner_manifest(
+            &manifest_path,
+            &root_dir,
+            deep,
+            output_only,
         )
     });
     json_loads(py, &to_json(&report)?)
@@ -2124,6 +2270,8 @@ fn retrocast(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(molecular_descriptors, module)?)?;
     module.add_function(wrap_pyfunction!(validate_task_py, module)?)?;
     module.add_function(wrap_pyfunction!(load_task_py, module)?)?;
+    module.add_function(wrap_pyfunction!(write_task_py, module)?)?;
+    module.add_function(wrap_pyfunction!(resolve_stock_bindings_py, module)?)?;
     module.add_function(wrap_pyfunction!(read_json_py, module)?)?;
     module.add_function(wrap_pyfunction!(write_json_py, module)?)?;
     module.add_function(wrap_pyfunction!(write_json_gz_py, module)?)?;
@@ -2131,7 +2279,9 @@ fn retrocast(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(validate_execution_stats_py, module)?)?;
     module.add_function(wrap_pyfunction!(write_execution_stats_py, module)?)?;
     module.add_function(wrap_pyfunction!(create_manifest_py, module)?)?;
+    module.add_function(wrap_pyfunction!(create_planner_manifest_py, module)?)?;
     module.add_function(wrap_pyfunction!(verify_manifest_py, module)?)?;
+    module.add_function(wrap_pyfunction!(verify_planner_manifest_py, module)?)?;
     module.add_function(wrap_pyfunction!(adapt_candidates_json, module)?)?;
     module.add_function(wrap_pyfunction!(adapt_route_json, module)?)?;
     module.add_function(wrap_pyfunction!(adapter_entries_json, module)?)?;
@@ -2251,6 +2401,7 @@ fn retrocast(module: &Bound<'_, PyModule>) -> PyResult<()> {
             "analyze_file",
             "canonicalize_smiles",
             "create_manifest",
+            "create_planner_manifest",
             "engine_info",
             "evaluate",
             "get_inchi_key",
@@ -2261,13 +2412,16 @@ fn retrocast(module: &Bound<'_, PyModule>) -> PyResult<()> {
             "molecular_descriptors",
             "read_json",
             "reduce_inchi_key",
+            "resolve_stock_bindings",
             "score",
             "validate_execution_stats",
             "validate_task",
             "verify_manifest",
+            "verify_planner_manifest",
             "write_execution_stats",
             "write_json",
             "write_json_gz",
+            "write_task",
         ],
     )?;
     Ok(())

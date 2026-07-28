@@ -9,7 +9,7 @@ use retrocast_core::{
     adapt, adapters, analyze,
     io::{read_json, read_stock, validate_path_component, write_json},
     model::{AnalysisReport, Evaluation, ExecutionStats, Predictions, Task},
-    provenance::{ContentType, ManifestOutput, create_manifest},
+    provenance::{ContentType, ManifestOutput, create_manifest, validate_planner_directives},
     route::AdaptMode,
     score::{Stocks, score_owned},
 };
@@ -145,8 +145,9 @@ pub fn ingest_project(
                 })?;
             let raw_filename = manifest_directive(&manifest_path, "raw_results_filename")?
                 .unwrap_or_else(|| "results.json.gz".to_owned());
-            safe_name(&raw_filename, "raw results filename")?;
-            let raw_path = raw_dir.join(raw_filename);
+            let planner = validate_planner_directives(&adapter_name, &raw_filename)?;
+            let adapter_name = planner.adapter;
+            let raw_path = raw_dir.join(planner.raw_results_filename);
             let task_path = paths.benchmarks.join(format!("{dataset}.json.gz"));
             let task: Task = read_json(&task_path)?;
             let adapter = adapters::built_in(&adapter_name)
