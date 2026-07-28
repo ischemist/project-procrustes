@@ -8,7 +8,7 @@ use retrocast_core::{
     chem::{self, InchiKeyLevel as ChemInchiKeyLevel},
     embedding::{EmbeddingOptions, find_route_embeddings, route_embeds_at},
     evaluate::{EvaluationOptions, evaluate_files},
-    io,
+    io::{self, StockRepresentation},
     model::{Evaluation, ExecutionStats, Predictions, Task},
     route::AdaptMode,
     route_path::RoutePath,
@@ -58,16 +58,19 @@ impl NativePredictions {
 
 #[pymethods]
 impl NativePredictions {
+    /// Serialize the Rust-owned predictions as compact JSON.
     fn json(&self) -> PyResult<String> {
         to_json(self.snapshot()?.as_ref())
     }
 
+    /// Write predictions without constructing the complete graph in Python.
     fn write(&self, py: Python<'_>, path: PathBuf) -> PyResult<()> {
         let value = self.snapshot()?;
         py.detach(move || io::write_json(&path, value.as_ref()))
             .map_err(artifact_read_error)
     }
 
+    /// Create a Python snapshot for inspection or interoperability.
     fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         json_loads(py, &to_json(self.snapshot()?.as_ref())?)
     }
@@ -81,20 +84,24 @@ struct NativeEvaluation {
 
 #[pymethods]
 impl NativeEvaluation {
+    /// Serialize the Rust-owned evaluation as compact JSON.
     fn json(&self) -> PyResult<String> {
         to_json(self.value.as_ref())
     }
 
+    /// Write the evaluation without constructing the complete graph in Python.
     fn write(&self, py: Python<'_>, path: PathBuf) -> PyResult<()> {
         let value = Arc::clone(&self.value);
         py.detach(move || io::write_json(&path, value.as_ref()))
             .map_err(artifact_read_error)
     }
 
+    /// Return the metric label derived from the effective task constraints.
     fn metric_label(&self) -> String {
         self.value.metric_label.clone()
     }
 
+    /// Create a Python snapshot for inspection or interoperability.
     fn to_dict(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         json_loads(py, &to_json(self.value.as_ref())?)
     }
@@ -174,6 +181,23 @@ fn json_loads(py: Python<'_>, value: &str) -> PyResult<Py<PyAny>> {
     Ok(py.import("json")?.call_method1("loads", (value,))?.unbind())
 }
 
+fn python_value(value: &Bound<'_, PyAny>) -> PyResult<Value> {
+    serde_json::from_str(&json_dumps(value)?)
+        .map_err(|error| PyValueError::new_err(error.to_string()))
+}
+
+fn python_map(value: Option<&Bound<'_, PyAny>>) -> PyResult<serde_json::Map<String, Value>> {
+    match value {
+        None => Ok(serde_json::Map::new()),
+        Some(value) if value.is_none() => Ok(serde_json::Map::new()),
+        Some(value) => python_value(value)?
+            .as_object()
+            .cloned()
+            .ok_or_else(|| PyValueError::new_err("expected a mapping")),
+    }
+}
+
+/// Adapt one planner payload into ranked schema-2 candidates.
 #[pyfunction(name = "adapt")]
 #[pyo3(signature = (raw, adapter, *, mode="strict", target=None, source_key=None, max_candidates=None, workers=1))]
 #[allow(clippy::too_many_arguments)]
@@ -202,6 +226,7 @@ fn adapt_py(
     json_loads(py, &result)
 }
 
+/// Adapt and collect an in-memory planner payload while keeping its graph in Rust.
 #[pyfunction(name = "ingest")]
 #[pyo3(signature = (raw, adapter, task, *, mode="strict", max_candidates=None, workers=1))]
 fn ingest_py(
@@ -224,6 +249,7 @@ fn ingest_py(
     )
 }
 
+/// Read, adapt, and collect a planner artifact without decompressing it in Python.
 #[pyfunction(name = "ingest_file")]
 #[pyo3(signature = (raw_path, adapter, task_path, *, mode="strict", max_candidates=None, workers=1))]
 fn ingest_file_py(
@@ -246,6 +272,7 @@ fn ingest_file_py(
     )
 }
 
+/// Consume native predictions and score them against one task and its named stocks.
 #[pyfunction(name = "score")]
 #[pyo3(signature = (predictions, task, stocks, *, match_level="full", acceptable_route_match="prefix", execution_stats=None, workers=1))]
 #[allow(clippy::too_many_arguments)]
@@ -272,6 +299,7 @@ fn score_py(
     )
 }
 
+/// Calculate metrics and confidence intervals from a native evaluation.
 #[pyfunction(name = "analyze")]
 #[pyo3(signature = (evaluation, *, ks=vec![1, 3, 5, 10, 20, 50, 100], prefix_depths=vec![1, 2, 3], n_boot=10000, seed=42, workers=1))]
 fn analyze_py(
@@ -287,6 +315,7 @@ fn analyze_py(
     json_loads(py, &result)
 }
 
+/// Read and analyze an evaluation artifact without loading it through Python.
 #[pyfunction(name = "analyze_file")]
 #[pyo3(signature = (evaluation_path, *, ks=vec![1, 3, 5, 10, 20, 50, 100], prefix_depths=vec![1, 2, 3], execution_stats_path=None, n_boot=10000, seed=42, workers=1))]
 #[allow(clippy::too_many_arguments)]
@@ -313,6 +342,7 @@ fn analyze_file_py(
     json_loads(py, &result)
 }
 
+/// Run adaptation, scoring, artifact writing, and analysis target by target.
 #[pyfunction(name = "evaluate")]
 #[pyo3(signature = (raw_path, benchmark_path, stock_path, output_dir, *, stock_name=None, execution_stats_path=None, adapter="aizynthfinder", workers=1, mode="strict", max_candidates=None, match_level="full", acceptable_route_match="prefix", ks=vec![1, 3, 5, 10, 20, 50, 100], prefix_depths=vec![1, 2, 3], n_boot=10000, seed=42))]
 #[allow(clippy::too_many_arguments)]
@@ -1263,6 +1293,192 @@ fn evaluate_files_json(
     to_json(&stats)
 }
 
+/// Validate a JSON-compatible task and return its normalized schema-2 value.
+#[pyfunction(name = "validate_task")]
+fn validate_task_py(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    let task: Task = serde_json::from_str(&json_dumps(value)?)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    json_loads(py, &to_json(&task)?)
+}
+
+/// Load and validate a task without recreating the Rust schema in Python.
+#[pyfunction(name = "load_task")]
+fn load_task_py(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
+    let task: Task = py
+        .detach(|| io::read_json(&path))
+        .map_err(artifact_read_error)?;
+    json_loads(py, &to_json(&task)?)
+}
+
+/// Read a JSON or JSON-gzip artifact into ordinary Python values.
+#[pyfunction(name = "read_json")]
+fn read_json_py(py: Python<'_>, path: PathBuf) -> PyResult<Py<PyAny>> {
+    let value = py
+        .detach(|| io::read_json_value(&path))
+        .map_err(artifact_read_error)?;
+    json_loads(py, &to_json(&value)?)
+}
+
+/// Write a JSON-compatible value using RetroCast's deterministic serializer.
+#[pyfunction(name = "write_json")]
+fn write_json_py(py: Python<'_>, value: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<()> {
+    let value = python_value(value)?;
+    py.detach(|| io::write_json(&path, &value))
+        .map_err(artifact_read_error)
+}
+
+/// Write a deterministic, human-readable gzip JSON artifact.
+#[pyfunction(name = "write_json_gz")]
+fn write_json_gz_py(py: Python<'_>, value: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<()> {
+    let value = python_value(value)?;
+    py.detach(|| io::write_json_gz(&path, &value))
+        .map_err(artifact_read_error)
+}
+
+/// Load the SMILES or InChIKeys an external planner needs from a stock artifact.
+#[pyfunction(name = "load_stock")]
+#[pyo3(signature = (path, *, representation="smiles"))]
+fn load_stock_py(py: Python<'_>, path: PathBuf, representation: &str) -> PyResult<Vec<String>> {
+    let representation = match representation {
+        "smiles" => StockRepresentation::Smiles,
+        "inchikey" => StockRepresentation::InchiKey,
+        value => {
+            return Err(PyValueError::new_err(format!(
+                "unknown stock representation {value:?}; expected 'smiles' or 'inchikey'"
+            )));
+        }
+    };
+    py.detach(|| io::read_stock_values(&path, representation))
+        .map(|values| values.into_iter().collect())
+        .map_err(artifact_read_error)
+}
+
+/// Validate per-target planner timings before they enter an evaluation.
+#[pyfunction(name = "validate_execution_stats")]
+fn validate_execution_stats_py(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    let stats: ExecutionStats = serde_json::from_str(&json_dumps(value)?)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    stats
+        .validate()
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    json_loads(py, &to_json(&stats)?)
+}
+
+/// Validate and write the planner timings consumed by score and evaluate.
+#[pyfunction(name = "write_execution_stats")]
+fn write_execution_stats_py(
+    py: Python<'_>,
+    value: &Bound<'_, PyAny>,
+    path: PathBuf,
+) -> PyResult<()> {
+    let stats: ExecutionStats = serde_json::from_str(&json_dumps(value)?)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    stats
+        .validate()
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    py.detach(|| io::write_json_gz(&path, &serde_json::to_value(stats)?))
+        .map_err(artifact_read_error)
+}
+
+fn manifest_output_from_python(
+    py: Python<'_>,
+    value: Py<PyAny>,
+) -> PyResult<retrocast_core::provenance::ManifestOutput> {
+    let value = value.bind(py);
+    let content_type: String = value.get_item("content_type")?.extract()?;
+    let content_type = match content_type.as_str() {
+        "benchmark" => retrocast_core::provenance::ContentType::Benchmark,
+        "predictions" => retrocast_core::provenance::ContentType::Predictions,
+        "route_corpus" => retrocast_core::provenance::ContentType::RouteCorpus,
+        "stock" => retrocast_core::provenance::ContentType::Stock,
+        "unknown" => retrocast_core::provenance::ContentType::Unknown,
+        value => {
+            return Err(PyValueError::new_err(format!(
+                "unknown manifest content_type {value:?}"
+            )));
+        }
+    };
+    Ok(retrocast_core::provenance::ManifestOutput {
+        label: value.call_method1("get", ("label",))?.extract()?,
+        path: value.get_item("path")?.extract()?,
+        value: python_value(&value.get_item("value")?)?,
+        content_type,
+        content_hash: value.call_method1("get", ("content_hash",))?.extract()?,
+    })
+}
+
+/// Create provenance metadata from Python values using the Rust hash policy.
+#[pyfunction(name = "create_manifest")]
+#[pyo3(signature = (
+    action,
+    sources,
+    outputs,
+    root_dir,
+    *,
+    parameters=None,
+    statistics=None,
+    directives=None,
+    summary=None,
+    release_name=None,
+    keyed_output_files=false
+))]
+#[allow(clippy::too_many_arguments)]
+fn create_manifest_py(
+    py: Python<'_>,
+    action: String,
+    sources: Vec<PathBuf>,
+    outputs: Vec<Py<PyAny>>,
+    root_dir: PathBuf,
+    parameters: Option<&Bound<'_, PyAny>>,
+    statistics: Option<&Bound<'_, PyAny>>,
+    directives: Option<&Bound<'_, PyAny>>,
+    summary: Option<&Bound<'_, PyAny>>,
+    release_name: Option<String>,
+    keyed_output_files: bool,
+) -> PyResult<Py<PyAny>> {
+    let outputs = outputs
+        .into_iter()
+        .map(|value| manifest_output_from_python(py, value))
+        .collect::<PyResult<Vec<_>>>()?;
+    let manifest = retrocast_core::provenance::create_manifest(
+        action,
+        &sources,
+        &outputs,
+        &root_dir,
+        python_map(parameters)?,
+        python_map(statistics)?,
+        python_map(directives)?,
+        python_map(summary)?,
+        release_name,
+        keyed_output_files,
+    )
+    .map_err(python_error)?;
+    json_loads(py, &to_json(&manifest)?)
+}
+
+/// Verify one manifest and return the same structured report as the Rust CLI.
+#[pyfunction(name = "verify_manifest")]
+#[pyo3(signature = (manifest_path, root_dir, *, deep=false, output_only=false, lenient=true))]
+fn verify_manifest_py(
+    py: Python<'_>,
+    manifest_path: PathBuf,
+    root_dir: PathBuf,
+    deep: bool,
+    output_only: bool,
+    lenient: bool,
+) -> PyResult<Py<PyAny>> {
+    let report = py.detach(|| {
+        retrocast_core::provenance::verify_manifest(
+            &manifest_path,
+            &root_dir,
+            deep,
+            output_only,
+            lenient,
+        )
+    });
+    json_loads(py, &to_json(&report)?)
+}
+
 #[pyfunction]
 #[pyo3(signature = (manifest_path, root_dir, deep=false, output_only=false, lenient=true))]
 fn verify_manifest_json(
@@ -1828,6 +2044,7 @@ fn build_route_embedding_audit_json(
     to_json(&audit)
 }
 
+/// Report the RetroCast engine and linked RDKit versions.
 #[pyfunction]
 fn engine_info() -> (&'static str, &'static str, String) {
     (
@@ -1837,6 +2054,7 @@ fn engine_info() -> (&'static str, &'static str, String) {
     )
 }
 
+/// Canonicalize a SMILES string with the same RDKit C++ bridge as the Rust API.
 #[pyfunction]
 #[pyo3(signature = (smiles, remove_mapping=false, ignore_stereo=false))]
 fn canonicalize_smiles(
@@ -1850,6 +2068,7 @@ fn canonicalize_smiles(
         .map_err(chemistry_error)
 }
 
+/// Calculate an InChIKey at the requested molecular-identity level.
 #[pyfunction]
 #[pyo3(signature = (smiles, level="full"))]
 fn get_inchi_key(py: Python<'_>, smiles: &str, level: &str) -> PyResult<String> {
@@ -1858,6 +2077,7 @@ fn get_inchi_key(py: Python<'_>, smiles: &str, level: &str) -> PyResult<String> 
         .map_err(chemistry_error)
 }
 
+/// Reduce an existing InChIKey without inventing information it does not contain.
 #[pyfunction]
 fn reduce_inchi_key(inchikey: &str, level: &str) -> PyResult<String> {
     chem::reduce_inchi_key(inchikey, parse_chem_level(level)?).map_err(chemistry_error)
@@ -1874,6 +2094,7 @@ fn parse_chem_level(level: &str) -> PyResult<ChemInchiKeyLevel> {
     }
 }
 
+/// Return heavy-atom count, molecular weight, and chiral-center count.
 #[pyfunction]
 fn molecular_descriptors(py: Python<'_>, smiles: &str) -> PyResult<(u32, f64, u32)> {
     py.detach(|| chem::descriptors(smiles))
@@ -1904,6 +2125,16 @@ fn retrocast(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(get_inchi_key, module)?)?;
     module.add_function(wrap_pyfunction!(reduce_inchi_key, module)?)?;
     module.add_function(wrap_pyfunction!(molecular_descriptors, module)?)?;
+    module.add_function(wrap_pyfunction!(validate_task_py, module)?)?;
+    module.add_function(wrap_pyfunction!(load_task_py, module)?)?;
+    module.add_function(wrap_pyfunction!(read_json_py, module)?)?;
+    module.add_function(wrap_pyfunction!(write_json_py, module)?)?;
+    module.add_function(wrap_pyfunction!(write_json_gz_py, module)?)?;
+    module.add_function(wrap_pyfunction!(load_stock_py, module)?)?;
+    module.add_function(wrap_pyfunction!(validate_execution_stats_py, module)?)?;
+    module.add_function(wrap_pyfunction!(write_execution_stats_py, module)?)?;
+    module.add_function(wrap_pyfunction!(create_manifest_py, module)?)?;
+    module.add_function(wrap_pyfunction!(verify_manifest_py, module)?)?;
     module.add_function(wrap_pyfunction!(adapt_candidates_json, module)?)?;
     module.add_function(wrap_pyfunction!(adapt_route_json, module)?)?;
     module.add_function(wrap_pyfunction!(adapter_entries_json, module)?)?;
@@ -2011,5 +2242,36 @@ fn retrocast(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(audit_single_step_release_json, module)?)?;
     module.add_function(wrap_pyfunction!(build_route_embedding_audit_json, module)?)?;
     module.add_function(wrap_pyfunction!(engine_info, module)?)?;
+    module.add(
+        "__all__",
+        vec![
+            "NativeEvaluation",
+            "NativePredictions",
+            "__engine__",
+            "__version__",
+            "adapt",
+            "analyze",
+            "analyze_file",
+            "canonicalize_smiles",
+            "create_manifest",
+            "engine_info",
+            "evaluate",
+            "get_inchi_key",
+            "ingest",
+            "ingest_file",
+            "load_stock",
+            "load_task",
+            "molecular_descriptors",
+            "read_json",
+            "reduce_inchi_key",
+            "score",
+            "validate_execution_stats",
+            "validate_task",
+            "verify_manifest",
+            "write_execution_stats",
+            "write_json",
+            "write_json_gz",
+        ],
+    )?;
     Ok(())
 }

@@ -61,16 +61,30 @@ Rust callers own `Predictions`, `Evaluation`, and `AnalysisReport` directly and 
 
 ## Core Models
 
-| Model | Purpose |
-| --- | --- |
-| `Route`, `Molecule`, `Reaction` | Canonical route tree |
-| `Candidate`, `FailureRecord` | Adaptation accounting |
-| `Target`, `Constraint`, `Task` | Problem definition |
-| `ScoredCandidate`, `TargetResult`, `Evaluation` | Scored output |
-| `MetricSummary`, `RuntimeSummary`, `AnalysisReport` | Analysis output |
-| `ExecutionStats` | Optional per-target runtime input |
+| Model                                               | Purpose                           |
+| --------------------------------------------------- | --------------------------------- |
+| `Route`, `Molecule`, `Reaction`                     | Canonical route tree              |
+| `Candidate`, `FailureRecord`                        | Adaptation accounting             |
+| `Target`, `Constraint`, `Task`                      | Problem definition                |
+| `ScoredCandidate`, `TargetResult`, `Evaluation`     | Scored output                     |
+| `MetricSummary`, `RuntimeSummary`, `AnalysisReport` | Analysis output                   |
+| `ExecutionStats`                                    | Optional per-target runtime input |
 
 The Python boundary represents individual models as JSON-compatible dictionaries. Corpus-sized prediction and evaluation collections remain native handles.
+
+## Producer Integration
+
+| Function | Purpose | Returns |
+| --- | --- | --- |
+| `load_task(path)` | Read and validate a schema-2 task | normalized `dict` |
+| `validate_task(value)` | Validate an in-memory task | normalized `dict` |
+| `load_stock(path, representation="smiles")` | Read planner SMILES or scoring InChIKeys | sorted `list[str]` |
+| `validate_execution_stats(value)` | Validate per-target wall and CPU times | normalized `dict` |
+| `write_execution_stats(value, path)` | Validate and write execution statistics | `None` |
+| `create_manifest(action, sources, outputs, root_dir, *, ...)` | Hash producer inputs and outputs | manifest `dict` |
+| `verify_manifest(manifest_path, root_dir, *, ...)` | Check lineage and physical hashes | verification `dict` |
+
+These functions expose `retrocast-core` schema and provenance behavior to Python runners. They do not recreate the Rust models as Python classes.
 
 ## Chemistry
 
@@ -107,6 +121,10 @@ No RDKit object crosses the Rust or Python API. Invalid chemical input raises `V
 === "Python 0.8.x"
 
     ```python
+    task = retrocast.load_task("benchmark.json.gz")
+    payload = retrocast.read_json("results.json.gz")
+    retrocast.write_json_gz(payload, "results-copy.json.gz")
+
     predictions.write("candidates.json.gz")
     evaluation.write("evaluation.json.gz")
     ```
@@ -129,7 +147,7 @@ No RDKit object crosses the Rust or Python API. Invalid chemical input raises `V
     save_evaluation(evaluation, "evaluation.json.gz")
     ```
 
-All three interfaces infer gzip from the path and write the same schema-v2 artifacts.
+`read_json` and `write_json` infer gzip from the path. `write_json_gz` always uses RetroCast's deterministic, human-readable gzip representation. Native handles write schema-v2 artifacts without first materializing them in Python.
 
 ## Runtime Identity
 
@@ -158,7 +176,7 @@ All three interfaces infer gzip from the path and write the same schema-v2 artif
 
 ## Errors
 
-- Python uses `ValueError` for invalid chemistry, `OSError` for artifact-path failures, and `RuntimeError` for schema, adapter, or workflow failures.
+- Python uses `ValueError` for invalid chemistry or producer input, `OSError` for artifact-path failures, and `RuntimeError` for adapter or workflow failures.
 - Rust returns `retrocast_core::error::EngineError` from core operations.
 
 See [Error Handling](../../dev/reference/errors.md) for stable failure codes and candidate-level accounting.

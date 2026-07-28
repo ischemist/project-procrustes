@@ -192,49 +192,81 @@ fn python_pretty_json(value: &Value) -> String {
 }
 
 pub fn read_stock(path: &Path, name: &str) -> Result<Stocks> {
-    let keys = if path
+    let keys = read_stock_values(path, StockRepresentation::InchiKey)?;
+    Ok(BTreeMap::from([(name.to_owned(), keys)]))
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StockRepresentation {
+    Smiles,
+    InchiKey,
+}
+
+/// Read the molecule identifiers an external planner needs from a RetroCast stock.
+pub fn read_stock_values(
+    path: &Path,
+    representation: StockRepresentation,
+) -> Result<BTreeSet<String>> {
+    if path
         .file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.ends_with(".csv.gz"))
         || path.extension().is_some_and(|extension| extension == "csv")
     {
-        read_stock_csv(path)?
-    } else {
-        read_stock_smiles(path)?
-    };
-    Ok(BTreeMap::from([(name.to_owned(), keys)]))
+        let headers: &[&str] = match representation {
+            StockRepresentation::Smiles => &["smiles"],
+            StockRepresentation::InchiKey => &["inchikey", "inchi_key"],
+        };
+        return read_stock_csv_column(path, headers);
+    }
+
+    let values = read_stock_smiles_lines(path)?;
+    match representation {
+        StockRepresentation::Smiles => Ok(values),
+        StockRepresentation::InchiKey => values
+            .into_iter()
+            .map(|smiles| Ok(chem::normalize(&smiles)?.1.into_string()))
+            .collect(),
+    }
 }
 
-fn read_stock_csv(path: &Path) -> Result<BTreeSet<String>> {
+fn read_stock_csv_column(path: &Path, accepted_headers: &[&str]) -> Result<BTreeSet<String>> {
     let reader = open_reader(path)?;
     let mut csv = csv::Reader::from_reader(reader);
     let headers = csv.headers().map_err(csv_error)?.clone();
     let index = headers
         .iter()
         .position(|header| {
-            header.eq_ignore_ascii_case("inchikey") || header.eq_ignore_ascii_case("inchi_key")
+            accepted_headers
+                .iter()
+                .any(|expected| header.eq_ignore_ascii_case(expected))
         })
-        .ok_or_else(|| EngineError::AdapterSchema("stock CSV has no InChIKey column".to_owned()))?;
-    let mut keys = BTreeSet::new();
+        .ok_or_else(|| {
+            EngineError::AdapterSchema(format!(
+                "stock CSV has no {} column",
+                accepted_headers.join(" or ")
+            ))
+        })?;
+    let mut values = BTreeSet::new();
     for row in csv.records() {
         let row = row.map_err(csv_error)?;
         if let Some(value) = row.get(index).filter(|value| !value.is_empty()) {
-            keys.insert(value.to_owned());
+            values.insert(value.to_owned());
         }
     }
-    Ok(keys)
+    Ok(values)
 }
 
-fn read_stock_smiles(path: &Path) -> Result<BTreeSet<String>> {
+fn read_stock_smiles_lines(path: &Path) -> Result<BTreeSet<String>> {
     let reader = open_reader(path)?;
-    let mut keys = BTreeSet::new();
+    let mut smiles_values = BTreeSet::new();
     for line in BufReader::new(reader).lines() {
         let smiles = line?;
         if !smiles.trim().is_empty() {
-            keys.insert(chem::normalize(smiles.trim())?.1.into_string());
+            smiles_values.insert(smiles.trim().to_owned());
         }
     }
-    Ok(keys)
+    Ok(smiles_values)
 }
 
 pub(crate) fn open_reader(path: &Path) -> Result<Box<dyn Read>> {
@@ -252,7 +284,9 @@ fn csv_error(error: csv::Error) -> EngineError {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_path_component;
+    use std::fs;
+
+    use super::{StockRepresentation, read_stock_values, validate_path_component};
 
     #[test]
     fn path_components_reject_traversal_and_platform_separators() {
@@ -271,5 +305,25 @@ mod tests {
             );
         }
         assert!(validate_path_component("buyables-stock", "stock").is_ok());
+    }
+
+    #[test]
+    fn stock_reader_selects_smiles_or_inchikey_columns() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("stock.csv");
+        fs::write(
+            &path,
+            "SMILES,InChIKey\nCCO,LFQSCWFLJHTTHZ-UHFFFAOYSA-N\nC,VNWKTOKETHGBQD-UHFFFAOYSA-N\n",
+        )
+        .unwrap();
+
+        let smiles = read_stock_values(&path, StockRepresentation::Smiles).unwrap();
+        let keys = read_stock_values(&path, StockRepresentation::InchiKey).unwrap();
+
+        assert_eq!(smiles.into_iter().collect::<Vec<_>>(), ["C", "CCO"]);
+        assert_eq!(
+            keys.into_iter().collect::<Vec<_>>(),
+            ["LFQSCWFLJHTTHZ-UHFFFAOYSA-N", "VNWKTOKETHGBQD-UHFFFAOYSA-N"]
+        );
     }
 }

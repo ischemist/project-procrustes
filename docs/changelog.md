@@ -12,7 +12,13 @@ Practically speaking, you should treat `2-raw` (or wherever you store the raw pl
 
 For most use cases, this should not be a problem since complete evaluation through ingest, score, and analyze is decently fast. If you are using (or planning to use) RetroCast for large evaluation runs, please feel free [to get in touch](ischemist.com/contact).
 
-## v0.8.1 (unreleased)
+## v0.8.2 (unreleased)
+
+v0.8.2 adds the Rust-backed Python surface needed by external planner runners. Python can now load and validate tasks and stocks, write deterministic artifacts and execution statistics, and create or verify manifests without calling string-based binding plumbing or recreating RetroCast schemas.
+
+The wheel remains a direct PyO3 binding with no Python implementation or runtime dependencies. A bundled type stub and `py.typed` marker describe the curated public API.
+
+## v0.8.1
 
 v0.8.1 keeps corpus-sized artifacts inside Rust across ingest, score, and analyze. It also narrows ASKCOS pathway graphs before route casting and exposes `--workers` consistently across project commands.
 
