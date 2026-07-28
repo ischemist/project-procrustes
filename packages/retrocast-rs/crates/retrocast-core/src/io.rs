@@ -237,6 +237,7 @@ fn read_stock_csv_column(path: &Path, accepted_headers: &[&str]) -> Result<BTree
     let index = headers
         .iter()
         .position(|header| {
+            let header = header.trim();
             accepted_headers
                 .iter()
                 .any(|expected| header.eq_ignore_ascii_case(expected))
@@ -250,7 +251,11 @@ fn read_stock_csv_column(path: &Path, accepted_headers: &[&str]) -> Result<BTree
     let mut values = BTreeSet::new();
     for row in csv.records() {
         let row = row.map_err(csv_error)?;
-        if let Some(value) = row.get(index).filter(|value| !value.is_empty()) {
+        if let Some(value) = row
+            .get(index)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
             values.insert(value.to_owned());
         }
     }
@@ -313,7 +318,7 @@ mod tests {
         let path = directory.path().join("stock.csv");
         fs::write(
             &path,
-            "SMILES,InChIKey\nCCO,LFQSCWFLJHTTHZ-UHFFFAOYSA-N\nC,VNWKTOKETHGBQD-UHFFFAOYSA-N\n",
+            "SMILES, InChIKey\n CCO , LFQSCWFLJHTTHZ-UHFFFAOYSA-N \nC,VNWKTOKETHGBQD-UHFFFAOYSA-N\n",
         )
         .unwrap();
 

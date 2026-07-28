@@ -338,7 +338,7 @@ fn validate_constraint(constraint: &Constraint) -> Result<()> {
                 ));
             }
         }
-        other => return Err(EngineError::UnsupportedConstraint(other.to_owned())),
+        _ => {}
     }
     Ok(())
 }
@@ -515,12 +515,35 @@ pub struct AnalysisReport {
     pub runtime: RuntimeSummary,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct ExecutionStats {
     #[serde(default)]
     pub wall_time: BTreeMap<String, f64>,
     #[serde(default)]
     pub cpu_time: BTreeMap<String, f64>,
+}
+
+#[derive(Deserialize)]
+struct ExecutionStatsWire {
+    #[serde(default)]
+    wall_time: BTreeMap<String, f64>,
+    #[serde(default)]
+    cpu_time: BTreeMap<String, f64>,
+}
+
+impl<'de> Deserialize<'de> for ExecutionStats {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = ExecutionStatsWire::deserialize(deserializer)?;
+        let stats = Self {
+            wall_time: value.wall_time,
+            cpu_time: value.cpu_time,
+        };
+        stats.validate().map_err(serde::de::Error::custom)?;
+        Ok(stats)
+    }
 }
 
 impl ExecutionStats {
@@ -619,14 +642,38 @@ mod tests {
                 .to_string()
                 .contains("duplicate constraint")
         );
+
+        let unknown_target = serde_json::from_value::<Task>(json!({
+            "name": "unknown-target",
+            "targets": {},
+            "constraints": {
+                "missing-target": []
+            }
+        }))
+        .unwrap_err();
+        assert!(unknown_target.to_string().contains("unknown target"));
+
+        let extensible_constraint = serde_json::from_value::<Task>(json!({
+            "name": "extension",
+            "targets": {},
+            "default_constraints": [{
+                "kind": "example.custom_constraint",
+                "parameter": true
+            }]
+        }))
+        .unwrap();
+        assert_eq!(
+            extensible_constraint.default_constraints[0].kind,
+            "example.custom_constraint"
+        );
     }
 
     #[test]
     fn execution_stats_reject_negative_measurements() {
-        let stats: ExecutionStats = serde_json::from_value(json!({
+        let error = serde_json::from_value::<ExecutionStats>(json!({
             "wall_time": {"target-1": -0.5}
         }))
-        .unwrap();
-        assert!(stats.validate().is_err());
+        .unwrap_err();
+        assert!(error.to_string().contains("non-negative"));
     }
 }

@@ -281,11 +281,15 @@ def test_stock_loader_selects_the_planner_representation(tmp_path: Path) -> None
 
 def test_execution_stats_are_validated_before_writing(tmp_path: Path) -> None:
     stats = {"wall_time": {TARGET_ID: 1.5}, "cpu_time": {TARGET_ID: 1.2}}
-    path = tmp_path / "execution_stats.json.gz"
+    gzip_path = tmp_path / "execution_stats.json.gz"
+    json_path = tmp_path / "execution_stats.json"
 
     assert retrocast.validate_execution_stats(stats) == stats
-    retrocast.write_execution_stats(stats, path)
-    assert retrocast.read_json(path) == stats
+    retrocast.write_execution_stats(stats, gzip_path)
+    retrocast.write_execution_stats(stats, json_path)
+    assert retrocast.read_json(gzip_path) == stats
+    assert retrocast.read_json(json_path) == stats
+    assert json_path.read_bytes().startswith(b"{")
 
     with pytest.raises(ValueError, match="non-negative"):
         retrocast.validate_execution_stats({"wall_time": {TARGET_ID: -1}})

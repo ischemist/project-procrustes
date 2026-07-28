@@ -186,14 +186,17 @@ fn python_value(value: &Bound<'_, PyAny>) -> PyResult<Value> {
         .map_err(|error| PyValueError::new_err(error.to_string()))
 }
 
-fn python_map(value: Option<&Bound<'_, PyAny>>) -> PyResult<serde_json::Map<String, Value>> {
+fn python_map(
+    name: &str,
+    value: Option<&Bound<'_, PyAny>>,
+) -> PyResult<serde_json::Map<String, Value>> {
     match value {
         None => Ok(serde_json::Map::new()),
         Some(value) if value.is_none() => Ok(serde_json::Map::new()),
-        Some(value) => python_value(value)?
-            .as_object()
-            .cloned()
-            .ok_or_else(|| PyValueError::new_err("expected a mapping")),
+        Some(value) => match python_value(value)? {
+            Value::Object(map) => Ok(map),
+            _ => Err(PyValueError::new_err(format!("{name} must be a mapping"))),
+        },
     }
 }
 
@@ -1296,7 +1299,7 @@ fn evaluate_files_json(
 /// Validate a JSON-compatible task and return its normalized schema-2 value.
 #[pyfunction(name = "validate_task")]
 fn validate_task_py(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let task: Task = serde_json::from_str(&json_dumps(value)?)
+    let task: Task = serde_json::from_value(python_value(value)?)
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
     json_loads(py, &to_json(&task)?)
 }
@@ -1356,10 +1359,7 @@ fn load_stock_py(py: Python<'_>, path: PathBuf, representation: &str) -> PyResul
 /// Validate per-target planner timings before they enter an evaluation.
 #[pyfunction(name = "validate_execution_stats")]
 fn validate_execution_stats_py(py: Python<'_>, value: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
-    let stats: ExecutionStats = serde_json::from_str(&json_dumps(value)?)
-        .map_err(|error| PyValueError::new_err(error.to_string()))?;
-    stats
-        .validate()
+    let stats: ExecutionStats = serde_json::from_value(python_value(value)?)
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
     json_loads(py, &to_json(&stats)?)
 }
@@ -1371,12 +1371,9 @@ fn write_execution_stats_py(
     value: &Bound<'_, PyAny>,
     path: PathBuf,
 ) -> PyResult<()> {
-    let stats: ExecutionStats = serde_json::from_str(&json_dumps(value)?)
+    let stats: ExecutionStats = serde_json::from_value(python_value(value)?)
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
-    stats
-        .validate()
-        .map_err(|error| PyValueError::new_err(error.to_string()))?;
-    py.detach(|| io::write_json_gz(&path, &serde_json::to_value(stats)?))
+    py.detach(|| io::write_json(&path, &stats))
         .map_err(artifact_read_error)
 }
 
@@ -1445,10 +1442,10 @@ fn create_manifest_py(
         &sources,
         &outputs,
         &root_dir,
-        python_map(parameters)?,
-        python_map(statistics)?,
-        python_map(directives)?,
-        python_map(summary)?,
+        python_map("parameters", parameters)?,
+        python_map("statistics", statistics)?,
+        python_map("directives", directives)?,
+        python_map("summary", summary)?,
         release_name,
         keyed_output_files,
     )

@@ -190,6 +190,8 @@ RetroCast is also a library. You can use it to integrate standardization directl
 External planner runners can also use the Rust-owned producer contracts directly:
 
 ```python
+import retrocast
+
 task = retrocast.load_task("benchmark.json.gz")
 stock_smiles = retrocast.load_stock("buyables-stock.csv.gz")
 retrocast.write_json_gz(raw_results, "results.json.gz")
