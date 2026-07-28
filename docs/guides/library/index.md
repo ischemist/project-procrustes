@@ -112,6 +112,7 @@ A planner runner owns model setup, progress presentation, logging policy, and th
 import retrocast
 
 task = retrocast.load_task(benchmark_path)
+stock_names = retrocast.resolve_stock_bindings(task)
 stock_smiles = retrocast.load_stock(stock_path)
 
 # The runner calls its planner for task["targets"] and serializes the planner's
@@ -120,26 +121,19 @@ raw_results, execution_stats = run_planner(task["targets"], stock_smiles)
 
 retrocast.write_json_gz(raw_results, results_path)
 retrocast.write_execution_stats(execution_stats, execution_stats_path)
-manifest = retrocast.create_manifest(
+manifest = retrocast.create_planner_manifest(
     "my-planner-run",
+    "aizynthfinder",
+    results_path,
     [benchmark_path, stock_path],
-    [
-        {
-            "path": results_path,
-            "value": raw_results,
-            "content_type": "unknown",
-        }
-    ],
     data_root,
-    directives={
-        "adapter": "my-planner",
-        "raw_results_filename": results_path.name,
-    },
 )
 retrocast.write_json(manifest, manifest_path)
 ```
 
-`load_task` validates target ids and constraint records in `retrocast-core`. `load_stock` reads the SMILES needed by a planner or the InChIKeys used by scoring. The artifact writers and manifest builder use the same deterministic serialization and hash policy as the standalone executable.
+`load_task` performs structural validation without recalculating target chemistry on every trusted read. Use `validate_task` for an explicit chemistry check, or `write_task` when preparing a task; both reject invalid target SMILES and SMILES/InChIKey mismatches. `resolve_stock_bindings` applies RetroCast's default and per-target constraint rules, leaving the runner to map stock names to its own files or configuration.
+
+`load_stock` reads the SMILES needed by a planner or the InChIKeys used by scoring. `create_planner_manifest` records the supported adapter and raw-results filename required by project ingest, verifies that all input and output files exist, and hashes the raw file directly. It never serializes `raw_results` again. Generic producers can use `create_manifest`; outputs with a known content type require either their value or an explicit content hash.
 
 RetroCast does not configure Python logging, choose a progress library, or serialize live objects from third-party planner libraries. Those decisions belong to the runner because RetroCast never owns the external model call. Once the runner writes the planner's documented raw format, the corresponding RetroCast adapter owns parsing it.
 

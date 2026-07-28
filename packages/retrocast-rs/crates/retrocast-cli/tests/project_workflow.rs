@@ -9,6 +9,7 @@ use retrocast_core::{
     chem,
     io::{read_json, write_csv_gz, write_json},
     model::{Constraint, Evaluation, Target, Task},
+    provenance::{ContentType, ManifestOutput, create_manifest},
 };
 use serde_json::{Map, Value, json};
 
@@ -53,24 +54,36 @@ fn standalone_binary_runs_the_project_lifecycle() {
         ],
     )
     .unwrap();
-    write_json(
-        &raw_dir.join("results.json.gz"),
-        &json!({"ethanol": raw_route()}),
-    )
-    .unwrap();
+    let raw_path = raw_dir.join("results.json.gz");
+    write_json(&raw_path, &json!({"ethanol": raw_route()})).unwrap();
     write_json(
         &raw_dir.join("execution_stats.json.gz"),
         &json!({"wall_time": {"ethanol": 12.5}, "cpu_time": {"ethanol": 3.25}}),
     )
     .unwrap();
-    write_json(
-        &raw_dir.join("manifest.json"),
-        &json!({
-            "schema_version": "2",
-            "directives": {"adapter": "paroutes", "raw_results_filename": "results.json.gz"}
-        }),
+    let manifest = create_manifest(
+        "planner-run",
+        std::slice::from_ref(&benchmark_path),
+        &[ManifestOutput {
+            label: None,
+            path: raw_path,
+            value: Value::Null,
+            content_type: ContentType::Unknown,
+            content_hash: None,
+        }],
+        &root,
+        Map::new(),
+        Map::new(),
+        Map::from_iter([
+            ("adapter".to_owned(), json!("paroutes")),
+            ("raw_results_filename".to_owned(), json!("results.json.gz")),
+        ]),
+        Map::new(),
+        None,
+        false,
     )
     .unwrap();
+    write_json(&raw_dir.join("manifest.json"), &manifest).unwrap();
 
     run(
         &root,

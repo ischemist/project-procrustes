@@ -243,7 +243,7 @@ fn read_stock_csv_column(path: &Path, accepted_headers: &[&str]) -> Result<BTree
                 .any(|expected| header.eq_ignore_ascii_case(expected))
         })
         .ok_or_else(|| {
-            EngineError::AdapterSchema(format!(
+            EngineError::InvalidStock(format!(
                 "stock CSV has no {} column",
                 accepted_headers.join(" or ")
             ))
@@ -284,7 +284,7 @@ pub(crate) fn open_reader(path: &Path) -> Result<Box<dyn Read>> {
 }
 
 fn csv_error(error: csv::Error) -> EngineError {
-    EngineError::AdapterSchema(format!("stock CSV error: {error}"))
+    EngineError::InvalidStock(format!("CSV error: {error}"))
 }
 
 #[cfg(test)]

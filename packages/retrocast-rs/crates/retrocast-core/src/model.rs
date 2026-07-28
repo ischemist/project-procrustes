@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
+    chem,
     error::{EngineError, Result},
     schema::{CanonicalSmiles, InchiKey, ReactionSmiles, SchemaVersion},
 };
@@ -222,6 +223,25 @@ impl Task {
         Ok(())
     }
 
+    /// Recompute each target identity when accepting or publishing an untrusted task.
+    pub fn validate_chemistry(&self) -> Result<()> {
+        for target in self.targets.values() {
+            let (_, expected) = chem::normalize(target.smiles.as_str()).map_err(|error| {
+                EngineError::InvalidTask(format!(
+                    "target {:?} has invalid SMILES: {error}",
+                    target.id
+                ))
+            })?;
+            if expected != target.inchikey {
+                return Err(EngineError::InvalidTask(format!(
+                    "target {:?} InChIKey does not match its SMILES: expected {expected}, got {}",
+                    target.id, target.inchikey
+                )));
+            }
+        }
+        Ok(())
+    }
+
     pub fn effective_constraints(&self, target_id: &str) -> Vec<Constraint> {
         let mut by_kind: BTreeMap<&str, &Constraint> = self
             .default_constraints
@@ -234,6 +254,27 @@ impl Task {
             }
         }
         by_kind.into_values().cloned().collect()
+    }
+
+    /// Resolve the stock name each target inherits after constraint overrides.
+    pub fn stock_bindings(&self) -> BTreeMap<String, Option<String>> {
+        self.targets
+            .keys()
+            .map(|target_id| {
+                let stock = self
+                    .effective_constraints(target_id)
+                    .into_iter()
+                    .find(|constraint| constraint.kind == "retrocast.stock_termination")
+                    .and_then(|constraint| {
+                        constraint
+                            .fields
+                            .get("stock")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned)
+                    });
+                (target_id.clone(), stock)
+            })
+            .collect()
     }
 
     pub fn derived_metric_label(&self) -> String {
@@ -569,6 +610,8 @@ impl ExecutionStats {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use serde_json::json;
 
     use super::{Candidate, Constraint, ExecutionStats, ScoredCandidate, Task};
@@ -665,6 +708,86 @@ mod tests {
         assert_eq!(
             extensible_constraint.default_constraints[0].kind,
             "example.custom_constraint"
+        );
+    }
+
+    #[test]
+    fn chemistry_validation_is_explicit_and_checks_target_identity() {
+        let mismatched: Task = serde_json::from_value(json!({
+            "name": "mismatched",
+            "targets": {
+                "target-1": {
+                    "id": "target-1",
+                    "smiles": "CCO",
+                    "inchikey": "VNWKTOKETHGBQD-UHFFFAOYSA-N"
+                }
+            }
+        }))
+        .unwrap();
+        assert!(mismatched.validate().is_ok());
+        assert!(
+            mismatched
+                .validate_chemistry()
+                .unwrap_err()
+                .to_string()
+                .contains("does not match")
+        );
+
+        let invalid: Task = serde_json::from_value(json!({
+            "name": "invalid",
+            "targets": {
+                "target-1": {
+                    "id": "target-1",
+                    "smiles": "not-smiles",
+                    "inchikey": "VNWKTOKETHGBQD-UHFFFAOYSA-N"
+                }
+            }
+        }))
+        .unwrap();
+        assert!(
+            invalid
+                .validate_chemistry()
+                .unwrap_err()
+                .to_string()
+                .contains("invalid SMILES")
+        );
+    }
+
+    #[test]
+    fn stock_bindings_apply_target_overrides() {
+        let task: Task = serde_json::from_value(json!({
+            "name": "stocks",
+            "targets": {
+                "target-1": {
+                    "id": "target-1",
+                    "smiles": "CCO",
+                    "inchikey": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
+                },
+                "target-2": {
+                    "id": "target-2",
+                    "smiles": "C",
+                    "inchikey": "VNWKTOKETHGBQD-UHFFFAOYSA-N"
+                }
+            },
+            "default_constraints": [{
+                "kind": "retrocast.stock_termination",
+                "stock": "default-stock"
+            }],
+            "constraints": {
+                "target-2": [{
+                    "kind": "retrocast.stock_termination",
+                    "stock": "override-stock"
+                }]
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            task.stock_bindings(),
+            BTreeMap::from([
+                ("target-1".to_owned(), Some("default-stock".to_owned())),
+                ("target-2".to_owned(), Some("override-stock".to_owned())),
+            ])
         );
     }
 

@@ -76,15 +76,23 @@ The Python boundary represents individual models as JSON-compatible dictionaries
 
 | Function | Purpose | Returns |
 | --- | --- | --- |
-| `load_task(path)` | Read and validate a schema-2 task | normalized `dict` |
-| `validate_task(value)` | Validate an in-memory task | normalized `dict` |
+| `load_task(path, chemistry=False)` | Read and structurally validate a trusted schema-2 task | normalized `dict` |
+| `validate_task(value, chemistry=True)` | Validate an in-memory task, including target chemistry by default | normalized `dict` |
+| `write_task(value, path)` | Chemistry-check and write a task | `None` |
+| `resolve_stock_bindings(value)` | Apply default and per-target constraints | target-to-stock `dict` |
 | `load_stock(path, representation="smiles")` | Read planner SMILES or scoring InChIKeys | sorted `list[str]` |
 | `validate_execution_stats(value)` | Validate per-target wall and CPU times | normalized `dict` |
 | `write_execution_stats(value, path)` | Validate and write execution statistics | `None` |
 | `create_manifest(action, sources, outputs, root_dir, *, ...)` | Hash producer inputs and outputs | manifest `dict` |
-| `verify_manifest(manifest_path, root_dir, *, ...)` | Check lineage and physical hashes | verification `dict` |
+| `create_planner_manifest(action, adapter, raw_results_path, sources, root_dir, *, ...)` | Create a project-ingest-compatible planner manifest | manifest `dict` |
+| `verify_manifest(manifest_path, root_dir, *, lenient=False, ...)` | Check lineage and physical hashes strictly by default | verification `dict` |
+| `verify_planner_manifest(manifest_path, root_dir, *, ...)` | Check hashes and project-ingest directives | verification `dict` |
 
 These functions expose `retrocast-core` schema and provenance behavior to Python runners. They do not recreate the Rust models as Python classes.
+
+Task files have an explicit trust boundary. Ordinary loads check the schema and constraint structure without repeating RDKit work. `validate_task` checks chemistry unless disabled, and `write_task` always verifies that every target SMILES is valid and produces the declared InChIKey.
+
+Manifest creation requires every source and output file to exist. An output with `content_type="unknown"` can omit `value`, so large planner results are hashed from disk without a second Python-to-Rust serialization. Known content types require either `value` or an explicit `content_hash`. Lenient verification remains available only when requested for historical manifests.
 
 ## Chemistry
 
@@ -176,7 +184,7 @@ No RDKit object crosses the Rust or Python API. Invalid chemical input raises `V
 
 ## Errors
 
-- Python uses `ValueError` for invalid chemistry or producer input, `OSError` for artifact-path failures, and `RuntimeError` for adapter or workflow failures.
+- Python uses `ValueError` for invalid chemistry, malformed JSON data, or invalid producer schemas; `OSError` for missing or unreadable artifacts; and `RuntimeError` for adapter or workflow failures.
 - Rust returns `retrocast_core::error::EngineError` from core operations.
 
 See [Error Handling](../../dev/reference/errors.md) for stable failure codes and candidate-level accounting.

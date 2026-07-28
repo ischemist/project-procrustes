@@ -45,6 +45,8 @@ pub enum EngineError {
     InvalidTask(String),
     #[error("invalid execution statistics: {0}")]
     InvalidExecutionStats(String),
+    #[error("invalid stock: {0}")]
+    InvalidStock(String),
     #[error("unknown adapter {name:?}; available adapters: {available}")]
     UnknownAdapter { name: String, available: String },
     #[error("unregistered stock: {0}")]

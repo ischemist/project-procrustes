@@ -18,6 +18,10 @@ v0.8.2 adds the Rust-backed Python surface needed by external planner runners. P
 
 The wheel remains a direct PyO3 binding with no Python implementation or runtime dependencies. A bundled type stub and `py.typed` marker describe the curated public API.
 
+Task loading now has an explicit trust boundary: normal reads validate structure without recalculating chemistry, while `validate_task` and `write_task` reject invalid SMILES and SMILES/InChIKey mismatches. Runners can ask RetroCast to resolve each target's effective stock requirement without reproducing constraint override rules.
+
+Planner manifests now require existing artifacts and can hash raw outputs from disk without serializing their full values across the Python/Rust boundary. Verification is strict by default, and the planner-specific creator and verifier enforce the adapter and safe raw-results directive contract consumed by project ingest. Producer schema errors surface as `ValueError`; filesystem failures surface as `OSError`.
+
 ## v0.8.1
 
 v0.8.1 keeps corpus-sized artifacts inside Rust across ingest, score, and analyze. It also narrows ASKCOS pathway graphs before route casting and exposes `--workers` consistently across project commands.

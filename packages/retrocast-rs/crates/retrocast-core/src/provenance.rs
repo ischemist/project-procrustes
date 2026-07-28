@@ -11,8 +11,9 @@ use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    VERSION,
+    VERSION, adapters,
     error::{EngineError, Result},
+    io::validate_path_component,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -119,6 +120,71 @@ pub struct ManifestOutput {
     pub content_hash: Option<String>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct PlannerDirectives {
+    pub adapter: String,
+    pub raw_results_filename: String,
+}
+
+/// Validate the two directives that project ingest uses to locate planner output.
+pub fn validate_planner_directives(
+    adapter: &str,
+    raw_results_filename: &str,
+) -> Result<PlannerDirectives> {
+    let adapter = adapters::normalize_slug(adapter);
+    if adapters::built_in(&adapter).is_none() {
+        return Err(EngineError::UnknownAdapter {
+            name: adapter,
+            available: adapters::BUILT_IN_ADAPTERS.join(", "),
+        });
+    }
+    validate_path_component(raw_results_filename, "raw results filename")?;
+    Ok(PlannerDirectives {
+        adapter,
+        raw_results_filename: raw_results_filename.to_owned(),
+    })
+}
+
+/// Require a planner manifest to name a supported adapter and its declared raw output.
+pub fn validate_planner_manifest(
+    manifest: &Manifest,
+    manifest_path: &Path,
+    root_dir: &Path,
+) -> Result<PlannerDirectives> {
+    let adapter = required_string_directive(manifest, "adapter")?;
+    let raw_results_filename = required_string_directive(manifest, "raw_results_filename")?;
+    let directives = validate_planner_directives(adapter, raw_results_filename)?;
+
+    let resolved_manifest = resolve_tracked_path(manifest_path, root_dir);
+    let raw_path = resolved_manifest
+        .parent()
+        .unwrap_or_else(|| Path::new(""))
+        .join(&directives.raw_results_filename);
+    let declares_raw_output = manifest
+        .output_files()
+        .any(|output| resolve_tracked_path(Path::new(&output.path), root_dir) == raw_path);
+    if !declares_raw_output {
+        return Err(EngineError::Provenance(format!(
+            "planner manifest does not declare raw output {}",
+            raw_path.display()
+        )));
+    }
+    Ok(directives)
+}
+
+fn required_string_directive<'a>(manifest: &'a Manifest, key: &str) -> Result<&'a str> {
+    manifest
+        .directives
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            EngineError::Provenance(format!(
+                "planner manifest requires a non-empty directives.{key} string"
+            ))
+        })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn create_manifest(
     action: impl Into<String>,
@@ -153,11 +219,13 @@ pub fn create_manifest(
     let output_files = outputs
         .iter()
         .map(|output| {
-            let file_hash = if output.path.exists() {
-                file_hash(&output.path).unwrap_or_else(|_| "error-hashing-file".to_owned())
-            } else {
-                "file-not-written".to_owned()
-            };
+            if !output.path.exists() {
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("manifest output file not found: {}", output.path.display()),
+                )));
+            }
+            let file_hash = file_hash(&output.path)?;
             Ok(FileInfo {
                 label: output.label.clone(),
                 path: tracked_file_path(&output.path, root_dir),
@@ -432,6 +500,34 @@ pub fn verify_manifest(
         return report;
     }
     verify_physical_integrity(&graph, root_dir, &mut report, output_only, lenient);
+    report
+}
+
+/// Verify hashes and the semantic contract consumed by project-mode ingest.
+pub fn verify_planner_manifest(
+    manifest_path: &Path,
+    root_dir: &Path,
+    deep: bool,
+    output_only: bool,
+) -> VerificationReport {
+    let mut report = verify_manifest(manifest_path, root_dir, deep, output_only, false);
+    let resolved = resolve_tracked_path(manifest_path, root_dir);
+    match read_manifest(&resolved)
+        .and_then(|manifest| validate_planner_manifest(&manifest, manifest_path, root_dir))
+    {
+        Ok(_) => report.add(
+            VerificationLevel::Pass,
+            tracked_path_key(manifest_path, root_dir),
+            "Planner directives identify a declared raw output and supported adapter.",
+            Some(VerificationCategory::Context),
+        ),
+        Err(error) => report.add(
+            VerificationLevel::Fail,
+            tracked_path_key(manifest_path, root_dir),
+            format!("Planner manifest is not ingestible: {error}"),
+            Some(VerificationCategory::Context),
+        ),
+    }
     report
 }
 
@@ -726,9 +822,15 @@ fn retrocast_version() -> String {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use std::fs;
 
-    use super::{Manifest, ManifestOutputs, content_hash};
+    use serde_json::{Map, Value, json};
+
+    use super::{
+        ContentType, Manifest, ManifestOutput, ManifestOutputs, content_hash, create_manifest,
+        validate_planner_directives, validate_planner_manifest,
+    };
+    use crate::error::EngineError;
 
     #[test]
     fn content_hash_is_object_order_independent() {
@@ -747,5 +849,80 @@ mod tests {
         .unwrap();
         assert_eq!(manifest.extensions["future_field"]["kept"], true);
         assert!(matches!(manifest.output_files, ManifestOutputs::List(_)));
+    }
+
+    #[test]
+    fn manifest_creation_requires_hashable_outputs() {
+        let directory = tempfile::tempdir().unwrap();
+        let missing = directory.path().join("missing.json");
+        let error = create_manifest(
+            "planner",
+            &[],
+            &[ManifestOutput {
+                label: None,
+                path: missing,
+                value: Value::Null,
+                content_type: ContentType::Unknown,
+                content_hash: None,
+            }],
+            directory.path(),
+            Map::new(),
+            Map::new(),
+            Map::new(),
+            Map::new(),
+            None,
+            false,
+        )
+        .unwrap_err();
+        assert!(matches!(error, EngineError::Io(_)));
+    }
+
+    #[test]
+    fn planner_manifest_contract_matches_project_ingest() {
+        let directory = tempfile::tempdir().unwrap();
+        let raw_dir = directory.path().join("2-raw/model/task");
+        fs::create_dir_all(&raw_dir).unwrap();
+        let raw_path = raw_dir.join("results.json.gz");
+        fs::write(&raw_path, b"raw").unwrap();
+        let manifest_path = raw_dir.join("manifest.json");
+        let directives = validate_planner_directives("retro-star", "results.json.gz").unwrap();
+        let manifest = create_manifest(
+            "planner",
+            &[],
+            &[ManifestOutput {
+                label: None,
+                path: raw_path,
+                value: Value::Null,
+                content_type: ContentType::Unknown,
+                content_hash: None,
+            }],
+            directory.path(),
+            Map::new(),
+            Map::new(),
+            Map::from_iter([
+                ("adapter".to_owned(), json!(directives.adapter)),
+                (
+                    "raw_results_filename".to_owned(),
+                    json!(directives.raw_results_filename),
+                ),
+            ]),
+            Map::new(),
+            None,
+            false,
+        )
+        .unwrap();
+
+        let validated =
+            validate_planner_manifest(&manifest, &manifest_path, directory.path()).unwrap();
+        assert_eq!(validated.adapter, "retrostar");
+        assert_eq!(validated.raw_results_filename, "results.json.gz");
+
+        let mut missing_adapter = manifest;
+        missing_adapter.directives.remove("adapter");
+        assert!(
+            validate_planner_manifest(&missing_adapter, &manifest_path, directory.path()).is_err()
+        );
+        assert!(validate_planner_directives("unknown", "results.json.gz").is_err());
+        assert!(validate_planner_directives("retrostar", "../results.json.gz").is_err());
     }
 }

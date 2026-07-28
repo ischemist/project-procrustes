@@ -61,6 +61,7 @@ def test_distribution_is_the_native_module() -> None:
         "analyze_file",
         "canonicalize_smiles",
         "create_manifest",
+        "create_planner_manifest",
         "engine_info",
         "evaluate",
         "get_inchi_key",
@@ -71,13 +72,16 @@ def test_distribution_is_the_native_module() -> None:
         "molecular_descriptors",
         "read_json",
         "reduce_inchi_key",
+        "resolve_stock_bindings",
         "score",
         "validate_execution_stats",
         "validate_task",
         "verify_manifest",
+        "verify_planner_manifest",
         "write_execution_stats",
         "write_json",
         "write_json_gz",
+        "write_task",
     }
 
 
@@ -220,6 +224,41 @@ def test_task_loading_and_validation_return_normalized_dicts(tmp_path: Path) -> 
     with pytest.raises(ValueError, match="does not match"):
         retrocast.validate_task(invalid)
 
+    mismatched = task()
+    mismatched["targets"][TARGET_ID]["inchikey"] = retrocast.get_inchi_key("C")
+    retrocast.write_json_gz(mismatched, path)
+    assert retrocast.load_task(path)["targets"][TARGET_ID]["smiles"] == "CCO"
+    assert retrocast.validate_task(mismatched, chemistry=False)["schema_version"] == "2"
+    with pytest.raises(ValueError, match="does not match"):
+        retrocast.load_task(path, chemistry=True)
+    with pytest.raises(ValueError, match="does not match"):
+        retrocast.validate_task(mismatched)
+    with pytest.raises(ValueError, match="does not match"):
+        retrocast.write_task(mismatched, tmp_path / "invalid-task.json.gz")
+
+    retrocast.write_task(task(), path)
+    assert retrocast.load_task(path) == validated
+
+    malformed_path = tmp_path / "malformed.json"
+    malformed_path.write_text("{", encoding="utf-8")
+    with pytest.raises(ValueError):
+        retrocast.load_task(malformed_path)
+
+
+def test_stock_bindings_apply_task_override_rules() -> None:
+    value = task()
+    value["targets"]["methane"] = {
+        "id": "methane",
+        "smiles": "C",
+        "inchikey": retrocast.get_inchi_key("C"),
+    }
+    value["constraints"] = {"methane": [{"kind": "retrocast.stock_termination", "stock": "special-stock"}]}
+
+    assert retrocast.resolve_stock_bindings(value) == {
+        TARGET_ID: "test-stock",
+        "methane": "special-stock",
+    }
+
 
 def test_producer_artifacts_use_rust_io_and_provenance(tmp_path: Path) -> None:
     source_path = tmp_path / "task.json.gz"
@@ -240,7 +279,6 @@ def test_producer_artifacts_use_rust_io_and_provenance(tmp_path: Path) -> None:
         [
             {
                 "path": results_path,
-                "value": results,
                 "content_type": "unknown",
             }
         ],
@@ -248,14 +286,14 @@ def test_producer_artifacts_use_rust_io_and_provenance(tmp_path: Path) -> None:
         directives={"adapter": "aizynthfinder"},
     )
     retrocast.write_json(manifest, manifest_path)
-    report = retrocast.verify_manifest(manifest_path, tmp_path, lenient=False)
+    report = retrocast.verify_manifest(manifest_path, tmp_path)
 
     assert manifest["action"] == "planner-run"
     assert manifest["directives"]["adapter"] == "aizynthfinder"
     assert report["is_valid"] is True
 
 
-def test_manifest_missing_source_is_a_filesystem_error(tmp_path: Path) -> None:
+def test_manifest_creation_requires_existing_sources_and_outputs(tmp_path: Path) -> None:
     with pytest.raises(OSError, match="manifest source file not found"):
         retrocast.create_manifest(
             "planner-run",
@@ -263,6 +301,87 @@ def test_manifest_missing_source_is_a_filesystem_error(tmp_path: Path) -> None:
             [],
             tmp_path,
         )
+
+    with pytest.raises(OSError, match="manifest output file not found"):
+        retrocast.create_manifest(
+            "planner-run",
+            [],
+            [{"path": tmp_path / "missing.json", "content_type": "unknown"}],
+            tmp_path,
+        )
+
+    output = tmp_path / "output.json"
+    output.write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="value is required"):
+        retrocast.create_manifest(
+            "known-content",
+            [],
+            [{"path": output, "content_type": "benchmark"}],
+            tmp_path,
+        )
+
+    manifest = retrocast.create_manifest(
+        "prehashed-content",
+        [],
+        [
+            {
+                "path": output,
+                "content_type": "benchmark",
+                "content_hash": "sha256:producer-supplied",
+            }
+        ],
+        tmp_path,
+    )
+    assert manifest["output_files"][0]["content_hash"] == "sha256:producer-supplied"
+
+
+def test_manifest_verification_is_strict_by_default(tmp_path: Path) -> None:
+    output = tmp_path / "output.json"
+    manifest_path = tmp_path / "manifest.json"
+    output.write_text("{}", encoding="utf-8")
+    manifest = retrocast.create_manifest(
+        "producer",
+        [],
+        [{"path": output, "content_type": "unknown"}],
+        tmp_path,
+    )
+    retrocast.write_json(manifest, manifest_path)
+    output.unlink()
+
+    assert retrocast.verify_manifest(manifest_path, tmp_path)["is_valid"] is False
+    assert retrocast.verify_manifest(manifest_path, tmp_path, lenient=True)["is_valid"] is True
+
+
+def test_planner_manifest_is_project_ingest_compatible(tmp_path: Path) -> None:
+    raw_dir = tmp_path / "2-raw" / "model" / "task"
+    raw_dir.mkdir(parents=True)
+    raw_path = raw_dir / "routes.json.gz"
+    source_path = tmp_path / "task.json"
+    manifest_path = raw_dir / "manifest.json"
+    raw_path.write_bytes(b"raw")
+    source_path.write_text("{}", encoding="utf-8")
+
+    manifest = retrocast.create_planner_manifest(
+        "planner-run",
+        "retro-star",
+        raw_path,
+        [source_path],
+        tmp_path,
+    )
+    retrocast.write_json(manifest, manifest_path)
+    report = retrocast.verify_planner_manifest(manifest_path, tmp_path)
+
+    assert manifest["directives"] == {
+        "adapter": "retrostar",
+        "raw_results_filename": "routes.json.gz",
+    }
+    assert report["is_valid"] is True
+
+    manifest["directives"].pop("adapter")
+    retrocast.write_json(manifest, manifest_path)
+    report = retrocast.verify_planner_manifest(manifest_path, tmp_path)
+    assert report["is_valid"] is False
+    assert any("not ingestible" in issue["message"] for issue in report["issues"])
 
 
 def test_stock_loader_selects_the_planner_representation(tmp_path: Path) -> None:
@@ -277,6 +396,16 @@ def test_stock_loader_selects_the_planner_representation(tmp_path: Path) -> None
         "LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
         "VNWKTOKETHGBQD-UHFFFAOYSA-N",
     ]
+
+    missing_column = tmp_path / "missing-column.csv"
+    missing_column.write_text("molecule\nCCO\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="stock CSV has no smiles column"):
+        retrocast.load_stock(missing_column)
+
+    invalid_smiles = tmp_path / "invalid.smi"
+    invalid_smiles.write_text("not-smiles\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="invalid SMILES"):
+        retrocast.load_stock(invalid_smiles, representation="inchikey")
 
 
 def test_execution_stats_are_validated_before_writing(tmp_path: Path) -> None:

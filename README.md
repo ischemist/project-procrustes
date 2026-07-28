@@ -195,9 +195,16 @@ import retrocast
 task = retrocast.load_task("benchmark.json.gz")
 stock_smiles = retrocast.load_stock("buyables-stock.csv.gz")
 retrocast.write_json_gz(raw_results, "results.json.gz")
+manifest = retrocast.create_planner_manifest(
+    "planner-run",
+    "aizynthfinder",
+    "results.json.gz",
+    ["benchmark.json.gz", "buyables-stock.csv.gz"],
+    ".",
+)
 ```
 
-Task validation, stock parsing, artifact serialization, execution-stat validation, and manifest hashing stay in `retrocast-core`; the runner owns model-specific serialization, logging, and progress presentation.
+Structural task loading, explicit chemistry validation, stock parsing, artifact serialization, execution-stat validation, and manifest provenance stay in `retrocast-core`; the runner owns model-specific serialization, logging, and progress presentation.
 
 ```python
 import retrocast
