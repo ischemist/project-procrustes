@@ -19,12 +19,15 @@ Use the library API inside notebooks, model loops, training-set curation program
 === "Python 0.8.x"
 
     ```python
-    import json
-
     import retrocast
 
-    task = json.loads(benchmark_path.read_text())
-    stocks = {"buyables": list(stock_inchikeys)}
+    task = retrocast.load_task(benchmark_path)
+    stocks = {
+        "buyables": retrocast.load_stock(
+            stock_path,
+            representation="inchikey",
+        )
+    }
 
     predictions = retrocast.ingest_file(
         raw_path,
@@ -100,6 +103,45 @@ Use the library API inside notebooks, model loops, training-set curation program
     ```
 
 The linked tabs remember the selected implementation across the documentation site. Python 0.7.1 examples document the frozen oracle; they are not available from the published 0.8.x wheel.
+
+## Produce Planner Output
+
+A planner runner owns model setup, progress presentation, logging policy, and the conversion of its runtime objects into the planner's documented raw format. RetroCast owns the task and stock schemas plus the artifacts that make the run reproducible:
+
+```python
+import retrocast
+
+task = retrocast.load_task(benchmark_path)
+stock_smiles = retrocast.load_stock(stock_path)
+
+# The runner calls its planner for task["targets"] and serializes the planner's
+# documented raw result shape. It may render progress however it chooses.
+raw_results, execution_stats = run_planner(task["targets"], stock_smiles)
+
+retrocast.write_json_gz(raw_results, results_path)
+retrocast.write_execution_stats(execution_stats, execution_stats_path)
+manifest = retrocast.create_manifest(
+    "my-planner-run",
+    [benchmark_path, stock_path],
+    [
+        {
+            "path": results_path,
+            "value": raw_results,
+            "content_type": "unknown",
+        }
+    ],
+    data_root,
+    directives={
+        "adapter": "my-planner",
+        "raw_results_filename": results_path.name,
+    },
+)
+retrocast.write_json(manifest, manifest_path)
+```
+
+`load_task` validates target ids and constraint records in `retrocast-core`. `load_stock` reads the SMILES needed by a planner or the InChIKeys used by scoring. The artifact writers and manifest builder use the same deterministic serialization and hash policy as the standalone executable.
+
+RetroCast does not configure Python logging, choose a progress library, or serialize live objects from third-party planner libraries. Those decisions belong to the runner because RetroCast never owns the external model call. Once the runner writes the planner's documented raw format, the corresponding RetroCast adapter owns parsing it.
 
 ## Data Ownership
 

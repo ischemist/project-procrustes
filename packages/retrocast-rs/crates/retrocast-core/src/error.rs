@@ -41,6 +41,10 @@ pub enum EngineError {
     },
     #[error("unsupported task constraint: {0}")]
     UnsupportedConstraint(String),
+    #[error("invalid task: {0}")]
+    InvalidTask(String),
+    #[error("invalid execution statistics: {0}")]
+    InvalidExecutionStats(String),
     #[error("unknown adapter {name:?}; available adapters: {available}")]
     UnknownAdapter { name: String, available: String },
     #[error("unregistered stock: {0}")]

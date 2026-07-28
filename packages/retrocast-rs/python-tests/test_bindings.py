@@ -51,6 +51,35 @@ def test_distribution_is_the_native_module() -> None:
     with pytest.raises(ModuleNotFoundError):
         importlib.import_module("retrocast.adapters")
 
+    assert set(retrocast.__all__) == {
+        "NativeEvaluation",
+        "NativePredictions",
+        "__engine__",
+        "__version__",
+        "adapt",
+        "analyze",
+        "analyze_file",
+        "canonicalize_smiles",
+        "create_manifest",
+        "engine_info",
+        "evaluate",
+        "get_inchi_key",
+        "ingest",
+        "ingest_file",
+        "load_stock",
+        "load_task",
+        "molecular_descriptors",
+        "read_json",
+        "reduce_inchi_key",
+        "score",
+        "validate_execution_stats",
+        "validate_task",
+        "verify_manifest",
+        "write_execution_stats",
+        "write_json",
+        "write_json_gz",
+    }
+
 
 def test_chemistry_uses_bundled_rdkit_cpp() -> None:
     assert retrocast.engine_info()[1] == "RDKit C++"
@@ -173,3 +202,94 @@ def test_worker_count_must_be_positive(entrypoint: str) -> None:
 def test_unknown_adapter_fails_at_the_binding_boundary() -> None:
     with pytest.raises(RuntimeError, match="unknown RetroCast adapter"):
         retrocast.adapt(raw(), "missing-adapter")
+
+
+def test_task_loading_and_validation_return_normalized_dicts(tmp_path: Path) -> None:
+    path = tmp_path / "task.json.gz"
+    retrocast.write_json_gz(task(), path)
+
+    loaded = retrocast.load_task(path)
+    validated = retrocast.validate_task(task())
+
+    assert loaded == validated
+    assert loaded["schema_version"] == "2"
+    assert loaded["targets"][TARGET_ID]["id"] == TARGET_ID
+
+    invalid = task()
+    invalid["targets"] = {"wrong-key": invalid["targets"][TARGET_ID]}
+    with pytest.raises(ValueError, match="does not match"):
+        retrocast.validate_task(invalid)
+
+
+def test_producer_artifacts_use_rust_io_and_provenance(tmp_path: Path) -> None:
+    source_path = tmp_path / "task.json.gz"
+    results_path = tmp_path / "results.json.gz"
+    manifest_path = tmp_path / "manifest.json"
+    results = {TARGET_ID: raw()}
+
+    retrocast.write_json_gz(task(), source_path)
+    retrocast.write_json_gz(results, results_path)
+    first_bytes = results_path.read_bytes()
+    retrocast.write_json_gz(results, results_path)
+    assert results_path.read_bytes() == first_bytes
+    assert retrocast.read_json(results_path) == results
+
+    manifest = retrocast.create_manifest(
+        "planner-run",
+        [source_path],
+        [
+            {
+                "path": results_path,
+                "value": results,
+                "content_type": "unknown",
+            }
+        ],
+        tmp_path,
+        directives={"adapter": "aizynthfinder"},
+    )
+    retrocast.write_json(manifest, manifest_path)
+    report = retrocast.verify_manifest(manifest_path, tmp_path, lenient=False)
+
+    assert manifest["action"] == "planner-run"
+    assert manifest["directives"]["adapter"] == "aizynthfinder"
+    assert report["is_valid"] is True
+
+
+def test_manifest_missing_source_is_a_filesystem_error(tmp_path: Path) -> None:
+    with pytest.raises(OSError, match="manifest source file not found"):
+        retrocast.create_manifest(
+            "planner-run",
+            [tmp_path / "missing.json"],
+            [],
+            tmp_path,
+        )
+
+
+def test_stock_loader_selects_the_planner_representation(tmp_path: Path) -> None:
+    stock_path = tmp_path / "stock.csv"
+    stock_path.write_text(
+        "SMILES,InChIKey\nCCO,LFQSCWFLJHTTHZ-UHFFFAOYSA-N\nC,VNWKTOKETHGBQD-UHFFFAOYSA-N\n",
+        encoding="utf-8",
+    )
+
+    assert retrocast.load_stock(stock_path) == ["C", "CCO"]
+    assert retrocast.load_stock(stock_path, representation="inchikey") == [
+        "LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
+        "VNWKTOKETHGBQD-UHFFFAOYSA-N",
+    ]
+
+
+def test_execution_stats_are_validated_before_writing(tmp_path: Path) -> None:
+    stats = {"wall_time": {TARGET_ID: 1.5}, "cpu_time": {TARGET_ID: 1.2}}
+    gzip_path = tmp_path / "execution_stats.json.gz"
+    json_path = tmp_path / "execution_stats.json"
+
+    assert retrocast.validate_execution_stats(stats) == stats
+    retrocast.write_execution_stats(stats, gzip_path)
+    retrocast.write_execution_stats(stats, json_path)
+    assert retrocast.read_json(gzip_path) == stats
+    assert retrocast.read_json(json_path) == stats
+    assert json_path.read_bytes().startswith(b"{")
+
+    with pytest.raises(ValueError, match="non-negative"):
+        retrocast.validate_execution_stats({"wall_time": {TARGET_ID: -1}})

@@ -6,7 +6,8 @@ import argparse
 import importlib
 import importlib.util
 import json
-from importlib.metadata import requires
+import tempfile
+from importlib.metadata import files, requires
 from pathlib import Path
 
 import retrocast
@@ -22,6 +23,9 @@ def main() -> None:
     if not args.allow_python_rdkit:
         assert importlib.util.find_spec("rdkit") is None
     assert not requires("retrocast")
+    distribution_files = {str(path) for path in files("retrocast") or []}
+    assert "retrocast/__init__.pyi" in distribution_files
+    assert "retrocast/py.typed" in distribution_files
     try:
         importlib.import_module("retrocast.adapters")
     except ModuleNotFoundError:
@@ -45,6 +49,11 @@ def main() -> None:
         },
         "default_constraints": [{"kind": "retrocast.stock_termination", "stock": "test-stock"}],
     }
+    with tempfile.TemporaryDirectory() as directory:
+        task_path = Path(directory) / "task.json.gz"
+        retrocast.write_json_gz(task, task_path)
+        assert retrocast.load_task(task_path)["targets"][target_id]["id"] == target_id
+
     raw = json.loads(args.fixture.read_text(encoding="utf-8"))
     predictions = retrocast.ingest(
         {target_id: raw},
