@@ -136,9 +136,9 @@ pub fn create_manifest(
         .iter()
         .map(|path| {
             if !path.exists() {
-                return Err(EngineError::Provenance(format!(
-                    "manifest source file not found: {}",
-                    path.display()
+                return Err(EngineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("manifest source file not found: {}", path.display()),
                 )));
             }
             Ok(FileInfo {

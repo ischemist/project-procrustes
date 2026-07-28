@@ -255,6 +255,16 @@ def test_producer_artifacts_use_rust_io_and_provenance(tmp_path: Path) -> None:
     assert report["is_valid"] is True
 
 
+def test_manifest_missing_source_is_a_filesystem_error(tmp_path: Path) -> None:
+    with pytest.raises(OSError, match="manifest source file not found"):
+        retrocast.create_manifest(
+            "planner-run",
+            [tmp_path / "missing.json"],
+            [],
+            tmp_path,
+        )
+
+
 def test_stock_loader_selects_the_planner_representation(tmp_path: Path) -> None:
     stock_path = tmp_path / "stock.csv"
     stock_path.write_text(

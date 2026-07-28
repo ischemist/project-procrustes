@@ -1452,7 +1452,7 @@ fn create_manifest_py(
         release_name,
         keyed_output_files,
     )
-    .map_err(python_error)?;
+    .map_err(artifact_read_error)?;
     json_loads(py, &to_json(&manifest)?)
 }
 
