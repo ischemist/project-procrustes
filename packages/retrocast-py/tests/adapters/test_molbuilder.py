@@ -101,7 +101,7 @@ def test_molbuilder_preserves_route_molecule_and_reaction_annotations(raw_molbui
 
     assert route.annotations == {}
     assert route.target.annotations == {"functional_groups": ["alcohol"]}
-    assert reaction.template == "Reduction"
+    assert reaction.template is None
     assert reaction.annotations["reaction_name"] == "Reduction"
     assert reaction.annotations["named_reaction"] == "NaBH4 Reduction"
     assert reaction.annotations["category"] == "reduction"

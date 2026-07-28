@@ -128,4 +128,4 @@ def _reaction_fields(node: MolBuilderNode) -> dict[str, Any]:
     if disconnection.precursors:
         annotations["precursors"] = [precursor.model_dump() for precursor in disconnection.precursors]
 
-    return {"template": reaction_name or None, "annotations": annotations}
+    return {"annotations": annotations}

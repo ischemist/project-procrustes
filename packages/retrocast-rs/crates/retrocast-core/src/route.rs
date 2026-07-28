@@ -133,7 +133,7 @@ fn build_molecule(
         .metadata
         .get("mapped_reaction_smiles")
         .and_then(Value::as_str)
-        .map(str::to_owned);
+        .map(forward_reaction_smiles);
     let template = reaction_node
         .metadata
         .get("template")
@@ -155,6 +155,13 @@ fn build_molecule(
         })),
         annotations: serde_json::Map::new(),
     }))
+}
+
+fn forward_reaction_smiles(reaction_smiles: &str) -> String {
+    reaction_smiles.split_once(">>").map_or_else(
+        || reaction_smiles.to_owned(),
+        |(target, precursors)| format!("{precursors}>>{target}"),
+    )
 }
 
 fn adapter_logic(code: &'static str, message: impl Into<String>) -> EngineError {

@@ -488,8 +488,17 @@ mod tests {
                     "CO": {"smiles": "CO", "id": "chem-unused", "type": "chemical", "terminal": true},
                     "CCO>>CCOC(C)=O": {
                         "smiles": "CCO>>CCOC(C)=O", "id": "rxn-1", "type": "reaction",
-                        "reaction_properties": {"mapped_smiles": "CCO>>CCOC(C)=O"},
-                        "model_metadata": [{"source": {"template": {"reaction_smarts": "esterification"}}}]
+                        "reaction_properties": {
+                            "mapped_smiles":
+                                "[CH3:1][CH2:2][OH:3]>>[CH3:1][CH2:2][O:3][C:4]([CH3:5])=[O:6]"
+                        },
+                        "model_metadata": [{
+                            "source": {
+                                "template": {
+                                    "reaction_smarts": "[OH:1]>>[O:1][C:2]([CH3:3])=[O:4]"
+                                }
+                            }
+                        }]
                     }
                 },
                 "uuid2smiles": {
@@ -525,7 +534,17 @@ mod tests {
             .unwrap();
         assert_eq!(route.annotations["total_paths"], 1);
         let reaction = route.target.product_of.unwrap();
-        assert_eq!(reaction.template.as_deref(), Some("esterification"));
+        assert_eq!(
+            reaction.template.as_deref(),
+            Some("[OH:1]>>[O:1][C:2]([CH3:3])=[O:4]")
+        );
+        assert_eq!(
+            reaction
+                .mapped_reaction_smiles
+                .as_ref()
+                .map(|value| value.as_str()),
+            Some("[CH3:1][CH2:2][OH:3]>>[CH3:1][CH2:2][O:3][C:4]([CH3:5])=[O:6]")
+        );
         assert_eq!(reaction.annotations["source_id"], "rxn-1");
     }
 

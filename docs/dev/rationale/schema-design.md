@@ -155,6 +155,8 @@ Basic schema
         schema_version: str = "2"
     ```
 
+`mapped_reaction_smiles` owns the full concrete atom-mapped reaction in `reactants>>product` direction, aligned with the reaction's child molecules and owning product molecule. `template` owns only a source-reported reaction template, typically reaction SMARTS. Reaction names and planner-specific action renderings are not promoted to either field.
+
 `CanonicalSmiles`, `InchiKey`, and `SchemaVersion` are validated Rust newtypes rather than aliases for `String`. Serde deserialization calls their validation path, so loading an artifact cannot bypass the constraints used by adapters.
 
 Identical molecules in different positions (e.g. same building block used in two branches) are different nodes; whence a Route is a tree, not just a DAG. Primarily because enforcing a 1 molecule = 1 node would introduce operational (serialization, signatures) complexity without any clear/obvious benefit beyond just marginally smaller disk usage.
