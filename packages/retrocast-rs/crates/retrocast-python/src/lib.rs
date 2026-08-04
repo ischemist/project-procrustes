@@ -528,17 +528,6 @@ fn reaction_string_parse_json(route_string: &str, adapter: &str, mode: &str) -> 
 }
 
 #[pyfunction]
-#[pyo3(signature = (raw_json, source_key=None))]
-fn synplanner_entries_json(raw_json: &str, source_key: Option<&str>) -> PyResult<String> {
-    let raw: Value = from_json(raw_json)?;
-    let result = match adapters::extract_synplanner_entries(raw, source_key) {
-        Ok(batch) => AdapterBoundaryResult::success(batch),
-        Err(error) => AdapterBoundaryResult::failure("synplanner", error, None),
-    };
-    to_json(&result)
-}
-
-#[pyfunction]
 fn paroutes_condition_stats_json(route_json: &str, statistics_json: &str) -> PyResult<String> {
     let route: Value = from_json(route_json)?;
     let mut statistics: adapters::ConditionSlotParseStatistics = from_json(statistics_json)?;
@@ -2289,7 +2278,6 @@ fn retrocast(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(dms_route_length_json, module)?)?;
     module.add_function(wrap_pyfunction!(synllama_precursor_map_json, module)?)?;
     module.add_function(wrap_pyfunction!(reaction_string_parse_json, module)?)?;
-    module.add_function(wrap_pyfunction!(synplanner_entries_json, module)?)?;
     module.add_function(wrap_pyfunction!(paroutes_condition_stats_json, module)?)?;
     module.add_function(wrap_pyfunction!(candidate_statistics_json, module)?)?;
     module.add_function(wrap_pyfunction!(

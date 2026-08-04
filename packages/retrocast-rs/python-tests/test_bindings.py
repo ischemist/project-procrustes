@@ -102,6 +102,118 @@ def test_adapt_accepts_plain_python_values() -> None:
     assert candidates[0]["route"]["target"]["smiles"] == "CCO"
 
 
+@pytest.mark.parametrize("adapter", ["synplanner", "syntheseus"])
+@pytest.mark.parametrize(
+    ("mode", "payload", "max_candidates", "expected_failure_codes"),
+    [
+        pytest.param(
+            "strict",
+            [{"type": "mol", "smiles": "CCO"}, {"type": "mol", "smiles": "OCC"}],
+            None,
+            [None, None],
+            id="all-valid-strict",
+        ),
+        pytest.param(
+            "prune",
+            [{"type": "mol", "smiles": "CCO"}, {"type": "mol", "smiles": "OCC"}],
+            None,
+            [None, None],
+            id="all-valid-prune",
+        ),
+        pytest.param(
+            "strict",
+            [
+                {"type": "mol", "smiles": "CCO"},
+                {"type": "mol", "smiles": "CCO", "children": [None]},
+                {"type": "mol", "smiles": "not-smiles"},
+            ],
+            None,
+            [None, "adapter.schema_invalid", "chem.invalid_smiles"],
+            id="mixed-strict",
+        ),
+        pytest.param(
+            "prune",
+            [
+                {"type": "mol", "smiles": "CCO"},
+                {"type": "mol", "smiles": "CCO", "children": [None]},
+                {"type": "mol", "smiles": "not-smiles"},
+            ],
+            None,
+            [None, "adapter.schema_invalid", "adapter.target_pruned"],
+            id="mixed-prune",
+        ),
+        pytest.param(
+            "strict",
+            [
+                {"type": "mol", "smiles": "CCO", "children": [True]},
+                {"type": "mol", "smiles": "not-smiles"},
+            ],
+            None,
+            ["adapter.schema_invalid", "chem.invalid_smiles"],
+            id="all-invalid-strict",
+        ),
+        pytest.param(
+            "prune",
+            [
+                {"type": "mol", "smiles": "CCO", "children": [True]},
+                {"type": "mol", "smiles": "not-smiles"},
+            ],
+            None,
+            ["adapter.schema_invalid", "adapter.target_pruned"],
+            id="all-invalid-prune",
+        ),
+        pytest.param(
+            "strict",
+            [
+                {"type": "mol", "smiles": "CCO", "children": [None]},
+                {"type": "mol", "smiles": "OCC"},
+                {"type": "mol", "smiles": "not-smiles"},
+            ],
+            2,
+            ["adapter.schema_invalid", None],
+            id="max-candidates-strict",
+        ),
+        pytest.param(
+            "prune",
+            [
+                {"type": "mol", "smiles": "CCO", "children": [None]},
+                {"type": "mol", "smiles": "OCC"},
+                {"type": "mol", "smiles": "not-smiles"},
+            ],
+            2,
+            ["adapter.schema_invalid", None],
+            id="max-candidates-prune",
+        ),
+    ],
+)
+def test_bipartite_candidate_slot_matrix(
+    adapter: str,
+    mode: str,
+    payload: list[dict[str, object]],
+    max_candidates: int | None,
+    expected_failure_codes: list[str | None],
+) -> None:
+    target = task()["targets"][TARGET_ID]
+    candidates = retrocast.adapt(
+        payload,
+        adapter,
+        mode=mode,
+        target=target,
+        source_key="source-ethanol",
+        max_candidates=max_candidates,
+    )
+
+    assert [candidate["rank"] for candidate in candidates] == list(range(1, len(expected_failure_codes) + 1))
+    for candidate, expected_failure_code in zip(candidates, expected_failure_codes, strict=True):
+        if expected_failure_code is None:
+            assert candidate["route"]["target"]["smiles"] == "CCO"
+            assert "failure" not in candidate
+        else:
+            assert candidate["failure"]["code"] == expected_failure_code
+            assert candidate["failure"]["target_id"] == TARGET_ID
+            assert "route" not in candidate
+
+
 def test_native_handles_keep_composed_state_in_rust(tmp_path: Path) -> None:
     predictions = retrocast.ingest(
         {TARGET_ID: raw()},

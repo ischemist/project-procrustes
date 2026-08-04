@@ -14,10 +14,7 @@ use rayon::prelude::*;
 use serde_json::{Map, Value, json};
 
 pub use askcos::AskcosAdapter;
-pub use bipartite::{
-    SynPlannerAdapter, SynPlannerEntryBatch, SynPlannerSkippedRoute, SyntheseusAdapter,
-    extract_synplanner_entries,
-};
+pub use bipartite::{SynPlannerAdapter, SyntheseusAdapter};
 pub use dms::{DirectMultiStepAdapter, route_length as dms_route_length};
 pub use molbuilder::MolBuilderAdapter;
 pub use multistepttl::MultiStepTtlAdapter;

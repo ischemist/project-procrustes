@@ -497,7 +497,11 @@ mod tests {
 
     use super::{ingest, ingest_file};
     use crate::{
-        adapters::AiZynthFinderAdapter, error::EngineError, io, model::Task, route::AdaptMode,
+        adapters::{AiZynthFinderAdapter, SynPlannerAdapter},
+        error::EngineError,
+        io,
+        model::Task,
+        route::AdaptMode,
     };
 
     static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(0);
@@ -597,6 +601,45 @@ mod tests {
 
         assert_eq!(predictions["ethanol"].len(), 1);
         assert!(predictions["methanol"].is_empty());
+    }
+
+    #[test]
+    fn ingest_keeps_an_all_invalid_synplanner_target_as_ranked_failures() {
+        let task = streamed_task();
+        let raw = json!({
+            "ethanol": [
+                {
+                    "type": "mol",
+                    "smiles": "CCO",
+                    "children": [{
+                        "type": "reaction",
+                        "smiles": "C>>CCO",
+                        "children": [true]
+                    }]
+                },
+                {"type": "mol", "smiles": "CCO", "children": [null]}
+            ],
+            "methanol": [{"type": "mol", "smiles": "CO"}]
+        });
+
+        let predictions =
+            ingest(raw, &SynPlannerAdapter, &task, AdaptMode::Strict, None, 2).unwrap();
+
+        assert_eq!(predictions["ethanol"].len(), 2);
+        assert_eq!(
+            predictions["ethanol"]
+                .iter()
+                .map(|candidate| candidate.rank)
+                .collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+        assert!(predictions["ethanol"].iter().all(|candidate| {
+            candidate.failure.as_ref().is_some_and(|failure| {
+                failure.code == "adapter.schema_invalid"
+                    && failure.target_id.as_deref() == Some("ethanol")
+            })
+        }));
+        assert!(predictions["methanol"][0].route.is_some());
     }
 
     #[test]

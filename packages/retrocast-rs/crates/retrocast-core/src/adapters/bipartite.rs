@@ -17,19 +17,6 @@ pub struct SyntheseusAdapter;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SynPlannerAdapter;
 
-#[derive(Clone, Debug, serde::Serialize)]
-pub struct SynPlannerSkippedRoute {
-    pub source_index: usize,
-    pub source_order: usize,
-    pub error: String,
-}
-
-#[derive(Clone, Debug, serde::Serialize)]
-pub struct SynPlannerEntryBatch {
-    pub entries: Vec<RawRouteEntry>,
-    pub skipped: Vec<SynPlannerSkippedRoute>,
-}
-
 #[derive(Clone, Copy)]
 enum Flavor {
     Syntheseus,
@@ -45,9 +32,6 @@ impl Adapter for SyntheseusAdapter {
         let routes = payload
             .as_array()
             .ok_or_else(|| common::schema(self.name(), "route payload must be a list"))?;
-        for route in routes {
-            validate_node(route, "mol", self.name(), "route root")?;
-        }
         Ok(make_entries(routes, source_key))
     }
 
@@ -62,74 +46,15 @@ impl Adapter for SynPlannerAdapter {
     }
 
     fn entries(&self, payload: Value, source_key: Option<&str>) -> Result<Vec<RawRouteEntry>> {
-        Ok(extract_synplanner_entries(payload, source_key)?.entries)
+        let routes = payload
+            .as_array()
+            .ok_or_else(|| common::schema(self.name(), "route payload must be a list"))?;
+        Ok(make_entries(routes, source_key))
     }
 
     fn cast(&self, raw_route: Value, mode: AdaptMode, target: Option<&Target>) -> Result<Route> {
         cast_bipartite(raw_route, mode, target, self.name(), Flavor::SynPlanner)
     }
-}
-
-pub fn extract_synplanner_entries(
-    payload: Value,
-    source_key: Option<&str>,
-) -> Result<SynPlannerEntryBatch> {
-    let routes = payload
-        .as_array()
-        .ok_or_else(|| common::schema("synplanner", "route payload must be a list"))?;
-    let mut entries = Vec::new();
-    let mut skipped = Vec::new();
-    for (index, route) in routes.iter().enumerate() {
-        match validate_node(route, "mol", "synplanner", "route root") {
-            Ok(()) => entries.push(RawRouteEntry {
-                payload: route.clone(),
-                source_key: source_key.map(str::to_owned),
-                source_row_index: None,
-                source_record_id: None,
-                target_hint_id: None,
-                target_hint_smiles: None,
-                source_order: Some(index + 1),
-            }),
-            Err(error) => skipped.push(SynPlannerSkippedRoute {
-                source_index: index,
-                source_order: index + 1,
-                error: error.to_string(),
-            }),
-        }
-    }
-    if entries.is_empty() && !skipped.is_empty() {
-        let first = &skipped[0];
-        let message = format!(
-            "no valid routes; skipped {} invalid route(s), first invalid route source_index={} source_order={}: {}",
-            skipped.len(),
-            first.source_index,
-            first.source_order,
-            first.error
-        );
-        let context = Map::from_iter([
-            ("adapter".to_owned(), json!("synplanner")),
-            (
-                "target_id".to_owned(),
-                json!(source_key.unwrap_or("<unknown>")),
-            ),
-            ("skipped_routes".to_owned(), json!(skipped.len())),
-            (
-                "first_invalid_source_index".to_owned(),
-                json!(first.source_index),
-            ),
-            (
-                "first_invalid_source_order".to_owned(),
-                json!(first.source_order),
-            ),
-            ("first_validation_error".to_owned(), json!(first.error)),
-        ]);
-        return Err(crate::error::EngineError::AdapterSchemaContext {
-            adapter: "synplanner",
-            message,
-            context,
-        });
-    }
-    Ok(SynPlannerEntryBatch { entries, skipped })
 }
 
 fn make_entries(routes: &[Value], source_key: Option<&str>) -> Vec<RawRouteEntry> {
@@ -353,10 +278,125 @@ fn build_molecule(
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     use super::{SynPlannerAdapter, SyntheseusAdapter};
-    use crate::{adapters::Adapter, route::AdaptMode};
+    use crate::{
+        adapters::{Adapter, adapt_candidates},
+        model::Target,
+        route::AdaptMode,
+    };
+
+    struct CandidateCase {
+        name: &'static str,
+        payload: Value,
+        mode: AdaptMode,
+        max_candidates: Option<usize>,
+        expected_failure_codes: Vec<Option<&'static str>>,
+    }
+
+    fn candidate_cases() -> Vec<CandidateCase> {
+        let valid = json!([
+            {"type": "mol", "smiles": "CCO"},
+            {"type": "mol", "smiles": "OCC"}
+        ]);
+        let mixed = json!([
+            {"type": "mol", "smiles": "CCO"},
+            {"type": "mol", "smiles": "CCO", "children": [null]},
+            {"type": "mol", "smiles": "not-smiles"}
+        ]);
+        let all_invalid = json!([
+            {"type": "mol", "smiles": "CCO", "children": [true]},
+            {"type": "mol", "smiles": "not-smiles"}
+        ]);
+        let truncated = json!([
+            {"type": "mol", "smiles": "CCO", "children": [null]},
+            {"type": "mol", "smiles": "OCC"},
+            {"type": "mol", "smiles": "not-smiles"}
+        ]);
+
+        vec![
+            CandidateCase {
+                name: "all-valid strict",
+                payload: valid.clone(),
+                mode: AdaptMode::Strict,
+                max_candidates: None,
+                expected_failure_codes: vec![None, None],
+            },
+            CandidateCase {
+                name: "all-valid prune",
+                payload: valid,
+                mode: AdaptMode::Prune,
+                max_candidates: None,
+                expected_failure_codes: vec![None, None],
+            },
+            CandidateCase {
+                name: "mixed strict",
+                payload: mixed.clone(),
+                mode: AdaptMode::Strict,
+                max_candidates: None,
+                expected_failure_codes: vec![
+                    None,
+                    Some("adapter.schema_invalid"),
+                    Some("chem.invalid_smiles"),
+                ],
+            },
+            CandidateCase {
+                name: "mixed prune",
+                payload: mixed,
+                mode: AdaptMode::Prune,
+                max_candidates: None,
+                expected_failure_codes: vec![
+                    None,
+                    Some("adapter.schema_invalid"),
+                    Some("adapter.target_pruned"),
+                ],
+            },
+            CandidateCase {
+                name: "all-invalid strict",
+                payload: all_invalid.clone(),
+                mode: AdaptMode::Strict,
+                max_candidates: None,
+                expected_failure_codes: vec![
+                    Some("adapter.schema_invalid"),
+                    Some("chem.invalid_smiles"),
+                ],
+            },
+            CandidateCase {
+                name: "all-invalid prune",
+                payload: all_invalid,
+                mode: AdaptMode::Prune,
+                max_candidates: None,
+                expected_failure_codes: vec![
+                    Some("adapter.schema_invalid"),
+                    Some("adapter.target_pruned"),
+                ],
+            },
+            CandidateCase {
+                name: "max-candidates strict",
+                payload: truncated.clone(),
+                mode: AdaptMode::Strict,
+                max_candidates: Some(2),
+                expected_failure_codes: vec![Some("adapter.schema_invalid"), None],
+            },
+            CandidateCase {
+                name: "max-candidates prune",
+                payload: truncated,
+                mode: AdaptMode::Prune,
+                max_candidates: Some(2),
+                expected_failure_codes: vec![Some("adapter.schema_invalid"), None],
+            },
+        ]
+    }
+
+    fn fixture_target() -> Target {
+        serde_json::from_value(json!({
+            "id": "target-ethanol",
+            "smiles": "CCO",
+            "inchikey": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N"
+        }))
+        .unwrap()
+    }
 
     #[test]
     fn syntheseus_preserves_reaction_metadata() {
@@ -379,18 +419,87 @@ mod tests {
     }
 
     #[test]
-    fn synplanner_skips_invalid_routes_but_keeps_source_rank() {
-        let routes = SynPlannerAdapter
-            .entries(
-                json!([
-                    {"type": "mol", "smiles": "CCO", "children": [{"type": "reaction", "smiles": "C>>CCO", "children": [null]}]},
-                    {"type": "mol", "smiles": "CCC"}
-                ]),
+    fn bipartite_candidate_slot_matrix() {
+        let target = fixture_target();
+        for adapter in [&SynPlannerAdapter as &dyn Adapter, &SyntheseusAdapter] {
+            for case in candidate_cases() {
+                let candidates = adapt_candidates(
+                    case.payload,
+                    adapter,
+                    case.mode,
+                    Some(&target),
+                    Some("source-ethanol"),
+                    case.max_candidates,
+                )
+                .unwrap_or_else(|error| {
+                    panic!("{} / {} failed: {error}", adapter.name(), case.name)
+                });
+
+                assert_eq!(
+                    candidates.len(),
+                    case.expected_failure_codes.len(),
+                    "{} / {} candidate count",
+                    adapter.name(),
+                    case.name
+                );
+                for (index, (candidate, expected_failure_code)) in candidates
+                    .iter()
+                    .zip(&case.expected_failure_codes)
+                    .enumerate()
+                {
+                    assert_eq!(
+                        candidate.rank,
+                        index + 1,
+                        "{} / {} rank",
+                        adapter.name(),
+                        case.name
+                    );
+                    match expected_failure_code {
+                        None => {
+                            let route = candidate.route.as_ref().unwrap_or_else(|| {
+                                panic!(
+                                    "{} / {} rank {} should be a route",
+                                    adapter.name(),
+                                    case.name,
+                                    candidate.rank
+                                )
+                            });
+                            assert_eq!(route.target.smiles, "CCO");
+                            assert!(candidate.failure.is_none());
+                        }
+                        Some(expected_code) => {
+                            let failure = candidate.failure.as_ref().unwrap_or_else(|| {
+                                panic!(
+                                    "{} / {} rank {} should be a failure",
+                                    adapter.name(),
+                                    case.name,
+                                    candidate.rank
+                                )
+                            });
+                            assert_eq!(failure.code, *expected_code);
+                            assert_eq!(failure.target_id.as_deref(), Some("target-ethanol"));
+                            assert!(candidate.route.is_none());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn bipartite_adapters_reject_non_list_envelopes() {
+        for adapter in [&SynPlannerAdapter as &dyn Adapter, &SyntheseusAdapter] {
+            let error = adapt_candidates(
+                json!({"not": "a route list"}),
+                adapter,
+                AdaptMode::Strict,
+                None,
+                None,
                 None,
             )
-            .unwrap();
-        assert_eq!(routes.len(), 1);
-        assert_eq!(routes[0].source_order, Some(2));
+            .unwrap_err();
+            assert!(error.to_string().contains("route payload must be a list"));
+        }
     }
 
     #[test]
