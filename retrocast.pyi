@@ -3,6 +3,7 @@ from os import PathLike
 from typing import Any, Literal, NotRequired, TypeAlias, TypedDict
 
 _StrPath: TypeAlias = str | PathLike[str]
+_AdaptMode: TypeAlias = Literal["strict", "prune"]
 _JSONScalar: TypeAlias = None | bool | int | float | str
 _JSONValue: TypeAlias = _JSONScalar | list["_JSONValue"] | dict[str, "_JSONValue"]
 
@@ -74,7 +75,7 @@ def adapt(
     raw: _JSONValue,
     adapter: str,
     *,
-    mode: Literal["strict", "lenient"] = "strict",
+    mode: _AdaptMode = "strict",
     target: _TargetInput | Mapping[str, _JSONValue] | None = None,
     source_key: str | None = None,
     max_candidates: int | None = None,
@@ -85,7 +86,7 @@ def ingest(
     adapter: str,
     task: _TaskInput | Mapping[str, _JSONValue],
     *,
-    mode: Literal["strict", "lenient"] = "strict",
+    mode: _AdaptMode = "strict",
     max_candidates: int | None = None,
     workers: int = 1,
 ) -> NativePredictions: ...
@@ -94,7 +95,7 @@ def ingest_file(
     adapter: str,
     task_path: _StrPath,
     *,
-    mode: Literal["strict", "lenient"] = "strict",
+    mode: _AdaptMode = "strict",
     max_candidates: int | None = None,
     workers: int = 1,
 ) -> NativePredictions: ...
@@ -137,7 +138,7 @@ def evaluate(
     execution_stats_path: _StrPath | None = None,
     adapter: str = "aizynthfinder",
     workers: int = 1,
-    mode: Literal["strict", "lenient"] = "strict",
+    mode: _AdaptMode = "strict",
     max_candidates: int | None = None,
     match_level: Literal["full", "no_stereo", "connectivity"] = "full",
     acceptable_route_match: Literal["prefix", "exact"] = "prefix",
