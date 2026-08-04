@@ -45,9 +45,6 @@ impl Adapter for SyntheseusAdapter {
         let routes = payload
             .as_array()
             .ok_or_else(|| common::schema(self.name(), "route payload must be a list"))?;
-        for route in routes {
-            validate_node(route, "mol", self.name(), "route root")?;
-        }
         Ok(make_entries(routes, source_key))
     }
 
@@ -62,7 +59,10 @@ impl Adapter for SynPlannerAdapter {
     }
 
     fn entries(&self, payload: Value, source_key: Option<&str>) -> Result<Vec<RawRouteEntry>> {
-        Ok(extract_synplanner_entries(payload, source_key)?.entries)
+        let routes = payload
+            .as_array()
+            .ok_or_else(|| common::schema(self.name(), "route payload must be a list"))?;
+        Ok(make_entries(routes, source_key))
     }
 
     fn cast(&self, raw_route: Value, mode: AdaptMode, target: Option<&Target>) -> Result<Route> {
@@ -96,38 +96,6 @@ pub fn extract_synplanner_entries(
                 error: error.to_string(),
             }),
         }
-    }
-    if entries.is_empty() && !skipped.is_empty() {
-        let first = &skipped[0];
-        let message = format!(
-            "no valid routes; skipped {} invalid route(s), first invalid route source_index={} source_order={}: {}",
-            skipped.len(),
-            first.source_index,
-            first.source_order,
-            first.error
-        );
-        let context = Map::from_iter([
-            ("adapter".to_owned(), json!("synplanner")),
-            (
-                "target_id".to_owned(),
-                json!(source_key.unwrap_or("<unknown>")),
-            ),
-            ("skipped_routes".to_owned(), json!(skipped.len())),
-            (
-                "first_invalid_source_index".to_owned(),
-                json!(first.source_index),
-            ),
-            (
-                "first_invalid_source_order".to_owned(),
-                json!(first.source_order),
-            ),
-            ("first_validation_error".to_owned(), json!(first.error)),
-        ]);
-        return Err(crate::error::EngineError::AdapterSchemaContext {
-            adapter: "synplanner",
-            message,
-            context,
-        });
     }
     Ok(SynPlannerEntryBatch { entries, skipped })
 }
@@ -355,8 +323,11 @@ fn build_molecule(
 mod tests {
     use serde_json::json;
 
-    use super::{SynPlannerAdapter, SyntheseusAdapter};
-    use crate::{adapters::Adapter, route::AdaptMode};
+    use super::{SynPlannerAdapter, SyntheseusAdapter, extract_synplanner_entries};
+    use crate::{
+        adapters::{Adapter, adapt_candidates},
+        route::AdaptMode,
+    };
 
     #[test]
     fn syntheseus_preserves_reaction_metadata() {
@@ -379,18 +350,118 @@ mod tests {
     }
 
     #[test]
-    fn synplanner_skips_invalid_routes_but_keeps_source_rank() {
-        let routes = SynPlannerAdapter
-            .entries(
-                json!([
-                    {"type": "mol", "smiles": "CCO", "children": [{"type": "reaction", "smiles": "C>>CCO", "children": [null]}]},
-                    {"type": "mol", "smiles": "CCC"}
-                ]),
+    fn synplanner_preserves_invalid_routes_as_ranked_failures() {
+        let candidates = adapt_candidates(
+            json!([
+                {"type": "mol", "smiles": "CCO", "children": [{"type": "reaction", "smiles": "C>>CCO", "children": [null]}]},
+                {"type": "mol", "smiles": "CCC"}
+            ]),
+            &SynPlannerAdapter,
+            AdaptMode::Strict,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(candidates[0].rank, 1);
+        assert!(candidates[0].route.is_none());
+        assert_eq!(
+            candidates[0].failure.as_ref().unwrap().code,
+            "adapter.schema_invalid"
+        );
+        assert_eq!(candidates[1].rank, 2);
+        assert!(candidates[1].route.is_some());
+        assert!(candidates[1].failure.is_none());
+    }
+
+    #[test]
+    fn synplanner_all_invalid_routes_remain_candidate_failures() {
+        let candidates = adapt_candidates(
+            json!([
+                {"type": "mol", "smiles": "CCO", "children": [true]},
+                {"type": "mol", "smiles": "CCC", "children": [null]}
+            ]),
+            &SynPlannerAdapter,
+            AdaptMode::Strict,
+            None,
+            Some("target-1"),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(
+            candidates
+                .iter()
+                .map(|candidate| candidate.rank)
+                .collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+        assert!(candidates.iter().all(|candidate| candidate.route.is_none()));
+        assert!(candidates.iter().all(|candidate| {
+            candidate.failure.as_ref().is_some_and(|failure| {
+                failure.code == "adapter.schema_invalid"
+                    && failure
+                        .message
+                        .as_deref()
+                        .is_some_and(|message| message.contains("node must be an object"))
+            })
+        }));
+    }
+
+    #[test]
+    fn synplanner_all_invalid_entry_inspection_reports_every_skip() {
+        let batch = extract_synplanner_entries(
+            json!([
+                {"type": "mol", "smiles": "CCO", "children": [true]},
+                {"type": "mol", "smiles": "CCC", "children": [null]}
+            ]),
+            Some("target-1"),
+        )
+        .unwrap();
+
+        assert!(batch.entries.is_empty());
+        assert_eq!(batch.skipped.len(), 2);
+        assert_eq!(batch.skipped[0].source_order, 1);
+        assert_eq!(batch.skipped[1].source_order, 2);
+    }
+
+    #[test]
+    fn bipartite_adapters_reject_non_list_envelopes() {
+        for adapter in [&SynPlannerAdapter as &dyn Adapter, &SyntheseusAdapter] {
+            let error = adapt_candidates(
+                json!({"not": "a route list"}),
+                adapter,
+                AdaptMode::Strict,
+                None,
+                None,
                 None,
             )
-            .unwrap();
-        assert_eq!(routes.len(), 1);
-        assert_eq!(routes[0].source_order, Some(2));
+            .unwrap_err();
+            assert!(error.to_string().contains("route payload must be a list"));
+        }
+    }
+
+    #[test]
+    fn syntheseus_invalid_routes_are_candidate_failures() {
+        let candidates = adapt_candidates(
+            json!([
+                {"type": "mol", "smiles": "CCO", "children": [null]},
+                {"type": "mol", "smiles": "CCC"}
+            ]),
+            &SyntheseusAdapter,
+            AdaptMode::Strict,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(candidates.len(), 2);
+        assert!(candidates[0].failure.is_some());
+        assert!(candidates[1].route.is_some());
     }
 
     #[test]
