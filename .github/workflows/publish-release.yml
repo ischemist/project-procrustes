@@ -9,8 +9,23 @@ permissions:
   contents: read
 
 jobs:
+  preflight:
+    name: Validate release version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Match release tag to package versions
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: python3 scripts/check-release-version.py --tag="$RELEASE_TAG"
+
   cli:
     name: ${{ matrix.platform }} CLI
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -226,6 +241,7 @@ jobs:
             if gh release upload "$RELEASE_TAG" \
               dist/retrocast-* \
               dist/SHA256SUMS \
+              --repo "$GITHUB_REPOSITORY" \
               --clobber
             then
               exit 0

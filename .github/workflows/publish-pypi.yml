@@ -6,8 +6,25 @@ on:
   workflow_dispatch:
 
 jobs:
+  preflight:
+    name: Validate release version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Match release tag to package versions
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: python3 scripts/check-release-version.py --tag="$RELEASE_TAG"
+
   wheels:
     name: ${{ matrix.platform }} wheel
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -139,6 +156,7 @@ jobs:
           if-no-files-found: error
 
   sdist:
+    needs: preflight
     runs-on: ubuntu-24.04
     permissions:
       contents: read

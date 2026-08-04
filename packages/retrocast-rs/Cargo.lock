@@ -1310,7 +1310,7 @@ dependencies = [
 
 [[package]]
 name = "retrocast-cli"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "anyhow",
  "clap",
@@ -1325,7 +1325,7 @@ dependencies = [
 
 [[package]]
 name = "retrocast-core"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "chrono",
  "csv",
@@ -1350,7 +1350,7 @@ dependencies = [
 
 [[package]]
 name = "retrocast-python"
-version = "0.8.2"
+version = "0.8.3"
 dependencies = [
  "pyo3",
  "retrocast-core",
