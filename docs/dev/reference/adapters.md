@@ -301,7 +301,7 @@ Chemistry failures use `chem.*` codes, usually `chem.invalid_smiles` or `chem.ru
   "children": [
     {
       "smiles": "CC=O",
-      "children": [{"smiles": "CCO", "children": []}]
+      "children": [{ "smiles": "CCO", "children": [] }]
     }
   ]
 }
@@ -313,7 +313,7 @@ Chemistry failures use `chem.*` codes, usually `chem.invalid_smiles` or `chem.ru
 {
   "type": "mol",
   "smiles": "CCO",
-  "children": [{"type": "mol", "smiles": "CC=O", "children": []}]
+  "children": [{ "type": "mol", "smiles": "CC=O", "children": [] }]
 }
 ```
 

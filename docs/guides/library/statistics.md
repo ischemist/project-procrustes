@@ -98,12 +98,12 @@ Each metric maps to a summary containing `value`, `count`, optional confidence b
     print(summary.reliability)
     ```
 
-| Field | Meaning |
-| --- | --- |
-| `value` | Estimated metric value. |
-| `count` | Number of targets used. |
-| `ci_low`, `ci_high` | Bootstrap confidence bounds, when computed. |
-| `reliability` | Warning such as low sample size or an extreme probability. |
+| Field               | Meaning                                                    |
+| ------------------- | ---------------------------------------------------------- |
+| `value`             | Estimated metric value.                                    |
+| `count`             | Number of targets used.                                    |
+| `ci_low`, `ci_high` | Bootstrap confidence bounds, when computed.                |
+| `reliability`       | Warning such as low sample size or an extreme probability. |
 
 ## Solv-N Rate
 
