@@ -81,6 +81,8 @@ cache-keys = [
   { file = "packages/retrocast-rs/Cargo.toml" },
   { file = "packages/retrocast-rs/crates/**/Cargo.toml" },
   { file = "packages/retrocast-rs/crates/**/*.rs" },
+  { file = "packages/retrocast-rs/crates/**/*.cpp" },
+  { file = "packages/retrocast-rs/crates/**/*.hpp" },
 ]
 
 [tool.uv.extra-build-dependencies]
