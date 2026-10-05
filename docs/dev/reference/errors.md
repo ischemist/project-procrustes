@@ -62,7 +62,7 @@ A malformed route entry can be counted without aborting the rest of the planner 
   "failure": {
     "code": "adapter.schema_invalid",
     "target_id": "target-1",
-    "context": {"adapter": "aizynthfinder"}
+    "context": { "adapter": "aizynthfinder" }
   }
 }
 ```
